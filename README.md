@@ -50,8 +50,8 @@
 
 1. **克隆项目**
 ```bash
-git clone <repository-url>
-cd guandan_ai_client
+git clone https://gitee.com/philsz/YiFeiAI-GD.git
+cd YiFeiAI-GD
 ```
 
 2. **安装依赖**
@@ -438,11 +438,15 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 欢迎提交Issue和Pull Request！
 
 ### 贡献指南
-1. Fork 本项目
+1. Fork 本项目: https://gitee.com/philsz/YiFeiAI-GD
 2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+5. 在Gitee上开启 Pull Request
+
+### 仓库信息
+- **Gitee仓库**: https://gitee.com/philsz/YiFeiAI-GD
+- **详细说明**: 查看 [REMOTE_REPO_INFO.md](REMOTE_REPO_INFO.md)
 
 **注意**: 提交代码前请确保：
 - ✅ 遵循时间处理规则（必须调用系统时间API）
