@@ -4,10 +4,11 @@
 
 ### 主仓库信息（YiFeiAI-GD）
 - **平台**: Gitee（码云）
-- **用户名**: philsz
+- **用户名**: Philsz（注意大小写）
 - **仓库名称**: YiFeiAI-GD
-- **完整地址**: https://gitee.com/philsz/YiFeiAI-GD
+- **完整地址**: https://gitee.com/Philsz/YiFeiAI-GD
 - **远程名称**: origin
+- **Git URL**: https://gitee.com/Philsz/YiFeiAI-GD.git
 
 ### philsz 账户下的仓库
 根据您提供的信息，philsz 账户下已有三个仓库。当前项目使用 **YiFeiAI-GD** 作为主远程仓库。
@@ -20,8 +21,8 @@
 git remote -v
 
 # 输出：
-# origin  https://gitee.com/philsz/YiFeiAI-GD.git (fetch)
-# origin  https://gitee.com/philsz/YiFeiAI-GD.git (push)
+# origin  https://gitee.com/Philsz/YiFeiAI-GD.git (fetch)
+# origin  https://gitee.com/Philsz/YiFeiAI-GD.git (push)
 ```
 
 ## 🚀 推送代码
@@ -55,9 +56,9 @@ git pull origin main
 
 ## 🔗 仓库链接
 
-- **Web访问**: https://gitee.com/philsz/YiFeiAI-GD
-- **克隆地址**: https://gitee.com/philsz/YiFeiAI-GD.git
-- **SSH地址**: git@gitee.com:philsz/YiFeiAI-GD.git
+- **Web访问**: https://gitee.com/Philsz/YiFeiAI-GD
+- **克隆地址**: https://gitee.com/Philsz/YiFeiAI-GD.git
+- **SSH地址**: git@gitee.com:Philsz/YiFeiAI-GD.git
 
 ## 📋 分支信息
 
@@ -85,10 +86,10 @@ git push -u origin develop
 git remote -v
 
 # 更新远程地址
-git remote set-url origin https://gitee.com/philsz/YiFeiAI-GD.git
+git remote set-url origin https://gitee.com/Philsz/YiFeiAI-GD.git
 
 # 或使用SSH
-git remote set-url origin git@gitee.com:philsz/YiFeiAI-GD.git
+git remote set-url origin git@gitee.com:Philsz/YiFeiAI-GD.git
 ```
 
 ## 🔐 SSH配置（可选）
