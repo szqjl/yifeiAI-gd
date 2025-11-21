@@ -1,0 +1,3 @@
+*.pth !text !filter !merge !diff
+*.pkl !text !filter !merge !diff
+*.h5 !text !filter !merge !diff
