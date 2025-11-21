@@ -2,11 +2,17 @@
 
 ## 📍 当前远程仓库配置
 
-### 仓库信息
+### 主仓库信息（YiFeiAI-GD）
 - **平台**: Gitee（码云）
 - **用户名**: philsz
 - **仓库名称**: YiFeiAI-GD
 - **完整地址**: https://gitee.com/philsz/YiFeiAI-GD
+- **远程名称**: origin
+
+### philsz 账户下的仓库
+根据您提供的信息，philsz 账户下已有三个仓库。当前项目使用 **YiFeiAI-GD** 作为主远程仓库。
+
+如需配置其他仓库，请参考 [多远程仓库配置指南](docs/MULTI_REPO_SETUP.md)
 
 ### Git 远程配置
 ```bash
