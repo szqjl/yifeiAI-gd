@@ -1,74 +1,18 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# Large files - Gitee free version doesn't support Git LFS
+# 大文件 - Gitee 免费版不支持 Git LFS
 
-# Virtual Environment
-venv/
-ENV/
-env/
-.venv
+# Large document files (>50MB) - exclude from git
+# 大文档文件（>50MB）- 从 git 中排除
+# Note: Keep markdown versions instead
+# 注意：保留 markdown 版本代替
+docs/skill/*.docx
+docs/skill/*.pdf
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# 配置文件（包含敏感信息）
-config.yaml
-!config.yaml.example
-
-# 日志文件
-logs/
-*.log
-
-# 数据文件
-data/replays/
-data/platform_info/
-*.json
-!package.json
-!tsconfig.json
-
-# 临时文件
+# Temporary files
+tmp/
 *.tmp
-*.temp
-.cache/
 
-# 系统文件
-Thumbs.db
-.DS_Store
-
-# 测试覆盖率
-.coverage
-htmlcov/
-.pytest_cache/
-
-# 环境变量
-.env
-.env.local
-
-# 备份文件
-*.bak
-*.backup
-
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
