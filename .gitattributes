@@ -1,6 +1,4 @@
-*.docx filter=lfs diff=lfs merge=lfs -text
-*.pdf filter=lfs diff=lfs merge=lfs -text
-*.jpg filter=lfs diff=lfs merge=lfs -text
-*.jpeg filter=lfs diff=lfs merge=lfs -text
-*.png filter=lfs diff=lfs merge=lfs -text
-*.avif filter=lfs diff=lfs merge=lfs -text
+# Git LFS 配置已移除 - Gitee 免费版不支持 Git LFS
+# 大文件已通过 .gitignore 排除
+# Git LFS configuration removed - Gitee free version doesn't support Git LFS
+# Large files are excluded via .gitignore
