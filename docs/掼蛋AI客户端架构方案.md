@@ -3,9 +3,9 @@ title: 掼蛋AI客户端基础架构方案
 type: architecture
 category: System/Architecture
 source: 掼蛋AI客户端架构方案.md
-version: v2.1
-last_updated: {{ datetime.now().strftime('%Y-%m-%d %H:%M:%S') }}
-tags: [架构, 客户端, WebSocket, 决策引擎, 信息监控]
+version: v2.2
+last_updated: 2025-11-25 03:30:00
+tags: [架构, 客户端, WebSocket, 决策引擎, 信息监控, 知识库]
 difficulty: 高级
 priority: 5
 game_phase: 全阶段
@@ -78,6 +78,15 @@ game_phase: 全阶段
 │  - 策略评估                         │
 │  - 出牌决策                         │
 │  - 配合策略                         │
+│  - 知识库查询                       │
+└─────────────────────────────────────┘
+          ↓
+┌─────────────────────────────────────┐
+│      知识库层 (Knowledge Base)       │
+│  - 规则库（硬编码）                 │
+│  - 策略库（内存加载）               │
+│  - 技巧库（按需查询）               │
+│  - 知识检索与缓存                   │
 └─────────────────────────────────────┘
           ↓
 ┌─────────────────────────────────────┐
@@ -223,7 +232,205 @@ game_phase: 全阶段
   - 制定配合策略
   - 评估配合效果
 
-#### 3.4 数据收集模块 (Data Collection Module)
+#### 3.4 知识库模块 (Knowledge Base Module)
+
+##### 3.4.1 知识库架构设计
+
+**分层记忆策略**（基于性能和使用频率）：
+
+1. **硬编码层（Hardcoded Rules）**
+   - **内容**：基础规则（牌型定义、压牌规则、大小关系等）
+   - **实现方式**：直接写在代码中，作为函数/类方法
+   - **访问方式**：O(1)直接调用
+   - **更新方式**：代码修改
+   - **示例**：
+     ```python
+     class GameRules:
+         CARD_TYPES = ['Single', 'Pair', 'Trips', ...]
+         def can_beat(self, card1, card2): ...
+         def is_valid_type(self, cards): ...
+     ```
+
+2. **内存加载层（In-Memory Knowledge）**
+   - **内容**：常用策略和技巧（组牌技巧、配火原则、常见策略模式）
+   - **实现方式**：程序启动时加载到内存（字典/对象）
+   - **访问方式**：O(1)内存访问
+   - **更新方式**：重启程序或热更新
+   - **示例**：
+     ```python
+     class KnowledgeBase:
+         def __init__(self):
+             self.grouping_priorities = self.load_grouping_rules()
+             self.strategy_patterns = self.load_strategies()
+     ```
+
+3. **按需查询层（On-Demand Query）**
+   - **内容**：高级技巧和特殊情况（复杂策略、边缘案例）
+   - **实现方式**：需要时查询知识库文件，结果缓存
+   - **访问方式**：首次O(n)查询，后续O(1)缓存访问
+   - **更新方式**：知识库文件更新，缓存失效
+   - **示例**：
+     ```python
+     class KnowledgeQuery:
+         def __init__(self):
+             self.cache = {}
+         def query_advanced_skill(self, situation): ...
+     ```
+
+**知识库目录结构**：
+```
+docs/knowledge/
+├── basics/              # 基础知识（规则、概念）
+│   ├── 01_getting_started/
+│   └── 02_beginner_guide/
+└── skills/              # 技巧知识
+    ├── 01_foundation/
+    ├── 02_main_attack/
+    ├── 03_assist_attack/
+    ├── 07_opening/      # 开局技巧（组牌技巧等）
+    └── 08_endgame/      # 残局技巧
+```
+
+##### 3.4.2 规则库 (Rules Library)
+
+**功能**：
+- 牌型定义和识别规则（`Single`, `Pair`, `Trips`, `ThreePair`, `ThreeWithTwo`, `TwoTrips`, `Straight`, `StraightFlush`, `Bomb`）
+- 压牌规则和大小关系（同牌型比较、炸弹压牌、同花顺压牌）
+- 进贡规则和升级规则（正常进贡、双下进贡、升级条件）
+- 游戏流程规则（局、场、轮的定义）
+
+**实现方式**：硬编码到`GameRules`类中
+
+**接口设计**：
+```python
+class GameRules:
+    # 牌型识别
+    def recognize_card_type(self, cards: List[str]) -> Tuple[str, str, List[str]]
+    
+    # 压牌判断
+    def can_beat(self, action1: List, action2: List) -> bool
+    
+    # 牌点大小比较
+    def compare_rank(self, rank1: str, rank2: str, cur_rank: str) -> int
+    
+    # 进贡规则
+    def get_tribute_rules(self, order: List[int]) -> Dict
+    
+    # 升级规则
+    def get_upgrade_rules(self, order: List[int]) -> int
+```
+
+##### 3.4.3 策略库 (Strategy Library)
+
+**功能**：
+- 组牌技巧和优先级（同花顺 > 炸弹 > 顺子/三带二）
+- 常用策略模式（主攻策略、助攻策略）
+- 开局、中局、残局策略
+- 配火原则（四头火、宜配中小不配大）
+
+**实现方式**：启动时加载到内存
+
+**接口设计**：
+```python
+class StrategyLibrary:
+    def __init__(self):
+        # 启动时加载
+        self.grouping_priorities = self.load_grouping_priorities()
+        self.strategy_patterns = self.load_strategy_patterns()
+    
+    # 组牌优先级
+    def get_grouping_priority(self) -> Dict[str, int]
+    
+    # 配火原则
+    def get_bomb_grouping_rules(self) -> Dict
+    
+    # 策略模式匹配
+    def match_strategy_pattern(self, situation: Dict) -> List[str]
+```
+
+**加载内容**：
+- 组牌优先级规则（同花顺 > 炸弹 > 顺子/三带二）
+- 配火原则（四头火、宜配中小不配大、破二炸弹不能搭）
+- 百搭使用原则（预留3个配百搭、百搭配3放后压）
+- 去单化原则（无论小与大，坚持去单化）
+
+##### 3.4.4 技巧库 (Skills Library)
+
+**功能**：
+- 高级技巧文章（开局技巧、残局技巧、复杂策略）
+- 特殊情况处理（边缘案例、复杂局面）
+- 复杂策略分析（多因素决策）
+- 按需查询和缓存
+
+**实现方式**：按需查询知识库文件，结果缓存
+
+**接口设计**：
+```python
+class SkillsLibrary:
+    def __init__(self, knowledge_base_path: str):
+        self.kb_path = knowledge_base_path
+        self.cache = {}
+        self.index = self.build_index()  # 建立索引
+    
+    # 查询技巧
+    def query_skill(self, situation: str, game_phase: str) -> Dict
+    
+    # 语义搜索
+    def semantic_search(self, query: str, limit: int = 5) -> List[Dict]
+    
+    # 缓存管理
+    def get_cached(self, key: str) -> Optional[Dict]
+    def cache_result(self, key: str, result: Dict)
+```
+
+**查询策略**：
+- 根据游戏阶段（opening/midgame/endgame）过滤
+- 根据标签（tags）匹配
+- 根据优先级（priority）排序
+- 结果缓存，避免重复查询
+
+##### 3.4.5 知识检索器 (Knowledge Retriever)
+
+**功能**：
+- 知识库文件解析（Markdown格式，YAML元数据）
+- 语义搜索和匹配（关键词、标签、阶段匹配）
+- 结果缓存管理（LRU缓存，避免重复查询）
+- 知识关联查询（前置知识、后续知识、相关知识点）
+
+**接口设计**：
+```python
+class KnowledgeRetriever:
+    def __init__(self, knowledge_base_path: str):
+        self.kb_path = knowledge_base_path
+        self.cache = LRUCache(maxsize=100)
+        self.index = self.build_index()
+    
+    # 解析知识库文件
+    def parse_knowledge_file(self, file_path: str) -> Dict
+    
+    # 建立索引
+    def build_index(self) -> Dict
+    
+    # 语义搜索
+    def search(self, query: str, filters: Dict = None) -> List[Dict]
+    
+    # 按标签查询
+    def query_by_tags(self, tags: List[str]) -> List[Dict]
+    
+    # 按阶段查询
+    def query_by_phase(self, phase: str) -> List[Dict]
+    
+    # 关联查询
+    def get_related_knowledge(self, knowledge_id: str) -> Dict
+```
+
+**性能优化**：
+- 启动时建立索引（避免每次查询都扫描文件）
+- LRU缓存（最近使用的知识优先）
+- 异步查询（不阻塞决策流程）
+- 批量加载（常用知识预加载）
+
+#### 3.5 数据收集模块 (Data Collection Module)
 
 ##### 3.4.1 对局记录器 (GameRecorder)
 - **功能**:
@@ -239,7 +446,7 @@ game_phase: 全阶段
   - 数据索引管理
   - 数据统计分析
 
-#### 3.5 信息监控模块 (Info Monitor Module)
+#### 3.6 信息监控模块 (Info Monitor Module)
 
 ##### 3.5.1 平台信息抓取器 (PlatformInfoFetcher)
 - **功能**:
@@ -1260,12 +1467,22 @@ notification.notify(
 
 ---
 
-**文档版本**: v2.1  
+**文档版本**: v2.2  
 **创建时间**: 使用系统时间API获取（`datetime.now()`）  
 **最后更新**: 使用系统时间API获取（`datetime.now()`）- 对齐知识库格式化方案  
 **维护责任**: AI开发团队
 
 ## 📝 更新日志
+
+### v2.2 (2025-11-25)
+- ✅ 添加知识库模块（Knowledge Base Module）设计
+- ✅ 更新整体架构图，增加知识库层
+- ✅ 设计分层记忆策略（硬编码层、内存加载层、按需查询层）
+- ✅ 设计规则库、策略库、技巧库、知识检索器
+- ✅ 明确知识库使用策略和性能优化方案
+- ✅ 添加知识库目录结构说明
+- ✅ 添加接口设计和实现方式
+- ✅ 明确基础规则硬编码、常用策略内存加载、高级技巧按需查询的策略
 
 ### v2.1 (使用系统时间API获取)
 - ✅ 对齐知识库格式化方案，添加YAML元数据

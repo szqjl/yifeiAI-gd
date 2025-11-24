@@ -126,6 +126,199 @@ git remote set-url origin git@gitee.com:philsz/YiFeiAI-GD.git
 
 ---
 
+## 🔐 GitHub 认证配置
+
+### 为什么需要配置认证？
+
+GitHub 从 2021年8月13日起，不再支持使用账户密码进行 Git 操作。必须使用以下方式之一：
+- **Personal Access Token (PAT)** - 推荐方式
+- **SSH 密钥** - 适合高级用户
+
+### 方法1：使用 Personal Access Token（推荐）
+
+#### 步骤1：生成 Personal Access Token
+
+1. **访问 GitHub Token 设置页面**
+   - 地址：https://github.com/settings/tokens
+   - 或：GitHub 头像 → Settings → Developer settings → Personal access tokens → Tokens (classic)
+
+2. **创建新 Token**
+   - 点击 "Generate new token" → "Generate new token (classic)"
+   - 填写 Token 描述：`YiFeiAI-GD 项目推送`
+   - 设置过期时间：根据需要选择（建议 90 天或 No expiration）
+
+3. **选择权限范围**
+   - ✅ **repo** (完整仓库权限) - 必须勾选
+     - `repo:status` - 访问提交状态
+     - `repo_deployment` - 访问部署状态
+     - `public_repo` - 访问公共仓库
+     - `repo:invite` - 访问仓库邀请
+     - `security_events` - 访问安全事件
+
+4. **生成并复制 Token**
+   - 点击 "Generate token"
+   - **重要**：立即复制 Token，页面关闭后无法再次查看
+   - 格式示例：`ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+
+#### 步骤2：配置 Git Credential Manager
+
+```bash
+# 配置 Git Credential Manager Core（Windows 推荐）
+git config --global credential.helper manager-core
+
+# 验证配置
+git config --global --get credential.helper
+# 应该输出：manager-core
+```
+
+#### 步骤3：使用 Token 推送
+
+```bash
+# 推送时会弹出凭据窗口
+git push -u github main
+
+# 在弹出的窗口中：
+# Username: 输入你的 GitHub 用户名（如：szqjl）
+# Password: 粘贴你的 Personal Access Token（不是账户密码！）
+```
+
+#### 步骤4：验证认证
+
+```bash
+# 测试连接
+git ls-remote github
+
+# 如果成功，会显示远程分支列表
+# 如果失败，检查 Token 权限和过期时间
+```
+
+### 方法2：使用 SSH 密钥（高级）
+
+#### 步骤1：生成 SSH 密钥
+
+```bash
+# 生成新的 SSH 密钥（如果还没有）
+ssh-keygen -t ed25519 -C "your_email@example.com"
+
+# 按提示操作：
+# - 保存位置：直接回车使用默认位置
+# - 密码：可以设置密码保护，也可以直接回车跳过
+```
+
+#### 步骤2：添加 SSH 密钥到 GitHub
+
+```bash
+# 查看公钥内容
+cat ~/.ssh/id_ed25519.pub
+
+# 复制输出的公钥内容
+```
+
+然后：
+1. 访问：https://github.com/settings/keys
+2. 点击 "New SSH key"
+3. 填写：
+   - **Title**: `YiFeiAI-GD Windows`
+   - **Key**: 粘贴刚才复制的公钥内容
+4. 点击 "Add SSH key"
+
+#### 步骤3：配置 SSH URL
+
+```bash
+# 设置 GitHub 使用 SSH
+git remote set-url github git@github.com:szqjl/yifeiAI-gd.git
+
+# 测试 SSH 连接
+ssh -T git@github.com
+# 应该输出：Hi szqjl! You've successfully authenticated...
+```
+
+### 方法3：在 URL 中嵌入 Token（临时方案）
+
+⚠️ **不推荐**：Token 会暴露在 Git 配置中，安全性较低。
+
+```bash
+# 格式：https://<token>@github.com/<username>/<repo>.git
+git remote set-url github https://ghp_xxxxxxxxxxxx@github.com/szqjl/yifeiAI-gd.git
+
+# 推送（不需要输入密码）
+git push -u github main
+```
+
+### 当前配置状态
+
+```bash
+# 查看当前凭据配置
+git config --global --list | Select-String credential
+
+# 应该看到：
+# credential.helper=manager-core
+# credential.https://gitee.com.provider=generic
+```
+
+### 故障排除
+
+#### 问题1：Token 无效或过期
+
+**症状**：
+```
+remote: Invalid username or password
+fatal: Authentication failed
+```
+
+**解决**：
+1. 检查 Token 是否过期
+2. 重新生成 Token
+3. 确保 Token 有 `repo` 权限
+
+#### 问题2：凭据管理器未保存
+
+**症状**：
+- 每次推送都要输入用户名和密码
+
+**解决**：
+```bash
+# 清除已保存的凭据
+git credential-manager-core erase
+# 输入：protocol=https
+# 输入：host=github.com
+# 按 Ctrl+D 结束
+
+# 重新推送，输入正确的凭据
+git push -u github main
+```
+
+#### 问题3：SSH 连接失败
+
+**症状**：
+```
+Permission denied (publickey)
+```
+
+**解决**：
+```bash
+# 测试 SSH 连接
+ssh -T git@github.com
+
+# 如果失败，检查：
+# 1. SSH 密钥是否已添加到 GitHub
+# 2. SSH 代理是否运行
+ssh-add ~/.ssh/id_ed25519
+
+# 3. 使用详细模式查看错误
+ssh -vT git@github.com
+```
+
+### 安全建议
+
+1. ✅ **使用 Personal Access Token**，不要使用账户密码
+2. ✅ **设置 Token 过期时间**，定期更新
+3. ✅ **最小权限原则**，只授予必要的权限
+4. ✅ **不要将 Token 提交到代码仓库**
+5. ✅ **使用 SSH 密钥**（如果熟悉 SSH）
+
+---
+
 ## 📤 推送代码
 
 ### 首次推送
