@@ -1,0 +1,9000 @@
+   "rest": 8,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 6
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '6', ['D6']]",
+  "greaterAction": "['Single', '6', ['D6']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "Single",
+      "7",
+      [
+        "C7"
+      ]
+    ],
+    [
+      "Single",
+      "9",
+      [
+        "H9"
+      ]
+    ],
+    [
+      "Single",
+      "T",
+      [
+        "DT"
+      ]
+    ]
+  ],
+  "indexRange": 3
+}
+[Test3] Sent response: {"actIndex": 3}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Single', 'T', ['DT']]",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'T', ['DT']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Single', 'A', ['DA']]",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "H5",
+    "H5",
+    "C5",
+    "C7",
+    "H9"
+  ],
+  "publicInfo": [
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 2
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['Single', 'A', ['DA']]",
+  "greaterPos": 3,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Single', '2', ['H2']]",
+  "greaterPos": 3,
+  "greaterAction": "['Single', '2', ['H2']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', '2', ['H2']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', 'T', ['ST']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'T', ['ST']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "H5",
+    "H5",
+    "C5",
+    "C7",
+    "H9"
+  ],
+  "publicInfo": [
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 5
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 0
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', 'T', ['ST']]",
+  "greaterAction": "['Single', 'T', ['ST']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'T', ['ST']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Single', 'J', ['CJ']]",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'J', ['CJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'J', ['CJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'J', ['CJ']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "H5",
+    "H5",
+    "C5",
+    "C7",
+    "H9"
+  ],
+  "publicInfo": [
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 5
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['Single', 'J', ['CJ']]",
+  "greaterPos": 3,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'J', ['CJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Single', '2', ['D2']]",
+  "greaterPos": 3,
+  "greaterAction": "['Single', '2', ['D2']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', '2', ['D2']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', 'J', ['HJ']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'J', ['HJ']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "H5",
+    "H5",
+    "C5",
+    "C7",
+    "H9"
+  ],
+  "publicInfo": [
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 5
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 0
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', 'J', ['HJ']]",
+  "greaterAction": "['Single', 'J', ['HJ']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'J', ['HJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'J', ['HJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'J', ['HJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '2', ['C2']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '2', ['C2']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "H5",
+    "H5",
+    "C5",
+    "C7",
+    "H9"
+  ],
+  "publicInfo": [
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 0
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '2', ['C2']]",
+  "greaterAction": "['Single', '2', ['C2']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "Single",
+      "3",
+      [
+        "S3"
+      ]
+    ],
+    [
+      "Single",
+      "5",
+      [
+        "H5"
+      ]
+    ],
+    [
+      "Single",
+      "5",
+      [
+        "C5"
+      ]
+    ],
+    [
+      "Single",
+      "7",
+      [
+        "C7"
+      ]
+    ],
+    [
+      "Single",
+      "9",
+      [
+        "H9"
+      ]
+    ]
+  ],
+  "indexRange": 5
+}
+[Test3] Sent response: {"actIndex": 5}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Single', '9', ['H9']]",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '9', ['H9']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '9', ['H9']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '9', ['H9']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '9', ['H9']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "H5",
+    "H5",
+    "C5",
+    "C7"
+  ],
+  "publicInfo": [
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 5
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 0
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": -1,
+  "curAction": "[None, None, None]",
+  "greaterAction": "[None, None, None]",
+  "greaterPos": -1,
+  "actionList": [
+    [
+      "Single",
+      "3",
+      [
+        "S3"
+      ]
+    ],
+    [
+      "Single",
+      "5",
+      [
+        "H5"
+      ]
+    ],
+    [
+      "Single",
+      "5",
+      [
+        "C5"
+      ]
+    ],
+    [
+      "Single",
+      "7",
+      [
+        "C7"
+      ]
+    ],
+    [
+      "Pair",
+      "3",
+      [
+        "S3",
+        "S3"
+      ]
+    ],
+    [
+      "Pair",
+      "5",
+      [
+        "H5",
+        "C5"
+      ]
+    ],
+    [
+      "Pair",
+      "5",
+      [
+        "H5",
+        "H5"
+      ]
+    ],
+    [
+      "Trips",
+      "5",
+      [
+        "H5",
+        "H5",
+        "C5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "5",
+      [
+        "H5",
+        "H5",
+        "C5",
+        "S3",
+        "S3"
+      ]
+    ]
+  ],
+  "indexRange": 8
+}
+[Test3] Sent response: {"actIndex": 5}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Pair', '5', ['H5', 'C5']]",
+  "greaterPos": 2,
+  "greaterAction": "['Pair', '5', ['H5', 'C5']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Pair', '6', ['H6', 'C6']]",
+  "greaterPos": 3,
+  "greaterAction": "['Pair', '6', ['H6', 'C6']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Pair', '7', ['H7', 'C7']]",
+  "greaterPos": 0,
+  "greaterAction": "['Pair', '7', ['H7', 'C7']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Pair', '7', ['H7', 'C7']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "H5",
+    "C7"
+  ],
+  "publicInfo": [
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 5
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['Pair', '7', ['H7', 'C7']]",
+  "greaterPos": 0,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Pair', '7', ['H7', 'C7']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Pair', '7', ['H7', 'C7']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Single', '5', ['D5']]",
+  "greaterPos": 0,
+  "greaterAction": "['Single', '5', ['D5']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '7', ['D7']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '7', ['D7']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "H5",
+    "C7"
+  ],
+  "publicInfo": [
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 5
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '7', ['D7']]",
+  "greaterAction": "['Single', '7', ['D7']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '7', ['D7']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '7', ['D7']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '7', ['D7']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '9', ['D9']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '9', ['D9']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "H5",
+    "C7"
+  ],
+  "publicInfo": [
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 5
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '9', ['D9']]",
+  "greaterAction": "['Single', '9', ['D9']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '9', ['D9']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '9', ['D9']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '9', ['D9']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '4', ['D4']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '4', ['D4']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "H5",
+    "C7"
+  ],
+  "publicInfo": [
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 5
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '4', ['D4']]",
+  "greaterAction": "['Single', '4', ['D4']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "Single",
+      "5",
+      [
+        "H5"
+      ]
+    ],
+    [
+      "Single",
+      "7",
+      [
+        "C7"
+      ]
+    ]
+  ],
+  "indexRange": 2
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '4', ['D4']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '4', ['D4']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '4', ['D4']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '4', ['H4']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '4', ['H4']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "H5",
+    "C7"
+  ],
+  "publicInfo": [
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 0,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 5
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '4', ['H4']]",
+  "greaterAction": "['Single', '4', ['H4']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "Single",
+      "5",
+      [
+        "H5"
+      ]
+    ],
+    [
+      "Single",
+      "7",
+      [
+        "C7"
+      ]
+    ]
+  ],
+  "indexRange": 2
+}
+[Test3] Sent response: {"actIndex": 1}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Single', '5', ['H5']]",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '5', ['H5']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '5', ['H5']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '5', ['H5']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "S3",
+    "C7"
+  ],
+  "publicInfo": [
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 0,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": -1,
+  "curAction": "[None, None, None]",
+  "greaterAction": "[None, None, None]",
+  "greaterPos": -1,
+  "actionList": [
+    [
+      "Single",
+      "3",
+      [
+        "S3"
+      ]
+    ],
+    [
+      "Single",
+      "7",
+      [
+        "C7"
+      ]
+    ],
+    [
+      "Pair",
+      "3",
+      [
+        "S3",
+        "S3"
+      ]
+    ]
+  ],
+  "indexRange": 2
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Single', '3', ['S3']]",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '3', ['S3']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Single', '4', ['H4']]",
+  "greaterPos": 3,
+  "greaterAction": "['Single', '4', ['H4']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', '4', ['H4']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "C7"
+  ],
+  "publicInfo": [
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 0,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['Single', '4', ['H4']]",
+  "greaterPos": 3,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "Single",
+      "7",
+      [
+        "C7"
+      ]
+    ]
+  ],
+  "indexRange": 1
+}
+[Test3] Sent response: {"actIndex": 1}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Single', '7', ['C7']]",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '7', ['C7']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '7', ['C7']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Single', 'T', ['HT']]",
+  "greaterPos": 0,
+  "greaterAction": "['Single', 'T', ['HT']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3"
+  ],
+  "publicInfo": [
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 0,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Single', 'T', ['HT']]",
+  "greaterAction": "['Single', 'T', ['HT']]",
+  "greaterPos": 0,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Single', 'T', ['HT']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Single', 'T', ['HT']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Pair', '2', ['S2', 'H2']]",
+  "greaterPos": 0,
+  "greaterAction": "['Pair', '2', ['S2', 'H2']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3"
+  ],
+  "publicInfo": [
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 4
+      }
+    },
+    {
+      "rest": 0,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Pair', '2', ['S2', 'H2']]",
+  "greaterAction": "['Pair', '2', ['S2', 'H2']]",
+  "greaterPos": 0,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Pair', '2', ['S2', 'H2']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Pair', '2', ['S2', 'H2']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Single', '6', ['H6']]",
+  "greaterPos": 0,
+  "greaterAction": "['Single', '6', ['H6']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3"
+  ],
+  "publicInfo": [
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 0,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Single', '6', ['H6']]",
+  "greaterAction": "['Single', '6', ['H6']]",
+  "greaterPos": 0,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Single', '6', ['H6']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Single', '6', ['H6']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Single', '8', ['C8']]",
+  "greaterPos": 0,
+  "greaterAction": "['Single', '8', ['C8']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3"
+  ],
+  "publicInfo": [
+    {
+      "rest": 0,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 0,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Single', '8', ['C8']]",
+  "greaterAction": "['Single', '8', ['C8']]",
+  "greaterPos": 0,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Single', '8', ['C8']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3"
+  ],
+  "publicInfo": [
+    {
+      "rest": 0,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 0,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "K",
+  "curRank": "K",
+  "stage": "play",
+  "curPos": -1,
+  "curAction": "[None, None, None]",
+  "greaterAction": "[None, None, None]",
+  "greaterPos": -1,
+  "actionList": [
+    [
+      "Single",
+      "3",
+      [
+        "S3"
+      ]
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Single', '3', ['S3']]",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '3', ['S3']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "episodeOver",
+  "curRank": "K",
+  "order": [
+    1,
+    0,
+    2,
+    3
+  ],
+  "restCards": [
+    [
+      3,
+      [
+        "H3"
+      ]
+    ]
+  ]
+}
+[Test3] Received message: {
+  "type": "notify",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "S5",
+    "H5",
+    "C6",
+    "D6",
+    "S7",
+    "C7",
+    "S8",
+    "S9",
+    "D9",
+    "HT",
+    "DT",
+    "CJ",
+    "SQ",
+    "CQ",
+    "DQ",
+    "SK",
+    "HK",
+    "CK",
+    "DK",
+    "SA",
+    "SA",
+    "HA",
+    "DA",
+    "DA"
+  ],
+  "stage": "beginning",
+  "myPos": 2
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "tribute",
+  "result": [
+    [
+      3,
+      1,
+      "SK"
+    ]
+  ]
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "back",
+  "result": [
+    [
+      1,
+      3,
+      "D9"
+    ]
+  ]
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['ThreeWithTwo', '4', ['S4', 'C4', 'D4', 'C8', 'D8']]",
+  "greaterPos": 3,
+  "greaterAction": "['ThreeWithTwo', '4', ['S4', 'C4', 'D4', 'C8', 'D8']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['ThreeWithTwo', '6', ['S6', 'H6', 'H6', 'S2', 'D2']]",
+  "greaterPos": 0,
+  "greaterAction": "['ThreeWithTwo', '6', ['S6', 'H6', 'H6', 'S2', 'D2']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['ThreeWithTwo', 'J', ['SJ', 'DJ', 'DJ', 'CK', 'HA']]",
+  "greaterPos": 1,
+  "greaterAction": "['ThreeWithTwo', 'J', ['SJ', 'DJ', 'DJ', 'CK', 'HA']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "S5",
+    "H5",
+    "C6",
+    "D6",
+    "S7",
+    "C7",
+    "S8",
+    "S9",
+    "D9",
+    "HT",
+    "DT",
+    "CJ",
+    "SQ",
+    "CQ",
+    "DQ",
+    "SK",
+    "HK",
+    "CK",
+    "DK",
+    "SA",
+    "SA",
+    "HA",
+    "DA",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 22,
+      "playArea": {
+        "actIndex": 17
+      }
+    },
+    {
+      "rest": 22,
+      "playArea": {
+        "actIndex": 406
+      }
+    },
+    {
+      "rest": 27,
+      "playArea": {
+        "actIndex": 0
+      }
+    },
+    {
+      "rest": 22,
+      "playArea": {
+        "actIndex": 177
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['ThreeWithTwo', 'J', ['SJ', 'DJ', 'DJ', 'CK', 'HA']]",
+  "greaterAction": "['ThreeWithTwo', 'J', ['SJ', 'DJ', 'DJ', 'CK', 'HA']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "SK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "SK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "SK",
+        "HK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "HK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "HK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "CK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "HA",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "H2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "C2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "S3",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "S5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "H5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "C6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "D6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "S7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "C7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "S8",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "S9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "D9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "HT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "DT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "CJ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "SK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "SK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "SK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "SK",
+        "HK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "HK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "HK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "HK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "CK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "CK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "DK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "SA",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "HA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "SK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "SK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "SK",
+        "HK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "HK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "HK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "CK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "DQ",
+        "HA",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "SK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "SK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "SK",
+        "HK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "HK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "HK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "CK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "CQ",
+        "DQ",
+        "HA",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "HA",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "H2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "C2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "S3",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "S5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "H5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "C6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "D6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "S7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "C7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "S8",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "S9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "D9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "HT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "DT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "CJ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "SQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "CQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "DQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "SA",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "HA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "H2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "C2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "S3",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "S5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "H5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "C6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "D6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "S7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "C7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "S8",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "S9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "D9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "HT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "DT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "CJ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "SQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "CQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "DQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "SA",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "HA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "HA",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "H2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "C2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "S3",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "S5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "H5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "C6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "D6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "S7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "C7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "S8",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "S9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "D9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "HT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "DT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "CJ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "SQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "CQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "DQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "SA",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "HA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "SK",
+        "DK",
+        "HA",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "HA",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "H2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "C2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "S3",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "S5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "H5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "C6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "D6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "S7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "C7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "S8",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "S9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "D9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "HT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "DT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "CJ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "SQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "CQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "DQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "SA",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "HA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "HK",
+        "DK",
+        "HA",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "SA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "SA",
+        "SA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "K",
+      [
+        "CK",
+        "DK",
+        "HA",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "H2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "C2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "S3",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "S5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "H5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "C6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "D6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "S7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "C7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "S8",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "S9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "D9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "HT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "DT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "CJ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "SQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "CQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "DQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "SK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "SK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "SK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "SK",
+        "HK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "HK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "HK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "HK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "CK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "CK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "DK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "SK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "SK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "SK",
+        "HK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "HK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "HK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "CK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "SK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "SK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "SK",
+        "HK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "HK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "HK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "CK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "H2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "C2",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "S3",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "S5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "H5",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "C6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "D6",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "S7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "C7",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "S8",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "S9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "D9",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "HT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "DT",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "CJ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "SQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "CQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "DQ",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "SK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "SK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "SK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "SK",
+        "HK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "HK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "HK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "HK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "CK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "CK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "SA",
+        "DA",
+        "DA",
+        "DK",
+        "HA"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "SQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "SQ",
+        "CQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "CQ",
+        "DQ"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "SK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "SK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "SK",
+        "HK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "HK",
+        "DK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "HK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "A",
+      [
+        "HA",
+        "DA",
+        "DA",
+        "CK",
+        "DK"
+      ]
+    ],
+    [
+      "Bomb",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "HA"
+      ]
+    ],
+    [
+      "Bomb",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "HA"
+      ]
+    ],
+    [
+      "Bomb",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "DK"
+      ]
+    ],
+    [
+      "Bomb",
+      "K",
+      [
+        "SK",
+        "HK",
+        "DK",
+        "HA"
+      ]
+    ],
+    [
+      "Bomb",
+      "K",
+      [
+        "SK",
+        "CK",
+        "DK",
+        "HA"
+      ]
+    ],
+    [
+      "Bomb",
+      "K",
+      [
+        "HK",
+        "CK",
+        "DK",
+        "HA"
+      ]
+    ],
+    [
+      "Bomb",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "DA"
+      ]
+    ],
+    [
+      "Bomb",
+      "A",
+      [
+        "SA",
+        "SA",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "Bomb",
+      "A",
+      [
+        "SA",
+        "HA",
+        "DA",
+        "DA"
+      ]
+    ],
+    [
+      "Bomb",
+      "K",
+      [
+        "SK",
+        "HK",
+        "CK",
+        "DK",
+        "HA"
+      ]
+    ],
+    [
+      "Bomb",
+      "A",
+      [
+        "SA",
+        "SA",
+        "HA",
+        "DA",
+        "DA"
+      ]
+    ]
+  ],
+  "indexRange": 411
+}
+[Test3] Sent response: {"actIndex": 331}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['ThreeWithTwo', 'A', ['SA', 'SA', 'HA', 'HK', 'DK']]",
+  "greaterPos": 2,
+  "greaterAction": "['ThreeWithTwo', 'A', ['SA', 'SA', 'HA', 'HK', 'DK']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['ThreeWithTwo', 'A', ['SA', 'SA', 'HA', 'HK', 'DK']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Bomb', 'T', ['HT', 'CT', 'CT', 'DT']]",
+  "greaterPos": 0,
+  "greaterAction": "['Bomb', 'T', ['HT', 'CT', 'CT', 'DT']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Bomb', 'T', ['HT', 'CT', 'CT', 'DT']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "S5",
+    "H5",
+    "C6",
+    "D6",
+    "S7",
+    "C7",
+    "S8",
+    "S9",
+    "D9",
+    "HT",
+    "DT",
+    "CJ",
+    "SQ",
+    "CQ",
+    "DQ",
+    "SK",
+    "CK",
+    "DA",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 18,
+      "playArea": {
+        "actIndex": 7
+      }
+    },
+    {
+      "rest": 22,
+      "playArea": {
+        "actIndex": 406
+      }
+    },
+    {
+      "rest": 22,
+      "playArea": {
+        "actIndex": 331
+      }
+    },
+    {
+      "rest": 22,
+      "playArea": {
+        "actIndex": 177
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['Bomb', 'T', ['HT', 'CT', 'CT', 'DT']]",
+  "greaterPos": 0,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Bomb', 'T', ['HT', 'CT', 'CT', 'DT']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Bomb', 'T', ['HT', 'CT', 'CT', 'DT']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['ThreeWithTwo', '5', ['S5', 'D5', 'D5', 'H3', 'C3']]",
+  "greaterPos": 0,
+  "greaterAction": "['ThreeWithTwo', '5', ['S5', 'D5', 'D5', 'H3', 'C3']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['ThreeWithTwo', '9', ['S9', 'C9', 'C9', 'H8', 'D8']]",
+  "greaterPos": 1,
+  "greaterAction": "['ThreeWithTwo', '9', ['S9', 'C9', 'C9', 'H8', 'D8']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "S5",
+    "H5",
+    "C6",
+    "D6",
+    "S7",
+    "C7",
+    "S8",
+    "S9",
+    "D9",
+    "HT",
+    "DT",
+    "CJ",
+    "SQ",
+    "CQ",
+    "DQ",
+    "SK",
+    "CK",
+    "DA",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 13,
+      "playArea": {
+        "actIndex": 44
+      }
+    },
+    {
+      "rest": 17,
+      "playArea": {
+        "actIndex": 32
+      }
+    },
+    {
+      "rest": 22,
+      "playArea": {
+        "actIndex": 331
+      }
+    },
+    {
+      "rest": 22,
+      "playArea": {
+        "actIndex": 177
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['ThreeWithTwo', '9', ['S9', 'C9', 'C9', 'H8', 'D8']]",
+  "greaterAction": "['ThreeWithTwo', '9', ['S9', 'C9', 'C9', 'H8', 'D8']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "S5",
+        "H5"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "C6",
+        "D6"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "S7",
+        "C7"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "S9",
+        "D9"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "HT",
+        "DT"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "SK",
+        "CK"
+      ]
+    ],
+    [
+      "ThreeWithTwo",
+      "Q",
+      [
+        "SQ",
+        "CQ",
+        "DQ",
+        "DA",
+        "DA"
+      ]
+    ]
+  ],
+  "indexRange": 8
+}
+[Test3] Sent response: {"actIndex": 2}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['ThreeWithTwo', 'Q', ['SQ', 'CQ', 'DQ', 'S5', 'H5']]",
+  "greaterPos": 2,
+  "greaterAction": "['ThreeWithTwo', 'Q', ['SQ', 'CQ', 'DQ', 'S5', 'H5']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Bomb', 'Q', ['HQ', 'HQ', 'CQ', 'DQ']]",
+  "greaterPos": 3,
+  "greaterAction": "['Bomb', 'Q', ['HQ', 'HQ', 'CQ', 'DQ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Bomb', 'Q', ['HQ', 'HQ', 'CQ', 'DQ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Bomb', 'Q', ['HQ', 'HQ', 'CQ', 'DQ']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "C6",
+    "D6",
+    "S7",
+    "C7",
+    "S8",
+    "S9",
+    "D9",
+    "HT",
+    "DT",
+    "CJ",
+    "SK",
+    "CK",
+    "DA",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 13,
+      "playArea": {
+        "actIndex": 44
+      }
+    },
+    {
+      "rest": 17,
+      "playArea": {
+        "actIndex": 32
+      }
+    },
+    {
+      "rest": 17,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 18,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['Bomb', 'Q', ['HQ', 'HQ', 'CQ', 'DQ']]",
+  "greaterPos": 3,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Bomb', 'Q', ['HQ', 'HQ', 'CQ', 'DQ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Straight', '2', ['C2', 'D3', 'H4', 'H5', 'C6']]",
+  "greaterPos": 3,
+  "greaterAction": "['Straight', '2', ['C2', 'D3', 'H4', 'H5', 'C6']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Straight', '2', ['C2', 'D3', 'H4', 'H5', 'C6']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Straight', '2', ['C2', 'D3', 'H4', 'H5', 'C6']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "C6",
+    "D6",
+    "S7",
+    "C7",
+    "S8",
+    "S9",
+    "D9",
+    "HT",
+    "DT",
+    "CJ",
+    "SK",
+    "CK",
+    "DA",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 13,
+      "playArea": {
+        "actIndex": 44
+      }
+    },
+    {
+      "rest": 17,
+      "playArea": {
+        "actIndex": 32
+      }
+    },
+    {
+      "rest": 17,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 13,
+      "playArea": {
+        "actIndex": 77
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['Straight', '2', ['C2', 'D3', 'H4', 'H5', 'C6']]",
+  "greaterPos": 3,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "C6",
+        "S7",
+        "S8",
+        "S9",
+        "HT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "C6",
+        "S7",
+        "S8",
+        "S9",
+        "DT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "C6",
+        "S7",
+        "S8",
+        "D9",
+        "HT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "C6",
+        "S7",
+        "S8",
+        "D9",
+        "DT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "C6",
+        "C7",
+        "S8",
+        "S9",
+        "HT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "C6",
+        "C7",
+        "S8",
+        "S9",
+        "DT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "C6",
+        "C7",
+        "S8",
+        "D9",
+        "HT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "C6",
+        "C7",
+        "S8",
+        "D9",
+        "DT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "D6",
+        "S7",
+        "S8",
+        "S9",
+        "HT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "D6",
+        "S7",
+        "S8",
+        "S9",
+        "DT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "D6",
+        "S7",
+        "S8",
+        "D9",
+        "HT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "D6",
+        "S7",
+        "S8",
+        "D9",
+        "DT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "D6",
+        "C7",
+        "S8",
+        "S9",
+        "HT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "D6",
+        "C7",
+        "S8",
+        "S9",
+        "DT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "D6",
+        "C7",
+        "S8",
+        "D9",
+        "HT"
+      ]
+    ],
+    [
+      "Straight",
+      "6",
+      [
+        "D6",
+        "C7",
+        "S8",
+        "D9",
+        "DT"
+      ]
+    ],
+    [
+      "Straight",
+      "7",
+      [
+        "S7",
+        "S8",
+        "S9",
+        "HT",
+        "CJ"
+      ]
+    ],
+    [
+      "Straight",
+      "7",
+      [
+        "S7",
+        "S8",
+        "S9",
+        "DT",
+        "CJ"
+      ]
+    ],
+    [
+      "Straight",
+      "7",
+      [
+        "S7",
+        "S8",
+        "D9",
+        "HT",
+        "CJ"
+      ]
+    ],
+    [
+      "Straight",
+      "7",
+      [
+        "S7",
+        "S8",
+        "D9",
+        "DT",
+        "CJ"
+      ]
+    ],
+    [
+      "Straight",
+      "7",
+      [
+        "C7",
+        "S8",
+        "S9",
+        "HT",
+        "CJ"
+      ]
+    ],
+    [
+      "Straight",
+      "7",
+      [
+        "C7",
+        "S8",
+        "S9",
+        "DT",
+        "CJ"
+      ]
+    ],
+    [
+      "Straight",
+      "7",
+      [
+        "C7",
+        "S8",
+        "D9",
+        "HT",
+        "CJ"
+      ]
+    ],
+    [
+      "Straight",
+      "7",
+      [
+        "C7",
+        "S8",
+        "D9",
+        "DT",
+        "CJ"
+      ]
+    ]
+  ],
+  "indexRange": 24
+}
+[Test3] Sent response: {"actIndex": 14}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Straight', '6', ['D6', 'C7', 'S8', 'S9', 'DT']]",
+  "greaterPos": 2,
+  "greaterAction": "['Straight', '6', ['D6', 'C7', 'S8', 'S9', 'DT']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Straight', '6', ['D6', 'C7', 'S8', 'S9', 'DT']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Straight', 'T', ['ST', 'CJ', 'SQ', 'DK', 'CA']]",
+  "greaterPos": 0,
+  "greaterAction": "['Straight', 'T', ['ST', 'CJ', 'SQ', 'DK', 'CA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Straight', 'T', ['ST', 'CJ', 'SQ', 'DK', 'CA']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "C6",
+    "S7",
+    "D9",
+    "HT",
+    "CJ",
+    "SK",
+    "CK",
+    "DA",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 17,
+      "playArea": {
+        "actIndex": 32
+      }
+    },
+    {
+      "rest": 12,
+      "playArea": {
+        "actIndex": 14
+      }
+    },
+    {
+      "rest": 13,
+      "playArea": {
+        "actIndex": 77
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['Straight', 'T', ['ST', 'CJ', 'SQ', 'DK', 'CA']]",
+  "greaterPos": 0,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Straight', 'T', ['ST', 'CJ', 'SQ', 'DK', 'CA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Straight', 'T', ['ST', 'CJ', 'SQ', 'DK', 'CA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Pair', 'B', ['SB', 'SB']]",
+  "greaterPos": 0,
+  "greaterAction": "['Pair', 'B', ['SB', 'SB']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Pair', 'R', ['HR', 'HR']]",
+  "greaterPos": 1,
+  "greaterAction": "['Pair', 'R', ['HR', 'HR']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "C6",
+    "S7",
+    "D9",
+    "HT",
+    "CJ",
+    "SK",
+    "CK",
+    "DA",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 10
+      }
+    },
+    {
+      "rest": 15,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 12,
+      "playArea": {
+        "actIndex": 14
+      }
+    },
+    {
+      "rest": 13,
+      "playArea": {
+        "actIndex": 77
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Pair', 'R', ['HR', 'HR']]",
+  "greaterAction": "['Pair', 'R', ['HR', 'HR']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Pair', 'R', ['HR', 'HR']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Pair', 'R', ['HR', 'HR']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Pair', 'R', ['HR', 'HR']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['ThreeWithTwo', '7', ['S7', 'H7', 'H7', 'S4', 'D4']]",
+  "greaterPos": 1,
+  "greaterAction": "['ThreeWithTwo', '7', ['S7', 'H7', 'H7', 'S4', 'D4']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "C6",
+    "S7",
+    "D9",
+    "HT",
+    "CJ",
+    "SK",
+    "CK",
+    "DA",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 10
+      }
+    },
+    {
+      "rest": 10,
+      "playArea": {
+        "actIndex": 30
+      }
+    },
+    {
+      "rest": 12,
+      "playArea": {
+        "actIndex": 14
+      }
+    },
+    {
+      "rest": 13,
+      "playArea": {
+        "actIndex": 77
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['ThreeWithTwo', '7', ['S7', 'H7', 'H7', 'S4', 'D4']]",
+  "greaterAction": "['ThreeWithTwo', '7', ['S7', 'H7', 'H7', 'S4', 'D4']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['ThreeWithTwo', '7', ['S7', 'H7', 'H7', 'S4', 'D4']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['ThreeWithTwo', '9', ['H9', 'H9', 'D9', 'C5', 'C5']]",
+  "greaterPos": 3,
+  "greaterAction": "['ThreeWithTwo', '9', ['H9', 'H9', 'D9', 'C5', 'C5']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['ThreeWithTwo', '9', ['H9', 'H9', 'D9', 'C5', 'C5']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['ThreeWithTwo', '9', ['H9', 'H9', 'D9', 'C5', 'C5']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "C6",
+    "S7",
+    "D9",
+    "HT",
+    "CJ",
+    "SK",
+    "CK",
+    "DA",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 10
+      }
+    },
+    {
+      "rest": 10,
+      "playArea": {
+        "actIndex": 30
+      }
+    },
+    {
+      "rest": 12,
+      "playArea": {
+        "actIndex": 14
+      }
+    },
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['ThreeWithTwo', '9', ['H9', 'H9', 'D9', 'C5', 'C5']]",
+  "greaterPos": 3,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['ThreeWithTwo', '9', ['H9', 'H9', 'D9', 'C5', 'C5']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Single', '2', ['S2']]",
+  "greaterPos": 3,
+  "greaterAction": "['Single', '2', ['S2']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Single', '3', ['D3']]",
+  "greaterPos": 0,
+  "greaterAction": "['Single', '3', ['D3']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '4', ['H4']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '4', ['H4']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "C6",
+    "S7",
+    "D9",
+    "HT",
+    "CJ",
+    "SK",
+    "CK",
+    "DA",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 9,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 12,
+      "playArea": {
+        "actIndex": 14
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 0
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '4', ['H4']]",
+  "greaterAction": "['Single', '4', ['H4']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "Single",
+      "6",
+      [
+        "C6"
+      ]
+    ],
+    [
+      "Single",
+      "7",
+      [
+        "S7"
+      ]
+    ],
+    [
+      "Single",
+      "9",
+      [
+        "D9"
+      ]
+    ],
+    [
+      "Single",
+      "T",
+      [
+        "HT"
+      ]
+    ],
+    [
+      "Single",
+      "J",
+      [
+        "CJ"
+      ]
+    ],
+    [
+      "Single",
+      "K",
+      [
+        "SK"
+      ]
+    ],
+    [
+      "Single",
+      "K",
+      [
+        "CK"
+      ]
+    ],
+    [
+      "Single",
+      "A",
+      [
+        "DA"
+      ]
+    ]
+  ],
+  "indexRange": 8
+}
+[Test3] Sent response: {"actIndex": 6}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Single', 'K', ['SK']]",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'K', ['SK']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'K', ['SK']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'K', ['SK']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'K', ['SK']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "C6",
+    "S7",
+    "D9",
+    "HT",
+    "CJ",
+    "CK",
+    "DA",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 9,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 11,
+      "playArea": {
+        "actIndex": 6
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 0
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": -1,
+  "curAction": "[None, None, None]",
+  "greaterAction": "[None, None, None]",
+  "greaterPos": -1,
+  "actionList": [
+    [
+      "Single",
+      "2",
+      [
+        "H2"
+      ]
+    ],
+    [
+      "Single",
+      "2",
+      [
+        "C2"
+      ]
+    ],
+    [
+      "Single",
+      "3",
+      [
+        "S3"
+      ]
+    ],
+    [
+      "Single",
+      "6",
+      [
+        "C6"
+      ]
+    ],
+    [
+      "Single",
+      "7",
+      [
+        "S7"
+      ]
+    ],
+    [
+      "Single",
+      "9",
+      [
+        "D9"
+      ]
+    ],
+    [
+      "Single",
+      "T",
+      [
+        "HT"
+      ]
+    ],
+    [
+      "Single",
+      "J",
+      [
+        "CJ"
+      ]
+    ],
+    [
+      "Single",
+      "K",
+      [
+        "CK"
+      ]
+    ],
+    [
+      "Single",
+      "A",
+      [
+        "DA"
+      ]
+    ],
+    [
+      "Pair",
+      "2",
+      [
+        "H2",
+        "C2"
+      ]
+    ],
+    [
+      "Pair",
+      "A",
+      [
+        "DA",
+        "DA"
+      ]
+    ]
+  ],
+  "indexRange": 11
+}
+[Test3] Sent response: {"actIndex": 9}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Single', 'A', ['DA']]",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "H2",
+    "C2",
+    "S3",
+    "C6",
+    "S7",
+    "D9",
+    "HT",
+    "CJ",
+    "CK",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 9,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 10,
+      "playArea": {
+        "actIndex": 9
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 0
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": -1,
+  "curAction": "[None, None, None]",
+  "greaterAction": "[None, None, None]",
+  "greaterPos": -1,
+  "actionList": [
+    [
+      "Single",
+      "2",
+      [
+        "H2"
+      ]
+    ],
+    [
+      "Single",
+      "2",
+      [
+        "C2"
+      ]
+    ],
+    [
+      "Single",
+      "3",
+      [
+        "S3"
+      ]
+    ],
+    [
+      "Single",
+      "6",
+      [
+        "C6"
+      ]
+    ],
+    [
+      "Single",
+      "7",
+      [
+        "S7"
+      ]
+    ],
+    [
+      "Single",
+      "9",
+      [
+        "D9"
+      ]
+    ],
+    [
+      "Single",
+      "T",
+      [
+        "HT"
+      ]
+    ],
+    [
+      "Single",
+      "J",
+      [
+        "CJ"
+      ]
+    ],
+    [
+      "Single",
+      "K",
+      [
+        "CK"
+      ]
+    ],
+    [
+      "Single",
+      "A",
+      [
+        "DA"
+      ]
+    ],
+    [
+      "Pair",
+      "2",
+      [
+        "H2",
+        "C2"
+      ]
+    ]
+  ],
+  "indexRange": 10
+}
+[Test3] Sent response: {"actIndex": 10}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Pair', '2', ['H2', 'C2']]",
+  "greaterPos": 2,
+  "greaterAction": "['Pair', '2', ['H2', 'C2']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Pair', '2', ['H2', 'C2']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['Pair', '3', ['H3', 'C3']]",
+  "greaterPos": 0,
+  "greaterAction": "['Pair', '3', ['H3', 'C3']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Pair', '3', ['H3', 'C3']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "C6",
+    "S7",
+    "D9",
+    "HT",
+    "CJ",
+    "CK",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 9,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 10
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 0
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['Pair', '3', ['H3', 'C3']]",
+  "greaterPos": 0,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 0,
+  "greaterAction": "['Pair', '3', ['H3', 'C3']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Pair', '7', ['C7', 'D7']]",
+  "greaterPos": 3,
+  "greaterAction": "['Pair', '7', ['C7', 'D7']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Pair', '7', ['C7', 'D7']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Pair', 'J', ['SJ', 'HJ']]",
+  "greaterPos": 1,
+  "greaterAction": "['Pair', 'J', ['SJ', 'HJ']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "C6",
+    "S7",
+    "D9",
+    "HT",
+    "CJ",
+    "CK",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 10
+      }
+    },
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 2
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Pair', 'J', ['SJ', 'HJ']]",
+  "greaterAction": "['Pair', 'J', ['SJ', 'HJ']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Pair', 'J', ['SJ', 'HJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Pair', 'J', ['SJ', 'HJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Pair', 'J', ['SJ', 'HJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '8', ['S8']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', '8', ['S8']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "C6",
+    "S7",
+    "D9",
+    "HT",
+    "CJ",
+    "CK",
+    "DA"
+  ],
+  "publicInfo": [
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 8,
+      "playArea": {
+        "actIndex": 10
+      }
+    },
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 2
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', '8', ['S8']]",
+  "greaterAction": "['Single', '8', ['S8']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "Single",
+      "9",
+      [
+        "D9"
+      ]
+    ],
+    [
+      "Single",
+      "T",
+      [
+        "HT"
+      ]
+    ],
+    [
+      "Single",
+      "J",
+      [
+        "CJ"
+      ]
+    ],
+    [
+      "Single",
+      "K",
+      [
+        "CK"
+      ]
+    ],
+    [
+      "Single",
+      "A",
+      [
+        "DA"
+      ]
+    ]
+  ],
+  "indexRange": 5
+}
+[Test3] Sent response: {"actIndex": 5}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Single', 'A', ['DA']]",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 2,
+  "greaterAction": "['Single', 'A', ['DA']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "C6",
+    "S7",
+    "D9",
+    "HT",
+    "CJ",
+    "CK"
+  ],
+  "publicInfo": [
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 7,
+      "playArea": {
+        "actIndex": 5
+      }
+    },
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 2
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": -1,
+  "curAction": "[None, None, None]",
+  "greaterAction": "[None, None, None]",
+  "greaterPos": -1,
+  "actionList": [
+    [
+      "Single",
+      "3",
+      [
+        "S3"
+      ]
+    ],
+    [
+      "Single",
+      "6",
+      [
+        "C6"
+      ]
+    ],
+    [
+      "Single",
+      "7",
+      [
+        "S7"
+      ]
+    ],
+    [
+      "Single",
+      "9",
+      [
+        "D9"
+      ]
+    ],
+    [
+      "Single",
+      "T",
+      [
+        "HT"
+      ]
+    ],
+    [
+      "Single",
+      "J",
+      [
+        "CJ"
+      ]
+    ],
+    [
+      "Single",
+      "K",
+      [
+        "CK"
+      ]
+    ]
+  ],
+  "indexRange": 6
+}
+[Test3] Sent response: {"actIndex": 2}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['Single', '7', ['S7']]",
+  "greaterPos": 2,
+  "greaterAction": "['Single', '7', ['S7']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Single', '8', ['H8']]",
+  "greaterPos": 3,
+  "greaterAction": "['Single', '8', ['H8']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', '8', ['H8']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', 'K', ['HK']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'K', ['HK']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "C6",
+    "D9",
+    "HT",
+    "CJ",
+    "CK"
+  ],
+  "publicInfo": [
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 5,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', 'K', ['HK']]",
+  "greaterAction": "['Single', 'K', ['HK']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'K', ['HK']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'K', ['HK']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'K', ['HK']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', 'K', ['SK']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'K', ['SK']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "C6",
+    "D9",
+    "HT",
+    "CJ",
+    "CK"
+  ],
+  "publicInfo": [
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 3
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', 'K', ['SK']]",
+  "greaterAction": "['Single', 'K', ['SK']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'K', ['SK']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'K', ['SK']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'K', ['SK']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Pair', '2', ['H2', 'D2']]",
+  "greaterPos": 1,
+  "greaterAction": "['Pair', '2', ['H2', 'D2']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "C6",
+    "D9",
+    "HT",
+    "CJ",
+    "CK"
+  ],
+  "publicInfo": [
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 4
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 4,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Pair', '2', ['H2', 'D2']]",
+  "greaterAction": "['Pair', '2', ['H2', 'D2']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Pair', '2', ['H2', 'D2']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Pair', '6', ['S6', 'D6']]",
+  "greaterPos": 3,
+  "greaterAction": "['Pair', '6', ['S6', 'D6']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Pair', '6', ['S6', 'D6']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Pair', '6', ['S6', 'D6']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "C6",
+    "D9",
+    "HT",
+    "CJ",
+    "CK"
+  ],
+  "publicInfo": [
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 4
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['Pair', '6', ['S6', 'D6']]",
+  "greaterPos": 3,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ]
+  ],
+  "indexRange": 0
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Pair', '6', ['S6', 'D6']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Single', 'J', ['HJ']]",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'J', ['HJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'J', ['HJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'J', ['HJ']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "C6",
+    "D9",
+    "HT",
+    "CJ",
+    "CK"
+  ],
+  "publicInfo": [
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 2,
+      "playArea": {
+        "actIndex": 4
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterAction": "['Single', 'J', ['HJ']]",
+  "greaterPos": 3,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "Single",
+      "K",
+      [
+        "CK"
+      ]
+    ]
+  ],
+  "indexRange": 1
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', 'J', ['HJ']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 3,
+  "curAction": "['Single', '3', ['S3']]",
+  "greaterPos": 3,
+  "greaterAction": "['Single', '3', ['S3']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 3,
+  "greaterAction": "['Single', '3', ['S3']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', 'T', ['ST']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'T', ['ST']]"
+}
+[Test3] Received message: {
+  "type": "act",
+  "handCards": [
+    "S3",
+    "C6",
+    "D9",
+    "HT",
+    "CJ",
+    "CK"
+  ],
+  "publicInfo": [
+    {
+      "rest": 3,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 1,
+      "playArea": {
+        "actIndex": 1
+      }
+    },
+    {
+      "rest": 6,
+      "playArea": {
+        "actIndex": 2
+      }
+    },
+    {
+      "rest": 0,
+      "playArea": {
+        "actIndex": 0
+      }
+    }
+  ],
+  "selfRank": "2",
+  "oppoRank": "A",
+  "curRank": "A",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', 'T', ['ST']]",
+  "greaterAction": "['Single', 'T', ['ST']]",
+  "greaterPos": 1,
+  "actionList": [
+    [
+      "PASS",
+      "PASS",
+      "PASS"
+    ],
+    [
+      "Single",
+      "J",
+      [
+        "CJ"
+      ]
+    ],
+    [
+      "Single",
+      "K",
+      [
+        "CK"
+      ]
+    ]
+  ],
+  "indexRange": 2
+}
+[Test3] Sent response: {"actIndex": 0}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 2,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'T', ['ST']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 0,
+  "curAction": "['PASS', 'PASS', 'PASS']",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'T', ['ST']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "play",
+  "curPos": 1,
+  "curAction": "['Single', 'A', ['CA']]",
+  "greaterPos": 1,
+  "greaterAction": "['Single', 'A', ['CA']]"
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "episodeOver",
+  "curRank": "A",
+  "order": [
+    3,
+    1,
+    0,
+    2
+  ],
+  "restCards": [
+    [
+      0,
+      [
+        "C4",
+        "D7",
+        "C8"
+      ]
+    ],
+    [
+      2,
+      [
+        "S3",
+        "C6",
+        "D9",
+        "HT",
+        "CJ",
+        "CK"
+      ]
+    ]
+  ]
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "gameOver",
+  "curTimes": 3,
+  "settingTimes": 3
+}
+[Test3] Received message: {
+  "type": "notify",
+  "stage": "gameResult",
+  "victoryNum": [
+    0,
+    3,
+    0,
+    3
+  ],
+  "draws": [
+    0,
+    0,
+    0,
+    0
+  ]
+}
+[Test3] Connection closed: no close frame received or sent
+[Test3] Disconnected
