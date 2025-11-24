@@ -16,3 +16,12 @@ tmp/
 __pycache__/
 *.pyc
 *.pyo
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Test files
+test_*.py
+*.md.bak

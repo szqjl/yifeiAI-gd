@@ -13,7 +13,7 @@
 ### philsz 账户下的仓库
 根据您提供的信息，philsz 账户下已有三个仓库。当前项目使用 **YiFeiAI-GD** 作为主远程仓库。
 
-如需配置其他仓库，请参考 [多远程仓库配置指南](docs/MULTI_REPO_SETUP.md)
+如需配置多个远程仓库，请参考 [Git设置完整指南](docs/GIT_SETUP_GUIDE.md)
 
 ### Git 远程配置
 ```bash
