@@ -185,19 +185,18 @@ game_phase: 全阶段
   - 判断是否可以压制
   - 判断牌型合法性
 
-##### 3.2.3 游戏状态管理器 (GameStateManager)
+##### 3.2.3 增强游戏状态管理器 (EnhancedGameStateManager)
 - **功能**:
-  - 维护当前手牌
-  - 记录已出牌信息
-  - 跟踪游戏进度
-  - 记录队友和对手信息
-  - 维护主牌信息
+  - 维护完整的游戏状态信息
+  - 集成记牌模块
+  - 提供状态查询接口
+  - 支持状态快照和恢复
   - **识别队友关系**（重要）
 
 - **组队规则**（平台规则）:
   - **第1个和第3个连接**的AI自动为一队 (myPos: 0和2)
   - **第2个和第4个连接**的AI自动为一队 (myPos: 1和3)
-  - 需要根据连接顺序识别队友并配合
+  - 队友识别公式: `teammate_pos = (myPos + 2) % 4`（参考获奖代码）
 
 - **状态信息**:
   - 当前手牌列表 (handCards)
@@ -208,29 +207,106 @@ game_phase: 全阶段
   - 队友座位号
   - 对手座位号
   - 主牌级别 (curRank)
+  
+- **增强功能**:
+  - 玩家历史记录（history）: 每个玩家打出的牌和剩余牌数
+  - 牌库状态（remain_cards）: 按花色和点数分类的剩余牌
+  - 游戏进度状态: 连续PASS次数（pass_num, my_pass_num）
+  - 配合状态: 队友位置识别、队友出牌意图分析
+  
+- **状态查询接口**:
+  - `is_passive_play()`: 判断是否被动出牌
+  - `is_active_play()`: 判断是否主动出牌
+  - `is_teammate_action()`: 判断是否是队友出的牌
+  - `get_player_remain_cards()`: 获取玩家剩余牌数
+  - `get_teammate_remain_cards()`: 获取队友剩余牌数
+  - `get_opponent_remain_cards()`: 获取对手剩余牌数
+  - `get_pass_count()`: 获取PASS次数
+  - `get_state_summary()`: 获取状态摘要
 
 #### 3.3 决策引擎模块 (Decision Engine Module)
 
-##### 3.3.1 策略评估器 (StrategyEvaluator)
+##### 3.3.1 多因素评估系统 (MultiFactorEvaluator)
+- **功能**:
+  - 综合评估多个因素
+  - 计算动作的综合评分
+  - 支持权重调整
+  
+- **评估因素**（6个因素，权重可调）:
+  1. **剩余牌数因素** (25%): 考虑自己、队友、对手的剩余牌数
+  2. **牌型大小因素** (20%): 评估牌型大小和压制能力
+  3. **配合因素** (20%): 评估配合机会和配合效果
+  4. **风险因素** (15%): 评估出牌风险
+  5. **时机因素** (10%): 评估游戏阶段和时机
+  6. **手牌结构因素** (10%): 评估对手牌结构的影响
+
+- **接口设计**:
+  ```python
+  class MultiFactorEvaluator:
+      def evaluate_action(self, action, action_index, cur_action, action_list) -> float
+      def evaluate_all_actions(self, action_list, cur_action) -> List[Tuple[int, float]]
+      def get_best_action(self, action_list, cur_action) -> int
+      def update_weights(self, weights: Dict[str, float])
+  ```
+
+##### 3.3.2 策略评估器 (StrategyEvaluator)
 - **功能**:
   - 评估当前局面
   - 评估手牌价值
   - 评估出牌风险
   - 评估配合机会
 
-##### 3.3.2 出牌决策器 (PlayDecisionMaker)
+##### 3.3.3 出牌决策器 (PlayDecisionMaker)
 - **功能**:
   - 生成候选出牌方案
   - 评估每个方案的价值
   - 选择最优出牌
   - 决定是否过牌 (PASS)
+  - **主动/被动决策分离**:
+    - `active_decision()`: 主动出牌决策（率先出牌或接风）
+    - `passive_decision()`: 被动出牌决策（需要压制）
 
-##### 3.3.3 配合策略器 (CooperationStrategy)
+##### 3.3.4 配合策略器 (CooperationStrategy)
 - **功能**:
   - 识别队友意图
   - 判断是否需要配合
   - 制定配合策略
   - 评估配合效果
+  
+- **详细实现**:
+  - `should_support_teammate()`: 判断是否应该配合队友（PASS让队友继续）
+  - `should_take_over()`: 判断是否应该接替队友
+  - `evaluate_cooperation_opportunity()`: 评估配合机会
+  - `get_cooperation_strategy()`: 获取配合策略建议
+  
+- **配合策略参数**（可配置）:
+  - `support_threshold`: 队友牌型值阈值（默认15）
+  - `danger_threshold`: 对手剩余牌数危险阈值（默认4）
+  - `max_val_threshold`: 最大牌值阈值（默认14）
+
+##### 3.3.5 决策时间控制器 (DecisionTimer)
+- **功能**:
+  - 设置最大决策时间（默认0.8秒）
+  - 超时检测和保护机制
+  - 渐进式决策支持
+  - 装饰器支持（`@with_timeout`）
+
+##### 3.3.6 牌型专门处理器 (CardTypeHandlers)
+- **功能**:
+  - 为每种牌型创建专门的处理类
+  - 实现针对性的决策逻辑
+  - 支持主动和被动两种出牌模式
+  
+- **已实现的处理器**:
+  - `SingleHandler`: 单张专门处理
+  - `PairHandler`: 对子专门处理
+  - `TripsHandler`: 三张专门处理
+  - `BombHandler`: 炸弹专门处理
+  - `StraightHandler`: 顺子专门处理
+  
+- **设计模式**:
+  - 使用抽象基类 `BaseCardTypeHandler` 定义统一接口
+  - 通过工厂模式 `CardTypeHandlerFactory` 获取处理器
 
 #### 3.4 知识库模块 (Knowledge Base Module)
 
@@ -609,15 +685,101 @@ CompetitionInfo:
 4. 接收游戏结束消息 → 保存对局数据 (stage: gameOver)
 ```
 
-#### 5.3 决策流程
+#### 5.3 完整数据流设计
+
+**数据流图**:
+```
+WebSocket消息接收
+    ↓
+消息解析 (JSON)
+    ↓
+状态更新 (EnhancedGameStateManager.update_from_message)
+    ├─> 更新基础状态 (myPos, handCards, curPos, etc.)
+    ├─> 更新记牌信息 (CardTracker.update_from_play)
+    │   ├─> 更新玩家历史
+    │   ├─> 更新剩余牌库
+    │   └─> 更新PASS次数
+    └─> 更新公共信息 (publicInfo)
+    ↓
+决策引擎 (DecisionEngine.decide)
+    ├─> 开始计时 (DecisionTimer.start)
+    ├─> 判断主动/被动 (EnhancedGameStateManager.is_passive_play)
+    │
+    ├─> [被动出牌分支]
+    │   ├─> 评估配合机会 (CooperationStrategy.get_cooperation_strategy)
+    │   │   └─> 查询状态信息 (EnhancedGameStateManager)
+    │   │       └─> 查询记牌信息 (CardTracker)
+    │   │
+    │   ├─> 使用牌型专门处理器 (CardTypeHandlerFactory.get_handler)
+    │   │   ├─> 分析手牌结构 (HandCombiner.combine_handcards)
+    │   │   └─> 处理被动出牌 (Handler.handle_passive)
+    │   │
+    │   └─> 多因素评估 (MultiFactorEvaluator.evaluate_all_actions)
+    │       ├─> 评估剩余牌数因素 (查询 CardTracker)
+    │       ├─> 评估牌型大小因素
+    │       ├─> 评估配合因素 (查询 CooperationStrategy)
+    │       ├─> 评估风险因素
+    │       ├─> 评估时机因素
+    │       └─> 评估手牌结构因素 (查询 HandCombiner)
+    │
+    └─> [主动出牌分支]
+        └─> 多因素评估 (MultiFactorEvaluator.evaluate_all_actions)
+            └─> (同上)
+    ↓
+检查超时 (DecisionTimer.check_timeout)
+    ↓
+选择最佳动作
+    ↓
+构建响应消息 ({"actIndex": X})
+    ↓
+WebSocket消息发送
+```
+
+#### 5.4 决策流程（详细）
 ```
 1. 接收出牌请求 (type: act, stage: play)
-2. 分析当前局面 (curPos, curAction, handCards)
-3. 识别可选牌型 (使用CardTypeRecognizer)
-4. 评估每个方案 (StrategyEvaluator)
-5. 选择最优方案 (PlayDecisionMaker)
-6. 发送决策结果 (type: act, curAction: [type, rank, cards])
+2. 开始计时 (DecisionTimer.start)
+3. 判断主动/被动 (EnhancedGameStateManager.is_passive_play)
+4. [被动出牌]:
+   - 评估配合机会 (CooperationStrategy)
+   - 使用牌型专门处理器 (CardTypeHandlerFactory)
+   - 多因素评估 (MultiFactorEvaluator)
+5. [主动出牌]:
+   - 多因素评估 (MultiFactorEvaluator)
+6. 检查超时 (DecisionTimer.check_timeout)
+7. 选择最优方案
+8. 发送决策结果 (type: act, {"actIndex": X})
 ```
+
+#### 5.5 模块依赖关系
+
+**依赖关系图**:
+```
+DecisionEngine (决策引擎)
+├── DecisionTimer (时间控制)
+│   └── (无依赖)
+├── CooperationStrategy (配合策略)
+│   └── EnhancedGameStateManager (状态管理)
+│       └── CardTracker (记牌模块)
+│           └── (无依赖)
+├── MultiFactorEvaluator (多因素评估)
+│   ├── EnhancedGameStateManager (状态管理)
+│   │   └── CardTracker (记牌模块)
+│   ├── HandCombiner (手牌组合)
+│   │   └── (无依赖)
+│   └── CooperationStrategy (配合策略)
+│       └── EnhancedGameStateManager (状态管理)
+└── CardTypeHandlerFactory (牌型处理器工厂)
+    ├── EnhancedGameStateManager (状态管理)
+    │   └── CardTracker (记牌模块)
+    └── HandCombiner (手牌组合)
+        └── (无依赖)
+```
+
+**依赖说明**:
+- **决策引擎 → 状态管理 → 记牌模块**: `DecisionEngine` 通过 `EnhancedGameStateManager` 访问游戏状态，`EnhancedGameStateManager` 内部使用 `CardTracker` 维护记牌信息
+- **决策引擎 → 配合策略 → 状态管理**: `DecisionEngine` 调用 `CooperationStrategy` 评估配合机会，`CooperationStrategy` 通过 `EnhancedGameStateManager` 获取状态信息
+- **决策引擎 → 手牌组合 → 游戏规则**: `DecisionEngine` 使用 `HandCombiner` 分析手牌结构，`HandCombiner` 基于游戏规则识别牌型
 
 #### 5.4 信息监控流程
 ```
@@ -662,11 +824,70 @@ websocket:
   heartbeat_interval: 30
   timeout: 10  # 连接超时时间（秒）
 
+decision:
+  # 最大决策时间（秒）
+  max_decision_time: 0.8
+  # 启用记牌功能
+  enable_card_tracking: true
+  # 启用推理功能
+  enable_inference: true
+  # 启用配合策略
+  enable_cooperation: true
+  # 决策缓存大小
+  cache_size: 1000
+
+# 记牌模块配置
+card_tracking:
+  # 跟踪历史
+  track_history: true
+  # 跟踪剩余牌
+  track_remaining: true
+  # 启用概率计算
+  enable_probability: true
+
+# 多因素评估权重配置
+evaluation:
+  weights:
+    # 剩余牌数因素权重
+    remaining_cards: 0.25
+    # 牌型大小因素权重
+    card_type_value: 0.20
+    # 配合因素权重
+    cooperation: 0.20
+    # 风险因素权重
+    risk: 0.15
+    # 时机因素权重
+    timing: 0.10
+    # 手牌结构因素权重
+    hand_structure: 0.10
+
+# 配合策略配置
+cooperation:
+  # 队友牌型值阈值（大于此值应该PASS配合）
+  support_threshold: 15
+  # 对手剩余牌数危险阈值（小于此值应该配合）
+  danger_threshold: 4
+  # 最大牌值阈值
+  max_val_threshold: 14
+
+# 手牌组合配置
+hand_combiner:
+  # 组牌优先级（数值越大优先级越高）
+  priorities:
+    StraightFlush: 100  # 同花顺
+    Bomb: 80            # 炸弹
+    Straight: 60        # 顺子
+    ThreeWithTwo: 50    # 三带二
+    TwoTrips: 45        # 钢板
+    ThreePair: 40       # 三连对
+    Trips: 30           # 三张
+    Pair: 20            # 对子
+    Single: 10          # 单张
+
 ai:
   strategy_level: "medium"  # basic/medium/advanced
   cooperation_enabled: true
   risk_tolerance: 0.5
-  max_decision_time: 1.0  # 最大决策时间（秒）
 
 data:
   save_path: "./replays"
@@ -765,34 +986,63 @@ info_monitor:
   - 验证组队关系（1-3一队 (myPos 0-2)，2-4一队 (myPos 1-3)）
   - 检查牌型识别准确性
   - 检查决策合理性
+  - 验证记牌模块准确性
+  - 验证配合策略有效性
+
+- **模块集成测试**
+  - 测试状态管理 → 记牌模块的集成
+  - 测试决策引擎 → 多因素评估的集成
+  - 测试决策引擎 → 配合策略的集成
+  - 测试决策引擎 → 牌型处理器的集成
+  - 测试完整决策流程
 
 - **多局稳定性测试**
   - 连续多局对战
   - 内存泄漏检查
   - 长时间运行稳定性
+  - 状态重置测试
 
 - **异常场景测试**
   - 网络中断恢复
   - 消息格式错误处理
   - 超时处理
   - 异常退出恢复
+  - 决策超时保护测试
 
 #### 9.3 性能测试
 - **决策响应时间**
-  - 目标：< 1秒（建议）
+  - 目标：< 0.8秒（默认配置）
   - 平均响应时间
   - 最大响应时间
   - 超时情况统计
+  - 时间控制机制验证
 
 - **内存使用**
   - 单局内存占用
   - 多局运行内存增长
   - 内存泄漏检测
+  - 记牌模块内存占用
 
 - **并发处理能力**
   - 同时处理多个消息
   - 异步处理性能
   - 连接并发数
+
+#### 9.4 策略测试
+- **多因素评估测试**
+  - 测试不同权重配置的效果
+  - 测试各因素评分的准确性
+  - 测试最佳动作选择的正确性
+
+- **配合策略测试**
+  - 测试配合判断的准确性
+  - 测试不同参数配置的效果
+  - 测试接替判断的逻辑
+
+- **牌型处理器测试**
+  - 测试每种牌型处理器的逻辑
+  - 测试主动/被动出牌的正确性
+  - 测试手牌结构分析的准确性
 
 ### 十、扩展性设计
 
@@ -925,13 +1175,48 @@ guandan_ai_client/
 - 规则引擎（初期）
 - 搜索算法（中期）
 - 机器学习（后期）
+- **多因素评估系统**: 综合评估6个因素（剩余牌数、牌型大小、配合、风险、时机、手牌结构），计算动作评分
+- **主动/被动决策分离**: 区分主动出牌和被动出牌，采用不同策略
+- **牌型专门处理**: 为每种牌型（Single、Pair、Trips、Bomb、Straight等）创建专门的处理逻辑
 
 #### 13.3 状态同步
 - 确保状态一致性
 - 处理消息乱序
 - 状态恢复机制
+- **增强状态管理**: 集成记牌模块，提供完整状态查询接口
+- **队友识别**: 使用公式 `teammate_pos = (myPos + 2) % 4` 自动识别队友（参考获奖代码）
 
-#### 13.4 信息抓取技术
+#### 13.4 模块依赖关系设计
+- **依赖注入**: 所有模块通过依赖注入方式连接，避免硬编码依赖
+- **依赖关系**:
+  - 决策引擎 → 状态管理 → 记牌模块
+  - 决策引擎 → 配合策略 → 状态管理
+  - 决策引擎 → 手牌组合 → 游戏规则
+- **初始化顺序**: 从底层到顶层，确保依赖关系正确
+
+#### 13.5 数据流设计
+- **完整数据流**: WebSocket消息 → 消息解析 → 状态更新 → 决策引擎 → 动作选择 → 消息发送
+- **关键节点**:
+  - 状态更新时自动更新记牌模块
+  - 决策引擎调用配合策略评估
+  - 决策引擎调用多因素评估
+  - 超时保护机制
+- **详细说明**: 参见"五、消息流程设计"章节的"5.3 完整数据流设计"
+
+#### 13.6 参考获奖代码的关键设计
+- **队友识别公式**: `teammate_pos = (myPos + 2) % 4`（参考获奖代码）
+- **状态数据结构**: 参考获奖代码的 `history` 和 `remain_cards` 结构
+  - `history`: `{'0': {'send': [], 'remain': 27}, ...}` 记录每个玩家的出牌历史和剩余牌数
+  - `remain_cards`: 按花色和点数分类的剩余牌库
+- **决策函数分离**: 参考获奖代码的 `active()` 和 `passive()` 分离
+  - `active_decision()`: 主动出牌决策（率先出牌或接风）
+  - `passive_decision()`: 被动出牌决策（需要压制）
+- **手牌组合算法**: 参考获奖代码的 `combine_handcards()` 完整实现
+  - 识别单张、对子、三张、炸弹
+  - 识别顺子（考虑单张、对子、三张分布）
+  - 识别同花顺
+
+#### 13.7 信息抓取技术
 - **HTTP请求**: 使用requests/httpx发送HTTP请求
 - **HTML解析**: 使用BeautifulSoup解析网页内容
 - **定时任务**: 使用schedule/APScheduler实现定时抓取
