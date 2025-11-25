@@ -1,11 +1,12 @@
 ---
 title: 掼蛋基本概念
-type: basic
-category: Basics/GettingStarted
+type: rule
+category: Rules/Basic
 source: 掼蛋入门指南.txt, 江苏掼蛋规则.md, 掼蛋平台使用说明书1006.md
+platform: 南京邮电大学平台
 version: 1.5
 last_updated: 2025-11-25 02:45:00
-tags: [入门, 概念, 基础, 平台标准]
+tags: [规则, 概念, 基础, 平台标准]
 difficulty: 入门
 priority: 5
 ---
