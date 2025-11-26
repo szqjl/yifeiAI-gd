@@ -1,0 +1,107 @@
+# 掼蛋AI客户端配置文件
+# Guandan AI Client Configuration
+
+# 平台配置
+platform:
+  name: "南京邮电大学掼蛋AI平台"
+  version: "v1006"
+  url: "https://gameai.njupt.edu.cn/gameaicompetition/gameGD/index.html"
+
+# WebSocket连接配置
+websocket:
+  # 本地连接
+  local_url: "ws://127.0.0.1:23456/game/{user_info}"
+  # 局域网连接（需要时替换IP）
+  network_url: "ws://[局域网IP]:23456/game/{user_info}"
+  reconnect_interval: 5
+  heartbeat_interval: 30
+  timeout: 10  # 连接超时时间（秒）
+
+# AI决策配置
+decision:
+  # 最大决策时间（秒）
+  max_decision_time: 0.8
+  # 启用记牌功能
+  enable_card_tracking: true
+  # 启用推理功能
+  enable_inference: true
+  # 启用配合策略
+  enable_cooperation: true
+  # 决策缓存大小
+  cache_size: 1000
+
+# 记牌模块配置
+card_tracking:
+  # 跟踪历史
+  track_history: true
+  # 跟踪剩余牌
+  track_remaining: true
+  # 启用概率计算
+  enable_probability: true
+
+# 多因素评估权重配置
+evaluation:
+  weights:
+    # 剩余牌数因素权重
+    remaining_cards: 0.25
+    # 牌型大小因素权重
+    card_type_value: 0.20
+    # 配合因素权重
+    cooperation: 0.20
+    # 风险因素权重
+    risk: 0.15
+    # 时机因素权重
+    timing: 0.10
+    # 手牌结构因素权重
+    hand_structure: 0.10
+
+# 配合策略配置
+cooperation:
+  # 队友牌型值阈值（大于此值应该PASS配合）
+  support_threshold: 15
+  # 对手剩余牌数危险阈值（小于此值应该配合）
+  danger_threshold: 4
+  # 最大牌值阈值
+  max_val_threshold: 14
+
+# 手牌组合配置
+hand_combiner:
+  # 组牌优先级（数值越大优先级越高）
+  priorities:
+    StraightFlush: 100  # 同花顺
+    Bomb: 80            # 炸弹
+    Straight: 60        # 顺子
+    ThreeWithTwo: 50    # 三带二
+    TwoTrips: 45        # 钢板
+    ThreePair: 40       # 三连对
+    Trips: 30           # 三张
+    Pair: 20            # 对子
+    Single: 10          # 单张
+
+# 数据存储配置
+data:
+  save_path: "./replays"
+  auto_save: true
+  format: "json"
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG/INFO/WARNING/ERROR
+  file: "ai_client.log"
+  console: true  # 是否输出到控制台
+
+# 联系方式
+contact:
+  research: "chenxg@njupt.edu.cn"
+  feedback: "wuguduofeng@gmail.com"
+  qq: "519301156"
+
+# 信息监控配置（可选）
+info_monitor:
+  enabled: false  # 是否启用信息监控
+  check_interval: 21600  # 检查间隔（秒），默认6小时
+  quiet_hours:  # 静默时段，不进行检查
+    enabled: true
+    start: "00:00"
+    end: "06:00"
+
