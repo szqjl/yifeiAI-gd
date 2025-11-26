@@ -1,11 +1,12 @@
 ---
 title: 掼蛋快速入门
-type: basic
-category: Basics/GettingStarted
+type: rule
+category: Rules/Basic
 source: 掼蛋入门指南.txt, 江苏掼蛋规则.md
+platform: 南京邮电大学平台
 version: 1.1
 last_updated: 2025-11-25 02:17:52
-tags: [入门, 快速入门, 基础]
+tags: [规则, 快速入门, 基础]
 difficulty: 入门
 priority: 5
 ---
