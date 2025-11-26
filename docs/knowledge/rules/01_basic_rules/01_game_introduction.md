@@ -1,11 +1,12 @@
 ---
 title: 掼蛋游戏介绍
-type: basic
-category: Basics/GettingStarted
+type: rule
+category: Rules/Basic
 source: 掼蛋入门指南.txt, 江苏掼蛋规则.md
+platform: 南京邮电大学平台
 version: 1.1
 last_updated: 2025-11-25 02:17:52
-tags: [入门, 游戏介绍, 基础]
+tags: [规则, 游戏介绍, 基础]
 difficulty: 入门
 priority: 5
 ---
@@ -14,7 +15,7 @@ priority: 5
 
 ## 概述
 
-掼蛋，是一种在中国尤其是江苏地区非常普及的扑克牌游戏。它结合了"跑得快"和"斗地主"等游戏精粹，既需要运气，也考验技巧。本文将为大家详细介绍掼蛋的基本规则、牌型和比赛流程，助你快速掌握这款趣味十足的游戏。
+掼蛋，是一种在中国尤其是江苏地区非常普及的扑克牌游戏。它结合了"跑得快"和"斗地主"等游戏精粹，既需要运气，也考验技巧。
 
 ## 游戏特点
 

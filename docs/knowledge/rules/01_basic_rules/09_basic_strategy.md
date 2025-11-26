@@ -1,11 +1,12 @@
 ---
 title: 掼蛋基础策略
-type: basic
-category: Basics/BeginnerGuide
+type: rule
+category: Rules/Basic
 source: 掼蛋入门指南.txt, 江苏掼蛋规则.md
+platform: 南京邮电大学平台
 version: 1.1
 last_updated: 2025-11-25 02:17:52
-tags: [入门, 策略, 基础]
+tags: [规则, 策略, 基础]
 difficulty: 初级
 priority: 4
 ---

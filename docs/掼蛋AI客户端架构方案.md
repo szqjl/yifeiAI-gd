@@ -3,9 +3,9 @@ title: 掼蛋AI客户端基础架构方案
 type: architecture
 category: System/Architecture
 source: 掼蛋AI客户端架构方案.md
-version: v2.2
-last_updated: 2025-11-25 03:30:00
-tags: [架构, 客户端, WebSocket, 决策引擎, 信息监控, 知识库]
+version: v2.4
+last_updated: 2025-01-27
+tags: [架构, 客户端, WebSocket, 决策引擎, 信息监控, 知识库, 动作空间优化, 特征编码]
 difficulty: 高级
 priority: 5
 game_phase: 全阶段
@@ -284,14 +284,116 @@ game_phase: 全阶段
   - `danger_threshold`: 对手剩余牌数危险阈值（默认4）
   - `max_val_threshold`: 最大牌值阈值（默认14）
 
-##### 3.3.5 决策时间控制器 (DecisionTimer)
+##### 3.3.5 决策时间控制器 (DecisionTimer) / 自适应决策时间控制器 (AdaptiveDecisionTimer)
 - **功能**:
   - 设置最大决策时间（默认0.8秒）
   - 超时检测和保护机制
   - 渐进式决策支持
   - 装饰器支持（`@with_timeout`）
+  - **自适应时间分配**（新增）:
+    - 根据动作空间大小动态调整评估深度
+    - 大动作空间：更多时间用于快速筛选
+    - 小动作空间：更多时间用于精细评估
 
-##### 3.3.6 牌型专门处理器 (CardTypeHandlers)
+- **接口设计**:
+  ```python
+  class AdaptiveDecisionTimer:
+      def get_time_budget(self, action_count: int) -> Dict[str, float]
+      def start(self)
+      def check_timeout(self) -> bool
+      def get_remaining_time(self) -> float
+  ```
+
+##### 3.3.6 动作空间优化器 (ActionSpaceOptimizer)
+- **功能**:
+  - 根据动作空间大小动态筛选候选动作
+  - 大动作空间（>100）：快速筛选Top-K候选
+  - 小动作空间（≤100）：精细评估所有动作
+  - 提升决策效率，避免在大动作空间下评估所有候选
+
+- **设计思路**（借鉴DanZero+论文）:
+  - 掼蛋游戏初始状态可能>5000合法动作，后期可能<50
+  - 大动作空间需要快速筛选，小动作空间可以精细评估
+  - 使用启发式规则快速评估，保留Top-K候选
+
+- **接口设计**:
+  ```python
+  class ActionSpaceOptimizer:
+      def filter_actions(self, action_list: List, game_state: GameState) -> List
+      def _fast_filter(self, action_list: List, game_state: GameState) -> List
+      def _quick_evaluate(self, action: List, game_state: GameState) -> float
+  ```
+
+- **配置参数**:
+  - `large_space_threshold`: 大动作空间阈值（默认100）
+  - `candidate_ratio`: 候选动作比例（默认0.1，即10%）
+  - `min_candidates`: 最小候选数量（默认10）
+
+##### 3.3.7 动作特征编码器 (ActionFeatureEncoder)
+- **功能**:
+  - 将动作编码为特征向量
+  - 提取动作的关键特征（牌型、大小、主牌、百搭牌等）
+  - 支持快速评估和相似度计算
+  - 为未来强化学习集成做准备
+
+- **设计思路**（借鉴DanZero+论文的DMC方法）:
+  - DMC方法利用动作特征进行无偏估计
+  - 结构化特征表示提升评估效率
+  - 考虑掼蛋特色（花色重要性、百搭牌、级牌）
+
+- **特征维度**:
+  1. **牌型类型特征**（One-hot编码）: Single/Pair/Trips/ThreePair/ThreeWithTwo/TwoTrips/Straight/StraightFlush/Bomb
+  2. **牌型大小特征**: 归一化的牌型大小值
+  3. **主牌数量特征**: 使用的主牌（级牌）数量
+  4. **百搭牌数量特征**: 使用的百搭牌（红心级牌）数量
+  5. **手牌结构影响特征**: 出牌后手牌结构变化
+  6. **压制能力特征**: 对当前牌型的压制能力
+
+- **接口设计**:
+  ```python
+  class ActionFeatureEncoder:
+      def encode_action(self, action: List, game_state: GameState) -> np.ndarray
+      def _encode_card_type(self, card_type: str) -> List[float]
+      def _encode_rank(self, rank: str, cur_rank: str) -> float
+      def _encode_special_cards(self, cards: List[str], game_state: GameState) -> List[float]
+      def _encode_hand_structure_impact(self, action: List, game_state: GameState) -> List[float]
+  ```
+
+##### 3.3.8 状态特征编码器 (StateFeatureEncoder)
+- **功能**:
+  - 将游戏状态编码为特征向量
+  - 提取状态的关键信息（手牌、历史、玩家状态等）
+  - 支持状态相似度计算和模式识别
+  - 为未来强化学习集成做准备
+
+- **设计思路**（借鉴DanZero+论文的特征编码技术）:
+  - 使用特征编码技术处理状态和动作
+  - 考虑花色重要性（掼蛋特色）
+  - 处理百搭牌和级牌的特殊性
+  - 结构化状态表示
+
+- **特征维度**:
+  1. **手牌特征**（27维）: 每张牌的存在性（考虑花色和点数）
+  2. **已出牌历史特征**: 各玩家出牌历史统计
+  3. **玩家剩余牌数特征**（4维）: 每个玩家的剩余牌数
+  4. **当前牌型特征**: 当前需要压制的牌型信息
+  5. **游戏阶段特征**: 游戏阶段（beginning/play/tribute/back等）
+  6. **级牌和百搭牌特征**: 当前级牌和百搭牌信息
+  7. **配合状态特征**: 队友状态、配合机会等
+
+- **接口设计**:
+  ```python
+  class StateFeatureEncoder:
+      def encode_state(self, game_state: GameState) -> np.ndarray
+      def _encode_hand_cards(self, hand_cards: List[str], cur_rank: str) -> List[float]
+      def _encode_play_history(self, history: Dict) -> List[float]
+      def _encode_player_states(self, game_state: GameState) -> List[float]
+      def _encode_current_action(self, cur_action: List) -> List[float]
+      def _encode_game_phase(self, stage: str) -> List[float]
+      def _encode_special_cards(self, game_state: GameState) -> List[float]
+  ```
+
+##### 3.3.9 牌型专门处理器 (CardTypeHandlers)
 - **功能**:
   - 为每种牌型创建专门的处理类
   - 实现针对性的决策逻辑
@@ -310,9 +412,16 @@ game_phase: 全阶段
 
 #### 3.4 知识库模块 (Knowledge Base Module)
 
+**与知识库格式化方案对齐**：
+- ✅ 本模块设计与《知识库格式化方案.md》完全对齐
+- ✅ 知识分类体系对应格式化方案的一级分类（规则/基础/策略/技巧/心理）
+- ✅ 目录结构对应格式化方案的`docs/knowledge/`目录设计
+- ✅ 变量命名统一使用平台标准变量名（Single/Pair/Bomb等）
+- ✅ 知识检索方式对应格式化方案的查询接口设计
+
 ##### 3.4.1 知识库架构设计
 
-**分层记忆策略**（基于性能和使用频率）：
+**分层记忆策略**（基于性能和使用频率，对应知识库格式化方案）：
 
 1. **硬编码层（Hardcoded Rules）**
    - **内容**：基础规则（牌型定义、压牌规则、大小关系等）
@@ -353,19 +462,39 @@ game_phase: 全阶段
          def query_advanced_skill(self, situation): ...
      ```
 
-**知识库目录结构**：
+**知识库目录结构**（对齐知识库格式化方案）：
 ```
 docs/knowledge/
-├── basics/              # 基础知识（规则、概念）
-│   ├── 01_getting_started/
-│   └── 02_beginner_guide/
-└── skills/              # 技巧知识
-    ├── 01_foundation/
-    ├── 02_main_attack/
-    ├── 03_assist_attack/
-    ├── 07_opening/      # 开局技巧（组牌技巧等）
-    └── 08_endgame/      # 残局技巧
+├── rules/              # 规则知识（硬编码层）- 对应规则库（最高准则）
+│   ├── 01_basic_rules/      # 基础规则（整合了原basics目录的内容）
+│   │   ├── 01_card_types.md          # 牌型定义
+│   │   ├── 01_card_types_guide.md    # 牌型指南
+│   │   ├── 02_card_distribution.md    # 牌张分配
+│   │   ├── 03_game_flow.md            # 游戏流程
+│   │   ├── 04_upgrade_rules.md        # 升级规则
+│   │   ├── 05_game_introduction.md    # 游戏介绍
+│   │   ├── 06_basic_concepts.md       # 基本概念
+│   │   ├── 07_quick_start.md          # 快速入门
+│   │   ├── 08_basic_strategy.md       # 基础策略
+│   │   └── 09_practice_tips.md        # 练习建议
+│   ├── 02_competition_rules/ # 比赛规则
+│   └── 03_advanced_rules/    # 进贡报牌规则
+└── skills/              # 技巧知识（按需查询层）- 对应技巧库
+    ├── 01_foundation/        # 基础技巧
+    ├── 02_main_attack/       # 主攻技巧
+    ├── 03_assist_attack/     # 助攻技巧
+    ├── 04_common_skills/     # 通用技巧
+    ├── 05_psychology/        # 心理知识
+    ├── 06_advanced/          # 高级技巧
+    ├── 07_opening/          # 开局技巧
+    └── 08_endgame/          # 残局技巧
 ```
+
+**说明**：
+- `rules/` 对应"规则库 (Rules Library)"，实现为硬编码层，是规则知识的最高准则
+- 原 `basics/` 目录已整合到 `rules/01_basic_rules/` 目录中，不再单独存在
+- `skills/` 对应"技巧库 (Skills Library)"，实现为按需查询层
+- 策略知识（Strategy）对应"策略库 (Strategy Library)"，实现为内存加载层，通常不存储在文件系统中，而是程序启动时从配置或代码中加载
 
 ##### 3.4.2 规则库 (Rules Library)
 
@@ -440,6 +569,12 @@ class StrategyLibrary:
 
 **实现方式**：按需查询知识库文件，结果缓存
 
+**对应知识库格式化方案**：
+- 对应格式化方案的"技巧知识 (Skills)"和"心理知识 (Psychology)"
+- 知识库文件存储在`docs/knowledge/skills/`目录下
+- 文件格式遵循格式化方案的Markdown模板（含YAML元数据）
+- 支持按游戏阶段（opening/midgame/endgame）过滤查询
+
 **接口设计**：
 ```python
 class SkillsLibrary:
@@ -472,6 +607,12 @@ class SkillsLibrary:
 - 语义搜索和匹配（关键词、标签、阶段匹配）
 - 结果缓存管理（LRU缓存，避免重复查询）
 - 知识关联查询（前置知识、后续知识、相关知识点）
+
+**对应知识库格式化方案**：
+- 解析格式化方案定义的Markdown文档（含YAML元数据）
+- 支持按格式化方案的分类体系查询（Rules/Basics/Skills/Psychology）
+- 支持按格式化方案的标签（tags）和游戏阶段（game_phase）过滤
+- 支持按格式化方案的优先级（priority）和难度（difficulty）排序
 
 **接口设计**：
 ```python
@@ -702,7 +843,12 @@ WebSocket消息接收
     └─> 更新公共信息 (publicInfo)
     ↓
 决策引擎 (DecisionEngine.decide)
-    ├─> 开始计时 (DecisionTimer.start)
+    ├─> 开始计时 (AdaptiveDecisionTimer.start)
+    ├─> 编码游戏状态 (StateFeatureEncoder.encode_state)
+    │   ├─> 编码手牌特征
+    │   ├─> 编码出牌历史特征
+    │   ├─> 编码玩家状态特征
+    │   └─> 编码游戏阶段特征
     ├─> 判断主动/被动 (EnhancedGameStateManager.is_passive_play)
     │
     ├─> [被动出牌分支]
@@ -714,7 +860,17 @@ WebSocket消息接收
     │   │   ├─> 分析手牌结构 (HandCombiner.combine_handcards)
     │   │   └─> 处理被动出牌 (Handler.handle_passive)
     │   │
+    │   ├─> 生成候选动作 (PlayDecisionMaker.generate_candidates)
+    │   │
+    │   ├─> 动作空间优化 (ActionSpaceOptimizer.filter_actions)
+    │   │   ├─> 判断动作空间大小
+    │   │   ├─> [大动作空间] 快速筛选Top-K候选
+    │   │   │   ├─> 编码动作特征 (ActionFeatureEncoder.encode_action)
+    │   │   │   └─> 快速评估并排序
+    │   │   └─> [小动作空间] 保留所有候选
+    │   │
     │   └─> 多因素评估 (MultiFactorEvaluator.evaluate_all_actions)
+    │       ├─> 编码动作特征 (ActionFeatureEncoder.encode_action) - 可选
     │       ├─> 评估剩余牌数因素 (查询 CardTracker)
     │       ├─> 评估牌型大小因素
     │       ├─> 评估配合因素 (查询 CooperationStrategy)
@@ -723,10 +879,15 @@ WebSocket消息接收
     │       └─> 评估手牌结构因素 (查询 HandCombiner)
     │
     └─> [主动出牌分支]
+        ├─> 生成候选动作 (PlayDecisionMaker.generate_candidates)
+        ├─> 动作空间优化 (ActionSpaceOptimizer.filter_actions)
+        │   └─> (同上)
         └─> 多因素评估 (MultiFactorEvaluator.evaluate_all_actions)
             └─> (同上)
     ↓
-检查超时 (DecisionTimer.check_timeout)
+检查超时 (AdaptiveDecisionTimer.check_timeout)
+    ├─> 根据动作空间大小动态调整时间预算
+    └─> 超时保护机制
     ↓
 选择最佳动作
     ↓
@@ -738,17 +899,26 @@ WebSocket消息发送
 #### 5.4 决策流程（详细）
 ```
 1. 接收出牌请求 (type: act, stage: play)
-2. 开始计时 (DecisionTimer.start)
-3. 判断主动/被动 (EnhancedGameStateManager.is_passive_play)
-4. [被动出牌]:
+2. 开始计时 (AdaptiveDecisionTimer.start)
+3. 编码游戏状态 (StateFeatureEncoder.encode_state)
+4. 判断主动/被动 (EnhancedGameStateManager.is_passive_play)
+5. [被动出牌]:
    - 评估配合机会 (CooperationStrategy)
    - 使用牌型专门处理器 (CardTypeHandlerFactory)
-   - 多因素评估 (MultiFactorEvaluator)
-5. [主动出牌]:
-   - 多因素评估 (MultiFactorEvaluator)
-6. 检查超时 (DecisionTimer.check_timeout)
-7. 选择最优方案
-8. 发送决策结果 (type: act, {"actIndex": X})
+   - 生成候选动作 (PlayDecisionMaker.generate_candidates)
+   - 动作空间优化 (ActionSpaceOptimizer.filter_actions)
+     - 判断动作空间大小
+     - [大动作空间] 快速筛选Top-K候选（使用ActionFeatureEncoder）
+     - [小动作空间] 保留所有候选
+   - 多因素评估 (MultiFactorEvaluator.evaluate_all_actions)
+6. [主动出牌]:
+   - 生成候选动作 (PlayDecisionMaker.generate_candidates)
+   - 动作空间优化 (ActionSpaceOptimizer.filter_actions)
+   - 多因素评估 (MultiFactorEvaluator.evaluate_all_actions)
+7. 检查超时 (AdaptiveDecisionTimer.check_timeout)
+   - 根据动作空间大小动态调整时间预算
+8. 选择最优方案
+9. 发送决策结果 (type: act, {"actIndex": X})
 ```
 
 #### 5.5 模块依赖关系
@@ -756,19 +926,29 @@ WebSocket消息发送
 **依赖关系图**:
 ```
 DecisionEngine (决策引擎)
-├── DecisionTimer (时间控制)
+├── AdaptiveDecisionTimer (自适应时间控制)
 │   └── (无依赖)
-├── CooperationStrategy (配合策略)
+├── StateFeatureEncoder (状态特征编码)
 │   └── EnhancedGameStateManager (状态管理)
 │       └── CardTracker (记牌模块)
 │           └── (无依赖)
+├── ActionSpaceOptimizer (动作空间优化)
+│   ├── EnhancedGameStateManager (状态管理)
+│   └── ActionFeatureEncoder (动作特征编码)
+│       └── EnhancedGameStateManager (状态管理)
+├── ActionFeatureEncoder (动作特征编码)
+│   └── EnhancedGameStateManager (状态管理)
+│       └── CardTracker (记牌模块)
+├── CooperationStrategy (配合策略)
+│   └── EnhancedGameStateManager (状态管理)
+│       └── CardTracker (记牌模块)
 ├── MultiFactorEvaluator (多因素评估)
 │   ├── EnhancedGameStateManager (状态管理)
 │   │   └── CardTracker (记牌模块)
 │   ├── HandCombiner (手牌组合)
 │   │   └── (无依赖)
-│   └── CooperationStrategy (配合策略)
-│       └── EnhancedGameStateManager (状态管理)
+│   ├── CooperationStrategy (配合策略)
+│   └── ActionFeatureEncoder (动作特征编码) - 可选
 └── CardTypeHandlerFactory (牌型处理器工厂)
     ├── EnhancedGameStateManager (状态管理)
     │   └── CardTracker (记牌模块)
@@ -778,6 +958,8 @@ DecisionEngine (决策引擎)
 
 **依赖说明**:
 - **决策引擎 → 状态管理 → 记牌模块**: `DecisionEngine` 通过 `EnhancedGameStateManager` 访问游戏状态，`EnhancedGameStateManager` 内部使用 `CardTracker` 维护记牌信息
+- **决策引擎 → 状态特征编码 → 状态管理**: `DecisionEngine` 使用 `StateFeatureEncoder` 编码游戏状态，`StateFeatureEncoder` 通过 `EnhancedGameStateManager` 获取状态信息
+- **决策引擎 → 动作空间优化 → 动作特征编码**: `DecisionEngine` 使用 `ActionSpaceOptimizer` 优化动作空间，`ActionSpaceOptimizer` 使用 `ActionFeatureEncoder` 进行快速评估
 - **决策引擎 → 配合策略 → 状态管理**: `DecisionEngine` 调用 `CooperationStrategy` 评估配合机会，`CooperationStrategy` 通过 `EnhancedGameStateManager` 获取状态信息
 - **决策引擎 → 手牌组合 → 游戏规则**: `DecisionEngine` 使用 `HandCombiner` 分析手牌结构，`HandCombiner` 基于游戏规则识别牌型
 
@@ -835,6 +1017,34 @@ decision:
   enable_cooperation: true
   # 决策缓存大小
   cache_size: 1000
+  # 启用动作空间优化
+  enable_action_space_optimization: true
+  # 启用特征编码
+  enable_feature_encoding: true
+
+# 动作空间优化配置
+action_space_optimizer:
+  # 大动作空间阈值（超过此值使用快速筛选）
+  large_space_threshold: 100
+  # 候选动作比例（大动作空间时保留的比例）
+  candidate_ratio: 0.1
+  # 最小候选数量（即使比例很小也至少保留的数量）
+  min_candidates: 10
+  # 快速评估模式（true: 使用特征编码快速评估, false: 使用完整评估）
+  fast_evaluation_mode: true
+
+# 特征编码配置
+feature_encoding:
+  # 启用状态特征编码
+  enable_state_encoding: true
+  # 启用动作特征编码
+  enable_action_encoding: true
+  # 状态特征维度（自动计算，此处为参考）
+  state_feature_dim: 200
+  # 动作特征维度（自动计算，此处为参考）
+  action_feature_dim: 50
+  # 特征缓存大小
+  feature_cache_size: 1000
 
 # 记牌模块配置
 card_tracking:
@@ -1088,7 +1298,11 @@ guandan_ai_client/
 │   │   ├── __init__.py
 │   │   ├── evaluator.py
 │   │   ├── decision_maker.py
-│   │   └── cooperation.py
+│   │   ├── cooperation.py
+│   │   ├── action_space_optimizer.py  # 动作空间优化器
+│   │   ├── action_feature_encoder.py  # 动作特征编码器
+│   │   ├── state_feature_encoder.py    # 状态特征编码器
+│   │   └── adaptive_timer.py          # 自适应决策时间控制器
 │   │
 │   ├── data/               # 数据收集模块
 │   │   ├── __init__.py
@@ -1143,6 +1357,10 @@ guandan_ai_client/
 - [ ] 实现策略评估
 - [ ] 实现配合策略
 - [ ] 优化决策算法
+- [ ] 实现动作空间优化器（ActionSpaceOptimizer）
+- [ ] 实现动作特征编码器（ActionFeatureEncoder）
+- [ ] 实现状态特征编码器（StateFeatureEncoder）
+- [ ] 实现自适应决策时间控制器（AdaptiveDecisionTimer）
 
 #### 阶段四：数据收集（1周）
 - [ ] 实现对局记录
@@ -1178,6 +1396,16 @@ guandan_ai_client/
 - **多因素评估系统**: 综合评估6个因素（剩余牌数、牌型大小、配合、风险、时机、手牌结构），计算动作评分
 - **主动/被动决策分离**: 区分主动出牌和被动出牌，采用不同策略
 - **牌型专门处理**: 为每种牌型（Single、Pair、Trips、Bomb、Straight等）创建专门的处理逻辑
+- **动作空间优化**（借鉴DanZero+论文）:
+  - 根据动作空间大小动态筛选候选动作
+  - 大动作空间（>100）：快速筛选Top-K候选，使用启发式规则快速评估
+  - 小动作空间（≤100）：精细评估所有候选动作
+  - 解决掼蛋游戏初始状态可能>5000合法动作的挑战
+- **特征编码技术**（借鉴DanZero+论文的DMC方法）:
+  - **状态特征编码**: 将游戏状态编码为结构化特征向量（手牌、历史、玩家状态等）
+  - **动作特征编码**: 将动作编码为特征向量（牌型、大小、主牌、百搭牌等）
+  - 提升评估效率，为未来强化学习集成做准备
+  - 考虑掼蛋特色（花色重要性、百搭牌、级牌）
 
 #### 13.3 状态同步
 - 确保状态一致性
@@ -1190,16 +1418,23 @@ guandan_ai_client/
 - **依赖注入**: 所有模块通过依赖注入方式连接，避免硬编码依赖
 - **依赖关系**:
   - 决策引擎 → 状态管理 → 记牌模块
+  - 决策引擎 → 状态特征编码 → 状态管理
+  - 决策引擎 → 动作空间优化 → 动作特征编码 → 状态管理
   - 决策引擎 → 配合策略 → 状态管理
   - 决策引擎 → 手牌组合 → 游戏规则
+  - 决策引擎 → 多因素评估 → 动作特征编码（可选）
 - **初始化顺序**: 从底层到顶层，确保依赖关系正确
 
 #### 13.5 数据流设计
 - **完整数据流**: WebSocket消息 → 消息解析 → 状态更新 → 决策引擎 → 动作选择 → 消息发送
 - **关键节点**:
   - 状态更新时自动更新记牌模块
+  - 状态特征编码（StateFeatureEncoder）: 编码游戏状态为特征向量
+  - 动作空间优化（ActionSpaceOptimizer）: 根据动作空间大小动态筛选候选
+  - 动作特征编码（ActionFeatureEncoder）: 编码动作为特征向量（大动作空间快速评估）
   - 决策引擎调用配合策略评估
   - 决策引擎调用多因素评估
+  - 自适应时间控制（AdaptiveDecisionTimer）: 根据动作空间大小动态调整时间预算
   - 超时保护机制
 - **详细说明**: 参见"五、消息流程设计"章节的"5.3 完整数据流设计"
 
@@ -1744,20 +1979,56 @@ notification.notify(
 - **组队识别**：严格按照平台规则，第1/3连接为一队 (myPos 0/2)
 - **信息抓取合规**：检查间隔≥6小时，静默时段 (00:00-06:00) 不抓取
 - **JSON格式**：严格遵守平台格式，示例：["Bomb", "2", ["H2", "D2", "C2", "S2"]]
+- **动作空间优化**：初始状态可能>5000合法动作，必须使用动作空间优化器快速筛选，避免评估所有候选导致超时
+- **特征编码**：状态和动作特征编码可提升评估效率，为未来强化学习集成打下基础，建议启用
 
 ## 相关知识点
-- [掼蛋AI知识库格式化方案 - 变量命名标准]
+- [掼蛋AI知识库格式化方案] - 知识库格式化标准，与本文档第3.4节"知识库模块"完全对齐
 - [江苏掼蛋规则 - 牌型定义 (Single/Pair/Bomb)]
 - [平台使用说明书 v1006 - JSON格式和消息类型]
+- [DanZero+论文分析-架构借鉴建议] - 动作空间优化和特征编码技术
 
 ---
 
-**文档版本**: v2.2  
+**文档版本**: v2.4  
 **创建时间**: 使用系统时间API获取（`datetime.now()`）  
 **最后更新**: 使用系统时间API获取（`datetime.now()`）- 对齐知识库格式化方案  
 **维护责任**: AI开发团队
 
 ## 📝 更新日志
+
+### v2.4 (2025-01-27)
+- ✅ 对齐《知识库格式化方案.md》
+- ✅ 更新知识库目录结构，添加`rules/`目录，与格式化方案保持一致
+- ✅ 在知识库模块部分添加与格式化方案的对齐说明
+- ✅ 明确知识分类与格式化方案的对应关系
+- ✅ 更新技巧库和知识检索器部分，添加格式化方案对应说明
+- ✅ 更新相关知识点，添加知识库格式化方案引用
+
+### v2.3 (2025-01-27)
+- ✅ 添加动作空间优化器（ActionSpaceOptimizer）模块设计
+  - 根据动作空间大小动态筛选候选动作
+  - 大动作空间快速筛选Top-K候选
+  - 小动作空间精细评估所有动作
+  - 借鉴DanZero+论文的动作空间处理策略
+- ✅ 添加动作特征编码器（ActionFeatureEncoder）模块设计
+  - 将动作编码为结构化特征向量
+  - 提取牌型、大小、主牌、百搭牌等特征
+  - 支持快速评估和相似度计算
+- ✅ 添加状态特征编码器（StateFeatureEncoder）模块设计
+  - 将游戏状态编码为特征向量
+  - 提取手牌、历史、玩家状态等特征
+  - 为未来强化学习集成做准备
+- ✅ 增强决策时间控制器为自适应决策时间控制器（AdaptiveDecisionTimer）
+  - 根据动作空间大小动态调整时间预算
+  - 大动作空间：更多时间用于快速筛选
+  - 小动作空间：更多时间用于精细评估
+- ✅ 更新数据流设计，集成动作空间优化和特征编码流程
+- ✅ 更新模块依赖关系，添加新模块的依赖说明
+- ✅ 更新配置管理，添加动作空间优化和特征编码配置项
+- ✅ 更新关键技术点，说明动作空间优化和特征编码技术
+- ✅ 更新项目目录结构，添加新模块文件
+- ✅ 更新开发计划，添加新模块的开发任务
 
 ### v2.2 (2025-11-25)
 - ✅ 添加知识库模块（Knowledge Base Module）设计
