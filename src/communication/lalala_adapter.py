@@ -69,16 +69,34 @@ class LalalaWebsocketsClient:
         
         if "curAction" in data and len(data["curAction"]) > 2:
             if data["curAction"][2] != "PASS":
-                data["curAction"][2] = convert_cards_list(data["curAction"][2])
+                # 重新创建列表（因为可能是元组）
+                data["curAction"] = [
+                    data["curAction"][0],
+                    data["curAction"][1],
+                    convert_cards_list(data["curAction"][2])
+                ]
         
         if "greaterAction" in data and len(data["greaterAction"]) > 2:
             if data["greaterAction"][2] != "PASS":
-                data["greaterAction"][2] = convert_cards_list(data["greaterAction"][2])
+                # 重新创建列表
+                data["greaterAction"] = [
+                    data["greaterAction"][0],
+                    data["greaterAction"][1],
+                    convert_cards_list(data["greaterAction"][2])
+                ]
         
         if "actionList" in data:
-            for i, action in enumerate(data["actionList"]):
+            new_action_list = []
+            for action in data["actionList"]:
                 if len(action) > 2 and action[2] != "PASS":
-                    data["actionList"][i][2] = convert_cards_list(action[2])
+                    new_action_list.append([
+                        action[0],
+                        action[1],
+                        convert_cards_list(action[2])
+                    ])
+                else:
+                    new_action_list.append(action)
+            data["actionList"] = new_action_list
         
         return data
     
