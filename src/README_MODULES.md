@@ -1,165 +1,165 @@
-# ¸ßÓÅÏÈ¼¶Ä£¿éËµÃ÷
+# é«˜ä¼˜å…ˆçº§æ¨¡å—è¯´æ˜
 
-±¾ÎÄµµËµÃ÷ÒÑÊµÊ©µÄ¸ßÓÅÏÈ¼¶ÓÅ»¯Ä£¿é¡£
+æœ¬æ–‡æ¡£è¯´æ˜å·²å®æ–½çš„é«˜ä¼˜å…ˆçº§ä¼˜åŒ–æ¨¡å—ã€‚
 
-## Ä£¿é½á¹¹
+## æ¨¡å—ç»“æ„
 
 ```
 src/
-©À©¤©¤ game_logic/          # ÓÎÏ·Âß¼­Ä£¿é
-©¦   ©À©¤©¤ __init__.py
-©¦   ©À©¤©¤ card_tracking.py      # ¼ÇÅÆÓëÍÆÀíÄ£¿é
-©¦   ©À©¤©¤ enhanced_state.py     # ÔöÇ¿×´Ì¬¹ÜÀí
-©¦   ©¸©¤©¤ hand_combiner.py       # ÊÖÅÆ×éºÏÓÅ»¯
-©¦
-©¸©¤©¤ decision/            # ¾ö²ßÒıÇæÄ£¿é
-    ©À©¤©¤ __init__.py
-    ©À©¤©¤ decision_engine.py    # ¾ö²ßÒıÇæ£¨Ö÷¶¯/±»¶¯·ÖÀë£©
-    ©¸©¤©¤ cooperation.py        # ÅäºÏ²ßÂÔ
+â”œâ”€â”€ game_logic/          # æ¸¸æˆé€»è¾‘æ¨¡å—
+â”‚   â”œâ”€â”€ __init__.py
+â”‚   â”œâ”€â”€ card_tracking.py      # è®°ç‰Œä¸æ¨ç†æ¨¡å—
+â”‚   â”œâ”€â”€ enhanced_state.py     # å¢å¼ºçŠ¶æ€ç®¡ç†
+â”‚   â””â”€â”€ hand_combiner.py       # æ‰‹ç‰Œç»„åˆä¼˜åŒ–
+â”‚
+â””â”€â”€ decision/            # å†³ç­–å¼•æ“æ¨¡å—
+    â”œâ”€â”€ __init__.py
+    â”œâ”€â”€ decision_engine.py    # å†³ç­–å¼•æ“ï¼ˆä¸»åŠ¨/è¢«åŠ¨åˆ†ç¦»ï¼‰
+    â””â”€â”€ cooperation.py        # é…åˆç­–ç•¥
 ```
 
-## 1. ¼ÇÅÆÓëÍÆÀíÄ£¿é (CardTracker)
+## 1. è®°ç‰Œä¸æ¨ç†æ¨¡å— (CardTracker)
 
-**ÎÄ¼ş**: `src/game_logic/card_tracking.py`
+**æ–‡ä»¶**: `src/game_logic/card_tracking.py`
 
-**¹¦ÄÜ**:
-- Î¬»¤Ã¿¸öÍæ¼ÒµÄ³öÅÆÀúÊ·
-- ¸ú×ÙÊ£ÓàÅÆ¿â£¨°´»¨É«ºÍµãÊı£©
-- ¼ÆËãÊ£ÓàÅÆ¸ÅÂÊ·Ö²¼
-- ¼ÇÂ¼Á¬ĞøPASS´ÎÊı
+**åŠŸèƒ½**:
+- ç»´æŠ¤æ¯ä¸ªç©å®¶çš„å‡ºç‰Œå†å²
+- è·Ÿè¸ªå‰©ä½™ç‰Œåº“ï¼ˆæŒ‰èŠ±è‰²å’Œç‚¹æ•°ï¼‰
+- è®¡ç®—å‰©ä½™ç‰Œæ¦‚ç‡åˆ†å¸ƒ
+- è®°å½•è¿ç»­PASSæ¬¡æ•°
 
-**Ö÷Òª½Ó¿Ú**:
+**ä¸»è¦æ¥å£**:
 ```python
 tracker = CardTracker()
 
-# ¸üĞÂ³öÅÆĞÅÏ¢
+# æ›´æ–°å‡ºç‰Œä¿¡æ¯
 tracker.update_from_play(cur_pos, cur_action, my_pos)
 
-# »ñÈ¡Íæ¼ÒÊ£ÓàÅÆÊı
+# è·å–ç©å®¶å‰©ä½™ç‰Œæ•°
 remain = tracker.get_player_remain(pos)
 
-# »ñÈ¡Ê£ÓàÅÆ¿â
+# è·å–å‰©ä½™ç‰Œåº“
 remain_cards = tracker.get_remaining_cards(rank)
 
-# ¼ÆËãÊ£ÓàÅÆ£¨ÅÅ³ıÊÖÅÆºó£©
+# è®¡ç®—å‰©ä½™ç‰Œï¼ˆæ’é™¤æ‰‹ç‰Œåï¼‰
 rest_cards = tracker.calculate_rest_cards(handcards, rank)
 
-# ÖØÖÃĞ¡¾ÖÊı¾İ
+# é‡ç½®å°å±€æ•°æ®
 tracker.reset_episode()
 ```
 
-## 2. ÔöÇ¿×´Ì¬¹ÜÀí (EnhancedGameStateManager)
+## 2. å¢å¼ºçŠ¶æ€ç®¡ç† (EnhancedGameStateManager)
 
-**ÎÄ¼ş**: `src/game_logic/enhanced_state.py`
+**æ–‡ä»¶**: `src/game_logic/enhanced_state.py`
 
-**¹¦ÄÜ**:
-- Î¬»¤ÍêÕûµÄÓÎÏ·×´Ì¬ĞÅÏ¢
-- ¼¯³É¼ÇÅÆÄ£¿é
-- Ìá¹©×´Ì¬²éÑ¯½Ó¿Ú
-- ×Ô¶¯Ê¶±ğ¶ÓÓÑºÍ¶ÔÊÖ
+**åŠŸèƒ½**:
+- ç»´æŠ¤å®Œæ•´çš„æ¸¸æˆçŠ¶æ€ä¿¡æ¯
+- é›†æˆè®°ç‰Œæ¨¡å—
+- æä¾›çŠ¶æ€æŸ¥è¯¢æ¥å£
+- è‡ªåŠ¨è¯†åˆ«é˜Ÿå‹å’Œå¯¹æ‰‹
 
-**Ö÷Òª½Ó¿Ú**:
+**ä¸»è¦æ¥å£**:
 ```python
 state = EnhancedGameStateManager()
 
-# ´ÓÏûÏ¢¸üĞÂ×´Ì¬
+# ä»æ¶ˆæ¯æ›´æ–°çŠ¶æ€
 state.update_from_message(message)
 
-# ÅĞ¶ÏÊÇ·ñ±»¶¯³öÅÆ
+# åˆ¤æ–­æ˜¯å¦è¢«åŠ¨å‡ºç‰Œ
 is_passive = state.is_passive_play()
 
-# ÅĞ¶ÏÊÇ·ñÖ÷¶¯³öÅÆ
+# åˆ¤æ–­æ˜¯å¦ä¸»åŠ¨å‡ºç‰Œ
 is_active = state.is_active_play()
 
-# ÅĞ¶ÏÊÇ·ñÊÇ¶ÓÓÑ³öµÄÅÆ
+# åˆ¤æ–­æ˜¯å¦æ˜¯é˜Ÿå‹å‡ºçš„ç‰Œ
 is_teammate = state.is_teammate_action()
 
-# »ñÈ¡×´Ì¬ÕªÒª
+# è·å–çŠ¶æ€æ‘˜è¦
 summary = state.get_state_summary()
 ```
 
-## 3. ¾ö²ßÒıÇæ (DecisionEngine)
+## 3. å†³ç­–å¼•æ“ (DecisionEngine)
 
-**ÎÄ¼ş**: `src/decision/decision_engine.py`
+**æ–‡ä»¶**: `src/decision/decision_engine.py`
 
-**¹¦ÄÜ**:
-- Ö÷¶¯/±»¶¯¾ö²ß·ÖÀë
-- µ÷ÓÃÅäºÏ²ßÂÔ
-- ×ÛºÏÆÀ¹ÀºÍ¾ö²ß
+**åŠŸèƒ½**:
+- ä¸»åŠ¨/è¢«åŠ¨å†³ç­–åˆ†ç¦»
+- è°ƒç”¨é…åˆç­–ç•¥
+- ç»¼åˆè¯„ä¼°å’Œå†³ç­–
 
-**Ö÷Òª½Ó¿Ú**:
+**ä¸»è¦æ¥å£**:
 ```python
 engine = DecisionEngine(state_manager)
 
-# Ö÷¾ö²ßº¯Êı
+# ä¸»å†³ç­–å‡½æ•°
 act_index = engine.decide(message)
 
-# Ö÷¶¯³öÅÆ¾ö²ß
+# ä¸»åŠ¨å‡ºç‰Œå†³ç­–
 act_index = engine.active_decision(message, action_list)
 
-# ±»¶¯³öÅÆ¾ö²ß
+# è¢«åŠ¨å‡ºç‰Œå†³ç­–
 act_index = engine.passive_decision(message, action_list)
 ```
 
-## 4. ÅäºÏ²ßÂÔ (CooperationStrategy)
+## 4. é…åˆç­–ç•¥ (CooperationStrategy)
 
-**ÎÄ¼ş**: `src/decision/cooperation.py`
+**æ–‡ä»¶**: `src/decision/cooperation.py`
 
-**¹¦ÄÜ**:
-- Ê¶±ğ¶ÓÓÑÒâÍ¼
-- ÅĞ¶ÏÊÇ·ñĞèÒªÅäºÏ
-- ÖÆ¶¨ÅäºÏ²ßÂÔ
+**åŠŸèƒ½**:
+- è¯†åˆ«é˜Ÿå‹æ„å›¾
+- åˆ¤æ–­æ˜¯å¦éœ€è¦é…åˆ
+- åˆ¶å®šé…åˆç­–ç•¥
 
-**Ö÷Òª½Ó¿Ú**:
+**ä¸»è¦æ¥å£**:
 ```python
 cooperation = CooperationStrategy(state_manager)
 
-# ÅĞ¶ÏÊÇ·ñÓ¦¸ÃÅäºÏ¶ÓÓÑ
+# åˆ¤æ–­æ˜¯å¦åº”è¯¥é…åˆé˜Ÿå‹
 should_support = cooperation.should_support_teammate(cur_action_value)
 
-# ÅĞ¶ÏÊÇ·ñÓ¦¸Ã½ÓÌæ¶ÓÓÑ
+# åˆ¤æ–­æ˜¯å¦åº”è¯¥æ¥æ›¿é˜Ÿå‹
 should_take_over = cooperation.should_take_over(cur_action_value, my_action_value)
 
-# ÆÀ¹ÀÅäºÏ»ú»á
+# è¯„ä¼°é…åˆæœºä¼š
 evaluation = cooperation.evaluate_cooperation_opportunity(action_list, cur_action)
 
-# »ñÈ¡ÅäºÏ²ßÂÔ
+# è·å–é…åˆç­–ç•¥
 strategy = cooperation.get_cooperation_strategy(action_list, cur_action, greater_action)
 ```
 
-## 5. ÊÖÅÆ×éºÏÓÅ»¯ (HandCombiner)
+## 5. æ‰‹ç‰Œç»„åˆä¼˜åŒ– (HandCombiner)
 
-**ÎÄ¼ş**: `src/game_logic/hand_combiner.py`
+**æ–‡ä»¶**: `src/game_logic/hand_combiner.py`
 
-**¹¦ÄÜ**:
-- Ê¶±ğËùÓĞ¿ÉÄÜµÄÅÆĞÍ×éºÏ
-- ÓÅ»¯×éÅÆ²ßÂÔ
-- ¿¼ÂÇÖ÷ÅÆ¶Ô×éºÏµÄÓ°Ïì
+**åŠŸèƒ½**:
+- è¯†åˆ«æ‰€æœ‰å¯èƒ½çš„ç‰Œå‹ç»„åˆ
+- ä¼˜åŒ–ç»„ç‰Œç­–ç•¥
+- è€ƒè™‘ä¸»ç‰Œå¯¹ç»„åˆçš„å½±å“
 
-**Ö÷Òª½Ó¿Ú**:
+**ä¸»è¦æ¥å£**:
 ```python
 combiner = HandCombiner()
 
-# ×éºÏÊÖÅÆ
+# ç»„åˆæ‰‹ç‰Œ
 sorted_cards, bomb_info = combiner.combine_handcards(handcards, rank)
 
-# »ñÈ¡×éÅÆÓÅÏÈ¼¶
+# è·å–ç»„ç‰Œä¼˜å…ˆçº§
 priority = combiner.get_grouping_priority()
 ```
 
-## Ê¹ÓÃÊ¾Àı
+## ä½¿ç”¨ç¤ºä¾‹
 
-### »ù±¾Ê¹ÓÃ
+### åŸºæœ¬ä½¿ç”¨
 
 ```python
 from game_logic.enhanced_state import EnhancedGameStateManager
 from decision.decision_engine import DecisionEngine
 
-# ³õÊ¼»¯
+# åˆå§‹åŒ–
 state_manager = EnhancedGameStateManager()
 decision_engine = DecisionEngine(state_manager)
 
-# ´¦ÀíÏûÏ¢
+# å¤„ç†æ¶ˆæ¯
 message = {
     "type": "act",
     "stage": "play",
@@ -168,31 +168,31 @@ message = {
     ...
 }
 
-# ¸üĞÂ×´Ì¬
+# æ›´æ–°çŠ¶æ€
 state_manager.update_from_message(message)
 
-# ×ö³ö¾ö²ß
+# åšå‡ºå†³ç­–
 act_index = decision_engine.decide(message)
 ```
 
-### ÍêÕû¿Í»§¶ËÊ¾Àı
+### å®Œæ•´å®¢æˆ·ç«¯ç¤ºä¾‹
 
-²Î¿¼ `src/communication/enhanced_client.py` ²é¿´ÍêÕûµÄ¿Í»§¶ËÊµÏÖ¡£
+å‚è€ƒ `src/communication/enhanced_client.py` æŸ¥çœ‹å®Œæ•´çš„å®¢æˆ·ç«¯å®ç°ã€‚
 
-## ÏÂÒ»²½ÓÅ»¯
+## ä¸‹ä¸€æ­¥ä¼˜åŒ–
 
-ÕâĞ©Ä£¿éÌá¹©ÁË»ù´¡¿ò¼Ü£¬ºóĞø¿ÉÒÔ£º
+è¿™äº›æ¨¡å—æä¾›äº†åŸºç¡€æ¡†æ¶ï¼Œåç»­å¯ä»¥ï¼š
 
-1. **ÍêÉÆ¾ö²ßËã·¨**: ÔÚ `active_decision()` ºÍ `passive_decision()` ÖĞÊµÏÖ¸üÖÇÄÜµÄ²ßÂÔ
-2. **ÔöÇ¿ÅäºÏ²ßÂÔ**: ÓÅ»¯ `CooperationStrategy` µÄ²ÎÊıºÍÂß¼­
-3. **ÍêÉÆÊÖÅÆ×éºÏ**: ÔÚ `HandCombiner` ÖĞÊµÏÖ¸ü¸´ÔÓµÄ×éÅÆËã·¨
-4. **Ìí¼ÓÍÆÀí¹¦ÄÜ**: ÔÚ `CardTracker` ÖĞÊµÏÖ¶ÔÊÖÊÖÅÆÍÆÀí
-5. **ĞÔÄÜÓÅ»¯**: Ìí¼Ó»º´æºÍÔ¤¼ÆËã»úÖÆ
+1. **å®Œå–„å†³ç­–ç®—æ³•**: åœ¨ `active_decision()` å’Œ `passive_decision()` ä¸­å®ç°æ›´æ™ºèƒ½çš„ç­–ç•¥
+2. **å¢å¼ºé…åˆç­–ç•¥**: ä¼˜åŒ– `CooperationStrategy` çš„å‚æ•°å’Œé€»è¾‘
+3. **å®Œå–„æ‰‹ç‰Œç»„åˆ**: åœ¨ `HandCombiner` ä¸­å®ç°æ›´å¤æ‚çš„ç»„ç‰Œç®—æ³•
+4. **æ·»åŠ æ¨ç†åŠŸèƒ½**: åœ¨ `CardTracker` ä¸­å®ç°å¯¹æ‰‹æ‰‹ç‰Œæ¨ç†
+5. **æ€§èƒ½ä¼˜åŒ–**: æ·»åŠ ç¼“å­˜å’Œé¢„è®¡ç®—æœºåˆ¶
 
-## ×¢ÒâÊÂÏî
+## æ³¨æ„äº‹é¡¹
 
-1. ËùÓĞÄ£¿é¶¼²Î¿¼ÁË»ñ½±´úÂëµÄÊµÏÖ
-2. ¶ÓÓÑÊ¶±ğ¹«Ê½: `(myPos + 2) % 4`
-3. ×´Ì¬¸üĞÂĞèÒªÔÚÊÕµ½ÏûÏ¢Ê±¼°Ê±µ÷ÓÃ
-4. ¼ÇÅÆÄ£¿é»áÔÚĞ¡¾Ö½áÊøÊ±×Ô¶¯ÖØÖÃ
+1. æ‰€æœ‰æ¨¡å—éƒ½å‚è€ƒäº†è·å¥–ä»£ç çš„å®ç°
+2. é˜Ÿå‹è¯†åˆ«å…¬å¼: `(myPos + 2) % 4`
+3. çŠ¶æ€æ›´æ–°éœ€è¦åœ¨æ”¶åˆ°æ¶ˆæ¯æ—¶åŠæ—¶è°ƒç”¨
+4. è®°ç‰Œæ¨¡å—ä¼šåœ¨å°å±€ç»“æŸæ—¶è‡ªåŠ¨é‡ç½®
 

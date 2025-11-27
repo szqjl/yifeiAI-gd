@@ -1,0 +1,4 @@
+# file: D:\guandanscore\YiFeiAI-GD\batch_executor\diagnostic.py
+# hypothesis_version: 6.148.2
+
+['.config', 'app.config', 'config.ini', 'config.json', 'config.yaml', 'config.yml', 'configuration.ini', 'configuration.json', 'ignore', 'settings.ini', 'settings.json', 'settings.txt', 'utf-8']

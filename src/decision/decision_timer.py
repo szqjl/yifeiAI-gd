@@ -1,168 +1,69 @@
 # -*- coding: utf-8 -*-
 """
-¾ö²ßÊ±¼ä¿ØÖÆÄ£¿é (Decision Timer)
-¹¦ÄÜ£º
-- ÉèÖÃ×î´ó¾ö²ßÊ±¼ä
-- ³¬Ê±±£»¤»úÖÆ
-- ¿ìËÙ¾ö²ßÂ·¾¶
-- ½¥½øÊ½¾ö²ß£¨ÏÈ·µ»Ø¿ÉĞĞ·½°¸£¬ÔÙÓÅ»¯£©
+é–¸æ„¬ç£­é¡ãƒ§æ‹‹éˆ©å†©å‚å´³éŠŠÎ´ä¾€å´¸ (Decision Timer)
+é–¸æ—‚å–•éæ©€æ•
+- é–¹è²‰å†¨ç…‘é–¸æ„¬ç£­é¡ãƒ©å¼®é«æ›Ÿï¼Ÿ
+- é—‚å†¨å¼¶éŠï½‡Ğ¢é–º
 """
 
 import time
-from typing import Callable, Optional, Any
-from functools import wraps
+from typing import Optional
 
 
 class DecisionTimer:
-    """¾ö²ßÊ±¼ä¿ØÖÆÆ÷"""
+    """é–¸æ„¬ç£­é¡ãƒ§æ‹‹éˆ©å†©å‚å´³"""
     
     def __init__(self, max_time: float = 0.8):
         """
-        ³õÊ¼»¯¾ö²ß¼ÆÊ±Æ÷
+        é–¸æ“ç¹‚ç€£ç€µèŒ¬æ‹‹éˆ©å†©å‚å´³
         
         Args:
-            max_time: ×î´ó¾ö²ßÊ±¼ä£¨Ãë£©£¬Ä¬ÈÏ0.8Ãë
+            max_time: é–ºå Ÿå¾„è¤é å‘¯ç²µéã„¦å‚æ¢»æˆå‰§ç¤„ç¼å¤‹å¸ªç»±æ°¶æ•å®€å‹­å¸›é 0.8ç¼
         """
         self.max_time = max_time
         self.start_time: Optional[float] = None
-        self.elapsed_time: float = 0.0
     
     def start(self):
-        """¿ªÊ¼¼ÆÊ±"""
+        """ç€µå©µç€£éˆ©å†©"""
         self.start_time = time.time()
-        self.elapsed_time = 0.0
     
     def check_timeout(self) -> bool:
         """
-        ¼ì²éÊÇ·ñ³¬Ê±
+        æ¿¡é–ºå±»å„²å¦²æå´¥é”•ä½ºĞ¢é–º
         
         Returns:
-            True: ÒÑ³¬Ê±£¬False: Î´³¬Ê±
+            å©µâ€³å€¹éå¤Œæ¾é›å¦å‚›æ½»é‚æŒç¤€Trueé–¿æ¶˜è‹¯é¯ä¾€å´šå¨†æ”ç®²é–¸ãƒ¦æ¥·alse
         """
         if self.start_time is None:
             return False
         
-        self.elapsed_time = time.time() - self.start_time
-        return self.elapsed_time >= self.max_time
-    
-    def get_remaining_time(self) -> float:
-        """
-        »ñÈ¡Ê£ÓàÊ±¼ä
-        
-        Returns:
-            Ê£ÓàÊ±¼ä£¨Ãë£©
-        """
-        if self.start_time is None:
-            return self.max_time
-        
         elapsed = time.time() - self.start_time
-        remaining = self.max_time - elapsed
-        return max(0.0, remaining)
+        return elapsed >= self.max_time
     
     def get_elapsed_time(self) -> float:
         """
-        »ñÈ¡ÒÑÓÃÊ±¼ä
+        é–¼æƒ§å˜²è¤°å›§æ­Œå°™éã‚‰å¼®é«æ›Ÿï¼Ÿ
         
         Returns:
-            ÒÑÓÃÊ±¼ä£¨Ãë£©
+            ç€¹æ­Œå°™éã‚‰å¼®é«æ›Ÿï¼Ÿé–¿æ¶˜ç‰éºç‚µç¤†
         """
         if self.start_time is None:
             return 0.0
+        return time.time() - self.start_time
+    
+    def get_remaining_time(self) -> float:
+        """
+        é–¼æƒ§å˜²è¤°å›¬å´œéˆºç¼æˆ¦å¼®é«æ›Ÿï¼Ÿ
         
-        self.elapsed_time = time.time() - self.start_time
-        return self.elapsed_time
+        Returns:
+            é–¸æ’¯æ™™ç¼æˆ¦å¼®é«æ›Ÿï¼Ÿé–¿æ¶˜ç‰éºç‚µç¤†
+        """
+        if self.start_time is None:
+            return self.max_time
+        elapsed = self.get_elapsed_time()
+        return max(0.0, self.max_time - elapsed)
     
     def reset(self):
-        """ÖØÖÃ¼ÆÊ±Æ÷"""
+        """é—æ’ç§¶é¤å—™æ‹‹éˆ©å†©å‚å´³"""
         self.start_time = None
-        self.elapsed_time = 0.0
-
-
-def with_timeout(max_time: float = 0.8, default_return: Any = 0):
-    """
-    ×°ÊÎÆ÷£ºÎªº¯ÊıÌí¼Ó³¬Ê±±£»¤
-    
-    Args:
-        max_time: ×î´óÖ´ĞĞÊ±¼ä£¨Ãë£©
-        default_return: ³¬Ê±Ê±µÄÄ¬ÈÏ·µ»ØÖµ
-    
-    Usage:
-        @with_timeout(max_time=0.8, default_return=0)
-        def my_decision_function():
-            # ¾ö²ßÂß¼­
-            return result
-    """
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            timer = DecisionTimer(max_time)
-            timer.start()
-            
-            # Èç¹ûº¯ÊıÖ§³Ötimer²ÎÊı£¬´«Èëtimer
-            if 'timer' in func.__code__.co_varnames:
-                kwargs['timer'] = timer
-            
-            try:
-                result = func(*args, **kwargs)
-                elapsed = timer.get_elapsed_time()
-                if elapsed > max_time * 0.8:
-                    print(f"Warning: {func.__name__} took {elapsed:.3f}s (½Ó½ü³¬Ê±)")
-                return result
-            except TimeoutError:
-                print(f"Timeout: {func.__name__} exceeded {max_time}s, returning default")
-                return default_return
-            except Exception as e:
-                print(f"Error in {func.__name__}: {e}, returning default")
-                return default_return
-        
-        return wrapper
-    return decorator
-
-
-class ProgressiveDecision:
-    """½¥½øÊ½¾ö²ß£¨ÏÈ·µ»Ø¿ÉĞĞ·½°¸£¬ÔÙÓÅ»¯£©"""
-    
-    def __init__(self, timer: DecisionTimer):
-        self.timer = timer
-        self.best_result = None
-        self.best_score = float('-inf')
-    
-    def update(self, result: Any, score: float):
-        """
-        ¸üĞÂ×î¼Ñ½á¹û
-        
-        Args:
-            result: ¾ö²ß½á¹û
-            score: ÆÀ·Ö
-        """
-        if score > self.best_score:
-            self.best_score = score
-            self.best_result = result
-    
-    def get_result(self) -> Any:
-        """
-        »ñÈ¡×î¼Ñ½á¹û
-        
-        Returns:
-            ×î¼Ñ¾ö²ß½á¹û
-        """
-        return self.best_result if self.best_result is not None else 0
-    
-    def should_continue(self) -> bool:
-        """
-        ÅĞ¶ÏÊÇ·ñÓ¦¸Ã¼ÌĞøÓÅ»¯
-        
-        Returns:
-            True: Ó¦¸Ã¼ÌĞø£¬False: Ó¦¸ÃÍ£Ö¹
-        """
-        # Èç¹ûÊ£ÓàÊ±¼ä²»×ã£¬Í£Ö¹ÓÅ»¯
-        remaining = self.timer.get_remaining_time()
-        if remaining < 0.1:  # Ê£ÓàÊ±¼äÉÙÓÚ0.1Ãë
-            return False
-        
-        # Èç¹ûÒÑ¾­ÕÒµ½ºÜºÃµÄ·½°¸£¬¿ÉÒÔÍ£Ö¹
-        if self.best_score > 100:  # ãĞÖµ¿Éµ÷
-            return False
-        
-        return True
 

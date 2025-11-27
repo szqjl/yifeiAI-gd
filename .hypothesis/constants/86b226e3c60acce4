@@ -1,0 +1,4 @@
+# file: D:\guandanscore\YiFeiAI-GD\batch_executor\executor.py
+# hypothesis_version: 6.148.2
+
+[600, '\n可能原因:', '\n建议:', '\n最终战绩:', '.', '.tmp', '=', 'CREATE_NEW_CONSOLE', 'ExecutionState', 'SIGINT', 'SIGTERM', 'batch_executor', 'execution_state.json', 'game_scores.json', 'last_update', 'r', 'start_time', 'team_a', 'team_b', 'utf-8', 'w', '仅诊断模式，退出', '参数设置正确，未发现问题', '开始诊断服务器参数问题...', '所有游戏已完成!', '执行完成!', '执行进度', '批量游戏执行系统启动', '服务器启动失败，停止执行', '服务器未在预期时间内终止，可能出现问题', '未发现配置文件', '检测到关闭请求，停止执行', '检测到参数不匹配!', '没有客户端成功启动，停止执行', '清理进程...', '系统正在退出...', '诊断报告']

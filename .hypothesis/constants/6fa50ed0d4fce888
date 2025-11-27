@@ -1,0 +1,4 @@
+# file: D:\guandanscore\YiFeiAI-GD\batch_executor\diagnostic.py
+# hypothesis_version: 6.148.2
+
+['.config', 'app.config', 'config.ini', 'config.json', 'config.yaml', 'config.yml', 'configuration.ini', 'configuration.json', 'ignore', 'settings.ini', 'settings.json', 'settings.txt', 'utf-8', '使用批量执行系统自动重启来完成目标场数', '参数设置正确，可以正常执行', '场数\\s*[:：]\\s*(\\d+)', '尝试修改或删除配置文件', '无法从服务器输出中提取游戏次数', '服务器可能有默认的3场限制', '查看服务器文档确认输出格式', '检查服务器是否正确输出游戏次数信息', '检查服务器源代码或文档', '检查配置文件中的游戏次数设置', '游戏场数\\s*[:：]\\s*(\\d+)', '游戏次数\\s*[:：]\\s*(\\d+)', '联系服务器开发者确认参数处理逻辑', '这可能是服务器的默认行为或测试模式']

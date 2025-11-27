@@ -1,340 +1,181 @@
 # -*- coding: utf-8 -*-
 """
-¶àÒòËØÆÀ¹ÀÏµÍ³ (Multi-Factor Evaluator)
-¹¦ÄÜ£º
-- ×ÛºÏÆÀ¹À¶à¸öÒòËØ
-- ¼ÆËã¶¯×÷µÄ×ÛºÏÆÀ·Ö
-- Ö§³ÖÈ¨ÖØµ÷Õû
+å©¢èˆµè‰¾å¨²æ»…æ§é˜è™¹æ§‘å¨´å…¼æ¾˜å¨…æ‘ÎŸéˆ¥è™«å¥ (Multi Factor Evaluator)
+é–¸æ—‚å–•éæ©€æ•
+- ç¼‚ä½ºå§é®åº¨æ‡“éå¦¾ç»˜å¾„å§˜é–²æ»ˆå´¶é˜ç”µå²€æ‹ é•é™å©‡å´éŠŠã‚‡ç¨Š
+- é–¹ç»˜åŠ’ç»¶ç”µç´’é“åº¢å€¤é å›§å«¬é¨
 """
 
 from typing import Dict, List, Optional, Tuple
-from ..game_logic.enhanced_state import EnhancedGameStateManager
-from ..game_logic.hand_combiner import HandCombiner
-from .cooperation import CooperationStrategy
+import sys
+from pathlib import Path
+
+# æ¿ï½ˆæ’ç€rcé–»â•„ãé‡ç‚²ç…‚é å“„
+if str(Path(__file__).parent.parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from game_logic.enhanced_state import EnhancedGameStateManager
+from game_logic.hand_combiner import HandCombiner
+from decision.cooperation import CooperationStrategy
 
 
 class MultiFactorEvaluator:
-    """¶àÒòËØÆÀ¹ÀÆ÷"""
+    """å©¢èˆµè‰¾å¨²æ»…æ§é˜è™¹æ§‘å¨´å…¼æ¾˜å¨…"""
     
-    def __init__(self, state_manager: EnhancedGameStateManager,
-                 hand_combiner: HandCombiner,
+    def __init__(self, state_manager: EnhancedGameStateManager, 
+                 combiner: HandCombiner,
                  cooperation: CooperationStrategy):
+        """
+        é–¸æ“ç¹‚ç€£ç€µå‰å¾„å§˜å¨²æ»…æ§é˜è™¹æ§‘å¨´å…¼æ¾˜å¨…
+        
+        Args:
+            state_manager: é–»æ¨¿åŸ–æµ£çŒ´ç´•é®å©‡å´³
+            combiner: é–¹é›æ¾§æ¿ˆç´’é•é®åº¨å´³
+            cooperation: é—æ¿ç§´é®åº£ç²µéé†
+        """
         self.state = state_manager
-        self.combiner = hand_combiner
+        self.combiner = combiner
         self.cooperation = cooperation
         
-        # ÆÀ¹ÀÈ¨ÖØ£¨¿Éµ÷Õû£©
+        # é–ºå¤Šå•´é£ææŸŠå®¥å›©æ‚
         self.weights = {
-            "remaining_cards": 0.25,      # Ê£ÓàÅÆÊıÒòËØ
-            "card_type_value": 0.20,      # ÅÆĞÍ´óĞ¡ÒòËØ
-            "cooperation": 0.20,          # ÅäºÏÒòËØ
-            "risk": 0.15,                 # ·çÏÕÒòËØ
-            "timing": 0.10,               # Ê±»úÒòËØ
-            "hand_structure": 0.10        # ÊÖÅÆ½á¹¹ÒòËØ
+            "remaining_cards": 0.25,
+            "card_type_value": 0.20,
+            "cooperation": 0.20,
+            "risk": 0.15,
+            "timing": 0.10,
+            "hand_structure": 0.10
         }
     
-    def evaluate_action(self, action: List, action_index: int,
-                       cur_action: Optional[List] = None,
-                       action_list: List[List] = None) -> float:
+    def evaluate_all_actions(self, action_list: List[List], 
+                            target_action: Optional[List] = None) -> List[Tuple[int, float]]:
         """
-        ÆÀ¹À¶¯×÷µÄ×ÛºÏÆÀ·Ö
+        é å›§å«ªé™å©‡å¹é–ºå å©‚Ğ—å¨´
         
         Args:
-            action: ÒªÆÀ¹ÀµÄ¶¯×÷
-            action_index: ¶¯×÷Ë÷Òı
-            cur_action: µ±Ç°ĞèÒªÑ¹ÖÆµÄ¶¯×÷£¨±»¶¯³öÅÆÊ±£©
-            action_list: ËùÓĞ¿ÉÑ¡¶¯×÷ÁĞ±í
+            action_list: é–¸æ–»åŠ‹ç¼æ—ˆå´šå¦¤å‹©
+            target_action: é–»â•…å¼½é¥ÑƒĞ—å¨´ï½†ç²£ç»±æ¬‘æ‚®é–¸æ–»åŠŒé¤é–»æ¥€æœ¬å¦å‚æ£éŸæ›šç¤ç”¯å›¬å´šç’åœ­ç¤†
         
         Returns:
-            ×ÛºÏÆÀ·Ö£¨ÊıÖµÔ½´óÔ½ºÃ£©
-        """
-        if action[0] == "PASS":
-            return self._evaluate_pass(cur_action)
-        
-        scores = {}
-        
-        # 1. Ê£ÓàÅÆÊıÒòËØ
-        scores["remaining_cards"] = self._evaluate_remaining_cards_factor(action)
-        
-        # 2. ÅÆĞÍ´óĞ¡ÒòËØ
-        scores["card_type_value"] = self._evaluate_card_type_value(action, cur_action)
-        
-        # 3. ÅäºÏÒòËØ
-        scores["cooperation"] = self._evaluate_cooperation_factor(action, cur_action)
-        
-        # 4. ·çÏÕÒòËØ
-        scores["risk"] = self._evaluate_risk_factor(action)
-        
-        # 5. Ê±»úÒòËØ
-        scores["timing"] = self._evaluate_timing_factor()
-        
-        # 6. ÊÖÅÆ½á¹¹ÒòËØ
-        scores["hand_structure"] = self._evaluate_hand_structure_factor(action)
-        
-        # ¼ÆËã¼ÓÈ¨×Ü·Ö
-        total_score = sum(
-            scores[factor] * self.weights[factor]
-            for factor in scores
-        )
-        
-        return total_score
-    
-    def _evaluate_remaining_cards_factor(self, action: List) -> float:
-        """
-        ÆÀ¹ÀÊ£ÓàÅÆÊıÒòËØ
-        
-        Returns:
-            ÆÀ·Ö£¨0-100£©
-        """
-        my_remain = len(self.state.hand_cards)
-        teammate_remain = self.state.get_teammate_remain_cards()
-        opponent_remain = self.state.get_opponent_remain_cards()
-        
-        # Èç¹û×Ô¼ºÅÆºÜÉÙ£¬ÓÅÏÈ³öÅÆ
-        if my_remain <= 5:
-            return 100
-        
-        # Èç¹û¶ÓÓÑÅÆºÜÉÙ£¬¿¼ÂÇÅäºÏ
-        if teammate_remain <= 5:
-            return 80
-        
-        # Èç¹û¶ÔÊÖÅÆºÜÉÙ£¬Ó¦¸ÃÑ¹ÖÆ
-        min_opponent = min(opponent_remain) if opponent_remain else 27
-        if min_opponent <= 5:
-            return 90
-        
-        # Õı³£Çé¿ö
-        return 50
-    
-    def _evaluate_card_type_value(self, action: List,
-                                 cur_action: Optional[List]) -> float:
-        """
-        ÆÀ¹ÀÅÆĞÍ´óĞ¡ÒòËØ
-        
-        Returns:
-            ÆÀ·Ö£¨0-100£©
-        """
-        action_value = self.cooperation._calculate_action_value(action)
-        
-        if cur_action:
-            cur_value = self.cooperation._calculate_action_value(cur_action)
-            # Èç¹ûÄÜÑ¹ÖÆ£¬¸ù¾İÑ¹ÖÆ·ù¶ÈÆÀ·Ö
-            if action_value > cur_value:
-                diff = action_value - cur_value
-                # Ñ¹ÖÆ·ù¶ÈÔ½Ğ¡Ô½ºÃ£¨½ÚÊ¡ÅÆÁ¦£©
-                if diff <= 2:
-                    return 90
-                elif diff <= 5:
-                    return 70
-                else:
-                    return 50
-            else:
-                return 0  # ÎŞ·¨Ñ¹ÖÆ
-        else:
-            # Ö÷¶¯³öÅÆ£¬Ñ¡ÔñĞ¡ÅÆ
-            if action_value <= 10:
-                return 80
-            elif action_value <= 14:
-                return 60
-            else:
-                return 40
-    
-    def _evaluate_cooperation_factor(self, action: List,
-                                    cur_action: Optional[List]) -> float:
-        """
-        ÆÀ¹ÀÅäºÏÒòËØ
-        
-        Returns:
-            ÆÀ·Ö£¨0-100£©
-        """
-        if not cur_action:
-            return 50  # Ö÷¶¯³öÅÆ£¬ÅäºÏÒòËØ²»ÖØÒª
-        
-        # ÆÀ¹ÀÅäºÏ»ú»á
-        evaluation = self.cooperation.evaluate_cooperation_opportunity(
-            [action], cur_action
-        )
-        
-        if evaluation["should_support"]:
-            # Ó¦¸ÃÅäºÏ£¬PASSµÃ·Ö¸ß
-            if action[0] == "PASS":
-                return 100
-            else:
-                return 20  # ²»Ó¦¸Ã³öÅÆ
-        elif evaluation["should_take_over"]:
-            # Ó¦¸Ã½ÓÌæ£¬³öÅÆµÃ·Ö¸ß
-            if action[0] != "PASS":
-                return 90
-            else:
-                return 30
-        
-        return 50  # Õı³£Çé¿ö
-    
-    def _evaluate_risk_factor(self, action: List) -> float:
-        """
-        ÆÀ¹À·çÏÕÒòËØ
-        
-        Returns:
-            ÆÀ·Ö£¨0-100£©
-        """
-        pass_num, my_pass_num = self.state.get_pass_count()
-        
-        # Èç¹ûÁ¬ĞøPASS´ÎÊı¹ı¶à£¬³öÅÆ·çÏÕ½µµÍ
-        if pass_num >= 7 or my_pass_num >= 5:
-            if action[0] != "PASS":
-                return 80  # Ó¦¸Ã³öÅÆ
-        
-        # Èç¹ûÊÖÅÆºÜÉÙ£¬³öÅÆ·çÏÕ½µµÍ
-        if len(self.state.hand_cards) <= 5:
-            if action[0] != "PASS":
-                return 90
-        
-        # Èç¹û³öµÄÊÇ´óÅÆ£¨Õ¨µ¯£©£¬·çÏÕ½Ï¸ß
-        if action[0] in ["Bomb", "StraightFlush"]:
-            return 40  # ·çÏÕ½Ï¸ß
-        
-        return 60  # Õı³£·çÏÕ
-    
-    def _evaluate_timing_factor(self) -> float:
-        """
-        ÆÀ¹ÀÊ±»úÒòËØ
-        
-        Returns:
-            ÆÀ·Ö£¨0-100£©
-        """
-        # ¸ù¾İÓÎÏ·½×¶ÎÆÀ·Ö
-        stage = self.state.stage
-        if stage == "play":
-            # ¸ù¾İµ±Ç°µÈ¼¶ÆÀ·Ö
-            cur_rank = self.state.cur_rank
-            if cur_rank == "A":
-                return 90  # ¹Ø¼ü½×¶Î
-            elif cur_rank in ["K", "Q"]:
-                return 70
-            else:
-                return 50
-        
-        return 50
-    
-    def _evaluate_hand_structure_factor(self, action: List) -> float:
-        """
-        ÆÀ¹ÀÊÖÅÆ½á¹¹ÒòËØ
-        
-        Returns:
-            ÆÀ·Ö£¨0-100£©
-        """
-        handcards = self.state.hand_cards
-        rank = self.state.cur_rank
-        
-        # ·ÖÎöÊÖÅÆ½á¹¹
-        sorted_cards, _ = self.combiner.combine_handcards(handcards, rank)
-        
-        # ¼ì²é¶¯×÷ÖĞµÄÅÆÊÇ·ñÆÆ»µÊÖÅÆ½á¹¹
-        action_cards = set(action[2])
-        
-        # ¼ì²éÊÇ·ñÆÆ»µË³×Ó
-        if sorted_cards.get("Straight"):
-            straight_cards = set(sorted_cards["Straight"][0])
-            if action_cards & straight_cards:
-                return 30  # ÆÆ»µË³×Ó£¬ÆÀ·ÖµÍ
-        
-        # ¼ì²éÊÇ·ñÆÆ»µÍ¬»¨Ë³
-        if sorted_cards.get("StraightFlush"):
-            flush_cards = set(sorted_cards["StraightFlush"][0])
-            if action_cards & flush_cards:
-                return 20  # ÆÆ»µÍ¬»¨Ë³£¬ÆÀ·ÖºÜµÍ
-        
-        # ¼ì²éÊÇ·ñÆÆ»µ¶Ô×Ó
-        if action[0] == "Single":
-            for pair in sorted_cards.get("Pair", []):
-                if action[2][0] in pair:
-                    return 40  # ÆÆ»µ¶Ô×Ó£¬ÆÀ·Ö½ÏµÍ
-        
-        # Èç¹û¶¯×÷ÖĞµÄÅÆÊÇµ¥ÕÅ³ÉÔ±£¬ÆÀ·Ö¸ß
-        if action[0] == "Single":
-            if action[2][0] in sorted_cards.get("Single", []):
-                return 80
-        
-        # Èç¹û¶¯×÷ÖĞµÄÅÆÊÇ¶Ô×Ó³ÉÔ±£¬ÆÀ·Ö¸ß
-        if action[0] == "Pair":
-            for pair in sorted_cards.get("Pair", []):
-                if action[2][0] in pair:
-                    return 80
-        
-        return 60  # Õı³£Çé¿ö
-    
-    def _evaluate_pass(self, cur_action: Optional[List]) -> float:
-        """
-        ÆÀ¹ÀPASS¶¯×÷
-        
-        Returns:
-            ÆÀ·Ö£¨0-100£©
-        """
-        if not cur_action:
-            return 0  # Ö÷¶¯³öÅÆÊ±²»Ó¦¸ÃPASS
-        
-        # ÆÀ¹ÀÅäºÏÒòËØ
-        evaluation = self.cooperation.evaluate_cooperation_opportunity(
-            [["PASS", "PASS", "PASS"]], cur_action
-        )
-        
-        if evaluation["should_support"]:
-            return 100  # Ó¦¸ÃÅäºÏ£¬PASSµÃ·Ö¸ß
-        
-        # Èç¹ûÎŞ·¨Ñ¹ÖÆ£¬PASSÊÇºÏÀíÑ¡Ôñ
-        return 50
-    
-    def evaluate_all_actions(self, action_list: List[List],
-                            cur_action: Optional[List] = None) -> List[Tuple[int, float]]:
-        """
-        ÆÀ¹ÀËùÓĞ¶¯×÷
-        
-        Args:
-            action_list: ËùÓĞ¿ÉÑ¡¶¯×÷ÁĞ±í
-            cur_action: µ±Ç°ĞèÒªÑ¹ÖÆµÄ¶¯×÷
-        
-        Returns:
-            [(¶¯×÷Ë÷Òı, ÆÀ·Ö), ...] ÁĞ±í£¬°´ÆÀ·Ö½µĞòÅÅÁĞ
+            é å›§å«ªé™å©„ç´’é¾å¯¸äº¯é–¸æ“å‹©å†®æ•çå‰§å£ç€µè¹‡åº¤ç¤‹ [(ç¼ä¾¿å¹ç»±, é å›§å«¬é¨), ...]é–¿æ¶˜æœ¬ç€µæ»…æ‹ é•é¨åº¨æ¢½å®¥å‘¯ç¢é–¹çƒ˜å¸’é¨
         """
         evaluations = []
         
-        for i, action in enumerate(action_list):
-            score = self.evaluate_action(action, i, cur_action, action_list)
-            evaluations.append((i, score))
+        for idx, action in enumerate(action_list):
+            if action[0] == "PASS":
+                score = 0.0
+            else:
+                score = self._evaluate_action(action, target_action)
+            evaluations.append((idx, score))
         
-        # °´ÆÀ·Ö½µĞòÅÅÁĞ
+        # é–¹ç¨¿åº£æ§‘é–¸æ‘æ£å¦¾é”‹æƒ”è¹‡æ–¿ç¬“é¼
         evaluations.sort(key=lambda x: x[1], reverse=True)
-        
         return evaluations
     
-    def get_best_action(self, action_list: List[List],
-                       cur_action: Optional[List] = None) -> int:
+    def _evaluate_action(self, action: List, target_action: Optional[List]) -> float:
         """
-        »ñÈ¡×î¼Ñ¶¯×÷Ë÷Òı
+        é å›§å«ªé™å©‡å´¡é‡æ°¶åš‹é–¸æ–»åŠ‹ç¼
         
         Args:
-            action_list: ËùÓĞ¿ÉÑ¡¶¯×÷ÁĞ±í
-            cur_action: µ±Ç°ĞèÒªÑ¹ÖÆµÄ¶¯×÷
+            action: é–¸æ–»åŠ‹ç¼
+            target_action: é–»â•…å¼½é¥ÑƒĞ—å¨´
         
         Returns:
-            ×î¼Ñ¶¯×÷Ë÷Òı
+            ç¼‚ä½ºå§é®åº£æ‹ é•é¨
         """
-        evaluations = self.evaluate_all_actions(action_list, cur_action)
-        if evaluations:
-            return evaluations[0][0]
-        return 0
+        scores = {}
+        
+        # 1. é–»æ¥€è‹¯éé”‹ç¦’å®„
+        scores["card_type_value"] = self._evaluate_card_type_value(action)
+        
+        # 2. é–¸æ’¯æ™™ç¼æˆ¦æ‚§çç‚¬æ®¶é–¸ãƒ§å§·ç»€
+        scores["remaining_cards"] = self._evaluate_remaining_cards(action)
+        
+        # 3. é—æ¿ç§´é®åº¨å´¶é˜ç”µ
+        scores["cooperation"] = self._evaluate_cooperation(action, target_action)
+        
+        # 4. å¦å¬ªé…£å¨…æ’»å´¶é˜ç”µ
+        scores["risk"] = self._evaluate_risk(action)
+        
+        # 5. é–ºå†­åŸ–å©§é–¸ãƒ§å§·ç»€
+        scores["timing"] = self._evaluate_timing(action, target_action)
+        
+        # 6. é–¹é›æ¾§æ¿ˆç´’é¾å¯¸é–¸ãƒ§å§·ç»€
+        scores["hand_structure"] = self._evaluate_hand_structure(action)
+        
+        # ç¼‚ä½ºå§é®åº£æ‹ é•é¨
+        total_score = sum(scores[factor] * self.weights[factor] 
+                         for factor in scores)
+        
+        return total_score
     
-    def update_weights(self, weights: Dict[str, float]):
-        """
-        ¸üĞÂÆÀ¹ÀÈ¨ÖØ
+    def _evaluate_card_type_value(self, action: List) -> float:
+        """é å›§å«ªé™å©‡æ‚§çç•Œé”‹ç¦’å®„"""
+        if not action or action[0] == "PASS":
+            return 0.0
         
-        Args:
-            weights: ĞÂµÄÈ¨ÖØ×Öµä
-        """
-        self.weights.update(weights)
+        type_values = {
+            "Bomb": 20.0,
+            "StraightFlush": 18.0,
+            "TwoTrips": 15.0,
+            "ThreePair": 12.0,
+            "Straight": 10.0,
+            "ThreeWithTwo": 8.0,
+            "Trips": 6.0,
+            "Pair": 4.0,
+            "Single": 2.0
+        }
         
-        # ¹éÒ»»¯È¨ÖØ
-        total = sum(self.weights.values())
-        if total > 0:
-            self.weights = {k: v / total for k, v in self.weights.items()}
+        base_value = type_values.get(action[0], 1.0)
+        
+        # ç‘œç‰ˆå¸Šç»”æ’®å´ éÑƒç…‚0-1é–¼ç…å•«å¨²
+        return min(base_value / 20.0, 1.0)
+    
+    def _evaluate_remaining_cards(self, action: List) -> float:
+        """é å›§å«ªé™å©‡å´œéˆºç¼æˆ¦æ‚§çç‚¬æ®¶é–¸ãƒ§å§·ç»€"""
+        # ç¼çŠ»å´ éÑ…æ½é–»æ»ƒåºœç»±ä¼´æ‚§çç‚¬æ®¶é¡æ‘ï¹¤é¨é¡æ‘ï¹¤éŠˆ
+        cards = action[2] if len(action) > 2 else []
+        card_count = len(cards) if isinstance(cards, list) else 1
+        
+        # ç‘œç‰ˆå¸Šç»”æ’®å´ éç”µçª—é–¸å¬ªæ´©éå¨“èˆµå¾„27ç€µé˜é›
+        return 1.0 - (card_count / 27.0)
+    
+    def _evaluate_cooperation(self, action: List, target_action: Optional[List]) -> float:
+        """é å›§å«ªé™å©‡æŸŠå®¥å‘®å€¤é–¸ãƒ§å§·ç»€"""
+        if not target_action:
+            return 0.5  # å¨‘æ’¹æ’Ğ—é–¸æˆ£æ«£æ¾§æ¿‹æ•å®€å‹«å¸³é–¸æ°¬ç‰†å¨²æ»…æ§é˜è¾«å¬ç¼
+        
+        # å©µâ€³å€¹éå¤æƒ„é–ºå¶…æ´¤æ¿®â•‚æ‹…å©Šå‹¬Ğ¦é—‚å†ªå–å¯®ææƒƒé•å‰ç¤‰é å›§å«ªé™å©‡æŸŠå®¥å‘®å€¤å¨´çŠ²å˜²
+        action_value = self.cooperation._calculate_action_value(action)
+        target_value = self.cooperation._calculate_action_value(target_action)
+        
+        # å©µâ€³å€¹éå¤æ‡—é’˜å¤Šç«¾é–¸æ“æ¹¹ç»²ç‚¬ç¨‰å®¥å ¢ç®–é¼è¾¾è®£ç»±æ¿‹æŸŠå®¥å‘®å€¤å¨´çŠ²å˜²æ¿‚å“¥å½¯
+        if action_value > target_value:
+            diff = action_value - target_value
+            if diff < 5:  # é—éŒæ°¬æŠ½å´¢ç€£é©
+                return 0.8
+            else:  # é‰â•æ´¤ç€¹æŠ½å´¢ç€£é©
+                return 0.4
+        
+        return 0.2  # é–ºå†ªå§µçº­å •å´¢ç€£é©
+    
+    def _evaluate_risk(self, action: List) -> float:
+        """é å›§å«ªé™å©ƒå¬ªé…£å¨…æ’»å´¶é˜ç”µ"""
+        # ç¼çŠ»å´ éÑ…æ½é–»æ»ƒåºœç»±ä¼´æ‚™ç»‹èƒ¯å‰¨å¦å¬ªé…£å¨…æ’´æ‹…æ´ç»±æ¿ˆäº¸è¹‡æ›æ¿‡å¬ªé…£å¨…æ’´
+        if action[0] == "Bomb":
+            return 0.9  # å¨´ï½…é…£æ´ã„¦ç¦
+        elif action[0] in ["Single", "Pair"]:
+            return 0.3  # å¦¤å‚›ï¹¢æ´ã„¦ç¦
+        else:
+            return 0.6  # å¨‘æ’¶ç²µæ¾¶æ„¬é…£å¨…
+    
+    def _evaluate_timing(self, action: List, target_action: Optional[List]) -> float:
+        """é å›§å«ªé™å©‡å¼®é‘¸å«ç°šé–¸ãƒ§å§·ç»€"""
+        # ç¼çŠ»å´ éÑ…æ½é–»
+        return 0.5
+    
+    def _evaluate_hand_structure(self, action: List) -> float:
+        """é å›§å«ªé™å©‡å¹ç€£æ¾§æ¿ˆç´’é¾å¯¸é–¸ãƒ§å§·ç»€"""
+        # ç¼çŠ»å´ éÑ…æ½é–»
+        return 0.5
 
