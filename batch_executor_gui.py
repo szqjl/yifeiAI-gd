@@ -310,6 +310,9 @@ class BatchExecutorGUI:
         # 在新线程中运行执行器
         self.executor_thread = threading.Thread(target=self.run_executor, daemon=True)
         self.executor_thread.start()
+        
+        # 启动进度更新定时器
+        self.update_progress_timer()
     
     def run_executor(self):
         """运行执行器（在后台线程中）"""
@@ -328,11 +331,6 @@ class BatchExecutorGUI:
             
             # 设置日志系统，将日志输出到GUI
             import logging
-            logger = logging.getLogger("batch_executor")
-            logger.setLevel(logging.INFO)
-            
-            # 移除现有的处理器
-            logger.handlers.clear()
             
             # 创建自定义处理器，将日志输出到GUI
             class GUIHandler(logging.Handler):
@@ -353,9 +351,21 @@ class BatchExecutorGUI:
                     except Exception:
                         pass
             
+            # 配置根日志记录器，捕获所有模块的日志
+            root_logger = logging.getLogger()
+            root_logger.setLevel(logging.INFO)
+            
+            # 移除现有的处理器
+            root_logger.handlers.clear()
+            
+            # 添加GUI处理器
             gui_handler = GUIHandler(self.log_message)
             gui_handler.setFormatter(logging.Formatter('%(message)s'))
-            logger.addHandler(gui_handler)
+            root_logger.addHandler(gui_handler)
+            
+            # 同时配置batch_executor的logger
+            logger = logging.getLogger("batch_executor")
+            logger.setLevel(logging.INFO)
             
             # 创建执行器（禁用信号处理器，因为在后台线程中）
             self.executor = BatchExecutor(
@@ -418,8 +428,36 @@ class BatchExecutorGUI:
             # 恢复UI状态
             self.root.after(0, self.execution_finished)
     
+    def update_progress_timer(self):
+        """定时更新进度（每秒调用一次）"""
+        if not self.is_running:
+            return
+        
+        # 获取当前状态并更新显示
+        if self.executor:
+            state = self.executor.get_state()
+            if state:
+                completed = state.completed_games
+                total = state.target_games
+                restarts = state.restart_count
+                progress = (completed / total * 100) if total > 0 else 0
+                
+                self.progress_var.set(progress)
+                self.completed_label.config(text=f"{completed} / {total}")
+                self.restart_label.config(text=str(restarts))
+                
+                # 更新战绩
+                if self.executor.tracker:
+                    tracker = self.executor.tracker
+                    score_text = f"{tracker.team_a_wins} 胜 / {tracker.team_b_wins} 负"
+                    self.score_label.config(text=score_text)
+        
+        # 1秒后再次调用
+        if self.is_running:
+            self.root.after(1000, self.update_progress_timer)
+    
     def update_progress(self, completed, total, progress, restarts=0):
-        """更新进度显示"""
+        """更新进度显示（手动调用）"""
         self.progress_var.set(progress)
         self.completed_label.config(text=f"{completed} / {total}")
         self.restart_label.config(text=str(restarts))
