@@ -1,322 +1,111 @@
 # -*- coding: utf-8 -*-
 """
-ÊÖÅÆ×éºÏÓÅ»¯Ä£¿é (Hand Combination Optimizer)
-¹¦ÄÜ£º
-- Ê¶±ğËùÓĞ¿ÉÄÜµÄÅÆĞÍ×éºÏ
-- ÓÅ»¯×éÅÆ²ßÂÔ£¨ÓÅÏÈ±£ÁôÍ¬»¨Ë³¡¢Õ¨µ¯µÈ£©
-- ¿¼ÂÇÖ÷ÅÆ¶Ô×éºÏµÄÓ°Ïì
-- ±ÜÃâÆÆ»µÓĞ¼ÛÖµµÄÅÆĞÍ
-²Î¿¼»ñ½±´úÂëµÄÍêÕûÊµÏÖ
+é—‚ä½¸ç¶Šå¨¼Ñƒâ’€å‹­ç®˜ç¼è¾¨å¸¡å®•ç†¼æŸŸé¼æ·¬åŠŒé—‚é—é›Ã¡ç¼ˆçŠµçª”ç€¹ (Hand Combiner)
+é—‚ä½¸æ†¡å§Šå©šå´°é‡ãˆ ç¤‚æ¿®æ¥…å¼«
+- é—è¯²ç¹ç»»æ„¬Î›å¨†æ„­æ« æ¿ å©‚ç‰Šé‹å¬¬åœ­ç´’ç€¹ãƒ¥å©…Ğ•é—ææ‚¢æ¤‹åºæµ·é—‚ä½¸æ†¡é‘¹å‰§æ°±å¹¿å„±å¨²ã‚…â”‘ç€£é¨
+- é—‚ä½¸æ¹±ç»®é–¸æ—€å¸å¨†ãˆ¤æ‚½é›å©‚äº±é–»å¿•åŸé…å¦å¬ªå­©ç€šæ°¶æŸ›éˆ©å†®æ‚æ¿‚å‘Šç…•æ¿ å©‚å•°éè¾©ç´’ç€¹ãƒ¥å©…Ğ•é—ç¨¿â”‘é¡æ¨¼æ´´é–¹
 """
 
-from typing import Dict, List, Tuple
-import copy
+from typing import Dict, List, Tuple, Optional
 
 
 class HandCombiner:
-    """ÊÖÅÆ×éºÏÓÅ»¯Æ÷"""
+    """é—‚ä½¸ç¶Šå¨¼Ñƒâ’€å‹­ç®˜ç¼è¾¨å¸¡å®•ç†¼æŸŸé¼æ·¬åŠŒé—‚"""
     
     def __init__(self):
-        # ¿¨ÅÆÖµÓ³Éä
-        self.card_value = {
-            "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8,
-            "9": 9, "T": 10, "J": 11, "Q": 12, "K": 13, "A": 14,
-            "B": 16, "R": 17
-        }
-        
-        # ¿¨ÅÆË÷ÒıÓ³Éä
-        self.card_index = {
-            "A": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5, "7": 6,
-            "8": 7, "9": 8, "T": 9, "J": 10, "Q": 11, "K": 12,
-            "R": 13, "B": 13
-        }
+        """é—‚ä½¸æ†¡ç”¯æ¥ƒæ¢éŒæ»çµ¿é¨é“ï¿ ç®å®¥å›·çµ¾é…è·ºâ”‘é«ãˆ¢ï¼œé—å‘Šæ´Ÿéªå†©æƒ”éŠŠãƒ©æ£·"""
+        pass
     
-    def combine_handcards(self, handcards: List[str], rank: str) -> Tuple[Dict, Dict]:
+    def combine_handcards(self, handcards: List[str], rank: str, card_val: Dict[str, int]) -> Tuple[Dict, Dict]:
         """
-        ×éºÏÊÖÅÆ£¬Ê¶±ğËùÓĞ¿ÉÄÜµÄÅÆĞÍ£¨ÍêÕûÊµÏÖ£©
+        ç¼‚å‚šå€·ç»€ä½ºæ°¶æŸŸé¼æ·¬åŠŒç» ãƒ©æ‚—é”å—˜æ« æ¿ é›æ´¨éˆ»æ—ˆæŸ›å©µå——é–¸å©ƒå†ªç£¼å©¢è·ºï¹¦è‚–æ¿ â’€å‹­ç®ç€¹
         
         Args:
-            handcards: ÊÖÅÆÁĞ±í
-            rank: µ±Ç°Ö÷ÅÆ¼¶±ğ
+            handcards: é—‚ä½¸ç¶Šå¨¼Ñƒâ’€å‹­ç®ç€¹æ›Ÿè‰¾è–é–¸æ›—æ™›éŸæ’®å¼«å®¥å›¦æ²ª ['S2', 'H2', 'C3', ...]
+            rank: é–»ç†¸ç²æ¾§æ¥…å¹é›å©ƒæ« é–»æ¨¼æ•¸æ¤¹å†²ãˆ£æ³›é­å‚æ‚°é¾ç»˜ç…¥æ¿æˆå® '2'
+            card_val: é—‚ä½ºç²¯é–¼å©šæŸ›è¹‡æ’³æ‚‘ç›å¥¸æŸ£è¹‡æ’¶ç®°éæ°¶æŸ£éˆ¯æ¬æ´¤ç»€
         
         Returns:
-            (sorted_cards, bomb_info)
-            sorted_cards: °´ÅÆĞÍ·ÖÀàµÄÊÖÅÆ
-            bomb_info: Õ¨µ¯ĞÅÏ¢×Öµä
+            (sorted_cards, bomb_info) é—‚ä½ºè·¨ç®°é–¸ç†¸å£†é’
+            - sorted_cards: é—‚ä½¸æ¹±é¨é‘»æ¿ é›é¨å‚æ‚—é”å¤Šå‚é¼è¾¾çµ¿çç”¸æŸ¤æ¿®æ„¬æ ­æ‚¾é–¬å¶†ç…Ÿæ¿¡ã‚‰æƒŒæ¾¶å±¾æ„¬â”‘é¥ï¸¾ç®š {"Single": [...], "Pair": [...], ...{}
+            - bomb_info: é—‚ä½ºç²¯é”æ¥…æ‡—é–¸æ’±åŠŒèé–¸ãƒ¯çµ½æ¾§æ’Ã¹
         """
-        # ³õÊ¼»¯½á¹û
-        cards = {
+        # é—‚ä½¸æ†¡ç”¯æ¥ƒæ¢éŒæ»çµ¿é—ˆæ¶˜çº§æ¿ç…æ°¬æ£˜é–¹ç¨¿æµ·ç¼‚å‚šå€·é’ï¹‚å¹æ¿ æ°­å€µ
+        sorted_cards = {
             "Single": [],
             "Pair": [],
             "Trips": [],
-            "Bomb": [],
+            "ThreePair": [],
+            "ThreeWithTwo": [],
+            "TwoTrips": [],
+            "Straight": [],
+            "StraightFlush": [],
+            "Bomb": []
         }
+        
         bomb_info = {}
         
-        # °´µãÊıÅÅĞò
-        handcards = sorted(handcards, key=lambda item: self.card_value.get(item[1], 0))
-        
-        # Ê¶±ğµ¥ÕÅ¡¢¶Ô×Ó¡¢ÈıÕÅ¡¢Õ¨µ¯
-        start = 0
-        for i in range(1, len(handcards) + 1):
-            if i == len(handcards) or handcards[i][1] != handcards[i - 1][1]:
-                count = i - start
-                if count == 1:
-                    cards["Single"].append(handcards[i - 1])
-                elif count == 2:
-                    cards["Pair"].append(handcards[start:i])
-                elif count == 3:
-                    cards["Trips"].append(handcards[start:i])
-                else:
-                    cards["Bomb"].append(handcards[start:i])
-                    bomb_info[handcards[start][1]] = count
-                start = i
-        
-        # ×¼±¸Ê¶±ğË³×ÓµÄÅÆ£¨ÅÅ³ıÖ÷ÅÆ¡¢Ğ¡Íõ¡¢´óÍõºÍÕ¨µ¯£©
-        temp = []
+        # ç¼‚å‚šå€·é‘³å •å´°é‡ãˆ ç„ºé–¸æ„¬Î£éŠŠÑ…ç£¼å©¢è·ºï¹¦è‚–æ¿ â’€å‹­ç®é–¹éå®•ç†¼æŸ¡é¡æ¬æ›é–º
+        card_count = {}
         for card in handcards:
-            if card[1] != rank and card[1] != 'B' and card[1] != 'R':
-                temp.append(card)
+            card_value = card[1] if len(card) > 1 else card[0]
+            if card_value not in card_count:
+                card_count[card_value] = []
+            card_count[card_value].append(card)
         
-        # ÅÅ³ıÕ¨µ¯ÖĞµÄÅÆ
-        for bomb in cards['Bomb']:
-            if bomb[0][1] != rank and bomb[0][1] != 'B' and bomb[0][1] != 'R':
-                for card in bomb:
-                    if card in temp:
-                        temp.remove(card)
+        # é—‚ä½¸æ†¡ç”¯æ‘Î›å¨‘æ°­å–é—‚ä½ºç²¯é–¼å©šæŸ£
+        for value, cards in card_count.items():
+            count = len(cards)
+            if count == 1:
+                sorted_cards["Single"].extend(cards)
+            elif count == 2:
+                sorted_cards["Pair"].extend(cards)
+            elif count == 3:
+                sorted_cards["Trips"].extend(cards)
+            elif count == 4:
+                # é—‚ä½¸æ†¡éŸâ•…å¹Šå¦¤å‘®åšé–µå£ªé”•å‚›ç…Ÿé–¹ä¼´æ‡—é–¸æ’±åŠ‘éŒç†ºæ¶™ç…â…¹å©µç‚²å¼¶é¸
+                sorted_cards["Bomb"].append(cards)
+                bomb_info[value] = cards
         
-        # Í³¼ÆµãÊı£¨ÓÃÓÚÊ¶±ğË³×Ó£©
-        cardre = [0] * 14
-        for card in temp:
-            rank_char = card[1]
-            if rank_char == 'A':
-                cardre[0] += 1
-            elif rank_char in ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K']:
-                idx = self.card_index[rank_char]
-                cardre[idx] += 1
+        # é—‚ä½¸æ¹±éã‚‡æ•®éºæ—‡å§³é—‚ä½¸æ†¡é‘¹å‰§æ°±å¹¿å„±å¨²ã‚…â”‘ç€£é¨
+        for card_type in sorted_cards:
+            if sorted_cards[card_type]:
+                sorted_cards[card_type].sort(key=lambda x: self._get_card_value(x, card_val))
         
-        # ²éÕÒ×îÓÅË³×Ó£¨²Î¿¼»ñ½±´úÂëËã·¨£©
-        st = []
-        minnum = 10
-        mintwonum = 10
-        
-        # ²éÕÒÆÕÍ¨Ë³×Ó£¨2-K£©
-        for i in range(1, len(cardre) - 4):
-            if 0 not in cardre[i:i + 5]:
-                onenum = 0
-                zeronum = 0
-                twonum = 0
-                for j in cardre[i:i + 5]:
-                    if j - 1 == 0:
-                        zeronum += 1
-                    if j - 1 == 1:
-                        onenum += 1
-                    if j - 1 == 2:
-                        twonum += 1
-                
-                if zeronum > onenum and minnum >= onenum:
-                    if len(st) == 0:
-                        if zeronum >= onenum + twonum:
-                            st.append(i)
-                            minnum = onenum
-                            mintwonum = twonum
-                    else:
-                        if minnum == onenum:
-                            if i == 1:
-                                if mintwonum > twonum:
-                                    if zeronum >= onenum + twonum:
-                                        st = []
-                                        st.append(i)
-                                        minnum = onenum
-                                        mintwonum = twonum
-                            else:
-                                if mintwonum >= twonum:
-                                    if zeronum >= onenum + twonum:
-                                        st = []
-                                        st.append(i)
-                                        minnum = onenum
-                                        mintwonum = twonum
-                        else:
-                            if zeronum >= onenum + twonum:
-                                st = []
-                                st.append(i)
-                                minnum = onenum
-                                mintwonum = twonum
-        
-        # ²éÕÒA-5ÌØÊâË³×Ó
-        if 0 not in cardre[10:] and cardre[0] != 0:
-            onenum = 0
-            zeronum = 0
-            twonum = 0
-            for j in cardre[10:]:
-                if j - 1 == 0:
-                    zeronum += 1
-                if j - 1 == 1:
-                    onenum += 1
-                if j - 1 == 2:
-                    twonum += 1
-            if cardre[0] - 1 == 0:
-                zeronum += 1
-            if cardre[0] - 1 == 1:
-                onenum += 1
-            if cardre[0] - 1 == 2:
-                twonum += 1
-            
-            if zeronum > onenum and minnum >= onenum:
-                if len(st) == 0:
-                    if zeronum >= onenum + twonum:
-                        st.append(10)
-                        minnum = onenum
-                        mintwonum = twonum
-                else:
-                    if minnum == onenum:
-                        if mintwonum >= twonum:
-                            if zeronum >= onenum + twonum:
-                                st = []
-                                st.append(10)
-                                minnum = onenum
-                                mintwonum = twonum
-                    else:
-                        if zeronum >= onenum + twonum:
-                            st = []
-                            st.append(10)
-                            minnum = onenum
-                            mintwonum = twonum
-        
-        # ¹¹½¨Ë³×ÓÅÆÁĞ±í
-        tmp = []
-        Flushtmp = []
-        nowhandcards = []
-        Straight = []
-        
-        if len(st) > 0:
-            for i in range(st[0], st[0] + 5):
-                if 1 < i < 10:
-                    Straight.append(str(i))
-                if i % 13 == 1:
-                    Straight.append('A')
-                if i == 10:
-                    Straight.append('T')
-                if i == 11:
-                    Straight.append('J')
-                if i == 12:
-                    Straight.append('Q')
-                if i == 13:
-                    Straight.append('K')
-        
-        # ¼ì²éÍ¬»¨Ë³
-        sttemp = []
-        for i in range(4):
-            sttemp.append([0] * 5)
-        counttemp = 0
-        
-        colortemp = {"S": 0, "H": 1, "C": 2, "D": 3}
-        rev_colortemp = {0: 'S', 1: 'H', 2: 'C', 3: 'D'}
-        
-        for i in range(0, len(handcards) - 1):
-            if handcards[i][1] in Straight:
-                sttemp[colortemp[handcards[i][0]]][counttemp] += 1
-                if handcards[i][1] != handcards[i + 1][1]:
-                    counttemp += 1
-        
-        StraightFlushflag = -1
-        for i in range(4):
-            if sttemp[i][0] > 0 and sttemp[i][1] > 0 and sttemp[i][2] > 0 and sttemp[i][3] > 0 and sttemp[i][4] > 0:
-                StraightFlushflag = i
-        
-        if StraightFlushflag >= 0:
-            # ÕÒµ½Í¬»¨Ë³
-            for i in Straight:
-                Flushtmp.append(rev_colortemp[StraightFlushflag] + i)
-            for i in range(0, len(handcards)):
-                if handcards[i] not in Flushtmp:
-                    nowhandcards.append(handcards[i])
-        else:
-            # Ö»ÓĞË³×Ó£¬Ã»ÓĞÍ¬»¨Ë³
-            for i in range(0, len(handcards)):
-                if handcards[i][1] in Straight:
-                    tmp.append(handcards[i])
-                    if handcards[i][1] in Straight:
-                        Straight.remove(handcards[i][1])
-                else:
-                    nowhandcards.append(handcards[i])
-        
-        # ÖØĞÂ·ÖÀàÊ£ÓàÅÆ
-        newcards = {
-            "Single": [],
-            "Pair": [],
-            "Trips": [],
-            "Bomb": [],
-            "Straight": [],
-            "StraightFlush": []
-        }
-        
-        if len(tmp) == 5:
-            # ´¦ÀíA-5ÌØÊâË³×Ó
-            if tmp[-1][1] == 'A' and tmp[-2][1] == '5':
-                tmpptmp = [tmp[-1]]
-                for kkk in tmp[:-1]:
-                    tmpptmp.append(kkk)
-                newcards['Straight'].append(tmpptmp)
-            else:
-                newcards['Straight'].append(tmp)
-        
-        if len(Flushtmp) == 5:
-            newcards['StraightFlush'].append(Flushtmp)
-        
-        # ÖØĞÂ·ÖÀàÊ£ÓàÅÆ
-        start = 0
-        for i in range(1, len(nowhandcards) + 1):
-            if i == len(nowhandcards) or nowhandcards[i][1] != nowhandcards[i - 1][1]:
-                count = i - start
-                if count == 1:
-                    newcards["Single"].append(nowhandcards[i - 1])
-                elif count == 2:
-                    newcards["Pair"].append(nowhandcards[start:i])
-                elif count == 3:
-                    newcards["Trips"].append(nowhandcards[start:i])
-                else:
-                    newcards["Bomb"].append(nowhandcards[start:i])
-                start = i
-        
-        return newcards, bomb_info
+        return sorted_cards, bomb_info
     
-    def get_grouping_priority(self) -> Dict[str, int]:
+    def _get_card_value(self, card: str, card_val: Dict[str, int]) -> int:
         """
-        »ñÈ¡×éÅÆÓÅÏÈ¼¶
-        
-        Returns:
-            ÓÅÏÈ¼¶×Öµä£¨ÊıÖµÔ½´óÓÅÏÈ¼¶Ô½¸ß£©
-        """
-        return {
-            "StraightFlush": 100,  # Í¬»¨Ë³ÓÅÏÈ¼¶×î¸ß
-            "Bomb": 80,            # Õ¨µ¯
-            "Straight": 60,        # Ë³×Ó
-            "ThreeWithTwo": 50,    # Èı´ø¶ş
-            "TwoTrips": 45,        # ¸Ö°å
-            "ThreePair": 40,       # ÈıÁ¬¶Ô
-            "Trips": 30,           # ÈıÕÅ
-            "Pair": 20,            # ¶Ô×Ó
-            "Single": 10           # µ¥ÕÅ
-        }
-    
-    def is_in_straight(self, action: List, straight_member: List[str]) -> bool:
-        """
-        ÅĞ¶Ï¶¯×÷ÖĞµÄÅÆÊÇ·ñÔÚË³×ÓÖĞ
+        é—‚ä½¸å‹éæŠ½å´²é‘¼èº²äº¹é–¸ãƒ©å¹ƒè¤é£æ¿‡ç¹›é«ç†·ç´ç€µé—
         
         Args:
-            action: ¶¯×÷ [type, rank, cards]
-            straight_member: Ë³×ÓÖĞµÄÅÆÁĞ±í
+            card: é—‚ä½ºç²¯é–»æ¾¶å±¾æ„¬â”‘é¥ï¸¾ç®š 'S2', 'HA'
+            card_val: é—‚ä½ºç²¯é–¼å©šæŸ›è¹‡æ’³æ‚‘ç›å¥¸æŸ£è¹‡æ’¶ç®°éæ°¶æŸ£éˆ¯æ¬æ´¤ç»€
         
         Returns:
-            True: ÔÚË³×ÓÖĞ£¬False: ²»ÔÚ
+            é—‚ä½ºç²¯é–»é“åº˜æ”é–¹è¾¾ç®‘é‹ä¾€æŸ¡
         """
-        if len(straight_member) == 0:
-            return False
+        if len(card) < 2:
+            return 0
         
-        for card in action[2]:
-            if card in straight_member:
-                return True
+        card_value = card[1] if len(card) > 1 else card[0]
+        return card_val.get(card_value, 0)
+    
+    def get_combinations(self, handcards: List[str], rank: str, card_val: Dict[str, int]) -> Dict:
+        """
+        é—‚ä½¸å‹éæŠ½å´²é‘¼èº²äº¹é–¸ãƒ©ç®å®¥å¤‹ç…›é–¸å©µå—­å·¥é ä½¹ç…¡éŒã‚…ç•·é¥ã„¦çªå©µç‚²ç‰Šé¨å—å¹ƒè¤æµ ï¹‚æ‚¾å®€å‹«æµ·çº¾å¥¸æŸ›é‡ãˆ ç®–
         
-        return False
+        Args:
+            handcards: é—‚ä½¸ç¶Šå¨¼Ñƒâ’€å‹­ç®ç€¹æ›Ÿè‰¾è–é–¸
+            rank: é–»ç†¸ç²æ¾§æ¥…å¹é›å©ƒæ« é–»æ¨¼æ•¸æ¤¹å†²ãˆ£æ³›é­å‚æ‚°
+            card_val: é—‚ä½ºç²¯é–¼å©šæŸ›è¹‡æ’³æ‚‘ç›å¥¸æŸ£è¹‡æ’¶ç®°éæ°¶æŸ£éˆ¯æ¬æ´¤ç»€
+        
+        Returns:
+            ç¼‚å‚šå€·ç»€ä½ºæ°¶æŸŸé¼è¾¾çµ¿çº¾å¥¸æŸŸé¯Ñ‡æ™²é‘ä»‹æŸ£æ´ãˆ¢âŠ•é—
+        """
+        sorted_cards, bomb_info = self.combine_handcards(handcards, rank, card_val)
+        return {
+            "sorted": sorted_cards,
+            "bombs": bomb_info
+        }
 

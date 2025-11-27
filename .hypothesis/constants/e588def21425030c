@@ -1,0 +1,4 @@
+# file: D:\guandanscore\YiFeiAI-GD\batch_executor\process_monitor.py
+# hypothesis_version: 6.148.2
+
+['/F', '/IM', '/T', 'name', 'pid', 'taskkill']

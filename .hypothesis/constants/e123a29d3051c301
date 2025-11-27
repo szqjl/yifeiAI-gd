@@ -1,0 +1,4 @@
+# file: D:\guandanscore\YiFeiAI-GD\batch_executor\logging_config.py
+# hypothesis_version: 6.148.2
+
+[1024, '%Y-%m-%d %H:%M:%S', 'batch_executor', 'logs', 'utf-8']

@@ -1,0 +1,180 @@
+{
+  "_comment": "批量游戏执行系统配置文件示例",
+  "_usage": "复制此文件为 config.json 并根据需要修改配置",
+  
+  "server": {
+    "_comment": "服务器配置",
+    "path": "D:\\guandan_offline_v1006\\windows\\guandan_offline_v1006.exe",
+    "_path_note": "服务器可执行文件的完整路径",
+    
+    "wait_time": 15,
+    "_wait_time_note": "启动服务器后等待就绪的时间（秒），如果客户端连接失败可以增加此值",
+    
+    "max_retries": 3,
+    "_max_retries_note": "服务器启动失败时的最大重试次数"
+  },
+  
+  "clients": {
+    "_comment": "客户端配置",
+    "scripts": [
+      "src\\communication\\Test1.py",
+      "src\\communication\\Test2.py",
+      "client3.py",
+      "client4.py"
+    ],
+    "_scripts_note": "客户端脚本路径列表，按顺序启动",
+    
+    "wait_between": 3,
+    "_wait_between_note": "启动每个客户端之间的等待时间（秒）",
+    
+    "continue_on_error": true,
+    "_continue_on_error_note": "如果某个客户端启动失败，是否继续启动其他客户端"
+  },
+  
+  "execution": {
+    "_comment": "执行配置",
+    "target_games": 100,
+    "_target_games_note": "目标游戏场数",
+    
+    "games_per_batch": 3,
+    "_games_per_batch_note": "服务器单次运行的游戏场数（通常为3，由服务器限制决定）",
+    
+    "diagnose_first": true,
+    "_diagnose_first_note": "执行前是否先运行诊断"
+  },
+  
+  "monitoring": {
+    "_comment": "监控配置",
+    "check_interval": 5,
+    "_check_interval_note": "检查服务器进程状态的间隔时间（秒）",
+    
+    "process_names": {
+      "server": "guandan_offline_v1006.exe",
+      "client": "python.exe"
+    },
+    "_process_names_note": "要监控的进程名称"
+  },
+  
+  "files": {
+    "_comment": "文件路径配置",
+    "state_file": "execution_state.json",
+    "_state_file_note": "执行状态保存文件路径",
+    
+    "score_file": "game_scores.json",
+    "_score_file_note": "战绩保存文件路径",
+    
+    "log_dir": "logs",
+    "_log_dir_note": "日志文件目录"
+  },
+  
+  "logging": {
+    "_comment": "日志配置",
+    "level": "INFO",
+    "_level_note": "日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL",
+    
+    "console": true,
+    "_console_note": "是否输出到控制台",
+    
+    "file": true,
+    "_file_note": "是否输出到文件",
+    
+    "max_file_size": 10485760,
+    "_max_file_size_note": "单个日志文件最大大小（字节），默认10MB",
+    
+    "backup_count": 5,
+    "_backup_count_note": "保留的日志文件备份数量",
+    
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "_format_note": "日志格式"
+  },
+  
+  "diagnostic": {
+    "_comment": "诊断配置",
+    "config_file_patterns": [
+      "*.ini",
+      "*.json",
+      "*.txt",
+      "*.cfg",
+      "config*",
+      "settings*"
+    ],
+    "_config_file_patterns_note": "要检查的配置文件模式",
+    
+    "output_capture_timeout": 30,
+    "_output_capture_timeout_note": "捕获服务器输出的超时时间（秒）",
+    
+    "game_count_patterns": [
+      "Game count:\\s*(\\d+)",
+      "游戏次数:\\s*(\\d+)",
+      "场数:\\s*(\\d+)",
+      "games?:\\s*(\\d+)"
+    ],
+    "_game_count_patterns_note": "从服务器输出中提取游戏次数的正则表达式模式"
+  },
+  
+  "tracker": {
+    "_comment": "战绩跟踪配置",
+    "auto_save": true,
+    "_auto_save_note": "是否在每次更新后自动保存战绩",
+    
+    "save_format": "json",
+    "_save_format_note": "战绩保存格式（目前仅支持json）",
+    
+    "backup_on_save": false,
+    "_backup_on_save_note": "保存时是否创建备份文件"
+  },
+  
+  "advanced": {
+    "_comment": "高级配置（谨慎修改）",
+    "cleanup_on_exit": true,
+    "_cleanup_on_exit_note": "退出时是否清理所有进程",
+    
+    "force_kill_timeout": 5,
+    "_force_kill_timeout_note": "强制终止进程前的等待时间（秒）",
+    
+    "state_save_interval": 60,
+    "_state_save_interval_note": "自动保存状态的间隔时间（秒），0表示仅在重启时保存",
+    
+    "enable_signal_handlers": true,
+    "_enable_signal_handlers_note": "是否启用信号处理器（Ctrl+C优雅退出）"
+  },
+  
+  "ui": {
+    "_comment": "用户界面配置",
+    "show_progress": true,
+    "_show_progress_note": "是否显示进度信息",
+    
+    "progress_update_interval": 10,
+    "_progress_update_interval_note": "更新进度显示的间隔时间（秒）",
+    
+    "show_banner": true,
+    "_show_banner_note": "是否显示启动横幅",
+    
+    "color_output": false,
+    "_color_output_note": "是否使用彩色输出（需要终端支持）"
+  },
+  
+  "performance": {
+    "_comment": "性能配置",
+    "max_concurrent_clients": 4,
+    "_max_concurrent_clients_note": "最大并发客户端数量",
+    
+    "memory_limit_mb": 1024,
+    "_memory_limit_mb_note": "内存使用限制（MB），0表示无限制",
+    
+    "cpu_affinity": [],
+    "_cpu_affinity_note": "CPU亲和性设置，空数组表示使用所有CPU"
+  },
+  
+  "testing": {
+    "_comment": "测试配置",
+    "mock_mode": false,
+    "_mock_mode_note": "是否启用模拟模式（用于测试，不实际启动进程）",
+    
+    "test_game_duration": 60,
+    "_test_game_duration_note": "模拟模式下每场游戏的持续时间（秒）",
+    
+    "inject_errors": false,
+    "_inject_errors_note": "是否注入错误（用于测试错误处理）"
+  }
+}

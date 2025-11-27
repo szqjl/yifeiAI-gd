@@ -1,103 +1,103 @@
-# ÖĞÓÅÏÈ¼¶Ä£¿éËµÃ÷
+# ä¸­ä¼˜å…ˆçº§æ¨¡å—è¯´æ˜
 
-±¾ÎÄµµËµÃ÷ÒÑÊµÊ©µÄÖĞÓÅÏÈ¼¶ÓÅ»¯Ä£¿é¡£
+æœ¬æ–‡æ¡£è¯´æ˜å·²å®æ–½çš„ä¸­ä¼˜å…ˆçº§ä¼˜åŒ–æ¨¡å—ã€‚
 
-## Ä£¿éÁĞ±í
+## æ¨¡å—åˆ—è¡¨
 
-1. **ÊÖÅÆ×éºÏÓÅ»¯Ä£¿é** (HandCombiner) - ÒÑÍêÉÆ
-2. **ÅÆĞÍ×¨ÃÅ´¦ÀíÄ£¿é** (CardTypeHandlers) - ĞÂ½¨
-3. **¾ö²ßÊ±¼ä¿ØÖÆÄ£¿é** (DecisionTimer) - ĞÂ½¨
-4. **¶àÒòËØÆÀ¹ÀÏµÍ³** (MultiFactorEvaluator) - ĞÂ½¨
+1. **æ‰‹ç‰Œç»„åˆä¼˜åŒ–æ¨¡å—** (HandCombiner) - å·²å®Œå–„
+2. **ç‰Œå‹ä¸“é—¨å¤„ç†æ¨¡å—** (CardTypeHandlers) - æ–°å»º
+3. **å†³ç­–æ—¶é—´æ§åˆ¶æ¨¡å—** (DecisionTimer) - æ–°å»º
+4. **å¤šå› ç´ è¯„ä¼°ç³»ç»Ÿ** (MultiFactorEvaluator) - æ–°å»º
 
-## 1. ÊÖÅÆ×éºÏÓÅ»¯Ä£¿é (HandCombiner) - ÍêÉÆ°æ
+## 1. æ‰‹ç‰Œç»„åˆä¼˜åŒ–æ¨¡å— (HandCombiner) - å®Œå–„ç‰ˆ
 
-**ÎÄ¼ş**: `src/game_logic/hand_combiner.py`
+**æ–‡ä»¶**: `src/game_logic/hand_combiner.py`
 
-**¸Ä½øÄÚÈİ**:
-- ÍêÕûÊµÏÖÁËË³×ÓÊ¶±ğËã·¨£¨²Î¿¼»ñ½±´úÂë£©
-- ÊµÏÖÁËÍ¬»¨Ë³Ê¶±ğ
-- ÓÅ»¯ÁË×éÅÆ²ßÂÔ£¬ÓÅÏÈ±£ÁôÓĞ¼ÛÖµµÄÅÆĞÍ
-- Ìí¼ÓÁË `is_in_straight()` ¸¨Öú·½·¨
+**æ”¹è¿›å†…å®¹**:
+- å®Œæ•´å®ç°äº†é¡ºå­è¯†åˆ«ç®—æ³•ï¼ˆå‚è€ƒè·å¥–ä»£ç ï¼‰
+- å®ç°äº†åŒèŠ±é¡ºè¯†åˆ«
+- ä¼˜åŒ–äº†ç»„ç‰Œç­–ç•¥ï¼Œä¼˜å…ˆä¿ç•™æœ‰ä»·å€¼çš„ç‰Œå‹
+- æ·»åŠ äº† `is_in_straight()` è¾…åŠ©æ–¹æ³•
 
-**Ö÷Òª½Ó¿Ú**:
+**ä¸»è¦æ¥å£**:
 ```python
 combiner = HandCombiner()
 
-# ×éºÏÊÖÅÆ£¨ÍêÕûÊµÏÖ£©
+# ç»„åˆæ‰‹ç‰Œï¼ˆå®Œæ•´å®ç°ï¼‰
 sorted_cards, bomb_info = combiner.combine_handcards(handcards, rank)
 
-# ÅĞ¶ÏÅÆÊÇ·ñÔÚË³×ÓÖĞ
+# åˆ¤æ–­ç‰Œæ˜¯å¦åœ¨é¡ºå­ä¸­
 is_in = combiner.is_in_straight(action, straight_member)
 
-# »ñÈ¡×éÅÆÓÅÏÈ¼¶
+# è·å–ç»„ç‰Œä¼˜å…ˆçº§
 priority = combiner.get_grouping_priority()
 ```
 
-## 2. ÅÆĞÍ×¨ÃÅ´¦ÀíÄ£¿é (CardTypeHandlers)
+## 2. ç‰Œå‹ä¸“é—¨å¤„ç†æ¨¡å— (CardTypeHandlers)
 
-**ÎÄ¼ş**: `src/decision/card_type_handlers.py`
+**æ–‡ä»¶**: `src/decision/card_type_handlers.py`
 
-**¹¦ÄÜ**:
-- ÎªÃ¿ÖÖÅÆĞÍ´´½¨×¨ÃÅµÄ´¦ÀíÀà
-- ÊµÏÖÕë¶ÔĞÔµÄ¾ö²ßÂß¼­
-- Ö§³ÖÖ÷¶¯ºÍ±»¶¯Á½ÖÖ³öÅÆÄ£Ê½
+**åŠŸèƒ½**:
+- ä¸ºæ¯ç§ç‰Œå‹åˆ›å»ºä¸“é—¨çš„å¤„ç†ç±»
+- å®ç°é’ˆå¯¹æ€§çš„å†³ç­–é€»è¾‘
+- æ”¯æŒä¸»åŠ¨å’Œè¢«åŠ¨ä¸¤ç§å‡ºç‰Œæ¨¡å¼
 
-**ÒÑÊµÏÖµÄ´¦ÀíÆ÷**:
-- `SingleHandler`: µ¥ÕÅ´¦Àí
-- `PairHandler`: ¶Ô×Ó´¦Àí
-- `TripsHandler`: ÈıÕÅ´¦Àí
-- `BombHandler`: Õ¨µ¯´¦Àí
-- `StraightHandler`: Ë³×Ó´¦Àí
+**å·²å®ç°çš„å¤„ç†å™¨**:
+- `SingleHandler`: å•å¼ å¤„ç†
+- `PairHandler`: å¯¹å­å¤„ç†
+- `TripsHandler`: ä¸‰å¼ å¤„ç†
+- `BombHandler`: ç‚¸å¼¹å¤„ç†
+- `StraightHandler`: é¡ºå­å¤„ç†
 
-**Ê¹ÓÃ·½Ê½**:
+**ä½¿ç”¨æ–¹å¼**:
 ```python
 from decision.card_type_handlers import CardTypeHandlerFactory
 
-# »ñÈ¡´¦ÀíÆ÷
+# è·å–å¤„ç†å™¨
 handler = CardTypeHandlerFactory.get_handler("Single", state_manager, hand_combiner)
 
-# ´¦Àí±»¶¯³öÅÆ
+# å¤„ç†è¢«åŠ¨å‡ºç‰Œ
 result = handler.handle_passive(action_list, cur_action, handcards, rank)
 
-# ´¦ÀíÖ÷¶¯³öÅÆ
+# å¤„ç†ä¸»åŠ¨å‡ºç‰Œ
 result = handler.handle_active(action_list, handcards, rank)
 ```
 
-**Éè¼ÆÄ£Ê½**:
-- Ê¹ÓÃ³éÏó»ùÀà `BaseCardTypeHandler` ¶¨Òå½Ó¿Ú
-- Ã¿ÖÖÅÆĞÍÓĞ¶ÀÁ¢µÄ´¦ÀíÂß¼­
-- Í¨¹ı¹¤³§Ä£Ê½ `CardTypeHandlerFactory` »ñÈ¡´¦ÀíÆ÷
+**è®¾è®¡æ¨¡å¼**:
+- ä½¿ç”¨æŠ½è±¡åŸºç±» `BaseCardTypeHandler` å®šä¹‰æ¥å£
+- æ¯ç§ç‰Œå‹æœ‰ç‹¬ç«‹çš„å¤„ç†é€»è¾‘
+- é€šè¿‡å·¥å‚æ¨¡å¼ `CardTypeHandlerFactory` è·å–å¤„ç†å™¨
 
-## 3. ¾ö²ßÊ±¼ä¿ØÖÆÄ£¿é (DecisionTimer)
+## 3. å†³ç­–æ—¶é—´æ§åˆ¶æ¨¡å— (DecisionTimer)
 
-**ÎÄ¼ş**: `src/decision/decision_timer.py`
+**æ–‡ä»¶**: `src/decision/decision_timer.py`
 
-**¹¦ÄÜ**:
-- ÉèÖÃ×î´ó¾ö²ßÊ±¼ä£¨Ä¬ÈÏ0.8Ãë£©
-- ³¬Ê±¼ì²âºÍ±£»¤
-- ½¥½øÊ½¾ö²ßÖ§³Ö
-- ×°ÊÎÆ÷Ö§³Ö
+**åŠŸèƒ½**:
+- è®¾ç½®æœ€å¤§å†³ç­–æ—¶é—´ï¼ˆé»˜è®¤0.8ç§’ï¼‰
+- è¶…æ—¶æ£€æµ‹å’Œä¿æŠ¤
+- æ¸è¿›å¼å†³ç­–æ”¯æŒ
+- è£…é¥°å™¨æ”¯æŒ
 
-**Ö÷Òª½Ó¿Ú**:
+**ä¸»è¦æ¥å£**:
 ```python
 from decision.decision_timer import DecisionTimer, with_timeout
 
-# »ù±¾Ê¹ÓÃ
+# åŸºæœ¬ä½¿ç”¨
 timer = DecisionTimer(max_time=0.8)
 timer.start()
-# ... ¾ö²ßÂß¼­ ...
+# ... å†³ç­–é€»è¾‘ ...
 if timer.check_timeout():
     return default_result
 remaining = timer.get_remaining_time()
 
-# ×°ÊÎÆ÷Ê¹ÓÃ
+# è£…é¥°å™¨ä½¿ç”¨
 @with_timeout(max_time=0.8, default_return=0)
 def my_decision_function():
-    # ¾ö²ßÂß¼­
+    # å†³ç­–é€»è¾‘
     return result
 ```
 
-**½¥½øÊ½¾ö²ß**:
+**æ¸è¿›å¼å†³ç­–**:
 ```python
 from decision.decision_timer import ProgressiveDecision
 
@@ -110,38 +110,38 @@ for candidate in candidates:
 result = progressive.get_result()
 ```
 
-## 4. ¶àÒòËØÆÀ¹ÀÏµÍ³ (MultiFactorEvaluator)
+## 4. å¤šå› ç´ è¯„ä¼°ç³»ç»Ÿ (MultiFactorEvaluator)
 
-**ÎÄ¼ş**: `src/decision/multi_factor_evaluator.py`
+**æ–‡ä»¶**: `src/decision/multi_factor_evaluator.py`
 
-**¹¦ÄÜ**:
-- ×ÛºÏÆÀ¹À¶à¸öÒòËØ
-- ¼ÆËã¶¯×÷µÄ×ÛºÏÆÀ·Ö
-- Ö§³ÖÈ¨ÖØµ÷Õû
+**åŠŸèƒ½**:
+- ç»¼åˆè¯„ä¼°å¤šä¸ªå› ç´ 
+- è®¡ç®—åŠ¨ä½œçš„ç»¼åˆè¯„åˆ†
+- æ”¯æŒæƒé‡è°ƒæ•´
 
-**ÆÀ¹ÀÒòËØ**:
-1. **Ê£ÓàÅÆÊıÒòËØ** (25%): ¿¼ÂÇ×Ô¼º¡¢¶ÓÓÑ¡¢¶ÔÊÖµÄÊ£ÓàÅÆÊı
-2. **ÅÆĞÍ´óĞ¡ÒòËØ** (20%): ÆÀ¹ÀÅÆĞÍ´óĞ¡ºÍÑ¹ÖÆÄÜÁ¦
-3. **ÅäºÏÒòËØ** (20%): ÆÀ¹ÀÅäºÏ»ú»áºÍÅäºÏĞ§¹û
-4. **·çÏÕÒòËØ** (15%): ÆÀ¹À³öÅÆ·çÏÕ
-5. **Ê±»úÒòËØ** (10%): ÆÀ¹ÀÓÎÏ·½×¶ÎºÍÊ±»ú
-6. **ÊÖÅÆ½á¹¹ÒòËØ** (10%): ÆÀ¹À¶ÔÊÖÅÆ½á¹¹µÄÓ°Ïì
+**è¯„ä¼°å› ç´ **:
+1. **å‰©ä½™ç‰Œæ•°å› ç´ ** (25%): è€ƒè™‘è‡ªå·±ã€é˜Ÿå‹ã€å¯¹æ‰‹çš„å‰©ä½™ç‰Œæ•°
+2. **ç‰Œå‹å¤§å°å› ç´ ** (20%): è¯„ä¼°ç‰Œå‹å¤§å°å’Œå‹åˆ¶èƒ½åŠ›
+3. **é…åˆå› ç´ ** (20%): è¯„ä¼°é…åˆæœºä¼šå’Œé…åˆæ•ˆæœ
+4. **é£é™©å› ç´ ** (15%): è¯„ä¼°å‡ºç‰Œé£é™©
+5. **æ—¶æœºå› ç´ ** (10%): è¯„ä¼°æ¸¸æˆé˜¶æ®µå’Œæ—¶æœº
+6. **æ‰‹ç‰Œç»“æ„å› ç´ ** (10%): è¯„ä¼°å¯¹æ‰‹ç‰Œç»“æ„çš„å½±å“
 
-**Ö÷Òª½Ó¿Ú**:
+**ä¸»è¦æ¥å£**:
 ```python
 evaluator = MultiFactorEvaluator(state_manager, hand_combiner, cooperation)
 
-# ÆÀ¹Àµ¥¸ö¶¯×÷
+# è¯„ä¼°å•ä¸ªåŠ¨ä½œ
 score = evaluator.evaluate_action(action, action_index, cur_action, action_list)
 
-# ÆÀ¹ÀËùÓĞ¶¯×÷
+# è¯„ä¼°æ‰€æœ‰åŠ¨ä½œ
 evaluations = evaluator.evaluate_all_actions(action_list, cur_action)
-# ·µ»Ø: [(Ë÷Òı, ÆÀ·Ö), ...] °´ÆÀ·Ö½µĞòÅÅÁĞ
+# è¿”å›: [(ç´¢å¼•, è¯„åˆ†), ...] æŒ‰è¯„åˆ†é™åºæ’åˆ—
 
-# »ñÈ¡×î¼Ñ¶¯×÷
+# è·å–æœ€ä½³åŠ¨ä½œ
 best_index = evaluator.get_best_action(action_list, cur_action)
 
-# ¸üĞÂÈ¨ÖØ
+# æ›´æ–°æƒé‡
 evaluator.update_weights({
     "remaining_cards": 0.30,
     "cooperation": 0.25,
@@ -149,11 +149,11 @@ evaluator.update_weights({
 })
 ```
 
-**ÆÀ·Ö·¶Î§**: 0-100£¬ÊıÖµÔ½´óÔ½ºÃ
+**è¯„åˆ†èŒƒå›´**: 0-100ï¼Œæ•°å€¼è¶Šå¤§è¶Šå¥½
 
-## ¼¯³ÉÊ¹ÓÃ
+## é›†æˆä½¿ç”¨
 
-### ÍêÕû¾ö²ßÁ÷³Ì
+### å®Œæ•´å†³ç­–æµç¨‹
 
 ```python
 from game_logic.enhanced_state import EnhancedGameStateManager
@@ -163,38 +163,38 @@ from decision.cooperation import CooperationStrategy
 from decision.multi_factor_evaluator import MultiFactorEvaluator
 from decision.decision_timer import DecisionTimer
 
-# ³õÊ¼»¯
+# åˆå§‹åŒ–
 state_manager = EnhancedGameStateManager()
 combiner = HandCombiner()
 cooperation = CooperationStrategy(state_manager)
 evaluator = MultiFactorEvaluator(state_manager, combiner, cooperation)
 decision_engine = DecisionEngine(state_manager, max_decision_time=0.8)
 
-# ´¦ÀíÏûÏ¢
+# å¤„ç†æ¶ˆæ¯
 state_manager.update_from_message(message)
 
-# ×ö³ö¾ö²ß£¨×Ô¶¯¼¯³ÉËùÓĞÄ£¿é£©
+# åšå‡ºå†³ç­–ï¼ˆè‡ªåŠ¨é›†æˆæ‰€æœ‰æ¨¡å—ï¼‰
 act_index = decision_engine.decide(message)
 ```
 
-## Ä£¿éÌØµã
+## æ¨¡å—ç‰¹ç‚¹
 
-1. **Ä£¿é»¯Éè¼Æ**: Ã¿¸öÄ£¿éÖ°ÔğÇåÎú£¬Ò×ÓÚÎ¬»¤
-2. **¿ÉÀ©Õ¹ĞÔ**: ¿ÉÒÔÇáËÉÌí¼ÓĞÂµÄÅÆĞÍ´¦ÀíÆ÷
-3. **ĞÔÄÜÓÅ»¯**: Ê±¼ä¿ØÖÆÈ·±£¾ö²ßÔÚºÏÀíÊ±¼äÄÚÍê³É
-4. **Áé»îÅäÖÃ**: ÆÀ¹ÀÈ¨ÖØ¿ÉÒÔµ÷ÕûÒÔÊÊÓ¦²»Í¬²ßÂÔ
+1. **æ¨¡å—åŒ–è®¾è®¡**: æ¯ä¸ªæ¨¡å—èŒè´£æ¸…æ™°ï¼Œæ˜“äºç»´æŠ¤
+2. **å¯æ‰©å±•æ€§**: å¯ä»¥è½»æ¾æ·»åŠ æ–°çš„ç‰Œå‹å¤„ç†å™¨
+3. **æ€§èƒ½ä¼˜åŒ–**: æ—¶é—´æ§åˆ¶ç¡®ä¿å†³ç­–åœ¨åˆç†æ—¶é—´å†…å®Œæˆ
+4. **çµæ´»é…ç½®**: è¯„ä¼°æƒé‡å¯ä»¥è°ƒæ•´ä»¥é€‚åº”ä¸åŒç­–ç•¥
 
-## ÏÂÒ»²½ÓÅ»¯
+## ä¸‹ä¸€æ­¥ä¼˜åŒ–
 
-1. **ÍêÉÆÅÆĞÍ´¦ÀíÆ÷**: ÊµÏÖ¸ü¶àÅÆĞÍµÄ×¨ÃÅ´¦ÀíÂß¼­
-2. **ÓÅ»¯ÆÀ¹ÀÈ¨ÖØ**: ¸ù¾İÊµ¼Ê²âÊÔµ÷ÕûÈ¨ÖØ
-3. **Ìí¼Ó»º´æ»úÖÆ**: »º´æ³£¼û¾ÖÃæµÄÆÀ¹À½á¹û
-4. **ĞÔÄÜµ÷ÓÅ**: ÓÅ»¯Ëã·¨£¬¼õÉÙ¾ö²ßÊ±¼ä
+1. **å®Œå–„ç‰Œå‹å¤„ç†å™¨**: å®ç°æ›´å¤šç‰Œå‹çš„ä¸“é—¨å¤„ç†é€»è¾‘
+2. **ä¼˜åŒ–è¯„ä¼°æƒé‡**: æ ¹æ®å®é™…æµ‹è¯•è°ƒæ•´æƒé‡
+3. **æ·»åŠ ç¼“å­˜æœºåˆ¶**: ç¼“å­˜å¸¸è§å±€é¢çš„è¯„ä¼°ç»“æœ
+4. **æ€§èƒ½è°ƒä¼˜**: ä¼˜åŒ–ç®—æ³•ï¼Œå‡å°‘å†³ç­–æ—¶é—´
 
-## ×¢ÒâÊÂÏî
+## æ³¨æ„äº‹é¡¹
 
-1. ¾ö²ßÊ±¼äÄ¬ÈÏÉèÖÃÎª0.8Ãë£¬¿ÉÒÔ¸ù¾İÊµ¼ÊÇé¿öµ÷Õû
-2. ÆÀ¹ÀÈ¨ÖØ¿ÉÒÔ¸ù¾İ²ßÂÔĞèÇóµ÷Õû
-3. ÅÆĞÍ´¦ÀíÆ÷·µ»Ø-1±íÊ¾Ó¦¸ÃPASS
-4. ËùÓĞÄ£¿é¶¼ÒÑ¼¯³Éµ½ `DecisionEngine` ÖĞ£¬¿ÉÒÔÖ±½ÓÊ¹ÓÃ
+1. å†³ç­–æ—¶é—´é»˜è®¤è®¾ç½®ä¸º0.8ç§’ï¼Œå¯ä»¥æ ¹æ®å®é™…æƒ…å†µè°ƒæ•´
+2. è¯„ä¼°æƒé‡å¯ä»¥æ ¹æ®ç­–ç•¥éœ€æ±‚è°ƒæ•´
+3. ç‰Œå‹å¤„ç†å™¨è¿”å›-1è¡¨ç¤ºåº”è¯¥PASS
+4. æ‰€æœ‰æ¨¡å—éƒ½å·²é›†æˆåˆ° `DecisionEngine` ä¸­ï¼Œå¯ä»¥ç›´æ¥ä½¿ç”¨
 

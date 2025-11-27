@@ -1,212 +1,212 @@
-# ¼Ü¹¹Éè¼ÆÎÄµµ
+# æ¶æ„è®¾è®¡æ–‡æ¡£
 
-±¾ÎÄµµÏêÏ¸ËµÃ÷Ä£¿éÒÀÀµ¹ØÏµºÍÊı¾İÁ÷Éè¼Æ¡£
+æœ¬æ–‡æ¡£è¯¦ç»†è¯´æ˜æ¨¡å—ä¾èµ–å…³ç³»å’Œæ•°æ®æµè®¾è®¡ã€‚
 
-## Ò»¡¢Ä£¿éÒÀÀµ¹ØÏµ
+## ä¸€ã€æ¨¡å—ä¾èµ–å…³ç³»
 
-### 1.1 ÒÀÀµ¹ØÏµÍ¼
+### 1.1 ä¾èµ–å…³ç³»å›¾
 
 ```
-DecisionEngine (¾ö²ßÒıÇæ)
-©À©¤©¤ DecisionTimer (Ê±¼ä¿ØÖÆ)
-©¦   ©¸©¤©¤ (ÎŞÒÀÀµ)
-©À©¤©¤ CooperationStrategy (ÅäºÏ²ßÂÔ)
-©¦   ©¸©¤©¤ EnhancedGameStateManager (×´Ì¬¹ÜÀí)
-©¦       ©¸©¤©¤ CardTracker (¼ÇÅÆÄ£¿é)
-©¦           ©¸©¤©¤ (ÎŞÒÀÀµ)
-©À©¤©¤ MultiFactorEvaluator (¶àÒòËØÆÀ¹À)
-©¦   ©À©¤©¤ EnhancedGameStateManager (×´Ì¬¹ÜÀí)
-©¦   ©¦   ©¸©¤©¤ CardTracker (¼ÇÅÆÄ£¿é)
-©¦   ©À©¤©¤ HandCombiner (ÊÖÅÆ×éºÏ)
-©¦   ©¦   ©¸©¤©¤ (ÎŞÒÀÀµ)
-©¦   ©¸©¤©¤ CooperationStrategy (ÅäºÏ²ßÂÔ)
-©¦       ©¸©¤©¤ EnhancedGameStateManager (×´Ì¬¹ÜÀí)
-©¸©¤©¤ CardTypeHandlerFactory (ÅÆĞÍ´¦ÀíÆ÷¹¤³§)
-    ©À©¤©¤ EnhancedGameStateManager (×´Ì¬¹ÜÀí)
-    ©¦   ©¸©¤©¤ CardTracker (¼ÇÅÆÄ£¿é)
-    ©¸©¤©¤ HandCombiner (ÊÖÅÆ×éºÏ)
-        ©¸©¤©¤ (ÎŞÒÀÀµ)
+DecisionEngine (å†³ç­–å¼•æ“)
+â”œâ”€â”€ DecisionTimer (æ—¶é—´æ§åˆ¶)
+â”‚   â””â”€â”€ (æ— ä¾èµ–)
+â”œâ”€â”€ CooperationStrategy (é…åˆç­–ç•¥)
+â”‚   â””â”€â”€ EnhancedGameStateManager (çŠ¶æ€ç®¡ç†)
+â”‚       â””â”€â”€ CardTracker (è®°ç‰Œæ¨¡å—)
+â”‚           â””â”€â”€ (æ— ä¾èµ–)
+â”œâ”€â”€ MultiFactorEvaluator (å¤šå› ç´ è¯„ä¼°)
+â”‚   â”œâ”€â”€ EnhancedGameStateManager (çŠ¶æ€ç®¡ç†)
+â”‚   â”‚   â””â”€â”€ CardTracker (è®°ç‰Œæ¨¡å—)
+â”‚   â”œâ”€â”€ HandCombiner (æ‰‹ç‰Œç»„åˆ)
+â”‚   â”‚   â””â”€â”€ (æ— ä¾èµ–)
+â”‚   â””â”€â”€ CooperationStrategy (é…åˆç­–ç•¥)
+â”‚       â””â”€â”€ EnhancedGameStateManager (çŠ¶æ€ç®¡ç†)
+â””â”€â”€ CardTypeHandlerFactory (ç‰Œå‹å¤„ç†å™¨å·¥å‚)
+    â”œâ”€â”€ EnhancedGameStateManager (çŠ¶æ€ç®¡ç†)
+    â”‚   â””â”€â”€ CardTracker (è®°ç‰Œæ¨¡å—)
+    â””â”€â”€ HandCombiner (æ‰‹ç‰Œç»„åˆ)
+        â””â”€â”€ (æ— ä¾èµ–)
 ```
 
-### 1.2 ÏêÏ¸ÒÀÀµËµÃ÷
+### 1.2 è¯¦ç»†ä¾èµ–è¯´æ˜
 
-#### ¾ö²ßÒıÇæ ¡ú ×´Ì¬¹ÜÀí ¡ú ¼ÇÅÆÄ£¿é
-```
-DecisionEngine
-  ©¸©¤> EnhancedGameStateManager
-        ©¸©¤> CardTracker
-              ©À©¤> Î¬»¤³öÅÆÀúÊ·
-              ©À©¤> ¸ú×ÙÊ£ÓàÅÆ¿â
-              ©¸©¤> ¼ÇÂ¼PASS´ÎÊı
-```
-
-**Êı¾İÁ÷**:
-- `DecisionEngine` Í¨¹ı `EnhancedGameStateManager` ·ÃÎÊÓÎÏ·×´Ì¬
-- `EnhancedGameStateManager` ÄÚ²¿Ê¹ÓÃ `CardTracker` Î¬»¤¼ÇÅÆĞÅÏ¢
-- ×´Ì¬¸üĞÂÊ±£¬`EnhancedGameStateManager` ×Ô¶¯¸üĞÂ `CardTracker`
-
-#### ¾ö²ßÒıÇæ ¡ú ÅäºÏ²ßÂÔ ¡ú ×´Ì¬¹ÜÀí
+#### å†³ç­–å¼•æ“ â†’ çŠ¶æ€ç®¡ç† â†’ è®°ç‰Œæ¨¡å—
 ```
 DecisionEngine
-  ©¸©¤> CooperationStrategy
-        ©¸©¤> EnhancedGameStateManager
-              ©À©¤> »ñÈ¡¶ÓÓÑÎ»ÖÃ
-              ©À©¤> »ñÈ¡Ê£ÓàÅÆÊı
-              ©¸©¤> ÅĞ¶ÏÊÇ·ñ¶ÓÓÑ¶¯×÷
+  â””â”€> EnhancedGameStateManager
+        â””â”€> CardTracker
+              â”œâ”€> ç»´æŠ¤å‡ºç‰Œå†å²
+              â”œâ”€> è·Ÿè¸ªå‰©ä½™ç‰Œåº“
+              â””â”€> è®°å½•PASSæ¬¡æ•°
 ```
 
-**Êı¾İÁ÷**:
-- `DecisionEngine` µ÷ÓÃ `CooperationStrategy` ÆÀ¹ÀÅäºÏ»ú»á
-- `CooperationStrategy` Í¨¹ı `EnhancedGameStateManager` »ñÈ¡×´Ì¬ĞÅÏ¢
-- ÅäºÏ²ßÂÔ»ùÓÚ×´Ì¬ĞÅÏ¢×ö³öÅĞ¶Ï
+**æ•°æ®æµ**:
+- `DecisionEngine` é€šè¿‡ `EnhancedGameStateManager` è®¿é—®æ¸¸æˆçŠ¶æ€
+- `EnhancedGameStateManager` å†…éƒ¨ä½¿ç”¨ `CardTracker` ç»´æŠ¤è®°ç‰Œä¿¡æ¯
+- çŠ¶æ€æ›´æ–°æ—¶ï¼Œ`EnhancedGameStateManager` è‡ªåŠ¨æ›´æ–° `CardTracker`
 
-#### ¾ö²ßÒıÇæ ¡ú ÊÖÅÆ×éºÏ ¡ú ÓÎÏ·¹æÔò
+#### å†³ç­–å¼•æ“ â†’ é…åˆç­–ç•¥ â†’ çŠ¶æ€ç®¡ç†
 ```
 DecisionEngine
-  ©¸©¤> HandCombiner
-        ©À©¤> Ê¶±ğÅÆĞÍ×éºÏ
-        ©À©¤> Ê¶±ğË³×ÓºÍÍ¬»¨Ë³
-        ©¸©¤> ÓÅ»¯×éÅÆ²ßÂÔ
+  â””â”€> CooperationStrategy
+        â””â”€> EnhancedGameStateManager
+              â”œâ”€> è·å–é˜Ÿå‹ä½ç½®
+              â”œâ”€> è·å–å‰©ä½™ç‰Œæ•°
+              â””â”€> åˆ¤æ–­æ˜¯å¦é˜Ÿå‹åŠ¨ä½œ
 ```
 
-**Êı¾İÁ÷**:
-- `DecisionEngine` Ê¹ÓÃ `HandCombiner` ·ÖÎöÊÖÅÆ½á¹¹
-- `HandCombiner` »ùÓÚÓÎÏ·¹æÔòÊ¶±ğÅÆĞÍ
-- ÊÖÅÆ×éºÏ½á¹ûÓÃÓÚ¾ö²ßÆÀ¹À
+**æ•°æ®æµ**:
+- `DecisionEngine` è°ƒç”¨ `CooperationStrategy` è¯„ä¼°é…åˆæœºä¼š
+- `CooperationStrategy` é€šè¿‡ `EnhancedGameStateManager` è·å–çŠ¶æ€ä¿¡æ¯
+- é…åˆç­–ç•¥åŸºäºçŠ¶æ€ä¿¡æ¯åšå‡ºåˆ¤æ–­
 
-### 1.3 ÒÀÀµ×¢ÈëÉè¼Æ
+#### å†³ç­–å¼•æ“ â†’ æ‰‹ç‰Œç»„åˆ â†’ æ¸¸æˆè§„åˆ™
+```
+DecisionEngine
+  â””â”€> HandCombiner
+        â”œâ”€> è¯†åˆ«ç‰Œå‹ç»„åˆ
+        â”œâ”€> è¯†åˆ«é¡ºå­å’ŒåŒèŠ±é¡º
+        â””â”€> ä¼˜åŒ–ç»„ç‰Œç­–ç•¥
+```
 
-ËùÓĞÄ£¿éÍ¨¹ıÒÀÀµ×¢Èë·½Ê½Á¬½Ó£¬±ÜÃâÓ²±àÂëÒÀÀµ£º
+**æ•°æ®æµ**:
+- `DecisionEngine` ä½¿ç”¨ `HandCombiner` åˆ†ææ‰‹ç‰Œç»“æ„
+- `HandCombiner` åŸºäºæ¸¸æˆè§„åˆ™è¯†åˆ«ç‰Œå‹
+- æ‰‹ç‰Œç»„åˆç»“æœç”¨äºå†³ç­–è¯„ä¼°
+
+### 1.3 ä¾èµ–æ³¨å…¥è®¾è®¡
+
+æ‰€æœ‰æ¨¡å—é€šè¿‡ä¾èµ–æ³¨å…¥æ–¹å¼è¿æ¥ï¼Œé¿å…ç¡¬ç¼–ç ä¾èµ–ï¼š
 
 ```python
-# ³õÊ¼»¯Ë³Ğò
-card_tracker = CardTracker()  # 1. ×îµ×²ã
-state_manager = EnhancedGameStateManager()  # 2. ÒÀÀµ CardTracker
-hand_combiner = HandCombiner()  # 3. ¶ÀÁ¢Ä£¿é
-cooperation = CooperationStrategy(state_manager)  # 4. ÒÀÀµ StateManager
-evaluator = MultiFactorEvaluator(state_manager, hand_combiner, cooperation)  # 5. ÒÀÀµ¶à¸öÄ£¿é
-decision_engine = DecisionEngine(state_manager, max_decision_time=0.8)  # 6. ¶¥²ã£¬ÒÀÀµËùÓĞÄ£¿é
+# åˆå§‹åŒ–é¡ºåº
+card_tracker = CardTracker()  # 1. æœ€åº•å±‚
+state_manager = EnhancedGameStateManager()  # 2. ä¾èµ– CardTracker
+hand_combiner = HandCombiner()  # 3. ç‹¬ç«‹æ¨¡å—
+cooperation = CooperationStrategy(state_manager)  # 4. ä¾èµ– StateManager
+evaluator = MultiFactorEvaluator(state_manager, hand_combiner, cooperation)  # 5. ä¾èµ–å¤šä¸ªæ¨¡å—
+decision_engine = DecisionEngine(state_manager, max_decision_time=0.8)  # 6. é¡¶å±‚ï¼Œä¾èµ–æ‰€æœ‰æ¨¡å—
 ```
 
-## ¶ş¡¢Êı¾İÁ÷Éè¼Æ
+## äºŒã€æ•°æ®æµè®¾è®¡
 
-### 2.1 ÍêÕûÊı¾İÁ÷Í¼
+### 2.1 å®Œæ•´æ•°æ®æµå›¾
 
 ```
-WebSocketÏûÏ¢½ÓÊÕ
-    ¡ı
-ÏûÏ¢½âÎö (JSON)
-    ¡ı
-×´Ì¬¸üĞÂ (EnhancedGameStateManager.update_from_message)
-    ©À©¤> ¸üĞÂ»ù´¡×´Ì¬ (myPos, handCards, curPos, etc.)
-    ©À©¤> ¸üĞÂ¼ÇÅÆĞÅÏ¢ (CardTracker.update_from_play)
-    ©¦   ©À©¤> ¸üĞÂÍæ¼ÒÀúÊ·
-    ©¦   ©À©¤> ¸üĞÂÊ£ÓàÅÆ¿â
-    ©¦   ©¸©¤> ¸üĞÂPASS´ÎÊı
-    ©¸©¤> ¸üĞÂ¹«¹²ĞÅÏ¢ (publicInfo)
-    ¡ı
-¾ö²ßÒıÇæ (DecisionEngine.decide)
-    ©À©¤> ¿ªÊ¼¼ÆÊ± (DecisionTimer.start)
-    ©À©¤> ÅĞ¶ÏÖ÷¶¯/±»¶¯ (EnhancedGameStateManager.is_passive_play)
-    ©¦
-    ©À©¤> [±»¶¯³öÅÆ·ÖÖ§]
-    ©¦   ©À©¤> ÆÀ¹ÀÅäºÏ»ú»á (CooperationStrategy.get_cooperation_strategy)
-    ©¦   ©¦   ©¸©¤> ²éÑ¯×´Ì¬ĞÅÏ¢ (EnhancedGameStateManager)
-    ©¦   ©¦       ©¸©¤> ²éÑ¯¼ÇÅÆĞÅÏ¢ (CardTracker)
-    ©¦   ©¦
-    ©¦   ©À©¤> Ê¹ÓÃÅÆĞÍ×¨ÃÅ´¦ÀíÆ÷ (CardTypeHandlerFactory.get_handler)
-    ©¦   ©¦   ©À©¤> ·ÖÎöÊÖÅÆ½á¹¹ (HandCombiner.combine_handcards)
-    ©¦   ©¦   ©¸©¤> ´¦Àí±»¶¯³öÅÆ (Handler.handle_passive)
-    ©¦   ©¦
-    ©¦   ©¸©¤> ¶àÒòËØÆÀ¹À (MultiFactorEvaluator.evaluate_all_actions)
-    ©¦       ©À©¤> ÆÀ¹ÀÊ£ÓàÅÆÊıÒòËØ (²éÑ¯ CardTracker)
-    ©¦       ©À©¤> ÆÀ¹ÀÅÆĞÍ´óĞ¡ÒòËØ
-    ©¦       ©À©¤> ÆÀ¹ÀÅäºÏÒòËØ (²éÑ¯ CooperationStrategy)
-    ©¦       ©À©¤> ÆÀ¹À·çÏÕÒòËØ
-    ©¦       ©À©¤> ÆÀ¹ÀÊ±»úÒòËØ
-    ©¦       ©¸©¤> ÆÀ¹ÀÊÖÅÆ½á¹¹ÒòËØ (²éÑ¯ HandCombiner)
-    ©¦
-    ©¸©¤> [Ö÷¶¯³öÅÆ·ÖÖ§]
-        ©¸©¤> ¶àÒòËØÆÀ¹À (MultiFactorEvaluator.evaluate_all_actions)
-            ©¸©¤> (Í¬ÉÏ)
-    ¡ı
-¼ì²é³¬Ê± (DecisionTimer.check_timeout)
-    ¡ı
-Ñ¡Ôñ×î¼Ñ¶¯×÷
-    ¡ı
-¹¹½¨ÏìÓ¦ÏûÏ¢ ({"actIndex": X})
-    ¡ı
-WebSocketÏûÏ¢·¢ËÍ
+WebSocketæ¶ˆæ¯æ¥æ”¶
+    â†“
+æ¶ˆæ¯è§£æ (JSON)
+    â†“
+çŠ¶æ€æ›´æ–° (EnhancedGameStateManager.update_from_message)
+    â”œâ”€> æ›´æ–°åŸºç¡€çŠ¶æ€ (myPos, handCards, curPos, etc.)
+    â”œâ”€> æ›´æ–°è®°ç‰Œä¿¡æ¯ (CardTracker.update_from_play)
+    â”‚   â”œâ”€> æ›´æ–°ç©å®¶å†å²
+    â”‚   â”œâ”€> æ›´æ–°å‰©ä½™ç‰Œåº“
+    â”‚   â””â”€> æ›´æ–°PASSæ¬¡æ•°
+    â””â”€> æ›´æ–°å…¬å…±ä¿¡æ¯ (publicInfo)
+    â†“
+å†³ç­–å¼•æ“ (DecisionEngine.decide)
+    â”œâ”€> å¼€å§‹è®¡æ—¶ (DecisionTimer.start)
+    â”œâ”€> åˆ¤æ–­ä¸»åŠ¨/è¢«åŠ¨ (EnhancedGameStateManager.is_passive_play)
+    â”‚
+    â”œâ”€> [è¢«åŠ¨å‡ºç‰Œåˆ†æ”¯]
+    â”‚   â”œâ”€> è¯„ä¼°é…åˆæœºä¼š (CooperationStrategy.get_cooperation_strategy)
+    â”‚   â”‚   â””â”€> æŸ¥è¯¢çŠ¶æ€ä¿¡æ¯ (EnhancedGameStateManager)
+    â”‚   â”‚       â””â”€> æŸ¥è¯¢è®°ç‰Œä¿¡æ¯ (CardTracker)
+    â”‚   â”‚
+    â”‚   â”œâ”€> ä½¿ç”¨ç‰Œå‹ä¸“é—¨å¤„ç†å™¨ (CardTypeHandlerFactory.get_handler)
+    â”‚   â”‚   â”œâ”€> åˆ†ææ‰‹ç‰Œç»“æ„ (HandCombiner.combine_handcards)
+    â”‚   â”‚   â””â”€> å¤„ç†è¢«åŠ¨å‡ºç‰Œ (Handler.handle_passive)
+    â”‚   â”‚
+    â”‚   â””â”€> å¤šå› ç´ è¯„ä¼° (MultiFactorEvaluator.evaluate_all_actions)
+    â”‚       â”œâ”€> è¯„ä¼°å‰©ä½™ç‰Œæ•°å› ç´  (æŸ¥è¯¢ CardTracker)
+    â”‚       â”œâ”€> è¯„ä¼°ç‰Œå‹å¤§å°å› ç´ 
+    â”‚       â”œâ”€> è¯„ä¼°é…åˆå› ç´  (æŸ¥è¯¢ CooperationStrategy)
+    â”‚       â”œâ”€> è¯„ä¼°é£é™©å› ç´ 
+    â”‚       â”œâ”€> è¯„ä¼°æ—¶æœºå› ç´ 
+    â”‚       â””â”€> è¯„ä¼°æ‰‹ç‰Œç»“æ„å› ç´  (æŸ¥è¯¢ HandCombiner)
+    â”‚
+    â””â”€> [ä¸»åŠ¨å‡ºç‰Œåˆ†æ”¯]
+        â””â”€> å¤šå› ç´ è¯„ä¼° (MultiFactorEvaluator.evaluate_all_actions)
+            â””â”€> (åŒä¸Š)
+    â†“
+æ£€æŸ¥è¶…æ—¶ (DecisionTimer.check_timeout)
+    â†“
+é€‰æ‹©æœ€ä½³åŠ¨ä½œ
+    â†“
+æ„å»ºå“åº”æ¶ˆæ¯ ({"actIndex": X})
+    â†“
+WebSocketæ¶ˆæ¯å‘é€
 ```
 
-### 2.2 ¹Ø¼üÊı¾İÁ÷½Úµã
+### 2.2 å…³é”®æ•°æ®æµèŠ‚ç‚¹
 
-#### ½Úµã1: ÏûÏ¢½ÓÊÕºÍ½âÎö
+#### èŠ‚ç‚¹1: æ¶ˆæ¯æ¥æ”¶å’Œè§£æ
 ```python
-# WebSocketÏûÏ¢ ¡ú JSON½âÎö
+# WebSocketæ¶ˆæ¯ â†’ JSONè§£æ
 message = json.loads(websocket_message)
-# message¸ñÊ½: {"type": "act", "stage": "play", "handCards": [...], ...}
+# messageæ ¼å¼: {"type": "act", "stage": "play", "handCards": [...], ...}
 ```
 
-#### ½Úµã2: ×´Ì¬¸üĞÂ
+#### èŠ‚ç‚¹2: çŠ¶æ€æ›´æ–°
 ```python
-# ×´Ì¬¹ÜÀíÆ÷¸üĞÂ
+# çŠ¶æ€ç®¡ç†å™¨æ›´æ–°
 state_manager.update_from_message(message)
-# ÄÚ²¿Á÷³Ì:
-#   1. ¸üĞÂ»ù´¡×Ö¶Î (myPos, handCards, etc.)
-#   2. Èç¹ûÊÇnotifyÏûÏ¢£¬¸üĞÂ¼ÇÅÆĞÅÏ¢
-#   3. ¸üĞÂ¹«¹²ĞÅÏ¢
+# å†…éƒ¨æµç¨‹:
+#   1. æ›´æ–°åŸºç¡€å­—æ®µ (myPos, handCards, etc.)
+#   2. å¦‚æœæ˜¯notifyæ¶ˆæ¯ï¼Œæ›´æ–°è®°ç‰Œä¿¡æ¯
+#   3. æ›´æ–°å…¬å…±ä¿¡æ¯
 ```
 
-#### ½Úµã3: ¼ÇÅÆÄ£¿é¸üĞÂ
+#### èŠ‚ç‚¹3: è®°ç‰Œæ¨¡å—æ›´æ–°
 ```python
-# ¼ÇÅÆÄ£¿é×Ô¶¯¸üĞÂ£¨ÔÚ×´Ì¬¸üĞÂÊ±´¥·¢£©
+# è®°ç‰Œæ¨¡å—è‡ªåŠ¨æ›´æ–°ï¼ˆåœ¨çŠ¶æ€æ›´æ–°æ—¶è§¦å‘ï¼‰
 if message.get("type") == "notify" and message.get("stage") == "play":
     card_tracker.update_from_play(cur_pos, cur_action, my_pos)
-    # ¸üĞÂ:
-    #   - Íæ¼Ò³öÅÆÀúÊ·
-    #   - Ê£ÓàÅÆ¿â
-    #   - PASS´ÎÊı
+    # æ›´æ–°:
+    #   - ç©å®¶å‡ºç‰Œå†å²
+    #   - å‰©ä½™ç‰Œåº“
+    #   - PASSæ¬¡æ•°
 ```
 
-#### ½Úµã4: ÅäºÏ²ßÂÔÆÀ¹À
+#### èŠ‚ç‚¹4: é…åˆç­–ç•¥è¯„ä¼°
 ```python
-# ÅäºÏ²ßÂÔÆÀ¹À
+# é…åˆç­–ç•¥è¯„ä¼°
 cooperation_result = cooperation.get_cooperation_strategy(
     action_list, cur_action, greater_action
 )
-# ÄÚ²¿Á÷³Ì:
-#   1. ÅĞ¶ÏÊÇ·ñÊÇ¶ÓÓÑ³öµÄÅÆ (state.is_teammate_action)
-#   2. »ñÈ¡¶ÔÊÖÊ£ÓàÅÆÊı (state.get_opponent_remain_cards)
-#   3. »ñÈ¡¶ÓÓÑÊ£ÓàÅÆÊı (state.get_teammate_remain_cards)
-#   4. ÆÀ¹ÀÅäºÏ»ú»á
+# å†…éƒ¨æµç¨‹:
+#   1. åˆ¤æ–­æ˜¯å¦æ˜¯é˜Ÿå‹å‡ºçš„ç‰Œ (state.is_teammate_action)
+#   2. è·å–å¯¹æ‰‹å‰©ä½™ç‰Œæ•° (state.get_opponent_remain_cards)
+#   3. è·å–é˜Ÿå‹å‰©ä½™ç‰Œæ•° (state.get_teammate_remain_cards)
+#   4. è¯„ä¼°é…åˆæœºä¼š
 ```
 
-#### ½Úµã5: ¶àÒòËØÆÀ¹À
+#### èŠ‚ç‚¹5: å¤šå› ç´ è¯„ä¼°
 ```python
-# ¶àÒòËØÆÀ¹À
+# å¤šå› ç´ è¯„ä¼°
 evaluations = evaluator.evaluate_all_actions(action_list, cur_action)
-# ÆÀ¹ÀÁ÷³Ì:
-#   1. Ê£ÓàÅÆÊıÒòËØ (²éÑ¯ state.get_player_remain_cards)
-#   2. ÅÆĞÍ´óĞ¡ÒòËØ (¼ÆËã¶¯×÷Öµ)
-#   3. ÅäºÏÒòËØ (²éÑ¯ cooperation)
-#   4. ·çÏÕÒòËØ (²éÑ¯ state.get_pass_count)
-#   5. Ê±»úÒòËØ (²éÑ¯ state.stage, state.cur_rank)
-#   6. ÊÖÅÆ½á¹¹ÒòËØ (²éÑ¯ combiner.combine_handcards)
+# è¯„ä¼°æµç¨‹:
+#   1. å‰©ä½™ç‰Œæ•°å› ç´  (æŸ¥è¯¢ state.get_player_remain_cards)
+#   2. ç‰Œå‹å¤§å°å› ç´  (è®¡ç®—åŠ¨ä½œå€¼)
+#   3. é…åˆå› ç´  (æŸ¥è¯¢ cooperation)
+#   4. é£é™©å› ç´  (æŸ¥è¯¢ state.get_pass_count)
+#   5. æ—¶æœºå› ç´  (æŸ¥è¯¢ state.stage, state.cur_rank)
+#   6. æ‰‹ç‰Œç»“æ„å› ç´  (æŸ¥è¯¢ combiner.combine_handcards)
 ```
 
-## Èı¡¢¹Ø¼üÉè¼Æ²Î¿¼
+## ä¸‰ã€å…³é”®è®¾è®¡å‚è€ƒ
 
-### 3.1 ¶ÓÓÑÊ¶±ğ¹«Ê½
+### 3.1 é˜Ÿå‹è¯†åˆ«å…¬å¼
 ```python
-# ²Î¿¼»ñ½±´úÂë
+# å‚è€ƒè·å¥–ä»£ç 
 teammate_pos = (myPos + 2) % 4
-# ÊµÏÖÎ»ÖÃ: EnhancedGameStateManager._update_team_info()
+# å®ç°ä½ç½®: EnhancedGameStateManager._update_team_info()
 ```
 
-### 3.2 ×´Ì¬Êı¾İ½á¹¹
+### 3.2 çŠ¶æ€æ•°æ®ç»“æ„
 ```python
-# ²Î¿¼»ñ½±´úÂëµÄ state.py
+# å‚è€ƒè·å¥–ä»£ç çš„ state.py
 history = {
     '0': {'send': [], 'remain': 27},
     '1': {'send': [], 'remain': 27},
@@ -214,35 +214,35 @@ history = {
     '3': {'send': [], 'remain': 27},
 }
 remain_cards = {
-    "S": [2, 2, 2, ...],  # °´»¨É«ºÍµãÊı·ÖÀà
+    "S": [2, 2, 2, ...],  # æŒ‰èŠ±è‰²å’Œç‚¹æ•°åˆ†ç±»
     "H": [2, 2, 2, ...],
     ...
 }
-# ÊµÏÖÎ»ÖÃ: CardTracker.__init__()
+# å®ç°ä½ç½®: CardTracker.__init__()
 ```
 
-### 3.3 ¾ö²ßº¯Êı·ÖÀë
+### 3.3 å†³ç­–å‡½æ•°åˆ†ç¦»
 ```python
-# ²Î¿¼»ñ½±´úÂëµÄ action.py
-# Ö÷¶¯³öÅÆ: active_decision()
-# ±»¶¯³öÅÆ: passive_decision()
-# ÊµÏÖÎ»ÖÃ: DecisionEngine.active_decision() ºÍ DecisionEngine.passive_decision()
+# å‚è€ƒè·å¥–ä»£ç çš„ action.py
+# ä¸»åŠ¨å‡ºç‰Œ: active_decision()
+# è¢«åŠ¨å‡ºç‰Œ: passive_decision()
+# å®ç°ä½ç½®: DecisionEngine.active_decision() å’Œ DecisionEngine.passive_decision()
 ```
 
-### 3.4 ÊÖÅÆ×éºÏËã·¨
+### 3.4 æ‰‹ç‰Œç»„åˆç®—æ³•
 ```python
-# ²Î¿¼»ñ½±´úÂëµÄ utils.py µÄ combine_handcards()
-# ÊµÏÖÎ»ÖÃ: HandCombiner.combine_handcards()
-# ¹¦ÄÜ:
-#   - Ê¶±ğµ¥ÕÅ¡¢¶Ô×Ó¡¢ÈıÕÅ¡¢Õ¨µ¯
-#   - Ê¶±ğË³×Ó£¨¿¼ÂÇµ¥ÕÅ¡¢¶Ô×Ó¡¢ÈıÕÅ·Ö²¼£©
-#   - Ê¶±ğÍ¬»¨Ë³
+# å‚è€ƒè·å¥–ä»£ç çš„ utils.py çš„ combine_handcards()
+# å®ç°ä½ç½®: HandCombiner.combine_handcards()
+# åŠŸèƒ½:
+#   - è¯†åˆ«å•å¼ ã€å¯¹å­ã€ä¸‰å¼ ã€ç‚¸å¼¹
+#   - è¯†åˆ«é¡ºå­ï¼ˆè€ƒè™‘å•å¼ ã€å¯¹å­ã€ä¸‰å¼ åˆ†å¸ƒï¼‰
+#   - è¯†åˆ«åŒèŠ±é¡º
 ```
 
-## ËÄ¡¢ÅäÖÃ¹ÜÀí
+## å››ã€é…ç½®ç®¡ç†
 
-### 4.1 ÅäÖÃÎÄ¼ş½á¹¹
-ÅäÖÃÎÄ¼ş: `config.yaml`
+### 4.1 é…ç½®æ–‡ä»¶ç»“æ„
+é…ç½®æ–‡ä»¶: `config.yaml`
 
 ```yaml
 decision:
@@ -267,7 +267,7 @@ cooperation:
   max_val_threshold: 14
 ```
 
-### 4.2 ÅäÖÃ¼ÓÔØ
+### 4.2 é…ç½®åŠ è½½
 ```python
 from src.config_loader import get_config
 
@@ -276,46 +276,46 @@ max_time = config.get("decision.max_decision_time", 0.8)
 weights = config.get_evaluation_weights()
 ```
 
-## Îå¡¢²âÊÔ¿ò¼Ü
+## äº”ã€æµ‹è¯•æ¡†æ¶
 
-### 5.1 µ¥Ôª²âÊÔ
-- ²âÊÔÃ¿¸öÄ£¿éµÄ¶ÀÁ¢¹¦ÄÜ
-- ²âÊÔÄ£¿é½Ó¿ÚµÄÕıÈ·ĞÔ
+### 5.1 å•å…ƒæµ‹è¯•
+- æµ‹è¯•æ¯ä¸ªæ¨¡å—çš„ç‹¬ç«‹åŠŸèƒ½
+- æµ‹è¯•æ¨¡å—æ¥å£çš„æ­£ç¡®æ€§
 
-### 5.2 ¼¯³É²âÊÔ
-- ²âÊÔÄ£¿éÖ®¼äµÄĞ­×÷
-- ²âÊÔÍêÕû¾ö²ßÁ÷³Ì
+### 5.2 é›†æˆæµ‹è¯•
+- æµ‹è¯•æ¨¡å—ä¹‹é—´çš„åä½œ
+- æµ‹è¯•å®Œæ•´å†³ç­–æµç¨‹
 
-### 5.3 ĞÔÄÜ²âÊÔ
-- ²âÊÔ¾ö²ßÊ±¼ä
-- ²âÊÔÄÚ´æÊ¹ÓÃ
+### 5.3 æ€§èƒ½æµ‹è¯•
+- æµ‹è¯•å†³ç­–æ—¶é—´
+- æµ‹è¯•å†…å­˜ä½¿ç”¨
 
-### 5.4 ²ßÂÔ²âÊÔ
-- ²âÊÔ²»Í¬È¨ÖØÅäÖÃ
-- ²âÊÔ²»Í¬²ßÂÔ²ÎÊı
+### 5.4 ç­–ç•¥æµ‹è¯•
+- æµ‹è¯•ä¸åŒæƒé‡é…ç½®
+- æµ‹è¯•ä¸åŒç­–ç•¥å‚æ•°
 
-## Áù¡¢×Ü½á
+## å…­ã€æ€»ç»“
 
-### 6.1 ÒÑÊµÏÖµÄÒÀÀµ¹ØÏµ
-- ? ¾ö²ßÒıÇæ ¡ú ×´Ì¬¹ÜÀí ¡ú ¼ÇÅÆÄ£¿é
-- ? ¾ö²ßÒıÇæ ¡ú ÅäºÏ²ßÂÔ ¡ú ×´Ì¬¹ÜÀí
-- ? ¾ö²ßÒıÇæ ¡ú ÊÖÅÆ×éºÏ ¡ú ÓÎÏ·¹æÔò
+### 6.1 å·²å®ç°çš„ä¾èµ–å…³ç³»
+- ? å†³ç­–å¼•æ“ â†’ çŠ¶æ€ç®¡ç† â†’ è®°ç‰Œæ¨¡å—
+- ? å†³ç­–å¼•æ“ â†’ é…åˆç­–ç•¥ â†’ çŠ¶æ€ç®¡ç†
+- ? å†³ç­–å¼•æ“ â†’ æ‰‹ç‰Œç»„åˆ â†’ æ¸¸æˆè§„åˆ™
 
-### 6.2 ÒÑÊµÏÖµÄÊı¾İÁ÷
-- ? WebSocketÏûÏ¢ ¡ú ÏûÏ¢½âÎö ¡ú ×´Ì¬¸üĞÂ
-- ? ×´Ì¬¸üĞÂ ¡ú ¼ÇÅÆÄ£¿é¸üĞÂ
-- ? ×´Ì¬¸üĞÂ ¡ú ¾ö²ßÒıÇæ ¡ú ¶¯×÷Ñ¡Ôñ
-- ? ¾ö²ßÒıÇæ ¡ú ÅäºÏ²ßÂÔÆÀ¹À
-- ? ¾ö²ßÒıÇæ ¡ú ¶àÒòËØÆÀ¹À
+### 6.2 å·²å®ç°çš„æ•°æ®æµ
+- ? WebSocketæ¶ˆæ¯ â†’ æ¶ˆæ¯è§£æ â†’ çŠ¶æ€æ›´æ–°
+- ? çŠ¶æ€æ›´æ–° â†’ è®°ç‰Œæ¨¡å—æ›´æ–°
+- ? çŠ¶æ€æ›´æ–° â†’ å†³ç­–å¼•æ“ â†’ åŠ¨ä½œé€‰æ‹©
+- ? å†³ç­–å¼•æ“ â†’ é…åˆç­–ç•¥è¯„ä¼°
+- ? å†³ç­–å¼•æ“ â†’ å¤šå› ç´ è¯„ä¼°
 
-### 6.3 ÒÑ²Î¿¼µÄ¹Ø¼üÉè¼Æ
-- ? ¶ÓÓÑÊ¶±ğ¹«Ê½: `(myPos + 2) % 4`
-- ? ×´Ì¬Êı¾İ½á¹¹: `history` ºÍ `remain_cards`
-- ? ¾ö²ßº¯Êı·ÖÀë: `active_decision()` ºÍ `passive_decision()`
-- ? ÊÖÅÆ×éºÏËã·¨: `combine_handcards()`
+### 6.3 å·²å‚è€ƒçš„å…³é”®è®¾è®¡
+- ? é˜Ÿå‹è¯†åˆ«å…¬å¼: `(myPos + 2) % 4`
+- ? çŠ¶æ€æ•°æ®ç»“æ„: `history` å’Œ `remain_cards`
+- ? å†³ç­–å‡½æ•°åˆ†ç¦»: `active_decision()` å’Œ `passive_decision()`
+- ? æ‰‹ç‰Œç»„åˆç®—æ³•: `combine_handcards()`
 
-### 6.4 ÒÑÊµÏÖµÄÅäÖÃ¹ÜÀí
-- ? ÅäÖÃÎÄ¼ş: `config.yaml`
-- ? ÅäÖÃ¼ÓÔØÆ÷: `ConfigLoader`
-- ? Ö§³ÖËùÓĞ¹Ø¼ü²ÎÊıÅäÖÃ
+### 6.4 å·²å®ç°çš„é…ç½®ç®¡ç†
+- ? é…ç½®æ–‡ä»¶: `config.yaml`
+- ? é…ç½®åŠ è½½å™¨: `ConfigLoader`
+- ? æ”¯æŒæ‰€æœ‰å…³é”®å‚æ•°é…ç½®
 
