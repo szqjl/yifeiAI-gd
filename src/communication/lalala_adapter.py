@@ -98,6 +98,17 @@ class LalalaWebsocketsClient:
                     new_action_list.append(action)
             data["actionList"] = new_action_list
         
+        # 转换publicInfo中的playArea
+        if "publicInfo" in data:
+            for i, player_info in enumerate(data["publicInfo"]):
+                if "playArea" in player_info and len(player_info["playArea"]) > 2:
+                    if player_info["playArea"][2] != "PASS":
+                        data["publicInfo"][i]["playArea"] = [
+                            player_info["playArea"][0],
+                            player_info["playArea"][1],
+                            convert_cards_list(player_info["playArea"][2])
+                        ]
+        
         return data
     
     async def handle_messages(self):
