@@ -219,12 +219,12 @@ class BatchExecutorGUI:
                 self.server_path_var.set(os.path.abspath(path))
                 break
         
-        # 默认客户端脚本（您的AI vs 一等奖AI）
+        # 默认客户端脚本（您的AI vs lalala一等奖AI）
         default_clients = [
-            "src/communication/Test1.py",           # 您的AI - 队友1
-            "src/communication/Test2.py",           # 您的AI - 队友2
-            r"D:\掼蛋算法大赛选手人工智能代码\一等奖-东南大学-李菁-lalala-人机大赛\client.py",  # 对手1
-            r"D:\掼蛋算法大赛选手人工智能代码\一等奖-东南大学-李菁-lalala-人机大赛\client.py"   # 对手2
+            "src/communication/Test1.py",                    # 您的AI - 队友1
+            "src/communication/Test2.py",                    # 您的AI - 队友2
+            "src/communication/run_lalala_client3.py",       # lalala对手1
+            "src/communication/run_lalala_client4.py"        # lalala对手2
         ]
         
         # 检查哪些客户端存在
