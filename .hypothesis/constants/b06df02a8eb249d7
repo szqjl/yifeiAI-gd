@@ -1,0 +1,4 @@
+# file: D:\guandanscore\YiFeiAI-GD\batch_executor\restart_manager.py
+# hypothesis_version: 6.148.2
+
+['CREATE_NEW_CONSOLE', 'python', 'python.exe', '开始清理所有进程...', '服务器启动成功', '清理完成', '等待5秒后重试...']

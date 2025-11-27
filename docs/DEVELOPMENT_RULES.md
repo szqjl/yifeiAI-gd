@@ -1,266 +1,266 @@
-# 开发规范与规则
+# 寮鍙戣勮寖涓庤勫垯
 
-## 🔴 核心规则（必须严格遵守）
+## 馃敶 鏍稿績瑙勫垯锛堝繀椤讳弗鏍奸伒瀹堬級
 
-### 1. 时间处理规则 ⚠️ 强制要求
+### 1. 鏃堕棿澶勭悊瑙勫垯 鈿狅笍 寮哄埗瑕佹眰
 
-**所有涉及当前时间、实时时间的场景必须调用系统时间API，禁止使用硬编码时间。**
+**鎵鏈夋秹鍙婂綋鍓嶆椂闂淬佸疄鏃舵椂闂寸殑鍦烘櫙蹇呴』璋冪敤绯荤粺鏃堕棿API锛岀佹浣跨敤纭缂栫爜鏃堕棿銆**
 
-#### 规则说明
-- ✅ **必须使用**: `datetime.now()` 获取系统当前时间
-- ❌ **禁止使用**: 硬编码的时间字符串、固定时间戳
-- ✅ **允许使用**: 固定的历史日期（如"2025年10月5日"这样的具体历史时间）
+#### 瑙勫垯璇存槑
+- 鉁 **蹇呴』浣跨敤**: `datetime.now()` 鑾峰彇绯荤粺褰撳墠鏃堕棿
+- 鉂 **绂佹浣跨敤**: 纭缂栫爜鐨勬椂闂村瓧绗︿覆銆佸浐瀹氭椂闂存埑
+- 鉁 **鍏佽镐娇鐢**: 鍥哄畾鐨勫巻鍙叉棩鏈燂紙濡"2025骞10鏈5鏃"杩欐牱鐨勫叿浣撳巻鍙叉椂闂达級
 
-#### 正确示例
+#### 姝ｇ‘绀轰緥
 
 ```python
 from datetime import datetime, timedelta
 
-# ✅ 获取当前时间
+# 鉁 鑾峰彇褰撳墠鏃堕棿
 current_time = datetime.now()
 
-# ✅ 获取当前时间戳
+# 鉁 鑾峰彇褰撳墠鏃堕棿鎴
 timestamp = datetime.now().timestamp()
 
-# ✅ 格式化当前时间
+# 鉁 鏍煎紡鍖栧綋鍓嶆椂闂
 formatted_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-# ✅ 判断是否在静默时段
+# 鉁 鍒ゆ柇鏄鍚﹀湪闈欓粯鏃舵
 def is_quiet_hours():
-    now = datetime.now()  # 必须调用系统时间
+    now = datetime.now()  # 蹇呴』璋冪敤绯荤粺鏃堕棿
     hour = now.hour
     return 0 <= hour < 6
 
-# ✅ 计算下次检查时间
+# 鉁 璁＄畻涓嬫℃鏌ユ椂闂
 def schedule_next_check(interval):
     next_time = datetime.now() + timedelta(seconds=interval)
     return next_time
 
-# ✅ 记录日志时间
+# 鉁 璁板綍鏃ュ織鏃堕棿
 log_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-# ✅ 文件命名时间戳
+# 鉁 鏂囦欢鍛藉悕鏃堕棿鎴
 filename = f"data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 ```
 
-#### 错误示例
+#### 閿欒绀轰緥
 
 ```python
-# ❌ 错误：硬编码时间
+# 鉂 閿欒锛氱‖缂栫爜鏃堕棿
 current_time = "2025-01-01 12:00:00"
 
-# ❌ 错误：使用固定时间戳
+# 鉂 閿欒锛氫娇鐢ㄥ浐瀹氭椂闂存埑
 timestamp = 1704067200
 
-# ❌ 错误：在代码中写死时间
-if hour == 12:  # 应该从系统时间获取
+# 鉂 閿欒锛氬湪浠ｇ爜涓鍐欐绘椂闂
+if hour == 12:  # 搴旇ヤ粠绯荤粺鏃堕棿鑾峰彇
 
-# ❌ 错误：使用固定的时间对象
-fixed_time = datetime(2025, 1, 1, 12, 0, 0)  # 除非是历史日期
+# 鉂 閿欒锛氫娇鐢ㄥ浐瀹氱殑鏃堕棿瀵硅薄
+fixed_time = datetime(2025, 1, 1, 12, 0, 0)  # 闄ら潪鏄鍘嗗彶鏃ユ湡
 ```
 
-#### 适用场景
+#### 閫傜敤鍦烘櫙
 
-| 场景 | 必须使用系统时间 | 示例 |
+| 鍦烘櫙 | 蹇呴』浣跨敤绯荤粺鏃堕棿 | 绀轰緥 |
 |------|----------------|------|
-| 日志时间戳 | ✅ 是 | `datetime.now()` |
-| 信息抓取时间 | ✅ 是 | `datetime.now()` |
-| 静默时段判断 | ✅ 是 | `datetime.now().hour` |
-| 定时任务调度 | ✅ 是 | `datetime.now() + timedelta(...)` |
-| 数据记录时间 | ✅ 是 | `datetime.now()` |
-| 文件命名时间戳 | ✅ 是 | `datetime.now().strftime(...)` |
-| 历史日期记录 | ❌ 否 | 可以使用固定日期 |
+| 鏃ュ織鏃堕棿鎴 | 鉁 鏄 | `datetime.now()` |
+| 淇℃伅鎶撳彇鏃堕棿 | 鉁 鏄 | `datetime.now()` |
+| 闈欓粯鏃舵靛垽鏂 | 鉁 鏄 | `datetime.now().hour` |
+| 瀹氭椂浠诲姟璋冨害 | 鉁 鏄 | `datetime.now() + timedelta(...)` |
+| 鏁版嵁璁板綍鏃堕棿 | 鉁 鏄 | `datetime.now()` |
+| 鏂囦欢鍛藉悕鏃堕棿鎴 | 鉁 鏄 | `datetime.now().strftime(...)` |
+| 鍘嗗彶鏃ユ湡璁板綍 | 鉂 鍚 | 鍙浠ヤ娇鐢ㄥ浐瀹氭棩鏈 |
 
-#### 时间处理工具函数
+#### 鏃堕棿澶勭悊宸ュ叿鍑芥暟
 
-建议在项目中创建统一的时间处理工具函数：
+寤鸿鍦ㄩ」鐩涓鍒涘缓缁熶竴鐨勬椂闂村勭悊宸ュ叿鍑芥暟锛
 
 ```python
 from datetime import datetime, timedelta
 from typing import Optional
 
 class TimeUtils:
-    """时间处理工具类"""
+    """鏃堕棿澶勭悊宸ュ叿绫"""
     
     @staticmethod
     def get_current_time() -> datetime:
-        """获取当前系统时间"""
+        """鑾峰彇褰撳墠绯荤粺鏃堕棿"""
         return datetime.now()
     
     @staticmethod
     def get_current_timestamp() -> float:
-        """获取当前时间戳"""
+        """鑾峰彇褰撳墠鏃堕棿鎴"""
         return datetime.now().timestamp()
     
     @staticmethod
     def format_time(dt: Optional[datetime] = None, fmt: str = '%Y-%m-%d %H:%M:%S') -> str:
-        """格式化时间"""
+        """鏍煎紡鍖栨椂闂"""
         if dt is None:
-            dt = datetime.now()  # 默认使用当前时间
+            dt = datetime.now()  # 榛樿や娇鐢ㄥ綋鍓嶆椂闂
         return dt.strftime(fmt)
     
     @staticmethod
     def is_quiet_hours(current_time: Optional[datetime] = None) -> bool:
-        """判断是否在静默时段（0:00-6:00）"""
+        """鍒ゆ柇鏄鍚﹀湪闈欓粯鏃舵碉紙0:00-6:00锛"""
         if current_time is None:
-            current_time = datetime.now()  # 必须调用系统时间
+            current_time = datetime.now()  # 蹇呴』璋冪敤绯荤粺鏃堕棿
         hour = current_time.hour
         return 0 <= hour < 6
     
     @staticmethod
     def schedule_next_check(interval: int, current_time: Optional[datetime] = None) -> datetime:
-        """计算下次检查时间（避开静默时段）"""
+        """璁＄畻涓嬫℃鏌ユ椂闂达紙閬垮紑闈欓粯鏃舵碉級"""
         if current_time is None:
-            current_time = datetime.now()  # 必须调用系统时间
+            current_time = datetime.now()  # 蹇呴』璋冪敤绯荤粺鏃堕棿
         
         next_check = current_time + timedelta(seconds=interval)
         
-        # 如果落在静默时段，延后到静默时段结束
+        # 濡傛灉钀藉湪闈欓粯鏃舵碉紝寤跺悗鍒伴潤榛樻椂娈电粨鏉
         if TimeUtils.is_quiet_hours(next_check):
             next_check = next_check.replace(hour=6, minute=0, second=0)
         
         return next_check
 ```
 
-### 2. JSON格式规则
+### 2. JSON鏍煎紡瑙勫垯
 
-- **严格遵循平台JSON格式要求**
-- 所有消息必须符合平台规范
-- 消息格式验证必须通过
-- 禁止随意修改JSON结构
+- **涓ユ牸閬靛惊骞冲彴JSON鏍煎紡瑕佹眰**
+- 鎵鏈夋秷鎭蹇呴』绗﹀悎骞冲彴瑙勮寖
+- 娑堟伅鏍煎紡楠岃瘉蹇呴』閫氳繃
+- 绂佹㈤殢鎰忎慨鏀笿SON缁撴瀯
 
-### 3. 组队规则
+### 3. 缁勯槦瑙勫垯
 
-- **第1个和第3个连接**的AI自动为一队
-- **第2个和第4个连接**的AI自动为一队
-- 必须正确识别队友并配合
-- 组队关系在连接时确定，不可更改
+- **绗1涓鍜岀3涓杩炴帴**鐨凙I鑷鍔ㄤ负涓闃
+- **绗2涓鍜岀4涓杩炴帴**鐨凙I鑷鍔ㄤ负涓闃
+- 蹇呴』姝ｇ‘璇嗗埆闃熷弸骞堕厤鍚
+- 缁勯槦鍏崇郴鍦ㄨ繛鎺ユ椂纭瀹氾紝涓嶅彲鏇存敼
 
-### 4. 响应时间规则
+### 4. 鍝嶅簲鏃堕棿瑙勫垯
 
-- 决策响应时间建议 < 1秒
-- 避免超时导致判负
-- 优化算法确保及时响应
+- 鍐崇瓥鍝嶅簲鏃堕棿寤鸿 < 1绉
+- 閬垮厤瓒呮椂瀵艰嚧鍒よ礋
+- 浼樺寲绠楁硶纭淇濆強鏃跺搷搴
 
-### 5. 信息监控规则
+### 5. 淇℃伅鐩戞帶瑙勫垯
 
-- 检查间隔 ≥ 6小时
-- 每日 0:00-6:00 为静默时段，不进行检查
-- 遵守网站使用条款，不造成服务器压力
-- 使用系统时间判断静默时段
+- 妫鏌ラ棿闅 鈮 6灏忔椂
+- 姣忔棩 0:00-6:00 涓洪潤榛樻椂娈碉紝涓嶈繘琛屾鏌
+- 閬靛畧缃戠珯浣跨敤鏉℃撅紝涓嶉犳垚鏈嶅姟鍣ㄥ帇鍔
+- 浣跨敤绯荤粺鏃堕棿鍒ゆ柇闈欓粯鏃舵
 
-## 📝 代码规范
+## 馃摑 浠ｇ爜瑙勮寖
 
-### Python代码规范
+### Python浠ｇ爜瑙勮寖
 
-- 遵循 PEP 8 Python代码规范
-- 使用类型提示（Type Hints）
-- 编写清晰的注释和文档字符串
-- 函数和类要有清晰的命名
+- 閬靛惊 PEP 8 Python浠ｇ爜瑙勮寖
+- 浣跨敤绫诲瀷鎻愮ず锛圱ype Hints锛
+- 缂栧啓娓呮櫚鐨勬敞閲婂拰鏂囨。瀛楃︿覆
+- 鍑芥暟鍜岀被瑕佹湁娓呮櫚鐨勫懡鍚
 
-### 文档规范
+### 鏂囨。瑙勮寖
 
-- **文档尽量简洁**：避免一次性生成过长文档导致超时
-- **先列提纲再填充**：先创建文档框架和提纲并保存，再逐步填充内容
-- **定期保存**：每3分钟保存一次，避免长时间编辑导致内容丢失
-- **遵守时间规范**：文档中的时间信息应使用系统时间API，禁止硬编码时间
+- **鏂囨。灏介噺绠娲**锛氶伩鍏嶄竴娆℃х敓鎴愯繃闀挎枃妗ｅ艰嚧瓒呮椂
+- **鍏堝垪鎻愮翰鍐嶅～鍏**锛氬厛鍒涘缓鏂囨。妗嗘灦鍜屾彁绾插苟淇濆瓨锛屽啀閫愭ュ～鍏呭唴瀹
+- **瀹氭湡淇濆瓨**锛氭瘡3鍒嗛挓淇濆瓨涓娆★紝閬垮厤闀挎椂闂寸紪杈戝艰嚧鍐呭逛涪澶
+- **閬靛畧鏃堕棿瑙勮寖**锛氭枃妗ｄ腑鐨勬椂闂翠俊鎭搴斾娇鐢ㄧ郴缁熸椂闂碅PI锛岀佹㈢‖缂栫爜鏃堕棿
 
-### 时间处理规范
+### 鏃堕棿澶勭悊瑙勮寖
 
-#### 必须使用系统时间API
+#### 蹇呴』浣跨敤绯荤粺鏃堕棿API
 
 ```python
-# ✅ 正确
+# 鉁 姝ｇ‘
 from datetime import datetime
 current_time = datetime.now()
 
-# ❌ 错误
+# 鉂 閿欒
 current_time = "2025-01-01 12:00:00"
 ```
 
-#### 时间处理工具函数
+#### 鏃堕棿澶勭悊宸ュ叿鍑芥暟
 
-建议使用统一的时间处理工具函数，避免在代码中直接调用 `datetime.now()`，便于测试和维护。
+寤鸿浣跨敤缁熶竴鐨勬椂闂村勭悊宸ュ叿鍑芥暟锛岄伩鍏嶅湪浠ｇ爜涓鐩存帴璋冪敤 `datetime.now()`锛屼究浜庢祴璇曞拰缁存姢銆
 
-### 错误处理规范
+### 閿欒澶勭悊瑙勮寖
 
-- 所有可能失败的操作都要有异常处理
-- 记录详细的错误日志
-- 提供有意义的错误信息
+- 鎵鏈夊彲鑳藉け璐ョ殑鎿嶄綔閮借佹湁寮傚父澶勭悊
+- 璁板綍璇︾粏鐨勯敊璇鏃ュ織
+- 鎻愪緵鏈夋剰涔夌殑閿欒淇℃伅
 
-### 日志规范
+### 鏃ュ織瑙勮寖
 
-- 使用统一的日志格式
-- 日志时间戳必须使用系统时间
-- 区分不同级别的日志（DEBUG/INFO/WARNING/ERROR）
+- 浣跨敤缁熶竴鐨勬棩蹇楁牸寮
+- 鏃ュ織鏃堕棿鎴冲繀椤讳娇鐢ㄧ郴缁熸椂闂
+- 鍖哄垎涓嶅悓绾у埆鐨勬棩蹇楋紙DEBUG/INFO/WARNING/ERROR锛
 
-## 🧪 测试规范
+## 馃И 娴嬭瘯瑙勮寖
 
-### 单元测试
+### 鍗曞厓娴嬭瘯
 
-- 所有核心功能都要有单元测试
-- 测试时间相关功能时，可以使用mock时间
-- 确保测试的可重复性
+- 鎵鏈夋牳蹇冨姛鑳介兘瑕佹湁鍗曞厓娴嬭瘯
+- 娴嬭瘯鏃堕棿鐩稿叧鍔熻兘鏃讹紝鍙浠ヤ娇鐢╩ock鏃堕棿
+- 纭淇濇祴璇曠殑鍙閲嶅嶆
 
-### 时间测试示例
+### 鏃堕棿娴嬭瘯绀轰緥
 
 ```python
 from unittest.mock import patch
 from datetime import datetime
 
 def test_is_quiet_hours():
-    """测试静默时段判断"""
-    # 测试凌晨3点（在静默时段）
+    """娴嬭瘯闈欓粯鏃舵靛垽鏂"""
+    # 娴嬭瘯鍑屾櫒3鐐癸紙鍦ㄩ潤榛樻椂娈碉級
     with patch('datetime.datetime') as mock_datetime:
         mock_datetime.now.return_value = datetime(2025, 1, 1, 3, 0, 0)
         assert is_quiet_hours() == True
     
-    # 测试上午10点（不在静默时段）
+    # 娴嬭瘯涓婂崍10鐐癸紙涓嶅湪闈欓粯鏃舵碉級
     with patch('datetime.datetime') as mock_datetime:
         mock_datetime.now.return_value = datetime(2025, 1, 1, 10, 0, 0)
         assert is_quiet_hours() == False
 ```
 
-## ⚠️ 常见错误
+## 鈿狅笍 甯歌侀敊璇
 
-### 时间处理错误
+### 鏃堕棿澶勭悊閿欒
 
-1. **硬编码时间**
+1. **纭缂栫爜鏃堕棿**
    ```python
-   # ❌ 错误
+   # 鉂 閿欒
    if datetime.now().hour == 12:
        do_something()
    ```
 
-2. **使用固定时间戳**
+2. **浣跨敤鍥哄畾鏃堕棿鎴**
    ```python
-   # ❌ 错误
+   # 鉂 閿欒
    timestamp = 1704067200
    ```
 
-3. **忘记调用系统时间**
+3. **蹇樿拌皟鐢ㄧ郴缁熸椂闂**
    ```python
-   # ❌ 错误
+   # 鉂 閿欒
    def get_time():
-       return "2025-01-01 12:00:00"  # 应该返回datetime.now()
+       return "2025-01-01 12:00:00"  # 搴旇ヨ繑鍥瀌atetime.now()
    ```
 
-## ✅ 检查清单
+## 鉁 妫鏌ユ竻鍗
 
-开发时请确保：
-- [ ] 所有时间相关代码都使用 `datetime.now()`
-- [ ] 没有硬编码的时间字符串
-- [ ] 没有使用固定的时间戳
-- [ ] 时间处理函数都有适当的测试
-- [ ] 日志时间戳使用系统时间
-- [ ] 定时任务基于系统时间计算
+寮鍙戞椂璇风‘淇濓細
+- [ ] 鎵鏈夋椂闂寸浉鍏充唬鐮侀兘浣跨敤 `datetime.now()`
+- [ ] 娌℃湁纭缂栫爜鐨勬椂闂村瓧绗︿覆
+- [ ] 娌℃湁浣跨敤鍥哄畾鐨勬椂闂存埑
+- [ ] 鏃堕棿澶勭悊鍑芥暟閮芥湁閫傚綋鐨勬祴璇
+- [ ] 鏃ュ織鏃堕棿鎴充娇鐢ㄧ郴缁熸椂闂
+- [ ] 瀹氭椂浠诲姟鍩轰簬绯荤粺鏃堕棿璁＄畻
 
-## 📚 相关文档
+## 馃摎 鐩稿叧鏂囨。
 
-- [README.md](../README.md) - 项目主文档（包含时间处理规则）
-- [架构方案](掼蛋AI客户端架构方案.md) - 详细技术文档
+- [README.md](../README.md) - 椤圭洰涓绘枃妗ｏ紙鍖呭惈鏃堕棿澶勭悊瑙勫垯锛
+- [鏋舵瀯鏂规圿(鎺艰泲AI瀹㈡埛绔鏋舵瀯鏂规.md) - 璇︾粏鎶鏈鏂囨。
 
 ---
 
-**重要提醒**: 时间处理规则是项目的核心规则之一，所有开发者必须严格遵守！
+**閲嶈佹彁閱**: 鏃堕棿澶勭悊瑙勫垯鏄椤圭洰鐨勬牳蹇冭勫垯涔嬩竴锛屾墍鏈夊紑鍙戣呭繀椤讳弗鏍奸伒瀹堬紒
 
