@@ -314,6 +314,24 @@ class BatchExecutor:
     
     def run(self) -> None:
         """执行批量游戏"""
+        # 立即创建执行状态，以便GUI可以显示
+        state = ExecutionState(
+            target_games=self.target_games,
+            completed_games=0,
+            restart_count=0,
+            current_batch=1,
+            start_time=datetime.now(),
+            last_update=datetime.now()
+        )
+        
+        # 保存当前状态供外部访问
+        self._current_state = state
+        self._running = True
+        
+        # 设置到信号处理器（如果存在）
+        if self.signal_handler:
+            self.signal_handler.set_execution_state(state)
+        
         self.logger.info("批量游戏执行系统启动")
         self.logger.info(f"目标场数: {self.target_games}")
         self.logger.info(f"服务器路径: {self.server_path}")
@@ -324,6 +342,7 @@ class BatchExecutor:
         
         if self.diagnose_only:
             self.logger.info("仅诊断模式，退出")
+            self._running = False
             return
         
         # 检查诊断是否成功
@@ -340,24 +359,6 @@ class BatchExecutor:
                 self.logger.info(f"加载之前的战绩: {self.tracker.total_games}场")
         except Exception as e:
             self.logger.warning(f"加载战绩失败: {e}")
-        
-        # 创建执行状态
-        state = ExecutionState(
-            target_games=self.target_games,
-            completed_games=0,
-            restart_count=0,
-            current_batch=1,
-            start_time=datetime.now(),
-            last_update=datetime.now()
-        )
-        
-        # 设置到信号处理器（如果存在）
-        if self.signal_handler:
-            self.signal_handler.set_execution_state(state)
-        
-        # 保存当前状态供外部访问
-        self._current_state = state
-        self._running = True
         
         # 计算需要的重启次数
         restart_count = self.validator.calculate_restart_count(self.target_games)
