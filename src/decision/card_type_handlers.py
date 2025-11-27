@@ -1,438 +1,124 @@
 # -*- coding: utf-8 -*-
 """
-ÅÆĞÍ×¨ÃÅ´¦ÀíÄ£¿é (Card Type Handlers)
-ÎªÃ¿ÖÖÅÆĞÍ´´½¨×¨ÃÅµÄ´¦ÀíÀà£¬ÊµÏÖÕë¶ÔĞÔµÄ¾ö²ßÂß¼­
+é–»æ¥€è‹¯éé”‹å¾„é•é®å©‡å´³éŠŠÎ´ä¾€å´¸ (Card Type Handlers)
+é–¸æ—‚å–•éæ©€æ•
+- å¨‘æ’¹æ¡¨ç»—å¤å´¥å®€æ¾§æ¿‹å´¹ç€£è¤°ä½¹ç¬Ÿå¨‘æ¥ƒç‘©é—‚å‚˜åŠå¨ˆæˆå¾„é•é®å©‡æŸ…é„å¿•å¸†
+- å¨´ï½ˆæ³•éã‚…æå„±å®¸è·ºÎŸéˆ¥å´‡ç¡€é–¸æ“ç¨‘ç¼‚æ’´å¾„é•é®å©‡å´³
 """
 
-from typing import Dict, List, Optional, Tuple
-from abc import ABC, abstractmethod
-from ..game_logic.enhanced_state import EnhancedGameStateManager
-from ..game_logic.hand_combiner import HandCombiner
+from typing import Dict, List, Optional, Any
+import sys
+from pathlib import Path
+
+# æ¿ï½ˆæ’ç€rcé–»â•„ãé‡ç‚²ç…‚é å“„
+if str(Path(__file__).parent.parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from game_logic.enhanced_state import EnhancedGameStateManager
+from game_logic.hand_combiner import HandCombiner
 
 
-class BaseCardTypeHandler(ABC):
-    """ÅÆĞÍ´¦Àí»ùÀà"""
+class CardTypeHandler:
+    """é–»æ¥€è‹¯éé”‹å¾„é•é®å©‡å´³éŠŠãƒ§å”¨ç¼"""
     
-    def __init__(self, state_manager: EnhancedGameStateManager, hand_combiner: HandCombiner):
+    def __init__(self, state_manager: EnhancedGameStateManager, combiner: HandCombiner):
         self.state = state_manager
-        self.combiner = hand_combiner
-        
-        # ¿¨ÅÆÖµÓ³Éä
-        self.card_value = {
-            "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8,
-            "9": 9, "T": 10, "J": 11, "Q": 12, "K": 13, "A": 14,
-            "B": 16, "R": 17
-        }
+        self.combiner = combiner
     
-    @abstractmethod
-    def handle_passive(self, action_list: List[List], cur_action: List,
+    def handle_passive(self, action_list: List[List], target_action: List, 
                       handcards: List[str], rank: str) -> int:
         """
-        ´¦Àí±»¶¯³öÅÆ£¨ĞèÒªÑ¹ÖÆ£©
+        å©¢è·ºå«®é®å©„æ‚®é–¸æ–»åŠŒé¤é–»æ¥€çŸ‰ç»±æ¬“æ£éŸæ›šç¤ç”¯å›¬å´šç’åœ­ç¤†
         
         Args:
-            action_list: ¿ÉÑ¡¶¯×÷ÁĞ±í
-            cur_action: µ±Ç°ĞèÒªÑ¹ÖÆµÄ¶¯×÷
-            handcards: ÊÖÅÆ
-            rank: Ö÷ÅÆ¼¶±ğ
+            action_list: é–¸æ¬“æŸ…æ¾¶å©‚Ğ—å¨´ï½†ç²Œé¨é
+            target_action: é–»â•…å¼½é¥ÑƒĞ—å¨´ï½†ç²£ç»±æ¬“æ£éŸæ›šç¤ç”¯å›¬å´šé“ä½¹ç•±é–¸æ–»åŠ‹ç¼æ—ˆæ•
+            handcards: é–¹é›æ¾§
+            rank: ç‘œç‰ˆæŒ¸æ¾§çŠµç²µæ¾¶å²„ç“
         
         Returns:
-            Ñ¡ÔñµÄ¶¯×÷Ë÷Òı£¬-1±íÊ¾Ó¦¸ÃPASS
+            é—æ¾¶å¬ªã„©æƒƒé•æ¿®â•‚æ‹…å©Šå‘­åç€µé‡ç»±æ¿‡ä¿ŠéŒæ¶šäº¯é–ºå†ªå§µçº­å •å´¢ç€£é©æ¥æ½»é‚æŒç¤€-1
         """
-        pass
-    
-    @abstractmethod
-    def handle_active(self, action_list: List[List], handcards: List[str],
-                     rank: str) -> int:
-        """
-        ´¦ÀíÖ÷¶¯³öÅÆ
+        # å§’æ¶™è£¤å€•é¤å‹¯æ‚³ç”¯ç»±æ‰®ç”µç²¯æ¾¹æ©€å´£å¨´çŠ®å„±ç”¯å›¬å´šé“ä½¹ç•±é–¸æ–»åŠ‹ç¼
+        target_value = self._get_action_value(target_action)
         
-        Args:
-            action_list: ¿ÉÑ¡¶¯×÷ÁĞ±í
-            handcards: ÊÖÅÆ
-            rank: Ö÷ÅÆ¼¶±ğ
-        
-        Returns:
-            Ñ¡ÔñµÄ¶¯×÷Ë÷Òı
-        """
-        pass
-    
-    def calculate_action_value(self, action: List) -> float:
-        """¼ÆËã¶¯×÷Öµ"""
-        if action[0] == "PASS":
-            return 0
-        
-        rank = action[1]
-        base_value = self.card_value.get(rank, 0)
-        
-        # ¸ù¾İÅÆĞÍµ÷Õû
-        if action[0] == "Bomb":
-            base_value += (len(action[2]) - 4) * 16
-        elif action[0] == "StraightFlush":
-            base_value += 32
-        elif action[0] in ["ThreeWithTwo", "TwoTrips"]:
-            base_value += 5
-        elif action[0] == "ThreePair":
-            base_value += 3
-        
-        return base_value
-
-
-class SingleHandler(BaseCardTypeHandler):
-    """µ¥ÕÅ´¦Àí"""
-    
-    def handle_passive(self, action_list: List[List], cur_action: List,
-                      handcards: List[str], rank: str) -> int:
-        """´¦Àíµ¥ÕÅ±»¶¯³öÅÆ"""
-        # »ñÈ¡ÊÖÅÆ×éºÏ
-        sorted_cards, bomb_info = self.combiner.combine_handcards(handcards, rank)
-        
-        # ÌáÈ¡µ¥ÕÅ¶¯×÷
-        single_actions = []
-        bomb_actions = []
-        for i, action in enumerate(action_list[1:], 1):
-            if action[0] == 'Single':
-                single_actions.append((i, action))
-            elif action[0] in ['Bomb', 'StraightFlush']:
-                bomb_actions.append((i, action))
-        
-        cur_value = self.calculate_action_value(cur_action)
-        rank_card = f"H{rank}"
-        
-        # »ñÈ¡µ¥ÕÅ³ÉÔ±
-        single_member = sorted_cards["Single"]
-        bomb_member = []
-        for bomb in sorted_cards["Bomb"]:
-            bomb_member.extend(bomb)
-        
-        straight_member = []
-        if sorted_cards.get("Straight"):
-            straight_member.extend(sorted_cards["Straight"][0])
-        if sorted_cards.get("StraightFlush"):
-            straight_member.extend(sorted_cards["StraightFlush"][0])
-        
-        # »ñÈ¡Íæ¼ÒÊ£ÓàÅÆÊı
-        numofplayers = [
-            self.state.get_player_remain_cards(0),
-            self.state.get_player_remain_cards(1),
-            self.state.get_player_remain_cards(2),
-            self.state.get_player_remain_cards(3),
-        ]
-        my_pos = self.state.my_pos
-        greater_pos = self.state.greater_pos
-        teammate_pos = self.state.teammate_pos
-        
-        numofnext = numofplayers[(my_pos + 1) % 4]
-        if numofnext == 0:
-            numofnext = numofplayers[(my_pos - 1) % 4]
-        
-        # Èç¹ûÊÇ¶ÓÓÑ³öµÄÅÆ£¬¿¼ÂÇÅäºÏ
-        if greater_pos == teammate_pos:
-            if cur_value >= 15:  # ¶ÓÓÑ³ö´óÅÆ
-                return -1  # PASS
-            if cur_value >= 14 and numofnext != 1:
-                return -1  # PASS
-        
-        # Ñ°ÕÒ¿ÉÒÔÑ¹ÖÆµÄ×îĞ¡µ¥ÕÅ
-        for idx, action in single_actions:
-            action_value = self.calculate_action_value(action)
-            if action_value > cur_value:
-                # ÓÅÏÈÑ¡Ôñµ¥ÕÅ³ÉÔ±£¬ÇÒ²»ÊÇÖ÷ÅÆ
-                if action[2][0] in single_member and rank_card not in action[2]:
-                    return idx
-                # Æä´ÎÑ¡Ôñ²»ÔÚÕ¨µ¯ÖĞµÄÅÆ£¬ÇÒ²»ÔÚË³×ÓÖĞ
-                elif (action[2][0] not in bomb_member and 
-                      rank_card not in action[2] and
-                      not self.combiner.is_in_straight(action, straight_member)):
-                    return idx
-        
-        # Èç¹ûÎŞ·¨Ñ¹ÖÆ£¬·µ»ØPASS
-        return -1
-    
-    def handle_active(self, action_list: List[List], handcards: List[str],
-                     rank: str) -> int:
-        """´¦Àíµ¥ÕÅÖ÷¶¯³öÅÆ"""
-        sorted_cards, _ = self.combiner.combine_handcards(handcards, rank)
-        single_member = sorted_cards["Single"]
-        rank_card = f"H{rank}"
-        
-        # ÓÅÏÈÑ¡Ôñµ¥ÕÅ³ÉÔ±ÖĞµÄĞ¡ÅÆ
-        for i, action in enumerate(action_list[1:], 1):
-            if action[0] == 'Single':
-                if action[2][0] in single_member and rank_card not in action[2]:
-                    return i
-        
-        # Èç¹ûÃ»ÓĞºÏÊÊµÄ£¬Ñ¡ÔñµÚÒ»¸öµ¥ÕÅ
-        for i, action in enumerate(action_list[1:], 1):
-            if action[0] == 'Single':
-                return i
-        
-        return 0  # PASS
-
-
-class PairHandler(BaseCardTypeHandler):
-    """¶Ô×Ó´¦Àí"""
-    
-    def handle_passive(self, action_list: List[List], cur_action: List,
-                      handcards: List[str], rank: str) -> int:
-        """´¦Àí¶Ô×Ó±»¶¯³öÅÆ"""
-        sorted_cards, bomb_info = self.combiner.combine_handcards(handcards, rank)
-        
-        pair_actions = []
-        bomb_actions = []
-        for i, action in enumerate(action_list[1:], 1):
-            if action[0] == 'Pair':
-                pair_actions.append((i, action))
-            elif action[0] in ['Bomb', 'StraightFlush']:
-                bomb_actions.append((i, action))
-        
-        cur_value = self.calculate_action_value(cur_action)
-        rank_card = f"H{rank}"
-        
-        pair_member = []
-        for pair in sorted_cards["Pair"]:
-            pair_member.extend(pair)
-        
-        bomb_member = []
-        for bomb in sorted_cards["Bomb"]:
-            bomb_member.extend(bomb)
-        
-        straight_member = []
-        if sorted_cards.get("Straight"):
-            straight_member.extend(sorted_cards["Straight"][0])
-        if sorted_cards.get("StraightFlush"):
-            straight_member.extend(sorted_cards["StraightFlush"][0])
-        
-        # Èç¹ûÊÇ¶ÓÓÑ³öµÄÅÆ
-        if self.state.greater_pos == self.state.teammate_pos:
-            if cur_value >= 13:  # ¶ÓÓÑ³ö´ó¶Ô×Ó
-                return -1  # PASS
-        
-        # Ñ°ÕÒ¿ÉÒÔÑ¹ÖÆµÄ¶Ô×Ó
-        for idx, action in pair_actions:
-            action_value = self.calculate_action_value(action)
-            if action_value > cur_value:
-                # ÓÅÏÈÑ¡Ôñ¶Ô×Ó³ÉÔ±
-                if action[2][0] in pair_member and rank_card not in action[2]:
-                    return idx
-                # Æä´ÎÑ¡Ôñ²»ÔÚÕ¨µ¯ÖĞµÄÅÆ
-                elif (action[2][0] not in bomb_member and 
-                      rank_card not in action[2] and
-                      not self.combiner.is_in_straight(action, straight_member)):
-                    return idx
-        
-        return -1
-    
-    def handle_active(self, action_list: List[List], handcards: List[str],
-                     rank: str) -> int:
-        """´¦Àí¶Ô×ÓÖ÷¶¯³öÅÆ"""
-        sorted_cards, _ = self.combiner.combine_handcards(handcards, rank)
-        pair_member = []
-        for pair in sorted_cards["Pair"]:
-            pair_member.extend(pair)
-        rank_card = f"H{rank}"
-        
-        # ÓÅÏÈÑ¡Ôñ¶Ô×Ó³ÉÔ±ÖĞµÄĞ¡¶Ô×Ó
-        for i, action in enumerate(action_list[1:], 1):
-            if action[0] == 'Pair':
-                if action[2][0] in pair_member and rank_card not in action[2]:
-                    return i
-        
-        return 0
-
-
-class TripsHandler(BaseCardTypeHandler):
-    """ÈıÕÅ´¦Àí"""
-    
-    def handle_passive(self, action_list: List[List], cur_action: List,
-                      handcards: List[str], rank: str) -> int:
-        """´¦ÀíÈıÕÅ±»¶¯³öÅÆ"""
-        sorted_cards, _ = self.combiner.combine_handcards(handcards, rank)
-        
-        trips_actions = []
-        bomb_actions = []
-        for i, action in enumerate(action_list[1:], 1):
-            if action[0] == 'Trips':
-                trips_actions.append((i, action))
-            elif action[0] in ['Bomb', 'StraightFlush']:
-                bomb_actions.append((i, action))
-        
-        cur_value = self.calculate_action_value(cur_action)
-        rank_card = f"H{rank}"
-        
-        trip_member = []
-        for trip in sorted_cards["Trips"]:
-            trip_member.extend(trip)
-        
-        # Èç¹ûÊÇ¶ÓÓÑ³öµÄÅÆ
-        if self.state.greater_pos == self.state.teammate_pos:
-            if cur_value >= 12:  # ¶ÓÓÑ³ö´óÈıÕÅ
-                return -1  # PASS
-        
-        # Ñ°ÕÒ¿ÉÒÔÑ¹ÖÆµÄÈıÕÅ
-        for idx, action in trips_actions:
-            action_value = self.calculate_action_value(action)
-            if action_value > cur_value:
-                if action[2][0] in trip_member and rank_card not in action[2]:
-                    return idx
-        
-        return -1
-    
-    def handle_active(self, action_list: List[List], handcards: List[str],
-                     rank: str) -> int:
-        """´¦ÀíÈıÕÅÖ÷¶¯³öÅÆ"""
-        sorted_cards, _ = self.combiner.combine_handcards(handcards, rank)
-        trip_member = []
-        for trip in sorted_cards["Trips"]:
-            trip_member.extend(trip)
-        rank_card = f"H{rank}"
-        
-        for i, action in enumerate(action_list[1:], 1):
-            if action[0] == 'Trips':
-                if action[2][0] in trip_member and rank_card not in action[2]:
-                    return i
-        
-        return 0
-
-
-class BombHandler(BaseCardTypeHandler):
-    """Õ¨µ¯´¦Àí"""
-    
-    def handle_passive(self, action_list: List[List], cur_action: List,
-                      handcards: List[str], rank: str) -> int:
-        """´¦ÀíÕ¨µ¯±»¶¯³öÅÆ"""
-        sorted_cards, bomb_info = self.combiner.combine_handcards(handcards, rank)
-        
-        bomb_actions = []
-        for i, action in enumerate(action_list[1:], 1):
-            if action[0] in ['Bomb', 'StraightFlush']:
-                bomb_actions.append((i, action))
-        
-        cur_value = self.calculate_action_value(cur_action)
-        rank_card = f"H{rank}"
-        
-        # »ñÈ¡Íæ¼ÒÊ£ÓàÅÆÊı
-        numofplayers = [
-            self.state.get_player_remain_cards(0),
-            self.state.get_player_remain_cards(1),
-            self.state.get_player_remain_cards(2),
-            self.state.get_player_remain_cards(3),
-        ]
-        greater_pos = self.state.greater_pos
-        numofgreaterPos = numofplayers[greater_pos]
-        
-        pass_num, my_pass_num = self.state.get_pass_count()
-        
-        # ÅĞ¶ÏÊÇ·ñÓ¦¸ÃÊ¹ÓÃÕ¨µ¯
-        should_use_bomb = False
-        
-        # Èç¹û¶ÔÊÖÅÆºÜÉÙ£¬Ó¦¸ÃÊ¹ÓÃÕ¨µ¯
-        if numofgreaterPos <= 15:
-            should_use_bomb = True
-        
-        # Èç¹ûÁ¬ĞøPASS´ÎÊı¹ı¶à£¬Ó¦¸ÃÊ¹ÓÃÕ¨µ¯
-        if pass_num >= 7 or my_pass_num >= 5:
-            should_use_bomb = True
-        
-        # Èç¹ûµ±Ç°ÅÆºÜ´ó£¬ÇÒ¶ÔÊÖÅÆºÜ¶à£¬¿¼ÂÇÊ¹ÓÃÕ¨µ¯
-        if cur_value >= 15 and numofgreaterPos >= 15:
-            # Ëæ»ú¾ö¶¨ÊÇ·ñÊ¹ÓÃÕ¨µ¯
-            import random
-            if random.random() > 0.5:
-                should_use_bomb = True
-        
-        if should_use_bomb:
-            # Ñ¡Ôñ×îĞ¡µÄ¿ÉÒÔÑ¹ÖÆµÄÕ¨µ¯
-            best_idx = -1
-            best_value = float('inf')
-            
-            for idx, action in bomb_actions:
-                action_value = self.calculate_action_value(action)
-                if action_value > cur_value and action_value < best_value:
-                    best_value = action_value
-                    best_idx = idx
-            
-            if best_idx != -1:
-                return best_idx
-        
-        return -1
-    
-    def handle_active(self, action_list: List[List], handcards: List[str],
-                     rank: str) -> int:
-        """´¦ÀíÕ¨µ¯Ö÷¶¯³öÅÆ£¨Í¨³£²»Ö÷¶¯³öÕ¨µ¯£©"""
-        return 0  # Ö÷¶¯³öÅÆÊ±Í¨³£²»³öÕ¨µ¯
-
-
-class StraightHandler(BaseCardTypeHandler):
-    """Ë³×Ó´¦Àí"""
-    
-    def handle_passive(self, action_list: List[List], cur_action: List,
-                      handcards: List[str], rank: str) -> int:
-        """´¦ÀíË³×Ó±»¶¯³öÅÆ"""
-        straight_actions = []
-        bomb_actions = []
-        for i, action in enumerate(action_list[1:], 1):
-            if action[0] == 'Straight':
-                straight_actions.append((i, action))
-            elif action[0] in ['Bomb', 'StraightFlush']:
-                bomb_actions.append((i, action))
-        
-        cur_value = self.calculate_action_value(cur_action)
-        
-        # Èç¹ûÊÇ¶ÓÓÑ³öµÄÅÆ
-        if self.state.greater_pos == self.state.teammate_pos:
-            return -1  # PASS£¬ÈÃ¶ÓÓÑ¼ÌĞø
-        
-        # Ñ°ÕÒ¿ÉÒÔÑ¹ÖÆµÄË³×Ó
-        for idx, action in straight_actions:
-            action_value = self.calculate_action_value(action)
-            if action_value > cur_value:
+        for idx, action in enumerate(action_list[1:], 1):  # é å“„ç–‡ç»»åƒASS
+            if action[0] == "PASS":
+                continue
+            action_value = self._get_action_value(action)
+            if action_value > target_value:
                 return idx
         
         return -1
     
-    def handle_active(self, action_list: List[List], handcards: List[str],
-                     rank: str) -> int:
-        """´¦ÀíË³×ÓÖ÷¶¯³öÅÆ"""
-        sorted_cards, _ = self.combiner.combine_handcards(handcards, rank)
+    def _get_action_value(self, action: List) -> float:
+        """é–¼æƒ§å˜²è¤°å›¬å´éŠŠã‚‡ç¨Šå¨´çŠ²å˜²"""
+        if not action or action[0] == "PASS":
+            return 0.0
         
-        # Èç¹ûÓĞË³×Ó£¬ÓÅÏÈ³öË³×Ó
-        if sorted_cards.get("Straight"):
-            for i, action in enumerate(action_list[1:], 1):
-                if action[0] == 'Straight':
-                    return i
+        # ç¼çŠ»å´ éå¨ˆæˆç¦’å®„æ‹Œå£ˆé”›å‹­æš¬
+        type_values = {
+            "Bomb": 20.0,
+            "StraightFlush": 18.0,
+            "TwoTrips": 15.0,
+            "ThreePair": 12.0,
+            "Straight": 10.0,
+            "ThreeWithTwo": 8.0,
+            "Trips": 6.0,
+            "Pair": 4.0,
+            "Single": 2.0
+        }
         
-        return 0
+        return type_values.get(action[0], 1.0)
+
+
+class SingleHandler(CardTypeHandler):
+    """é–¸æ¥æ´–ç»±èˆµå¾„é•é®å©‡å´³"""
+    pass
+
+
+class PairHandler(CardTypeHandler):
+    """éç”µæ‡“é¡æ¬å¾„é•é®å©‡å´³"""
+    pass
+
+
+class TripsHandler(CardTypeHandler):
+    """å¨‘æ’³å©„ç‚Šå©¢è·ºå«®é®å©‡å´³"""
+    pass
 
 
 class CardTypeHandlerFactory:
-    """ÅÆĞÍ´¦ÀíÆ÷¹¤³§"""
+    """é–»æ¥€è‹¯éé”‹å¾„é•é®å©‡å´³éŠŠãƒ¤ç´£é–¸"""
+    
+    _handlers = {
+        "Single": SingleHandler,
+        "Pair": PairHandler,
+        "Trips": TripsHandler,
+        "ThreePair": CardTypeHandler,
+        "ThreeWithTwo": CardTypeHandler,
+        "TwoTrips": CardTypeHandler,
+        "Straight": CardTypeHandler,
+        "StraightFlush": CardTypeHandler,
+        "Bomb": CardTypeHandler
+    }
     
     @staticmethod
-    def get_handler(card_type: str, state_manager: EnhancedGameStateManager,
-                   hand_combiner: HandCombiner) -> Optional[BaseCardTypeHandler]:
+    def get_handler(card_type: str, 
+                   state_manager: EnhancedGameStateManager,
+                   combiner: HandCombiner) -> Optional[CardTypeHandler]:
         """
-        ¸ù¾İÅÆĞÍ»ñÈ¡¶ÔÓ¦µÄ´¦ÀíÆ÷
+        é–¼æƒ§å˜²è¤°å›¬æ‚§çç•Œé”‹å¾„é•é®å©‡å´³
         
         Args:
-            card_type: ÅÆĞÍÃû³Æ
-            state_manager: ×´Ì¬¹ÜÀíÆ÷
-            hand_combiner: ÊÖÅÆ×éºÏÆ÷
+            card_type: é–»æ¥€è‹¯éçƒ½æ•ç "Single", "Pair" ç¼
+            state_manager: é–»æ¨¿åŸ–æµ£çŒ´ç´•é®å©‡å´³
+            combiner: é–¹é›æ¾§æ¿ˆç´’é•é®åº¨å´³
         
         Returns:
-            ¶ÔÓ¦µÄ´¦ÀíÆ÷ÊµÀı
+            å©¢è·ºå«®é®å©‡å´³éŠŠãƒ§æ½å¨“æ°¬å‰ç¤‰å©µâ€³å€¹éå¤‹ç¨‰å®¥å‘¯æ‘ é–¸ï¸ºåŠŒé¨é‰â•‚æŸ¨å¨²æœœone
         """
-        handlers = {
-            "Single": SingleHandler,
-            "Pair": PairHandler,
-            "Trips": TripsHandler,
-            "Bomb": BombHandler,
-            "Straight": StraightHandler,
-        }
-        
-        handler_class = handlers.get(card_type)
+        handler_class = CardTypeHandlerFactory._handlers.get(card_type)
         if handler_class:
-            return handler_class(state_manager, hand_combiner)
-        
+            return handler_class(state_manager, combiner)
         return None
 

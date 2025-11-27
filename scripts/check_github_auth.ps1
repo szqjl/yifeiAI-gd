@@ -1,103 +1,106 @@
-# GitHub ÈÏÖ¤ÅäÖÃ¼ì²é½Å±¾
-# ÓÃÍ¾£º¼ì²éGitHubÔ¶³Ì²Ö¿âµÄÈÏÖ¤ÅäÖÃ×´Ì¬
+ï»¿# GitHub è®¤è¯é…ç½®æ£€æŸ¥è„šæœ¬
+# ç”¨é€”ï¼šæ£€æŸ¥GitHubè¿œç¨‹ä»“åº“çš„è®¤è¯é…ç½®çŠ¶æ€
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "GitHub ÈÏÖ¤ÅäÖÃ¼ì²é" -ForegroundColor Cyan
+Write-Host "GitHub è®¤è¯é…ç½®æ£€æŸ¥" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. ¼ì²éGitÅäÖÃ
-Write-Host "1. ¼ì²éGitÆ¾¾İÖúÊÖÅäÖÃ..." -ForegroundColor Yellow
+# 1. æ£€æŸ¥Gité…ç½®
+Write-Host "1. æ£€æŸ¥Gitå‡­æ®åŠ©æ‰‹é…ç½®..." -ForegroundColor Yellow
 $credentialHelper = git config --global --get credential.helper
 if ($credentialHelper) {
-    Write-Host "   ? Æ¾¾İÖúÊÖ: $credentialHelper" -ForegroundColor Green
+    Write-Host "   ? å‡­æ®åŠ©æ‰‹: $credentialHelper" -ForegroundColor Green
 } else {
-    Write-Host "   ? Î´ÅäÖÃÆ¾¾İÖúÊÖ" -ForegroundColor Red
-    Write-Host "   ½¨ÒéÔËĞĞ: git config --global credential.helper manager-core" -ForegroundColor Yellow
+    Write-Host "   ? æœªé…ç½®å‡­æ®åŠ©æ‰‹" -ForegroundColor Red
+    Write-Host "   å»ºè®®è¿è¡Œ: git config --global credential.helper manager-core" -ForegroundColor Yellow
 }
 Write-Host ""
 
-# 2. ¼ì²éGitHubÔ¶³Ì²Ö¿â
-Write-Host "2. ¼ì²éGitHubÔ¶³Ì²Ö¿âÅäÖÃ..." -ForegroundColor Yellow
+# 2. æ£€æŸ¥GitHubè¿œç¨‹ä»“åº“
+Write-Host "2. æ£€æŸ¥GitHubè¿œç¨‹ä»“åº“é…ç½®..." -ForegroundColor Yellow
 $githubRemote = git remote get-url github 2>$null
 if ($githubRemote) {
-    Write-Host "   ? GitHubÔ¶³Ì: $githubRemote" -ForegroundColor Green
+    Write-Host "   ? GitHubè¿œç¨‹: $githubRemote" -ForegroundColor Green
     
-    # ¼ì²éURLÀàĞÍ
+    # æ£€æŸ¥URLç±»å‹
     if ($githubRemote -like "*git@github.com*") {
-        Write-Host "   ? Ê¹ÓÃSSH·½Ê½" -ForegroundColor Cyan
+        Write-Host "   ? ä½¿ç”¨SSHæ–¹å¼" -ForegroundColor Cyan
     } elseif ($githubRemote -like "*https://github.com*") {
-        Write-Host "   ? Ê¹ÓÃHTTPS·½Ê½" -ForegroundColor Cyan
+        Write-Host "   ? ä½¿ç”¨HTTPSæ–¹å¼" -ForegroundColor Cyan
     }
 } else {
-    Write-Host "   ? Î´ÅäÖÃGitHubÔ¶³Ì²Ö¿â" -ForegroundColor Red
-    Write-Host "   ½¨ÒéÔËĞĞ: git remote add github https://github.com/szqjl/yifeiAI-gd.git" -ForegroundColor Yellow
+    Write-Host "   ? æœªé…ç½®GitHubè¿œç¨‹ä»“åº“" -ForegroundColor Red
+    Write-Host "   å»ºè®®è¿è¡Œ: git remote add github https://github.com/szqjl/yifeiAI-gd.git" -ForegroundColor Yellow
 }
 Write-Host ""
 
-# 3. ²âÊÔGitHubÁ¬½Ó
-Write-Host "3. ²âÊÔGitHubÁ¬½Ó..." -ForegroundColor Yellow
+# 3. æµ‹è¯•GitHubè¿æ¥
+Write-Host "3. æµ‹è¯•GitHubè¿æ¥..." -ForegroundColor Yellow
 try {
     $result = git ls-remote github 2>&1
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "   ? GitHubÁ¬½Ó³É¹¦" -ForegroundColor Green
+        Write-Host "   ? GitHubè¿æ¥æˆåŠŸ" -ForegroundColor Green
     } else {
-        Write-Host "   ? GitHubÁ¬½ÓÊ§°Ü" -ForegroundColor Red
-        Write-Host "   ´íÎóĞÅÏ¢: $result" -ForegroundColor Red
+        Write-Host "   ? GitHubè¿æ¥å¤±è´¥" -ForegroundColor Red
+        Write-Host "   é”™è¯¯ä¿¡æ¯: $result" -ForegroundColor Red
         Write-Host ""
-        Write-Host "   ¿ÉÄÜµÄÔ­Òò:" -ForegroundColor Yellow
-        Write-Host "   1. Î´ÅäÖÃPersonal Access Token" -ForegroundColor Yellow
-        Write-Host "   2. TokenÒÑ¹ıÆÚ»òÈ¨ÏŞ²»×ã" -ForegroundColor Yellow
-        Write-Host "   3. ÍøÂçÁ¬½ÓÎÊÌâ" -ForegroundColor Yellow
+        Write-Host "   å¯èƒ½çš„åŸå› :" -ForegroundColor Yellow
+        Write-Host "   1. æœªé…ç½®Personal Access Token" -ForegroundColor Yellow
+        Write-Host "   2. Tokenå·²è¿‡æœŸæˆ–æƒé™ä¸è¶³" -ForegroundColor Yellow
+        Write-Host "   3. ç½‘ç»œè¿æ¥é—®é¢˜" -ForegroundColor Yellow
         Write-Host ""
-        Write-Host "   ½â¾ö·½°¸:" -ForegroundColor Yellow
-        Write-Host "   1. ·ÃÎÊ https://github.com/settings/tokens Éú³ÉToken" -ForegroundColor Yellow
-        Write-Host "   2. È·±£TokenÓĞ 'repo' È¨ÏŞ" -ForegroundColor Yellow
-        Write-Host "   3. ÍÆËÍÊ±Ê¹ÓÃToken×÷ÎªÃÜÂë" -ForegroundColor Yellow
+        Write-Host "   è§£å†³æ–¹æ¡ˆ:" -ForegroundColor Yellow
+        Write-Host "   1. è®¿é—® https://github.com/settings/tokens ç”ŸæˆToken" -ForegroundColor Yellow
+        Write-Host "   2. ç¡®ä¿Tokenæœ‰ 'repo' æƒé™" -ForegroundColor Yellow
+        Write-Host "   3. æ¨é€æ—¶ä½¿ç”¨Tokenä½œä¸ºå¯†ç " -ForegroundColor Yellow
     }
 } catch {
-    Write-Host "   ? ²âÊÔÊ§°Ü: $_" -ForegroundColor Red
+    Write-Host "   ? æµ‹è¯•å¤±è´¥: $_" -ForegroundColor Red
 }
 Write-Host ""
 
-# 4. ¼ì²éSSHÅäÖÃ£¨Èç¹ûÊ¹ÓÃSSH£©
+# 4. æ£€æŸ¥SSHé…ç½®ï¼ˆå¦‚æœä½¿ç”¨SSHï¼‰
 if ($githubRemote -like "*git@github.com*") {
-    Write-Host "4. ¼ì²éSSHÅäÖÃ..." -ForegroundColor Yellow
+    Write-Host "4. æ£€æŸ¥SSHé…ç½®..." -ForegroundColor Yellow
     $sshTest = ssh -T git@github.com 2>&1
     if ($sshTest -like "*successfully authenticated*") {
-        Write-Host "   ? SSHÈÏÖ¤³É¹¦" -ForegroundColor Green
+        Write-Host "   ? SSHè®¤è¯æˆåŠŸ" -ForegroundColor Green
     } else {
-        Write-Host "   ? SSHÈÏÖ¤Ê§°Ü" -ForegroundColor Red
-        Write-Host "   ½¨Òé¼ì²éSSHÃÜÔ¿ÊÇ·ñÒÑÌí¼Óµ½GitHub" -ForegroundColor Yellow
+        Write-Host "   ? SSHè®¤è¯å¤±è´¥" -ForegroundColor Red
+        Write-Host "   å»ºè®®æ£€æŸ¥SSHå¯†é’¥æ˜¯å¦å·²æ·»åŠ åˆ°GitHub" -ForegroundColor Yellow
     }
     Write-Host ""
 }
 
-# 5. ×Ü½á
+# 5. æ€»ç»“
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "ÅäÖÃ×Ü½á" -ForegroundColor Cyan
+Write-Host "é…ç½®æ€»ç»“" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 if ($credentialHelper -and $githubRemote) {
-    Write-Host "? »ù±¾ÅäÖÃÒÑÍê³É" -ForegroundColor Green
+    Write-Host "? åŸºæœ¬é…ç½®å·²å®Œæˆ" -ForegroundColor Green
     Write-Host ""
-    Write-Host "ÏÂÒ»²½²Ù×÷:" -ForegroundColor Yellow
-    Write-Host "1. Èç¹ûÊ¹ÓÃHTTPS£¬È·±£ÒÑÉú³ÉPersonal Access Token" -ForegroundColor White
-    Write-Host "2. ÔËĞĞÍÆËÍÃüÁî: git push -u github main" -ForegroundColor White
-    Write-Host "3. Ê×´ÎÍÆËÍÊ±»áÌáÊ¾ÊäÈëÓÃ»§ÃûºÍToken" -ForegroundColor White
+    Write-Host "ä¸‹ä¸€æ­¥æ“ä½œ:" -ForegroundColor Yellow
+    Write-Host "1. å¦‚æœä½¿ç”¨HTTPSï¼Œç¡®ä¿å·²ç”ŸæˆPersonal Access Token" -ForegroundColor White
+    Write-Host "2. è¿è¡Œæ¨é€å‘½ä»¤: git push -u github main" -ForegroundColor White
+    Write-Host "3. é¦–æ¬¡æ¨é€æ—¶ä¼šæç¤ºè¾“å…¥ç”¨æˆ·åå’ŒToken" -ForegroundColor White
 } else {
-    Write-Host "??  ĞèÒªÍê³É»ù±¾ÅäÖÃ" -ForegroundColor Yellow
+    Write-Host "??  éœ€è¦å®ŒæˆåŸºæœ¬é…ç½®" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "ÅäÖÃ²½Öè:" -ForegroundColor Yellow
-    Write-Host "1. ÅäÖÃÆ¾¾İÖúÊÖ: git config --global credential.helper manager-core" -ForegroundColor White
-    Write-Host "2. Ìí¼ÓGitHubÔ¶³Ì: git remote add github https://github.com/szqjl/yifeiAI-gd.git" -ForegroundColor White
-    Write-Host "3. Éú³ÉPersonal Access Token: https://github.com/settings/tokens" -ForegroundColor White
+    Write-Host "é…ç½®æ­¥éª¤:" -ForegroundColor Yellow
+    Write-Host "1. é…ç½®å‡­æ®åŠ©æ‰‹: git config --global credential.helper manager-core" -ForegroundColor White
+    Write-Host "2. æ·»åŠ GitHubè¿œç¨‹: git remote add github https://github.com/szqjl/yifeiAI-gd.git" -ForegroundColor White
+    Write-Host "3. ç”ŸæˆPersonal Access Token: https://github.com/settings/tokens" -ForegroundColor White
 }
 
 Write-Host ""
-Write-Host "ÏêÏ¸ÅäÖÃËµÃ÷Çë²Î¿¼: docs/GIT_SETUP_GUIDE.md" -ForegroundColor Cyan
+Write-Host "è¯¦ç»†é…ç½®è¯´æ˜è¯·å‚è€ƒ: docs/GIT_SETUP_GUIDE.md" -ForegroundColor Cyan
 Write-Host ""
+
+
+
 
 
 

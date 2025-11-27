@@ -1,568 +1,568 @@
-# Git 设置完整指南
+# Git 璁剧疆瀹屾暣鎸囧崡
 
-## 📋 目录
+## 馃搵 鐩褰
 
-1. [当前状态](#当前状态)
-2. [创建远程仓库](#创建远程仓库)
-3. [连接远程仓库](#连接远程仓库)
-4. [推送代码](#推送代码)
-5. [故障排查](#故障排查)
-6. [常用命令](#常用命令)
-7. [分支管理策略](#分支管理策略)
-
----
-
-## ✅ 当前状态
-
-### 本地仓库
-- ✅ Git仓库已初始化
-- ✅ 主分支: `main`
-- ✅ 开发分支: `develop`
-- ✅ 初始提交已完成
-- ✅ .gitignore 已配置
-
-### 分支结构
-```
-main (主分支，用于生产环境)
-  ↑
-develop (开发分支，用于日常开发)
-```
+1. [褰撳墠鐘舵乚(#褰撳墠鐘舵)
+2. [鍒涘缓杩滅▼浠撳簱](#鍒涘缓杩滅▼浠撳簱)
+3. [杩炴帴杩滅▼浠撳簱](#杩炴帴杩滅▼浠撳簱)
+4. [鎺ㄩ佷唬鐮乚(#鎺ㄩ佷唬鐮)
+5. [鏁呴殰鎺掓煡](#鏁呴殰鎺掓煡)
+6. [甯哥敤鍛戒护](#甯哥敤鍛戒护)
+7. [鍒嗘敮绠＄悊绛栫暐](#鍒嗘敮绠＄悊绛栫暐)
 
 ---
 
-## 🚀 创建远程仓库
+## 鉁 褰撳墠鐘舵
 
-### 1. 选择远程仓库平台
+### 鏈鍦颁粨搴
+- 鉁 Git浠撳簱宸插垵濮嬪寲
+- 鉁 涓诲垎鏀: `main`
+- 鉁 寮鍙戝垎鏀: `develop`
+- 鉁 鍒濆嬫彁浜ゅ凡瀹屾垚
+- 鉁 .gitignore 宸查厤缃
 
-推荐使用以下平台之一：
-- **GitHub** (国际，适合开源项目)
-- **Gitee** (国内，访问速度快) ⭐ 推荐
-- **GitLab** (自托管或云服务)
+### 鍒嗘敮缁撴瀯
+```
+main (涓诲垎鏀锛岀敤浜庣敓浜х幆澧)
+  鈫
+develop (寮鍙戝垎鏀锛岀敤浜庢棩甯稿紑鍙)
+```
 
-### 2. 推荐的仓库名称
+---
 
-**guandan-ai-client** ⭐ (推荐)
+## 馃殌 鍒涘缓杩滅▼浠撳簱
 
-或使用当前项目名称：**YiFeiAI-GD**
+### 1. 閫夋嫨杩滅▼浠撳簱骞冲彴
 
-### 3. 在 Gitee 上创建仓库
+鎺ㄨ崘浣跨敤浠ヤ笅骞冲彴涔嬩竴锛
+- **GitHub** (鍥介檯锛岄傚悎寮婧愰」鐩)
+- **Gitee** (鍥藉唴锛岃块棶閫熷害蹇) 猸 鎺ㄨ崘
+- **GitLab** (鑷鎵樼℃垨浜戞湇鍔)
 
-#### 3.1 访问创建页面
-- 地址：https://gitee.com/projects/new
+### 2. 鎺ㄨ崘鐨勪粨搴撳悕绉
 
-#### 3.2 填写基本信息
-- **仓库名称**: `YiFeiAI-GD` 或 `guandan-ai-client`
-- **仓库介绍**: `南京邮电大学掼蛋AI算法对抗平台客户端 - 支持AI自动出牌决策、自我对弈、数据收集和平台信息监控`
-- **仓库路径**: 自动生成
-- **可见性**: 根据需求选择 **公开** 或 **私有**
+**guandan-ai-client** 猸 (鎺ㄨ崘)
 
-#### 3.3 选择配置选项
+鎴栦娇鐢ㄥ綋鍓嶉」鐩鍚嶇О锛**YiFeiAI-GD**
 
-| 选项 | 推荐值 | 说明 |
+### 3. 鍦 Gitee 涓婂垱寤轰粨搴
+
+#### 3.1 璁块棶鍒涘缓椤甸潰
+- 鍦板潃锛歨ttps://gitee.com/projects/new
+
+#### 3.2 濉鍐欏熀鏈淇℃伅
+- **浠撳簱鍚嶇О**: `YiFeiAI-GD` 鎴 `guandan-ai-client`
+- **浠撳簱浠嬬粛**: `鍗椾含閭鐢靛ぇ瀛︽幖铔婣I绠楁硶瀵规姉骞冲彴瀹㈡埛绔 - 鏀鎸丄I鑷鍔ㄥ嚭鐗屽喅绛栥佽嚜鎴戝瑰紙銆佹暟鎹鏀堕泦鍜屽钩鍙颁俊鎭鐩戞帶`
+- **浠撳簱璺寰**: 鑷鍔ㄧ敓鎴
+- **鍙瑙佹**: 鏍规嵁闇姹傞夋嫨 **鍏寮** 鎴 **绉佹湁**
+
+#### 3.3 閫夋嫨閰嶇疆閫夐」
+
+| 閫夐」 | 鎺ㄨ崘鍊 | 璇存槑 |
 |------|--------|------|
-| **语言** | Python | 项目使用 Python 开发 |
-| **.gitignore** | 不选择 | 已有定制化的 .gitignore 文件 |
-| **开源许可证** | MIT License | 与 README.md 中的声明一致 |
-| **初始化README** | 不勾选 | 已有 README.md 文件 |
+| **璇瑷** | Python | 椤圭洰浣跨敤 Python 寮鍙 |
+| **.gitignore** | 涓嶉夋嫨 | 宸叉湁瀹氬埗鍖栫殑 .gitignore 鏂囦欢 |
+| **寮婧愯稿彲璇** | MIT License | 涓 README.md 涓鐨勫０鏄庝竴鑷 |
+| **鍒濆嬪寲README** | 涓嶅嬀閫 | 宸叉湁 README.md 鏂囦欢 |
 
-**重要提示**：
-- ✅ **语言**: 选择 `Python`，有助于代码统计和语言分析
-- ✅ **.gitignore**: 不选择（推荐），因为项目根目录已有定制化的 `.gitignore` 文件
-- ✅ **开源许可证**: 选择 `MIT License`，与 README.md 中的声明一致
-- ✅ **初始化README**: 不勾选，使用项目中的 README.md
+**閲嶈佹彁绀**锛
+- 鉁 **璇瑷**: 閫夋嫨 `Python`锛屾湁鍔╀簬浠ｇ爜缁熻″拰璇瑷鍒嗘瀽
+- 鉁 **.gitignore**: 涓嶉夋嫨锛堟帹鑽愶級锛屽洜涓洪」鐩鏍圭洰褰曞凡鏈夊畾鍒跺寲鐨 `.gitignore` 鏂囦欢
+- 鉁 **寮婧愯稿彲璇**: 閫夋嫨 `MIT License`锛屼笌 README.md 涓鐨勫０鏄庝竴鑷
+- 鉁 **鍒濆嬪寲README**: 涓嶅嬀閫夛紝浣跨敤椤圭洰涓鐨 README.md
 
-#### 3.4 点击创建
+#### 3.4 鐐瑰嚮鍒涘缓
 
-### 4. 在 GitHub 上创建仓库（可选）
+### 4. 鍦 GitHub 涓婂垱寤轰粨搴擄紙鍙閫夛級
 
-1. 访问 https://github.com/new
-2. 仓库名称: `guandan-ai-client`
-3. 描述: `南京邮电大学掼蛋AI算法对抗平台客户端`
-4. 选择 Public 或 Private
-5. **不要**初始化README、.gitignore或license
+1. 璁块棶 https://github.com/new
+2. 浠撳簱鍚嶇О: `guandan-ai-client`
+3. 鎻忚堪: `鍗椾含閭鐢靛ぇ瀛︽幖铔婣I绠楁硶瀵规姉骞冲彴瀹㈡埛绔痐
+4. 閫夋嫨 Public 鎴 Private
+5. **涓嶈**鍒濆嬪寲README銆.gitignore鎴杔icense
 
 ---
 
-## 🔗 连接远程仓库
+## 馃敆 杩炴帴杩滅▼浠撳簱
 
-### 1. 添加远程仓库
+### 1. 娣诲姞杩滅▼浠撳簱
 
 ```bash
-# Gitee（推荐）
+# Gitee锛堟帹鑽愶級
 git remote add origin https://gitee.com/philsz/YiFeiAI-GD.git
 
-# 或 GitHub
+# 鎴 GitHub
 git remote add origin https://github.com/yourusername/guandan-ai-client.git
 ```
 
-### 2. 验证远程仓库
+### 2. 楠岃瘉杩滅▼浠撳簱
 
 ```bash
-# 查看远程仓库
+# 鏌ョ湅杩滅▼浠撳簱
 git remote -v
 
-# 应该显示：
+# 搴旇ユ樉绀猴細
 # origin  https://gitee.com/philsz/YiFeiAI-GD.git (fetch)
 # origin  https://gitee.com/philsz/YiFeiAI-GD.git (push)
 
-# 测试连接
+# 娴嬭瘯杩炴帴
 git ls-remote origin
 ```
 
-### 3. 更新远程仓库地址
+### 3. 鏇存柊杩滅▼浠撳簱鍦板潃
 
-如果需要更改远程仓库地址：
+濡傛灉闇瑕佹洿鏀硅繙绋嬩粨搴撳湴鍧锛
 
 ```bash
-# 查看当前远程地址
+# 鏌ョ湅褰撳墠杩滅▼鍦板潃
 git remote -v
 
-# 更新远程地址
+# 鏇存柊杩滅▼鍦板潃
 git remote set-url origin https://gitee.com/philsz/YiFeiAI-GD.git
 
-# 或使用SSH方式（推荐）
+# 鎴栦娇鐢⊿SH鏂瑰紡锛堟帹鑽愶級
 git remote set-url origin git@gitee.com:philsz/YiFeiAI-GD.git
 ```
 
 ---
 
-## 🔐 GitHub 认证配置
+## 馃攼 GitHub 璁よ瘉閰嶇疆
 
-### 为什么需要配置认证？
+### 涓轰粈涔堥渶瑕侀厤缃璁よ瘉锛
 
-GitHub 从 2021年8月13日起，不再支持使用账户密码进行 Git 操作。必须使用以下方式之一：
-- **Personal Access Token (PAT)** - 推荐方式
-- **SSH 密钥** - 适合高级用户
+GitHub 浠 2021骞8鏈13鏃ヨ捣锛屼笉鍐嶆敮鎸佷娇鐢ㄨ处鎴峰瘑鐮佽繘琛 Git 鎿嶄綔銆傚繀椤讳娇鐢ㄤ互涓嬫柟寮忎箣涓锛
+- **Personal Access Token (PAT)** - 鎺ㄨ崘鏂瑰紡
+- **SSH 瀵嗛挜** - 閫傚悎楂樼骇鐢ㄦ埛
 
-### 方法1：使用 Personal Access Token（推荐）
+### 鏂规硶1锛氫娇鐢 Personal Access Token锛堟帹鑽愶級
 
-#### 步骤1：生成 Personal Access Token
+#### 姝ラ1锛氱敓鎴 Personal Access Token
 
-1. **访问 GitHub Token 设置页面**
-   - 地址：https://github.com/settings/tokens
-   - 或：GitHub 头像 → Settings → Developer settings → Personal access tokens → Tokens (classic)
+1. **璁块棶 GitHub Token 璁剧疆椤甸潰**
+   - 鍦板潃锛歨ttps://github.com/settings/tokens
+   - 鎴栵細GitHub 澶村儚 鈫 Settings 鈫 Developer settings 鈫 Personal access tokens 鈫 Tokens (classic)
 
-2. **创建新 Token**
-   - 点击 "Generate new token" → "Generate new token (classic)"
-   - 填写 Token 描述：`YiFeiAI-GD 项目推送`
-   - 设置过期时间：根据需要选择（建议 90 天或 No expiration）
+2. **鍒涘缓鏂 Token**
+   - 鐐瑰嚮 "Generate new token" 鈫 "Generate new token (classic)"
+   - 濉鍐 Token 鎻忚堪锛歚YiFeiAI-GD 椤圭洰鎺ㄩ乣
+   - 璁剧疆杩囨湡鏃堕棿锛氭牴鎹闇瑕侀夋嫨锛堝缓璁 90 澶╂垨 No expiration锛
 
-3. **选择权限范围**
-   - ✅ **repo** (完整仓库权限) - 必须勾选
-     - `repo:status` - 访问提交状态
-     - `repo_deployment` - 访问部署状态
-     - `public_repo` - 访问公共仓库
-     - `repo:invite` - 访问仓库邀请
-     - `security_events` - 访问安全事件
+3. **閫夋嫨鏉冮檺鑼冨洿**
+   - 鉁 **repo** (瀹屾暣浠撳簱鏉冮檺) - 蹇呴』鍕鹃
+     - `repo:status` - 璁块棶鎻愪氦鐘舵
+     - `repo_deployment` - 璁块棶閮ㄧ讲鐘舵
+     - `public_repo` - 璁块棶鍏鍏变粨搴
+     - `repo:invite` - 璁块棶浠撳簱閭璇
+     - `security_events` - 璁块棶瀹夊叏浜嬩欢
 
-4. **生成并复制 Token**
-   - 点击 "Generate token"
-   - **重要**：立即复制 Token，页面关闭后无法再次查看
-   - 格式示例：`ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+4. **鐢熸垚骞跺嶅埗 Token**
+   - 鐐瑰嚮 "Generate token"
+   - **閲嶈**锛氱珛鍗冲嶅埗 Token锛岄〉闈㈠叧闂鍚庢棤娉曞啀娆℃煡鐪
+   - 鏍煎紡绀轰緥锛歚ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
 
-#### 步骤2：配置 Git Credential Manager
+#### 姝ラ2锛氶厤缃 Git Credential Manager
 
 ```bash
-# 配置 Git Credential Manager Core（Windows 推荐）
+# 閰嶇疆 Git Credential Manager Core锛圵indows 鎺ㄨ崘锛
 git config --global credential.helper manager-core
 
-# 验证配置
+# 楠岃瘉閰嶇疆
 git config --global --get credential.helper
-# 应该输出：manager-core
+# 搴旇ヨ緭鍑猴細manager-core
 ```
 
-#### 步骤3：使用 Token 推送
+#### 姝ラ3锛氫娇鐢 Token 鎺ㄩ
 
 ```bash
-# 推送时会弹出凭据窗口
+# 鎺ㄩ佹椂浼氬脊鍑哄嚟鎹绐楀彛
 git push -u github main
 
-# 在弹出的窗口中：
-# Username: 输入你的 GitHub 用户名（如：szqjl）
-# Password: 粘贴你的 Personal Access Token（不是账户密码！）
+# 鍦ㄥ脊鍑虹殑绐楀彛涓锛
+# Username: 杈撳叆浣犵殑 GitHub 鐢ㄦ埛鍚嶏紙濡傦細szqjl锛
+# Password: 绮樿创浣犵殑 Personal Access Token锛堜笉鏄璐︽埛瀵嗙爜锛侊級
 ```
 
-#### 步骤4：验证认证
+#### 姝ラ4锛氶獙璇佽よ瘉
 
 ```bash
-# 测试连接
+# 娴嬭瘯杩炴帴
 git ls-remote github
 
-# 如果成功，会显示远程分支列表
-# 如果失败，检查 Token 权限和过期时间
+# 濡傛灉鎴愬姛锛屼細鏄剧ず杩滅▼鍒嗘敮鍒楄〃
+# 濡傛灉澶辫触锛屾鏌 Token 鏉冮檺鍜岃繃鏈熸椂闂
 ```
 
-### 方法2：使用 SSH 密钥（高级）
+### 鏂规硶2锛氫娇鐢 SSH 瀵嗛挜锛堥珮绾э級
 
-#### 步骤1：生成 SSH 密钥
+#### 姝ラ1锛氱敓鎴 SSH 瀵嗛挜
 
 ```bash
-# 生成新的 SSH 密钥（如果还没有）
+# 鐢熸垚鏂扮殑 SSH 瀵嗛挜锛堝傛灉杩樻病鏈夛級
 ssh-keygen -t ed25519 -C "your_email@example.com"
 
-# 按提示操作：
-# - 保存位置：直接回车使用默认位置
-# - 密码：可以设置密码保护，也可以直接回车跳过
+# 鎸夋彁绀烘搷浣滐細
+# - 淇濆瓨浣嶇疆锛氱洿鎺ュ洖杞︿娇鐢ㄩ粯璁や綅缃
+# - 瀵嗙爜锛氬彲浠ヨ剧疆瀵嗙爜淇濇姢锛屼篃鍙浠ョ洿鎺ュ洖杞﹁烦杩
 ```
 
-#### 步骤2：添加 SSH 密钥到 GitHub
+#### 姝ラ2锛氭坊鍔 SSH 瀵嗛挜鍒 GitHub
 
 ```bash
-# 查看公钥内容
+# 鏌ョ湅鍏閽ュ唴瀹
 cat ~/.ssh/id_ed25519.pub
 
-# 复制输出的公钥内容
+# 澶嶅埗杈撳嚭鐨勫叕閽ュ唴瀹
 ```
 
-然后：
-1. 访问：https://github.com/settings/keys
-2. 点击 "New SSH key"
-3. 填写：
+鐒跺悗锛
+1. 璁块棶锛歨ttps://github.com/settings/keys
+2. 鐐瑰嚮 "New SSH key"
+3. 濉鍐欙細
    - **Title**: `YiFeiAI-GD Windows`
-   - **Key**: 粘贴刚才复制的公钥内容
-4. 点击 "Add SSH key"
+   - **Key**: 绮樿创鍒氭墠澶嶅埗鐨勫叕閽ュ唴瀹
+4. 鐐瑰嚮 "Add SSH key"
 
-#### 步骤3：配置 SSH URL
+#### 姝ラ3锛氶厤缃 SSH URL
 
 ```bash
-# 设置 GitHub 使用 SSH
+# 璁剧疆 GitHub 浣跨敤 SSH
 git remote set-url github git@github.com:szqjl/yifeiAI-gd.git
 
-# 测试 SSH 连接
+# 娴嬭瘯 SSH 杩炴帴
 ssh -T git@github.com
-# 应该输出：Hi szqjl! You've successfully authenticated...
+# 搴旇ヨ緭鍑猴細Hi szqjl! You've successfully authenticated...
 ```
 
-### 方法3：在 URL 中嵌入 Token（临时方案）
+### 鏂规硶3锛氬湪 URL 涓宓屽叆 Token锛堜复鏃舵柟妗堬級
 
-⚠️ **不推荐**：Token 会暴露在 Git 配置中，安全性较低。
+鈿狅笍 **涓嶆帹鑽**锛歍oken 浼氭毚闇插湪 Git 閰嶇疆涓锛屽畨鍏ㄦц緝浣庛
 
 ```bash
-# 格式：https://<token>@github.com/<username>/<repo>.git
+# 鏍煎紡锛歨ttps://<token>@github.com/<username>/<repo>.git
 git remote set-url github https://ghp_xxxxxxxxxxxx@github.com/szqjl/yifeiAI-gd.git
 
-# 推送（不需要输入密码）
+# 鎺ㄩ侊紙涓嶉渶瑕佽緭鍏ュ瘑鐮侊級
 git push -u github main
 ```
 
-### 当前配置状态
+### 褰撳墠閰嶇疆鐘舵
 
 ```bash
-# 查看当前凭据配置
+# 鏌ョ湅褰撳墠鍑鎹閰嶇疆
 git config --global --list | Select-String credential
 
-# 应该看到：
+# 搴旇ョ湅鍒帮細
 # credential.helper=manager-core
 # credential.https://gitee.com.provider=generic
 ```
 
-### 故障排除
+### 鏁呴殰鎺掗櫎
 
-#### 问题1：Token 无效或过期
+#### 闂棰1锛歍oken 鏃犳晥鎴栬繃鏈
 
-**症状**：
+**鐥囩姸**锛
 ```
 remote: Invalid username or password
 fatal: Authentication failed
 ```
 
-**解决**：
-1. 检查 Token 是否过期
-2. 重新生成 Token
-3. 确保 Token 有 `repo` 权限
+**瑙ｅ喅**锛
+1. 妫鏌 Token 鏄鍚﹁繃鏈
+2. 閲嶆柊鐢熸垚 Token
+3. 纭淇 Token 鏈 `repo` 鏉冮檺
 
-#### 问题2：凭据管理器未保存
+#### 闂棰2锛氬嚟鎹绠＄悊鍣ㄦ湭淇濆瓨
 
-**症状**：
-- 每次推送都要输入用户名和密码
+**鐥囩姸**锛
+- 姣忔℃帹閫侀兘瑕佽緭鍏ョ敤鎴峰悕鍜屽瘑鐮
 
-**解决**：
+**瑙ｅ喅**锛
 ```bash
-# 清除已保存的凭据
+# 娓呴櫎宸蹭繚瀛樼殑鍑鎹
 git credential-manager-core erase
-# 输入：protocol=https
-# 输入：host=github.com
-# 按 Ctrl+D 结束
+# 杈撳叆锛歱rotocol=https
+# 杈撳叆锛歨ost=github.com
+# 鎸 Ctrl+D 缁撴潫
 
-# 重新推送，输入正确的凭据
+# 閲嶆柊鎺ㄩ侊紝杈撳叆姝ｇ‘鐨勫嚟鎹
 git push -u github main
 ```
 
-#### 问题3：SSH 连接失败
+#### 闂棰3锛歋SH 杩炴帴澶辫触
 
-**症状**：
+**鐥囩姸**锛
 ```
 Permission denied (publickey)
 ```
 
-**解决**：
+**瑙ｅ喅**锛
 ```bash
-# 测试 SSH 连接
+# 娴嬭瘯 SSH 杩炴帴
 ssh -T git@github.com
 
-# 如果失败，检查：
-# 1. SSH 密钥是否已添加到 GitHub
-# 2. SSH 代理是否运行
+# 濡傛灉澶辫触锛屾鏌ワ細
+# 1. SSH 瀵嗛挜鏄鍚﹀凡娣诲姞鍒 GitHub
+# 2. SSH 浠ｇ悊鏄鍚﹁繍琛
 ssh-add ~/.ssh/id_ed25519
 
-# 3. 使用详细模式查看错误
+# 3. 浣跨敤璇︾粏妯″紡鏌ョ湅閿欒
 ssh -vT git@github.com
 ```
 
-### 安全建议
+### 瀹夊叏寤鸿
 
-1. ✅ **使用 Personal Access Token**，不要使用账户密码
-2. ✅ **设置 Token 过期时间**，定期更新
-3. ✅ **最小权限原则**，只授予必要的权限
-4. ✅ **不要将 Token 提交到代码仓库**
-5. ✅ **使用 SSH 密钥**（如果熟悉 SSH）
+1. 鉁 **浣跨敤 Personal Access Token**锛屼笉瑕佷娇鐢ㄨ处鎴峰瘑鐮
+2. 鉁 **璁剧疆 Token 杩囨湡鏃堕棿**锛屽畾鏈熸洿鏂
+3. 鉁 **鏈灏忔潈闄愬師鍒**锛屽彧鎺堜簣蹇呰佺殑鏉冮檺
+4. 鉁 **涓嶈佸皢 Token 鎻愪氦鍒颁唬鐮佷粨搴**
+5. 鉁 **浣跨敤 SSH 瀵嗛挜**锛堝傛灉鐔熸倝 SSH锛
 
 ---
 
-## 📤 推送代码
+## 馃摛 鎺ㄩ佷唬鐮
 
-### 首次推送
+### 棣栨℃帹閫
 
 ```bash
-# 推送main分支
+# 鎺ㄩ乵ain鍒嗘敮
 git push -u origin main
 
-# 推送develop分支
+# 鎺ㄩ乨evelop鍒嗘敮
 git push -u origin develop
 
-# 推送所有分支
+# 鎺ㄩ佹墍鏈夊垎鏀
 git push -u origin --all
 
-# 推送标签
+# 鎺ㄩ佹爣绛
 git push -u origin --tags
 ```
 
-### 日常推送
+### 鏃ュ父鎺ㄩ
 
 ```bash
-# 推送当前分支
+# 鎺ㄩ佸綋鍓嶅垎鏀
 git push
 
-# 推送指定分支
+# 鎺ㄩ佹寚瀹氬垎鏀
 git push origin branch-name
 
-# 拉取更新
+# 鎷夊彇鏇存柊
 git pull origin main
 ```
 
-### 验证推送成功
+### 楠岃瘉鎺ㄩ佹垚鍔
 
 ```bash
-# 查看远程分支
+# 鏌ョ湅杩滅▼鍒嗘敮
 git branch -r
 
-# 应该看到：
+# 搴旇ョ湅鍒帮細
 # origin/main
 # origin/develop
 
-# 查看远程仓库详细信息
+# 鏌ョ湅杩滅▼浠撳簱璇︾粏淇℃伅
 git remote show origin
 ```
 
 ---
 
-## 🔍 故障排查
+## 馃攳 鏁呴殰鎺掓煡
 
-### 问题1: 404 not found
+### 闂棰1: 404 not found
 
-**错误信息**:
+**閿欒淇℃伅**:
 ```
 remote: [session-xxx] 404 not found!
 fatal: repository 'https://gitee.com/philsz/YiFeiAI-GD.git/' not found
 ```
 
-**可能原因**:
-1. 仓库名称不正确
-2. 仓库还未完全创建
-3. 仓库路径大小写问题
-4. 权限问题
+**鍙鑳藉師鍥**:
+1. 浠撳簱鍚嶇О涓嶆ｇ‘
+2. 浠撳簱杩樻湭瀹屽叏鍒涘缓
+3. 浠撳簱璺寰勫ぇ灏忓啓闂棰
+4. 鏉冮檺闂棰
 
-**解决方法**:
+**瑙ｅ喅鏂规硶**:
 
-#### 方法1: 确认仓库名称
+#### 鏂规硶1: 纭璁や粨搴撳悕绉
 ```bash
-# 检查远程URL是否正确
+# 妫鏌ヨ繙绋婾RL鏄鍚︽ｇ‘
 git remote -v
 
-# 如果仓库名称不同，更新URL
-git remote set-url origin https://gitee.com/philsz/实际仓库名.git
+# 濡傛灉浠撳簱鍚嶇О涓嶅悓锛屾洿鏂癠RL
+git remote set-url origin https://gitee.com/philsz/瀹為檯浠撳簱鍚.git
 ```
 
-#### 方法2: 检查仓库是否创建
-- 访问 https://gitee.com/philsz
-- 查看仓库列表，确认仓库名称
-- 确认仓库是否已创建完成
+#### 鏂规硶2: 妫鏌ヤ粨搴撴槸鍚﹀垱寤
+- 璁块棶 https://gitee.com/philsz
+- 鏌ョ湅浠撳簱鍒楄〃锛岀‘璁や粨搴撳悕绉
+- 纭璁や粨搴撴槸鍚﹀凡鍒涘缓瀹屾垚
 
-#### 方法3: 使用SSH方式（推荐）
+#### 鏂规硶3: 浣跨敤SSH鏂瑰紡锛堟帹鑽愶級
 ```bash
-# 如果已配置SSH密钥，使用SSH URL
+# 濡傛灉宸查厤缃甋SH瀵嗛挜锛屼娇鐢⊿SH URL
 git remote set-url origin git@gitee.com:philsz/YiFeiAI-GD.git
 
-# 测试连接
+# 娴嬭瘯杩炴帴
 ssh -T git@gitee.com
 ```
 
-### 问题2: 权限被拒绝
+### 闂棰2: 鏉冮檺琚鎷掔粷
 
-**错误信息**:
+**閿欒淇℃伅**:
 ```
 Permission denied (publickey)
 ```
 
-**解决方法**:
-1. 配置SSH密钥（推荐）
-2. 或使用HTTPS方式，输入用户名和密码
+**瑙ｅ喅鏂规硶**:
+1. 閰嶇疆SSH瀵嗛挜锛堟帹鑽愶級
+2. 鎴栦娇鐢℉TTPS鏂瑰紡锛岃緭鍏ョ敤鎴峰悕鍜屽瘑鐮
 
-### 问题3: 仓库为空
+### 闂棰3: 浠撳簱涓虹┖
 
-如果仓库刚创建，可能需要先推送：
+濡傛灉浠撳簱鍒氬垱寤猴紝鍙鑳介渶瑕佸厛鎺ㄩ侊細
 
 ```bash
-# 推送main分支
+# 鎺ㄩ乵ain鍒嗘敮
 git push -u origin main
 
-# 如果提示需要先拉取，可以强制推送（谨慎使用）
+# 濡傛灉鎻愮ず闇瑕佸厛鎷夊彇锛屽彲浠ュ己鍒舵帹閫侊紙璋ㄦ厧浣跨敤锛
 git push -u origin main --force
 ```
 
-### 问题4: 仓库名称不同
+### 闂棰4: 浠撳簱鍚嶇О涓嶅悓
 
-如果实际创建的仓库名称不是 `YiFeiAI-GD`，需要更新远程URL：
+濡傛灉瀹為檯鍒涘缓鐨勪粨搴撳悕绉颁笉鏄 `YiFeiAI-GD`锛岄渶瑕佹洿鏂拌繙绋婾RL锛
 
 ```bash
-# 更新为实际仓库名
-git remote set-url origin https://gitee.com/philsz/实际仓库名.git
+# 鏇存柊涓哄疄闄呬粨搴撳悕
+git remote set-url origin https://gitee.com/philsz/瀹為檯浠撳簱鍚.git
 
-# 验证
+# 楠岃瘉
 git remote -v
 
-# 推送
+# 鎺ㄩ
 git push -u origin main
 ```
 
-### 📝 推送前检查清单
+### 馃摑 鎺ㄩ佸墠妫鏌ユ竻鍗
 
-推送前确认：
-- [ ] 远程仓库已在Gitee/GitHub上创建
-- [ ] 仓库名称正确（区分大小写）
-- [ ] 远程URL配置正确
-- [ ] 有仓库的推送权限
-- [ ] 本地分支已准备好推送
+鎺ㄩ佸墠纭璁わ細
+- [ ] 杩滅▼浠撳簱宸插湪Gitee/GitHub涓婂垱寤
+- [ ] 浠撳簱鍚嶇О姝ｇ‘锛堝尯鍒嗗ぇ灏忓啓锛
+- [ ] 杩滅▼URL閰嶇疆姝ｇ‘
+- [ ] 鏈変粨搴撶殑鎺ㄩ佹潈闄
+- [ ] 鏈鍦板垎鏀宸插噯澶囧ソ鎺ㄩ
 
 ---
 
-## 🔧 常用命令
+## 馃敡 甯哥敤鍛戒护
 
-### 查看分支
+### 鏌ョ湅鍒嗘敮
 ```bash
-git branch          # 本地分支
-git branch -a       # 所有分支（包括远程）
-git branch -r       # 远程分支
+git branch          # 鏈鍦板垎鏀
+git branch -a       # 鎵鏈夊垎鏀锛堝寘鎷杩滅▼锛
+git branch -r       # 杩滅▼鍒嗘敮
 ```
 
-### 切换分支
+### 鍒囨崲鍒嗘敮
 ```bash
-git checkout main       # 切换到main分支
-git checkout develop    # 切换到develop分支
+git checkout main       # 鍒囨崲鍒癿ain鍒嗘敮
+git checkout develop    # 鍒囨崲鍒癲evelop鍒嗘敮
 ```
 
-### 创建功能分支
+### 鍒涘缓鍔熻兘鍒嗘敮
 ```bash
-# 从develop创建功能分支
+# 浠巇evelop鍒涘缓鍔熻兘鍒嗘敮
 git checkout develop
 git checkout -b feature/websocket-client
 
-# 开发完成后合并
+# 寮鍙戝畬鎴愬悗鍚堝苟
 git checkout develop
 git merge feature/websocket-client
 ```
 
-### 推送和拉取
+### 鎺ㄩ佸拰鎷夊彇
 ```bash
-git push origin branch-name    # 推送分支
-git pull origin branch-name    # 拉取更新
-git fetch origin              # 获取远程更新
+git push origin branch-name    # 鎺ㄩ佸垎鏀
+git pull origin branch-name    # 鎷夊彇鏇存柊
+git fetch origin              # 鑾峰彇杩滅▼鏇存柊
 ```
 
-### 删除分支
+### 鍒犻櫎鍒嗘敮
 ```bash
-# 删除本地分支
+# 鍒犻櫎鏈鍦板垎鏀
 git branch -d branch-name
 
-# 强制删除本地分支
+# 寮哄埗鍒犻櫎鏈鍦板垎鏀
 git branch -D branch-name
 
-# 删除远程分支
+# 鍒犻櫎杩滅▼鍒嗘敮
 git push origin --delete branch-name
 ```
 
 ---
 
-## 🌿 分支管理策略
+## 馃尶 鍒嗘敮绠＄悊绛栫暐
 
-### 📋 分支命名规范
+### 馃搵 鍒嗘敮鍛藉悕瑙勮寖
 
-#### 主分支
-- **main**: 主分支，用于生产环境，只接受来自develop的合并
-- **develop**: 开发分支，用于日常开发，所有功能分支从此分支创建
+#### 涓诲垎鏀
+- **main**: 涓诲垎鏀锛岀敤浜庣敓浜х幆澧冿紝鍙鎺ュ彈鏉ヨ嚜develop鐨勫悎骞
+- **develop**: 寮鍙戝垎鏀锛岀敤浜庢棩甯稿紑鍙戯紝鎵鏈夊姛鑳藉垎鏀浠庢ゅ垎鏀鍒涘缓
 
-#### 功能分支
-- **feature/功能名称**: 新功能开发
-  - 示例: `feature/websocket-client`, `feature/info-monitor`
-  - 命名规则: 小写字母，使用连字符分隔
+#### 鍔熻兘鍒嗘敮
+- **feature/鍔熻兘鍚嶇О**: 鏂板姛鑳藉紑鍙
+  - 绀轰緥: `feature/websocket-client`, `feature/info-monitor`
+  - 鍛藉悕瑙勫垯: 灏忓啓瀛楁瘝锛屼娇鐢ㄨ繛瀛楃﹀垎闅
 
-#### 修复分支
-- **hotfix/修复描述**: 紧急修复
-  - 示例: `hotfix/connection-timeout`, `hotfix/json-parsing-error`
-  - 命名规则: 小写字母，使用连字符分隔
+#### 淇澶嶅垎鏀
+- **hotfix/淇澶嶆弿杩**: 绱фヤ慨澶
+  - 绀轰緥: `hotfix/connection-timeout`, `hotfix/json-parsing-error`
+  - 鍛藉悕瑙勫垯: 灏忓啓瀛楁瘝锛屼娇鐢ㄨ繛瀛楃﹀垎闅
 
-#### 发布分支
-- **release/版本号**: 发布准备
-  - 示例: `release/v1.0.0`, `release/v1.1.0`
-  - 命名规则: 使用版本号格式
+#### 鍙戝竷鍒嗘敮
+- **release/鐗堟湰鍙**: 鍙戝竷鍑嗗
+  - 绀轰緥: `release/v1.0.0`, `release/v1.1.0`
+  - 鍛藉悕瑙勫垯: 浣跨敤鐗堟湰鍙锋牸寮
 
-### 🔄 分支工作流
+### 馃攧 鍒嗘敮宸ヤ綔娴
 
 ```
-main (生产环境)
-  ↑
-  | (合并)
-develop (开发环境)
-  ↑
-  | (创建/合并)
-feature/* (功能开发)
-hotfix/* (紧急修复)
-release/* (发布准备)
+main (鐢熶骇鐜澧)
+  鈫
+  | (鍚堝苟)
+develop (寮鍙戠幆澧)
+  鈫
+  | (鍒涘缓/鍚堝苟)
+feature/* (鍔熻兘寮鍙)
+hotfix/* (绱фヤ慨澶)
+release/* (鍙戝竷鍑嗗)
 ```
 
-### 📝 分支使用指南
+### 馃摑 鍒嗘敮浣跨敤鎸囧崡
 
-#### 1. 创建功能分支
+#### 1. 鍒涘缓鍔熻兘鍒嗘敮
 ```bash
-# 从develop分支创建新功能分支
+# 浠巇evelop鍒嗘敮鍒涘缓鏂板姛鑳藉垎鏀
 git checkout develop
 git pull origin develop
 git checkout -b feature/websocket-client
 
-# 开发完成后合并回develop
+# 寮鍙戝畬鎴愬悗鍚堝苟鍥瀌evelop
 git checkout develop
 git merge feature/websocket-client
-git branch -d feature/websocket-client  # 删除本地分支
+git branch -d feature/websocket-client  # 鍒犻櫎鏈鍦板垎鏀
 ```
 
-#### 2. 创建修复分支
+#### 2. 鍒涘缓淇澶嶅垎鏀
 ```bash
-# 从main分支创建紧急修复分支
+# 浠巑ain鍒嗘敮鍒涘缓绱фヤ慨澶嶅垎鏀
 git checkout main
 git pull origin main
 git checkout -b hotfix/connection-timeout
 
-# 修复完成后合并到main和develop
+# 淇澶嶅畬鎴愬悗鍚堝苟鍒癿ain鍜宒evelop
 git checkout main
 git merge hotfix/connection-timeout
 git checkout develop
@@ -570,14 +570,14 @@ git merge hotfix/connection-timeout
 git branch -d hotfix/connection-timeout
 ```
 
-#### 3. 创建发布分支
+#### 3. 鍒涘缓鍙戝竷鍒嗘敮
 ```bash
-# 从develop分支创建发布分支
+# 浠巇evelop鍒嗘敮鍒涘缓鍙戝竷鍒嗘敮
 git checkout develop
 git pull origin develop
 git checkout -b release/v1.0.0
 
-# 发布完成后合并到main和develop
+# 鍙戝竷瀹屾垚鍚庡悎骞跺埌main鍜宒evelop
 git checkout main
 git merge release/v1.0.0
 git tag v1.0.0
@@ -586,122 +586,122 @@ git merge release/v1.0.0
 git branch -d release/v1.0.0
 ```
 
-### 📌 分支保护规则
+### 馃搶 鍒嗘敮淇濇姢瑙勫垯
 
-#### main分支
-- ✅ 禁止直接推送
-- ✅ 只能通过Pull Request合并
-- ✅ 必须通过代码审查
-- ✅ 必须通过所有测试
+#### main鍒嗘敮
+- 鉁 绂佹㈢洿鎺ユ帹閫
+- 鉁 鍙鑳介氳繃Pull Request鍚堝苟
+- 鉁 蹇呴』閫氳繃浠ｇ爜瀹℃煡
+- 鉁 蹇呴』閫氳繃鎵鏈夋祴璇
 
-#### develop分支
-- ✅ 可以推送，但建议通过Pull Request
-- ✅ 合并前需要代码审查
-- ✅ 必须通过基础测试
+#### develop鍒嗘敮
+- 鉁 鍙浠ユ帹閫侊紝浣嗗缓璁閫氳繃Pull Request
+- 鉁 鍚堝苟鍓嶉渶瑕佷唬鐮佸℃煡
+- 鉁 蹇呴』閫氳繃鍩虹娴嬭瘯
 
-### 📋 分支命名示例
+### 馃搵 鍒嗘敮鍛藉悕绀轰緥
 
-#### 功能分支
+#### 鍔熻兘鍒嗘敮
 - `feature/websocket-communication`
 - `feature/card-type-recognition`
 - `feature/decision-engine`
 - `feature/info-monitor`
 - `feature/cooperation-strategy`
 
-#### 修复分支
+#### 淇澶嶅垎鏀
 - `hotfix/connection-timeout`
 - `hotfix/json-parsing-error`
 - `hotfix/memory-leak`
 - `hotfix/state-sync-issue`
 
-#### 发布分支
+#### 鍙戝竷鍒嗘敮
 - `release/v1.0.0`
 - `release/v1.1.0`
 - `release/v2.0.0`
 
-### ⚠️ 分支管理注意事项
+### 鈿狅笍 鍒嗘敮绠＄悊娉ㄦ剰浜嬮」
 
-1. **提交信息规范**
-   - 使用清晰的提交信息
-   - 遵循约定式提交规范（可选）
-   - 示例: `feat: 添加WebSocket通信模块`
+1. **鎻愪氦淇℃伅瑙勮寖**
+   - 浣跨敤娓呮櫚鐨勬彁浜や俊鎭
+   - 閬靛惊绾﹀畾寮忔彁浜よ勮寖锛堝彲閫夛級
+   - 绀轰緥: `feat: 娣诲姞WebSocket閫氫俊妯″潡`
 
-2. **定期同步**
-   - 开发前先拉取最新代码
-   - 定期推送本地更改
-   - 保持分支与远程同步
+2. **瀹氭湡鍚屾**
+   - 寮鍙戝墠鍏堟媺鍙栨渶鏂颁唬鐮
+   - 瀹氭湡鎺ㄩ佹湰鍦版洿鏀
+   - 淇濇寔鍒嗘敮涓庤繙绋嬪悓姝
 
-3. **代码审查**
-   - 重要功能必须经过代码审查
-   - 使用Pull Request进行合并
-   - 确保代码质量
+3. **浠ｇ爜瀹℃煡**
+   - 閲嶈佸姛鑳藉繀椤荤粡杩囦唬鐮佸℃煡
+   - 浣跨敤Pull Request杩涜屽悎骞
+   - 纭淇濅唬鐮佽川閲
 
-4. **分支清理**
-   - 合并后及时删除已合并的分支
-   - 定期清理过期的分支
-   - 保持仓库整洁
-
----
-
-## 📝 许可证说明
-
-### MIT License 特点
-- ✅ 允许商业使用
-- ✅ 允许修改
-- ✅ 允许分发
-- ✅ 允许私人使用
-- ✅ 需要包含许可证和版权声明
-- ❌ 不提供任何担保
-
-### 许可证文件位置
-如果 Gitee/GitHub 自动生成了 LICENSE 文件，可以：
-- 保留它（如果内容正确）
-- 或者使用项目中的 LICENSE 文件（如果有）
+4. **鍒嗘敮娓呯悊**
+   - 鍚堝苟鍚庡強鏃跺垹闄ゅ凡鍚堝苟鐨勫垎鏀
+   - 瀹氭湡娓呯悊杩囨湡鐨勫垎鏀
+   - 淇濇寔浠撳簱鏁存磥
 
 ---
 
-## ⚠️ 注意事项
+## 馃摑 璁稿彲璇佽存槑
 
-1. **首次推送前**
-   - 确保已创建远程仓库
-   - 检查远程仓库URL是否正确
-   - 确认有推送权限
+### MIT License 鐗圭偣
+- 鉁 鍏佽稿晢涓氫娇鐢
+- 鉁 鍏佽镐慨鏀
+- 鉁 鍏佽稿垎鍙
+- 鉁 鍏佽哥佷汉浣跨敤
+- 鉁 闇瑕佸寘鍚璁稿彲璇佸拰鐗堟潈澹版槑
+- 鉂 涓嶆彁渚涗换浣曟媴淇
 
-2. **分支保护**
-   - 建议在远程仓库设置main分支保护
-   - 要求Pull Request才能合并到main
-   - 启用代码审查
-
-3. **SSH密钥（推荐）**
-   - 配置SSH密钥可以避免每次输入密码
-   - 参考相关文档中的SSH配置
-
-4. **.gitignore 冲突**
-   - 如果选择了 Python .gitignore 模板
-   - 需要检查是否与现有文件冲突
-   - 建议使用现有的 .gitignore 文件
-
-5. **README 冲突**
-   - 不要勾选"初始化README"
-   - 使用项目中的 README.md
-
-6. **许可证一致性**
-   - 确保远程仓库上的许可证与 README.md 中的声明一致
-   - 都是 MIT License
+### 璁稿彲璇佹枃浠朵綅缃
+濡傛灉 Gitee/GitHub 鑷鍔ㄧ敓鎴愪簡 LICENSE 鏂囦欢锛屽彲浠ワ細
+- 淇濈暀瀹冿紙濡傛灉鍐呭规ｇ‘锛
+- 鎴栬呬娇鐢ㄩ」鐩涓鐨 LICENSE 鏂囦欢锛堝傛灉鏈夛級
 
 ---
 
-## 🔗 相关文档
+## 鈿狅笍 娉ㄦ剰浜嬮」
 
-- [开发规范与规则](DEVELOPMENT_RULES.md) - 项目开发规范
-- [阶段一任务清单](PHASE1_TASKS.md) - 开发任务指南
+1. **棣栨℃帹閫佸墠**
+   - 纭淇濆凡鍒涘缓杩滅▼浠撳簱
+   - 妫鏌ヨ繙绋嬩粨搴揢RL鏄鍚︽ｇ‘
+   - 纭璁ゆ湁鎺ㄩ佹潈闄
+
+2. **鍒嗘敮淇濇姢**
+   - 寤鸿鍦ㄨ繙绋嬩粨搴撹剧疆main鍒嗘敮淇濇姢
+   - 瑕佹眰Pull Request鎵嶈兘鍚堝苟鍒癿ain
+   - 鍚鐢ㄤ唬鐮佸℃煡
+
+3. **SSH瀵嗛挜锛堟帹鑽愶級**
+   - 閰嶇疆SSH瀵嗛挜鍙浠ラ伩鍏嶆瘡娆¤緭鍏ュ瘑鐮
+   - 鍙傝冪浉鍏虫枃妗ｄ腑鐨凷SH閰嶇疆
+
+4. **.gitignore 鍐茬獊**
+   - 濡傛灉閫夋嫨浜 Python .gitignore 妯℃澘
+   - 闇瑕佹鏌ユ槸鍚︿笌鐜版湁鏂囦欢鍐茬獊
+   - 寤鸿浣跨敤鐜版湁鐨 .gitignore 鏂囦欢
+
+5. **README 鍐茬獊**
+   - 涓嶈佸嬀閫"鍒濆嬪寲README"
+   - 浣跨敤椤圭洰涓鐨 README.md
+
+6. **璁稿彲璇佷竴鑷存**
+   - 纭淇濊繙绋嬩粨搴撲笂鐨勮稿彲璇佷笌 README.md 涓鐨勫０鏄庝竴鑷
+   - 閮芥槸 MIT License
 
 ---
 
-**提示**: 
-- 设置完成后，记得更新README.md中的仓库链接！
-- 如果问题持续，请检查：
-  1. Gitee/GitHub账户登录状态
-  2. 仓库的实际名称和路径
-  3. 网络连接状态
+## 馃敆 鐩稿叧鏂囨。
+
+- [寮鍙戣勮寖涓庤勫垯](DEVELOPMENT_RULES.md) - 椤圭洰寮鍙戣勮寖
+- [闃舵典竴浠诲姟娓呭崟](PHASE1_TASKS.md) - 寮鍙戜换鍔℃寚鍗
+
+---
+
+**鎻愮ず**: 
+- 璁剧疆瀹屾垚鍚庯紝璁板緱鏇存柊README.md涓鐨勪粨搴撻摼鎺ワ紒
+- 濡傛灉闂棰樻寔缁锛岃锋鏌ワ細
+  1. Gitee/GitHub璐︽埛鐧诲綍鐘舵
+  2. 浠撳簱鐨勫疄闄呭悕绉板拰璺寰
+  3. 缃戠粶杩炴帴鐘舵
 
