@@ -221,14 +221,24 @@ class BatchExecutorGUI:
         
         # 默认客户端脚本（您的AI vs lalala一等奖AI）
         # 座位分配：0号和2号是对家（一队），1号和3号是对家（一队）
+        
+        # 选项1：使用原始AI（知识库版本，较弱）
+        # default_clients = [
+        #     "src/communication/Test1.py",
+        #     "src/communication/run_lalala_client3.py",
+        #     "src/communication/Test2.py",
+        #     "src/communication/run_lalala_client4.py"
+        # ]
+        
+        # 选项2：使用lalala策略版本（推荐，实力相当）
         default_clients = [
-            "src/communication/Test1.py",                    # 0号位 - 您的AI队友1
+            "src/communication/Test1_lalala.py",             # 0号位 - 使用lalala策略
             "src/communication/run_lalala_client3.py",       # 1号位 - lalala对手1
-            "src/communication/Test2.py",                    # 2号位 - 您的AI队友2
+            "src/communication/Test2_lalala.py",             # 2号位 - 使用lalala策略
             "src/communication/run_lalala_client4.py"        # 3号位 - lalala对手2
         ]
         # 队伍分组：
-        # 队伍A（您的队）：0号(Test1) + 2号(Test2)
+        # 队伍A（您的队）：0号(Test1_lalala) + 2号(Test2_lalala)
         # 队伍B（lalala队）：1号(client3) + 3号(client4)
         
         # 检查哪些客户端存在
