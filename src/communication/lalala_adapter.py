@@ -152,7 +152,16 @@ class LalalaWebsocketsClient:
                     data = self.convert_card_format(data)
                     
                     # 使用lalala的状态解析
-                    self.state.parse(data)
+                    try:
+                        self.state.parse(data)
+                    except IndexError as e:
+                        print(f"[ERROR] IndexError in state.parse: {e}")
+                        print(f"[ERROR] curAction: {data.get('curAction')}")
+                        print(f"[ERROR] greaterAction: {data.get('greaterAction')}")
+                        if "publicInfo" in data:
+                            for i, info in enumerate(data["publicInfo"]):
+                                print(f"[ERROR] Player {i} playArea: {info.get('playArea')}")
+                        raise
                     
                     # 如果需要做出动作选择
                     if "actionList" in data:
