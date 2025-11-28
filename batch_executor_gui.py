@@ -455,6 +455,12 @@ class BatchExecutorGUI:
                     tracker = self.executor.tracker
                     score_text = f"{tracker.team_a_wins} 胜 / {tracker.team_b_wins} 负"
                     self.score_label.config(text=score_text)
+            else:
+                # 状态为空，可能还在初始化
+                pass
+        else:
+            # executor还未创建
+            pass
         
         # 1秒后再次调用
         if self.is_running:
