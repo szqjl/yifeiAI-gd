@@ -78,76 +78,21 @@ class LalalaWebsocketsClient:
         if "handCards" in data:
             data["handCards"] = convert_cards_list(data["handCards"])
         
-        if "curAction" in data:
-            cur_action = data["curAction"]
-            # 如果是字符串，尝试解析为JSON
-            if isinstance(cur_action, str):
-                try:
-                    cur_action = json.loads(cur_action)
-                except:
-                    pass
-            
-            if isinstance(cur_action, list) and len(cur_action) > 2:
-                cards = cur_action[2]
-                # 如果cards是字符串，尝试解析
-                if isinstance(cards, str) and cards != "PASS":
-                    try:
-                        # 先尝试JSON
-                        cards = json.loads(cards)
-                    except Exception as e1:
-                        try:
-                            # 再尝试Python字面量（支持单引号）
-                            cards = ast.literal_eval(cards)
-                        except Exception as e2:
-                            print(f"[DEBUG] Failed to parse cards: {cards}")
-                            print(f"[DEBUG] JSON error: {e1}")
-                            print(f"[DEBUG] AST error: {e2}")
-                            pass
-                
-                if cards != "PASS":
-                    data["curAction"] = [
-                        cur_action[0],
-                        cur_action[1],
-                        convert_cards_list(cards)
-                    ]
-                else:
-                    data["curAction"] = cur_action
-            else:
-                data["curAction"] = cur_action
+        if "curAction" in data and isinstance(data["curAction"], list):
+            if len(data["curAction"]) > 2 and data["curAction"][2] != "PASS":
+                data["curAction"] = [
+                    data["curAction"][0],
+                    data["curAction"][1],
+                    convert_cards_list(data["curAction"][2])
+                ]
         
-        if "greaterAction" in data:
-            greater_action = data["greaterAction"]
-            # 如果是字符串，尝试解析为JSON
-            if isinstance(greater_action, str):
-                try:
-                    greater_action = json.loads(greater_action)
-                except:
-                    pass
-            
-            if isinstance(greater_action, list) and len(greater_action) > 2:
-                cards = greater_action[2]
-                # 如果cards是字符串，尝试解析
-                if isinstance(cards, str) and cards != "PASS":
-                    try:
-                        # 先尝试JSON
-                        cards = json.loads(cards)
-                    except:
-                        try:
-                            # 再尝试Python字面量（支持单引号）
-                            cards = ast.literal_eval(cards)
-                        except:
-                            pass
-                
-                if cards != "PASS":
-                    data["greaterAction"] = [
-                        greater_action[0],
-                        greater_action[1],
-                        convert_cards_list(cards)
-                    ]
-                else:
-                    data["greaterAction"] = greater_action
-            else:
-                data["greaterAction"] = greater_action
+        if "greaterAction" in data and isinstance(data["greaterAction"], list):
+            if len(data["greaterAction"]) > 2 and data["greaterAction"][2] != "PASS":
+                data["greaterAction"] = [
+                    data["greaterAction"][0],
+                    data["greaterAction"][1],
+                    convert_cards_list(data["greaterAction"][2])
+                ]
         
         if "actionList" in data:
             new_action_list = []
@@ -205,11 +150,13 @@ class LalalaWebsocketsClient:
                 try:
                     data = json.loads(message)
                     
-                    # 调试：打印原始数据
-                    if data.get("type") == "act" and "curAction" in data:
-                        print(f"[DEBUG RAW] curAction: {data['curAction']}, type: {type(data['curAction'])}")
-                        if isinstance(data['curAction'], list) and len(data['curAction']) > 2:
-                            print(f"[DEBUG RAW] curAction[2]: {data['curAction'][2]}, type: {type(data['curAction'][2])}")
+                    # 预处理：解析字符串形式的列表字段
+                    for field in ['curAction', 'greaterAction', 'handCards']:
+                        if field in data and isinstance(data[field], str):
+                            try:
+                                data[field] = ast.literal_eval(data[field])
+                            except:
+                                pass
                     
                     # 转换牌的格式
                     data = self.convert_card_format(data)
