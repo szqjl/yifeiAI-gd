@@ -418,51 +418,39 @@ class BatchExecutor:
                 state.completed_games += batch_games
                 state.last_update = datetime.now()
                 
-                # 尝试从服务器输出中读取战绩
-                # 查找类似 "Game result, victory: [2, 1, 2, 1]" 的输出
+                # 从服务器输出读取本批次战绩
+                # 服务器输出格式: "达到设定场次, 其中0号位胜利X次，1号位胜利Y次，2号位胜利Z次，3号位胜利W次"
                 try:
-                    # 读取match_log.txt或其他日志文件
-                    log_files = ["match_log.txt", "game_log.txt", "server_log.txt"]
-                    victory_data = None
-                    
-                    for log_file in log_files:
-                        if os.path.exists(log_file):
-                            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                                content = f.read()
-                                # 查找victory数据
-                                import re
-                                match = re.search(r'victory:\s*\[([^\]]+)\]', content)
-                                if match:
-                                    victory_str = match.group(1)
-                                    victory_data = [int(x.strip()) for x in victory_str.split(',')]
-                                    break
-                    
-                    if victory_data and len(victory_data) == 4:
-                        # victory_data格式: [pos0_wins, pos1_wins, pos2_wins, pos3_wins]
-                        # 假设pos0和pos2是team_a，pos1和pos3是team_b
-                        team_a_total = victory_data[0] + victory_data[2]
-                        team_b_total = victory_data[1] + victory_data[3]
-                        
-                        # 记录本批次的战绩
-                        for _ in range(team_a_total):
-                            self.tracker.record_game("team_a")
-                        for _ in range(team_b_total):
-                            self.tracker.record_game("team_b")
-                        
-                        self.logger.info(f"本批次战绩: Team A {team_a_total}胜, Team B {team_b_total}胜")
+                    # 读取match_log.txt
+                    if os.path.exists("match_log.txt"):
+                        with open("match_log.txt", 'r', encoding='utf-8', errors='ignore') as f:
+                            lines = f.readlines()
+                            # 找最后一行包含"达到设定场次"的
+                            for line in reversed(lines):
+                                if "达到设定场次" in line or "其中" in line:
+                                    import re
+                                    # 提取各位置胜利次数
+                                    matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
+                                    if matches:
+                                        wins = {int(pos): int(count) for pos, count in matches}
+                                        # 0号和2号是team_a，1号和3号是team_b
+                                        team_a_wins = wins.get(0, 0) + wins.get(2, 0)
+                                        team_b_wins = wins.get(1, 0) + wins.get(3, 0)
+                                        
+                                        # 只记录本批次的增量
+                                        # 清空之前的记录，重新统计
+                                        self.tracker.team_a_wins = team_a_wins
+                                        self.tracker.team_b_wins = team_b_wins
+                                        self.tracker.total_games = team_a_wins + team_b_wins
+                                        
+                                        self.logger.info(f"本批次战绩: Team A(0+2号) {team_a_wins}胜, Team B(1+3号) {team_b_wins}胜")
+                                        break
                     else:
-                        # 如果无法读取战绩，使用默认值
-                        self.logger.warning("无法从日志中读取战绩，使用默认值")
-                        for _ in range(batch_games):
-                            import random
-                            winner = random.choice(["team_a", "team_b"])
-                            self.tracker.record_game(winner)
+                        self.logger.warning("未找到match_log.txt，无法读取战绩")
                 except Exception as e:
-                    self.logger.warning(f"读取战绩失败: {e}，使用默认值")
-                    for _ in range(batch_games):
-                        import random
-                        winner = random.choice(["team_a", "team_b"])
-                        self.tracker.record_game(winner)
+                    self.logger.warning(f"读取战绩失败: {e}")
+                    import traceback
+                    traceback.print_exc()
                 
                 # 保存战绩和状态
                 try:
