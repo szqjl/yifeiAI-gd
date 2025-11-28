@@ -6,19 +6,29 @@
 
 ## 可能的问题
 
-### 1. 知识库未正确加载
-你的AI使用`KnowledgeEnhancedDecisionEngine`，但可能：
-- 知识库文件路径错误
-- 知识规则未生效
-- 编码问题导致规则解析失败
+### 1. 知识库未转换为策略 ⚠️ **已确认**
+**调试结果**：
+- ✅ 加载了32条知识内容
+- ❌ 0条可执行规则
+- ❌ `_apply_knowledge_rules`只是简单加分，没有实际策略
 
-**检查方法**：
+**问题**：
 ```python
-# 在Test1.py中添加调试
-print(f"Knowledge loader: {self.decision_engine.knowledge_loader}")
-if self.decision_engine.knowledge_loader:
-    print(f"Loaded rules: {len(self.decision_engine.knowledge_loader.rules)}")
+# 当前实现：只根据优先级加分
+def _calculate_knowledge_bonus(self, action, skills, message, is_active):
+    bonus = 0.0
+    for skill in skills:
+        priority = skill.get('priority', 0)
+        if priority >= 5:
+            bonus += 15.0  # 简单加分
+    return min(bonus, 50.0)
 ```
+
+**缺少的策略**：
+- 队友保护（队友剩余牌少时不压）
+- 对手压制（对手剩余牌少时必压）
+- 牌型保留（保留炸弹、顺子成员）
+- 位置感知（根据下家、上家调整）
 
 ### 2. 决策超时
 - 你的AI决策时间限制：0.8秒
