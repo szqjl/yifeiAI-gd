@@ -74,23 +74,47 @@ class LalalaWebsocketsClient:
         if "handCards" in data:
             data["handCards"] = convert_cards_list(data["handCards"])
         
-        if "curAction" in data and len(data["curAction"]) > 2:
-            if data["curAction"][2] != "PASS":
-                # 重新创建列表（因为可能是元组）
-                data["curAction"] = [
-                    data["curAction"][0],
-                    data["curAction"][1],
-                    convert_cards_list(data["curAction"][2])
-                ]
+        if "curAction" in data:
+            cur_action = data["curAction"]
+            # 如果是字符串，尝试解析为JSON
+            if isinstance(cur_action, str):
+                try:
+                    cur_action = json.loads(cur_action)
+                except:
+                    pass
+            
+            if isinstance(cur_action, list) and len(cur_action) > 2:
+                if cur_action[2] != "PASS":
+                    data["curAction"] = [
+                        cur_action[0],
+                        cur_action[1],
+                        convert_cards_list(cur_action[2])
+                    ]
+                else:
+                    data["curAction"] = cur_action
+            else:
+                data["curAction"] = cur_action
         
-        if "greaterAction" in data and len(data["greaterAction"]) > 2:
-            if data["greaterAction"][2] != "PASS":
-                # 重新创建列表
-                data["greaterAction"] = [
-                    data["greaterAction"][0],
-                    data["greaterAction"][1],
-                    convert_cards_list(data["greaterAction"][2])
-                ]
+        if "greaterAction" in data:
+            greater_action = data["greaterAction"]
+            # 如果是字符串，尝试解析为JSON
+            if isinstance(greater_action, str):
+                try:
+                    greater_action = json.loads(greater_action)
+                except:
+                    pass
+            
+            if isinstance(greater_action, list) and len(greater_action) > 2:
+                if greater_action[2] != "PASS":
+                    data["greaterAction"] = [
+                        greater_action[0],
+                        greater_action[1],
+                        convert_cards_list(greater_action[2])
+                    ]
+                else:
+                    data["greaterAction"] = greater_action
+            else:
+                data["greaterAction"] = greater_action
         
         if "actionList" in data:
             new_action_list = []
