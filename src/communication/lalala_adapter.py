@@ -111,20 +111,25 @@ class LalalaWebsocketsClient:
                 if "playArea" in player_info and player_info["playArea"] is not None:
                     play_area = player_info["playArea"]
                     
-                    # 如果是字典格式，转换为列表格式 [type, rank, cards]
+                    # 如果是字典格式
                     if isinstance(play_area, dict):
-                        card_type = play_area.get("type", "PASS")
-                        rank = play_area.get("rank", "")
-                        actions = play_area.get("actions", [])
-                        
-                        if actions and actions != "PASS":
-                            data["publicInfo"][i]["playArea"] = [
-                                card_type,
-                                rank,
-                                convert_cards_list(actions)
-                            ]
+                        # 如果只有actIndex，说明还没有出牌信息，设置为空
+                        if "actIndex" in play_area and "type" not in play_area:
+                            data["publicInfo"][i]["playArea"] = ["PASS", "", "PASS"]
                         else:
-                            data["publicInfo"][i]["playArea"] = [card_type, rank, "PASS"]
+                            # 正常的牌型信息
+                            card_type = play_area.get("type", "PASS")
+                            rank = play_area.get("rank", "")
+                            actions = play_area.get("actions", [])
+                            
+                            if actions and actions != "PASS":
+                                data["publicInfo"][i]["playArea"] = [
+                                    card_type,
+                                    rank,
+                                    convert_cards_list(actions)
+                                ]
+                            else:
+                                data["publicInfo"][i]["playArea"] = [card_type, rank, "PASS"]
                     
                     # 如果是列表格式，转换牌
                     elif isinstance(play_area, list) and len(play_area) > 2:
