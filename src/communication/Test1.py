@@ -26,6 +26,17 @@ class BasicGuandanClient:
         # Initialize knowledge-enhanced decision engine
         self.decision_engine = KnowledgeEnhancedDecisionEngine(self.state_manager)
         
+        # 调试：检查知识库是否加载
+        print(f"[{user_info}] Knowledge loader: {self.decision_engine.knowledge_loader}")
+        if self.decision_engine.knowledge_loader:
+            try:
+                rules_count = len(self.decision_engine.knowledge_loader.rules) if hasattr(self.decision_engine.knowledge_loader, 'rules') else 0
+                print(f"[{user_info}] Loaded {rules_count} knowledge rules")
+            except Exception as e:
+                print(f"[{user_info}] Error checking rules: {e}")
+        else:
+            print(f"[{user_info}] WARNING: Knowledge loader is None!")
+        
         # Keep old game_state for compatibility
         self.game_state = {
             "handCards": [],
