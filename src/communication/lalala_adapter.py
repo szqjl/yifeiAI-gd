@@ -49,13 +49,20 @@ class LalalaWebsocketsClient:
         lalala期望的格式是列表，而不是字符串
         """
         def convert_card(card):
-            if isinstance(card, str) and len(card) >= 2:
-                # 'H3' -> ['H', '3']
-                # 'HT' -> ['H', 'T']
-                # 'H10' -> ['H', 'T'] (10用T表示)
-                suit = card[0]
-                rank = card[1:].replace('10', 'T')
-                return [suit, rank]
+            if isinstance(card, str):
+                if len(card) == 1:
+                    # 大小王: 'R' -> ['R', 'R'], 'B' -> ['B', 'B']
+                    return [card, card]
+                elif len(card) >= 2:
+                    # 'H3' -> ['H', '3']
+                    # 'HT' -> ['H', 'T']
+                    # 'H10' -> ['H', 'T'] (10用T表示)
+                    suit = card[0]
+                    rank = card[1:].replace('10', 'T')
+                    return [suit, rank]
+            elif isinstance(card, list) and len(card) == 2:
+                # 已经是正确格式，但检查是否需要转换10
+                return [card[0], str(card[1]).replace('10', 'T')]
             return card
         
         def convert_cards_list(cards):
