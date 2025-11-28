@@ -503,6 +503,9 @@ class BatchExecutorGUI:
                     self.log_message("执行已停止，状态已保存", "INFO")
                 except Exception as e:
                     self.log_message(f"停止时出错: {e}", "ERROR")
+            
+            # 恢复UI状态
+            self.execution_finished()
     
     def execution_finished(self):
         """执行完成后的清理"""
