@@ -148,12 +148,6 @@ class LalalaWebsocketsClient:
                 try:
                     data = json.loads(message)
                     
-                    # 调试：打印publicInfo格式
-                    if "publicInfo" in data and data.get("type") == "act":
-                        for i, info in enumerate(data["publicInfo"]):
-                            if "playArea" in info and info["playArea"] is not None:
-                                print(f"[DEBUG] Player {i} playArea: {info['playArea']}, type: {type(info['playArea'])}")
-                    
                     # 转换牌的格式
                     data = self.convert_card_format(data)
                     
