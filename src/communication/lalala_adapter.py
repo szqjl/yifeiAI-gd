@@ -87,11 +87,19 @@ class LalalaWebsocketsClient:
                     pass
             
             if isinstance(cur_action, list) and len(cur_action) > 2:
-                if cur_action[2] != "PASS":
+                cards = cur_action[2]
+                # 如果cards是字符串，尝试解析为JSON
+                if isinstance(cards, str) and cards != "PASS":
+                    try:
+                        cards = json.loads(cards)
+                    except:
+                        pass
+                
+                if cards != "PASS":
                     data["curAction"] = [
                         cur_action[0],
                         cur_action[1],
-                        convert_cards_list(cur_action[2])
+                        convert_cards_list(cards)
                     ]
                 else:
                     data["curAction"] = cur_action
@@ -108,11 +116,19 @@ class LalalaWebsocketsClient:
                     pass
             
             if isinstance(greater_action, list) and len(greater_action) > 2:
-                if greater_action[2] != "PASS":
+                cards = greater_action[2]
+                # 如果cards是字符串，尝试解析为JSON
+                if isinstance(cards, str) and cards != "PASS":
+                    try:
+                        cards = json.loads(cards)
+                    except:
+                        pass
+                
+                if cards != "PASS":
                     data["greaterAction"] = [
                         greater_action[0],
                         greater_action[1],
-                        convert_cards_list(greater_action[2])
+                        convert_cards_list(cards)
                     ]
                 else:
                     data["greaterAction"] = greater_action
