@@ -220,12 +220,16 @@ class BatchExecutorGUI:
                 break
         
         # 默认客户端脚本（您的AI vs lalala一等奖AI）
+        # 座位分配：0号和2号是对家（一队），1号和3号是对家（一队）
         default_clients = [
-            "src/communication/Test1.py",                    # 您的AI - 队友1
-            "src/communication/Test2.py",                    # 您的AI - 队友2
-            "src/communication/run_lalala_client3.py",       # lalala对手1
-            "src/communication/run_lalala_client4.py"        # lalala对手2
+            "src/communication/Test1.py",                    # 0号位 - 您的AI队友1
+            "src/communication/run_lalala_client3.py",       # 1号位 - lalala对手1
+            "src/communication/Test2.py",                    # 2号位 - 您的AI队友2
+            "src/communication/run_lalala_client4.py"        # 3号位 - lalala对手2
         ]
+        # 队伍分组：
+        # 队伍A（您的队）：0号(Test1) + 2号(Test2)
+        # 队伍B（lalala队）：1号(client3) + 3号(client4)
         
         # 检查哪些客户端存在
         existing_clients = [c for c in default_clients if os.path.exists(c)]
