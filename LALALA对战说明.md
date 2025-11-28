@@ -17,14 +17,20 @@ TEST_LALALA.bat
 
 ## GUI配置
 
-在GUI中配置客户端路径：
+在GUI中配置客户端路径（按座位顺序）：
 ```
-src/communication/Test1.py, src/communication/Test2.py, src/communication/run_lalala_client3.py, src/communication/run_lalala_client4.py
+src/communication/Test1.py, src/communication/run_lalala_client3.py, src/communication/Test2.py, src/communication/run_lalala_client4.py
 ```
 
-这样配置表示：
-- Test1 + Test2 (你的AI，一队)
-- lalala client3 + client4 (对手，另一队)
+**座位和队伍分配**：
+- 0号位：Test1（你的AI）
+- 1号位：lalala client3（对手）
+- 2号位：Test2（你的AI）
+- 3号位：lalala client4（对手）
+
+**队伍分组**（掼蛋规则：0+2对家，1+3对家）：
+- 队伍A（你的队）：0号(Test1) + 2号(Test2)
+- 队伍B（lalala队）：1号(client3) + 3号(client4)
 
 ## 命令行测试
 
