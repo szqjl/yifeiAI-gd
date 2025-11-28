@@ -108,8 +108,8 @@ class LalalaWebsocketsClient:
         # 转换publicInfo中的playArea
         if "publicInfo" in data:
             for i, player_info in enumerate(data["publicInfo"]):
-                if "playArea" in player_info and len(player_info["playArea"]) > 2:
-                    if player_info["playArea"][2] != "PASS":
+                if "playArea" in player_info and player_info["playArea"] is not None:
+                    if len(player_info["playArea"]) > 2 and player_info["playArea"][2] != "PASS":
                         data["publicInfo"][i]["playArea"] = [
                             player_info["playArea"][0],
                             player_info["playArea"][1],
