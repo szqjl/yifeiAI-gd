@@ -109,12 +109,31 @@ class LalalaWebsocketsClient:
         if "publicInfo" in data:
             for i, player_info in enumerate(data["publicInfo"]):
                 if "playArea" in player_info and player_info["playArea"] is not None:
-                    if len(player_info["playArea"]) > 2 and player_info["playArea"][2] != "PASS":
-                        data["publicInfo"][i]["playArea"] = [
-                            player_info["playArea"][0],
-                            player_info["playArea"][1],
-                            convert_cards_list(player_info["playArea"][2])
-                        ]
+                    play_area = player_info["playArea"]
+                    
+                    # 如果是字典格式，转换为列表格式 [type, rank, cards]
+                    if isinstance(play_area, dict):
+                        card_type = play_area.get("type", "PASS")
+                        rank = play_area.get("rank", "")
+                        actions = play_area.get("actions", [])
+                        
+                        if actions and actions != "PASS":
+                            data["publicInfo"][i]["playArea"] = [
+                                card_type,
+                                rank,
+                                convert_cards_list(actions)
+                            ]
+                        else:
+                            data["publicInfo"][i]["playArea"] = [card_type, rank, "PASS"]
+                    
+                    # 如果是列表格式，转换牌
+                    elif isinstance(play_area, list) and len(play_area) > 2:
+                        if play_area[2] != "PASS":
+                            data["publicInfo"][i]["playArea"] = [
+                                play_area[0],
+                                play_area[1],
+                                convert_cards_list(play_area[2])
+                            ]
         
         return data
     
