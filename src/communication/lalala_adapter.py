@@ -68,6 +68,9 @@ class LalalaWebsocketsClient:
         def convert_cards_list(cards):
             if isinstance(cards, list):
                 return [convert_card(c) for c in cards]
+            elif isinstance(cards, str) and cards != "PASS":
+                # 单个牌字符串也转换
+                return convert_card(cards)
             return cards
         
         # 转换各种可能包含牌的字段
@@ -181,10 +184,15 @@ class LalalaWebsocketsClient:
                     except IndexError as e:
                         print(f"[ERROR] IndexError in state.parse: {e}")
                         print(f"[ERROR] curAction: {data.get('curAction')}")
+                        if data.get('curAction') and len(data['curAction']) > 2:
+                            print(f"[ERROR] curAction[2] type: {type(data['curAction'][2])}")
+                            if isinstance(data['curAction'][2], list) and len(data['curAction'][2]) > 0:
+                                print(f"[ERROR] curAction[2][0]: {data['curAction'][2][0]}, type: {type(data['curAction'][2][0])}")
                         print(f"[ERROR] greaterAction: {data.get('greaterAction')}")
-                        if "publicInfo" in data:
-                            for i, info in enumerate(data["publicInfo"]):
-                                print(f"[ERROR] Player {i} playArea: {info.get('playArea')}")
+                        if data.get('greaterAction') and len(data['greaterAction']) > 2:
+                            print(f"[ERROR] greaterAction[2] type: {type(data['greaterAction'][2])}")
+                            if isinstance(data['greaterAction'][2], list) and len(data['greaterAction'][2]) > 0:
+                                print(f"[ERROR] greaterAction[2][0]: {data['greaterAction'][2][0]}, type: {type(data['greaterAction'][2][0])}")
                         raise
                     
                     # 如果需要做出动作选择
