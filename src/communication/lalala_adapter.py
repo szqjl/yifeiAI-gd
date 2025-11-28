@@ -4,6 +4,7 @@
 import asyncio
 import websockets
 import json
+import ast
 import sys
 import os
 
@@ -88,12 +89,17 @@ class LalalaWebsocketsClient:
             
             if isinstance(cur_action, list) and len(cur_action) > 2:
                 cards = cur_action[2]
-                # 如果cards是字符串，尝试解析为JSON
+                # 如果cards是字符串，尝试解析
                 if isinstance(cards, str) and cards != "PASS":
                     try:
+                        # 先尝试JSON
                         cards = json.loads(cards)
                     except:
-                        pass
+                        try:
+                            # 再尝试Python字面量（支持单引号）
+                            cards = ast.literal_eval(cards)
+                        except:
+                            pass
                 
                 if cards != "PASS":
                     data["curAction"] = [
@@ -117,12 +123,17 @@ class LalalaWebsocketsClient:
             
             if isinstance(greater_action, list) and len(greater_action) > 2:
                 cards = greater_action[2]
-                # 如果cards是字符串，尝试解析为JSON
+                # 如果cards是字符串，尝试解析
                 if isinstance(cards, str) and cards != "PASS":
                     try:
+                        # 先尝试JSON
                         cards = json.loads(cards)
                     except:
-                        pass
+                        try:
+                            # 再尝试Python字面量（支持单引号）
+                            cards = ast.literal_eval(cards)
+                        except:
+                            pass
                 
                 if cards != "PASS":
                     data["greaterAction"] = [
