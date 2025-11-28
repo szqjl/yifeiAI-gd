@@ -230,15 +230,15 @@ class BatchExecutorGUI:
         #     "src/communication/run_lalala_client4.py"
         # ]
         
-        # 选项2：使用lalala策略版本（推荐，实力相当）
+        # 选项2：使用N版本（New，集成lalala策略，推荐）
         default_clients = [
-            "src/communication/Test1_lalala.py",             # 0号位 - 使用lalala策略
+            "src/communication/Test_N1.py",                  # 0号位 - N1（集成lalala策略）
             "src/communication/run_lalala_client3.py",       # 1号位 - lalala对手1
-            "src/communication/Test2_lalala.py",             # 2号位 - 使用lalala策略
+            "src/communication/Test_N2.py",                  # 2号位 - N2（集成lalala策略）
             "src/communication/run_lalala_client4.py"        # 3号位 - lalala对手2
         ]
         # 队伍分组：
-        # 队伍A（您的队）：0号(Test1_lalala) + 2号(Test2_lalala)
+        # 队伍A（您的队）：0号(Test_N1) + 2号(Test_N2)
         # 队伍B（lalala队）：1号(client3) + 3号(client4)
         
         # 检查哪些客户端存在
