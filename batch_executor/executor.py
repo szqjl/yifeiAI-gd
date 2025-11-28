@@ -364,6 +364,16 @@ class BatchExecutor:
         restart_count = self.validator.calculate_restart_count(self.target_games)
         self.logger.info(f"预计需要重启 {restart_count} 次")
         
+        # 清空之前的战绩，开始新的对战
+        self.tracker.team_a_wins = 0
+        self.tracker.team_b_wins = 0
+        self.tracker.total_games = 0
+        self.logger.info("已清空之前的战绩，开始新的对战")
+        
+        # 记录初始战绩，用于计算增量
+        initial_team_a = 0
+        initial_team_b = 0
+        
         # 主执行循环
         try:
             while state.completed_games < state.target_games and self._running:
@@ -434,16 +444,25 @@ class BatchExecutor:
                                     if matches:
                                         wins = {int(pos): int(count) for pos, count in matches}
                                         # 0号和2号是team_a，1号和3号是team_b
-                                        team_a_wins = wins.get(0, 0) + wins.get(2, 0)
-                                        team_b_wins = wins.get(1, 0) + wins.get(3, 0)
+                                        current_team_a = wins.get(0, 0) + wins.get(2, 0)
+                                        current_team_b = wins.get(1, 0) + wins.get(3, 0)
                                         
-                                        # 只记录本批次的增量
-                                        # 清空之前的记录，重新统计
-                                        self.tracker.team_a_wins = team_a_wins
-                                        self.tracker.team_b_wins = team_b_wins
-                                        self.tracker.total_games = team_a_wins + team_b_wins
+                                        # 计算本批次的增量
+                                        delta_a = current_team_a - initial_team_a
+                                        delta_b = current_team_b - initial_team_b
                                         
-                                        self.logger.info(f"本批次战绩: Team A(0+2号) {team_a_wins}胜, Team B(1+3号) {team_b_wins}胜")
+                                        # 累加到tracker
+                                        for _ in range(delta_a):
+                                            self.tracker.record_game("team_a")
+                                        for _ in range(delta_b):
+                                            self.tracker.record_game("team_b")
+                                        
+                                        # 更新初始值
+                                        initial_team_a = current_team_a
+                                        initial_team_b = current_team_b
+                                        
+                                        self.logger.info(f"本批次增量: Team A +{delta_a}, Team B +{delta_b}")
+                                        self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
                                         break
                     else:
                         self.logger.warning("未找到match_log.txt，无法读取战绩")
