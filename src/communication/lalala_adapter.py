@@ -94,11 +94,14 @@ class LalalaWebsocketsClient:
                     try:
                         # 先尝试JSON
                         cards = json.loads(cards)
-                    except:
+                    except Exception as e1:
                         try:
                             # 再尝试Python字面量（支持单引号）
                             cards = ast.literal_eval(cards)
-                        except:
+                        except Exception as e2:
+                            print(f"[DEBUG] Failed to parse cards: {cards}")
+                            print(f"[DEBUG] JSON error: {e1}")
+                            print(f"[DEBUG] AST error: {e2}")
                             pass
                 
                 if cards != "PASS":
