@@ -205,6 +205,12 @@ class LalalaWebsocketsClient:
                 try:
                     data = json.loads(message)
                     
+                    # 调试：打印原始数据
+                    if data.get("type") == "act" and "curAction" in data:
+                        print(f"[DEBUG RAW] curAction: {data['curAction']}, type: {type(data['curAction'])}")
+                        if isinstance(data['curAction'], list) and len(data['curAction']) > 2:
+                            print(f"[DEBUG RAW] curAction[2]: {data['curAction'][2]}, type: {type(data['curAction'][2])}")
+                    
                     # 转换牌的格式
                     data = self.convert_card_format(data)
                     
