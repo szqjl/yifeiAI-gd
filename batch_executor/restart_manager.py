@@ -72,12 +72,15 @@ class RestartManager:
                 logger.info(f"工作目录: {server_dir}")
                 
                 # 启动服务器进程
-                # 不捕获输出，让服务器正常在新窗口中运行
-                # 这样服务器才能正常输出并接受客户端连接
+                # 捕获输出以便读取战绩，但不阻塞
                 process = subprocess.Popen(
                     command,
                     cwd=server_dir,  # 设置工作目录
-                    creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                    text=True,
+                    bufsize=1  # 行缓冲
                 )
                 
                 logger.info(f"服务器进程已启动，PID: {process.pid}")

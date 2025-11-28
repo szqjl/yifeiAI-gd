@@ -416,13 +416,24 @@ class BatchExecutor:
                 server_name = os.path.basename(self.server_path)
                 self.logger.info(f"等待服务器完成 {batch_games} 场游戏...")
                 
-                # 直接等待服务器进程结束
+                # 等待服务器进程结束并读取输出
+                server_output = []
                 try:
-                    server_process.wait(timeout=600)  # 10分钟超时
+                    # 读取输出
+                    if server_process.stdout:
+                        for line in server_process.stdout:
+                            server_output.append(line.strip())
+                            # 实时打印服务器输出
+                            if line.strip():
+                                self.logger.info(f"[服务器] {line.strip()}")
+                    
+                    server_process.wait(timeout=60)  # 等待进程结束
                     self.logger.info("服务器进程已正常结束")
                 except subprocess.TimeoutExpired:
                     self.logger.warning("服务器未在预期时间内终止，强制结束")
                     server_process.kill()
+                except Exception as e:
+                    self.logger.error(f"读取服务器输出时出错: {e}")
                 
                 # 更新状态
                 state.completed_games += batch_games
@@ -431,41 +442,35 @@ class BatchExecutor:
                 # 从服务器输出读取本批次战绩
                 # 服务器输出格式: "达到设定场次, 其中0号位胜利X次，1号位胜利Y次，2号位胜利Z次，3号位胜利W次"
                 try:
-                    # 读取match_log.txt
-                    if os.path.exists("match_log.txt"):
-                        with open("match_log.txt", 'r', encoding='utf-8', errors='ignore') as f:
-                            lines = f.readlines()
-                            # 找最后一行包含"达到设定场次"的
-                            for line in reversed(lines):
-                                if "达到设定场次" in line or "其中" in line:
-                                    import re
-                                    # 提取各位置胜利次数
-                                    matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
-                                    if matches:
-                                        wins = {int(pos): int(count) for pos, count in matches}
-                                        # 0号和2号是team_a，1号和3号是team_b
-                                        current_team_a = wins.get(0, 0) + wins.get(2, 0)
-                                        current_team_b = wins.get(1, 0) + wins.get(3, 0)
-                                        
-                                        # 计算本批次的增量
-                                        delta_a = current_team_a - initial_team_a
-                                        delta_b = current_team_b - initial_team_b
-                                        
-                                        # 累加到tracker
-                                        for _ in range(delta_a):
-                                            self.tracker.record_game("team_a")
-                                        for _ in range(delta_b):
-                                            self.tracker.record_game("team_b")
-                                        
-                                        # 更新初始值
-                                        initial_team_a = current_team_a
-                                        initial_team_b = current_team_b
-                                        
-                                        self.logger.info(f"本批次增量: Team A +{delta_a}, Team B +{delta_b}")
-                                        self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
-                                        break
-                    else:
-                        self.logger.warning("未找到match_log.txt，无法读取战绩")
+                    import re
+                    # 从服务器输出中查找战绩
+                    for line in reversed(server_output):
+                        if "达到设定场次" in line or "其中" in line:
+                            # 提取各位置胜利次数
+                            matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
+                            if matches:
+                                wins = {int(pos): int(count) for pos, count in matches}
+                                # 0号和2号是team_a，1号和3号是team_b
+                                current_team_a = wins.get(0, 0) + wins.get(2, 0)
+                                current_team_b = wins.get(1, 0) + wins.get(3, 0)
+                                
+                                # 计算本批次的增量
+                                delta_a = current_team_a - initial_team_a
+                                delta_b = current_team_b - initial_team_b
+                                
+                                # 累加到tracker
+                                for _ in range(delta_a):
+                                    self.tracker.record_game("team_a")
+                                for _ in range(delta_b):
+                                    self.tracker.record_game("team_b")
+                                
+                                # 更新初始值
+                                initial_team_a = current_team_a
+                                initial_team_b = current_team_b
+                                
+                                self.logger.info(f"本批次增量: Team A +{delta_a}, Team B +{delta_b}")
+                                self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
+                                break
                 except Exception as e:
                     self.logger.warning(f"读取战绩失败: {e}")
                     import traceback
