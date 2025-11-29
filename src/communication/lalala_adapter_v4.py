@@ -100,11 +100,25 @@ class YFAdapter:
                 self.logger.warning(f"YF returned invalid action: {action_index}, returning empty list")
                 return []
             
-            # Task 2.1: 返回候选列表格式
-            # YF的主要选择，给予最高基础评分（100.0）
-            candidates.append((action_index, 100.0))
+            # Task 2.2: 添加候选评分
+            # 为YF的主要选择评分
+            primary_score = self._score_yf_action(action_index, message, converted_message)
+            candidates.append((action_index, primary_score))
             
-            self.logger.debug(f"YF generated 1 candidate: action={action_index}, score=100.0")
+            # Task 2.2: 考虑返回 top-3 候选
+            # 获取其他可能的候选动作（除了PASS）
+            additional_candidates = self._get_additional_candidates(
+                action_index, message, converted_message, top_k=2
+            )
+            candidates.extend(additional_candidates)
+            
+            # 按评分排序（降序）
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            
+            self.logger.debug(
+                f"YF generated {len(candidates)} candidate(s): "
+                f"{[(idx, f'{score:.1f}') for idx, score in candidates]}"
+            )
             return candidates
             
         except Exception as e:
@@ -504,6 +518,156 @@ class YFAdapter:
         except Exception as e:
             self.logger.error(f"YF rule_parse failed: {e}", exc_info=True)
             raise RuntimeError(f"YF decision failed: {e}")
+    
+    def _score_yf_action(self, action_idx: int, message: dict, converted_message: dict) -> float:
+        """
+        Score a YF action based on various factors.
+        
+        Task 2.2: 为 YF 返回的动作添加基础评分
+        
+        Scoring factors:
+        - Base score: 100.0 for YF's primary choice
+        - Action type bonus: +10 for non-PASS actions
+        - Card value bonus: +5-15 based on card rank
+        - Situation bonus: +5-20 based on game situation
+        
+        Args:
+            action_idx: Action index to score
+            message: Original message from server
+            converted_message: Converted message in YF format
+            
+        Returns:
+            Score for the action (higher is better)
+        """
+        base_score = 100.0
+        action_list = message.get("actionList", [])
+        
+        if not action_list or action_idx >= len(action_list):
+            return base_score
+        
+        action = action_list[action_idx]
+        if not isinstance(action, list) or len(action) < 3:
+            return base_score
+        
+        action_type = action[0]
+        rank = action[1]
+        cards = action[2]
+        
+        score = base_score
+        
+        # Factor 1: Action type bonus
+        if action_type != "PASS":
+            score += 10.0  # Non-PASS actions get bonus
+        else:
+            # PASS gets lower score (but still valid)
+            score -= 5.0
+        
+        # Factor 2: Card value bonus
+        if action_type != "PASS" and cards != "PASS":
+            # Higher rank cards get bonus
+            rank_value = self._get_rank_value(rank)
+            if rank_value >= 14:  # A, 2, B, R
+                score += 15.0
+            elif rank_value >= 11:  # J, Q, K
+                score += 10.0
+            elif rank_value >= 7:  # 7-10
+                score += 5.0
+        
+        # Factor 3: Situation bonus
+        public_info = message.get("publicInfo", [])
+        my_pos = self.yf_state._myPos if self.yf_state else message.get("myPos", 0)
+        
+        if public_info and isinstance(public_info, list):
+            # 获取剩余牌数
+            cards_left = {}
+            for i, info in enumerate(public_info):
+                if isinstance(info, dict):
+                    cards_left[i] = info.get('rest', 27)
+            
+            # 如果对手快走完了，非PASS动作加分
+            if action_type != "PASS":
+                teammate_pos = (my_pos + 2) % 4
+                next_pos = (my_pos + 1) % 4
+                prev_pos = (my_pos - 1) % 4
+                
+                opponent_min = min(
+                    cards_left.get(next_pos, 27),
+                    cards_left.get(prev_pos, 27)
+                )
+                
+                if opponent_min <= 5:
+                    score += 20.0  # 紧急情况，积极出牌
+                elif opponent_min <= 10:
+                    score += 10.0  # 对手牌不多，适度积极
+        
+        return score
+    
+    def _get_rank_value(self, rank: str) -> int:
+        """
+        Get numeric value for a card rank.
+        
+        Args:
+            rank: Card rank (e.g., "3", "K", "A", "2", "B", "R")
+            
+        Returns:
+            Numeric value (3=3, T=10, J=11, Q=12, K=13, A=14, 2=15, B=16, R=17)
+        """
+        rank_map = {
+            "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9,
+            "T": 10, "10": 10,
+            "J": 11, "Q": 12, "K": 13,
+            "A": 14, "2": 15,
+            "B": 16, "R": 17
+        }
+        return rank_map.get(str(rank).upper(), 0)
+    
+    def _get_additional_candidates(
+        self, primary_idx: int, message: dict, converted_message: dict, top_k: int = 2
+    ) -> List[tuple]:
+        """
+        Get additional candidate actions besides the primary one.
+        
+        Task 2.2: 考虑返回 top-3 候选而非单一动作
+        
+        This method evaluates other actions and returns top-k candidates
+        with lower scores than the primary action.
+        
+        Args:
+            primary_idx: Primary action index from YF
+            message: Original message from server
+            converted_message: Converted message in YF format
+            top_k: Number of additional candidates to return
+            
+        Returns:
+            List of (action_idx, score) tuples for additional candidates
+        """
+        candidates = []
+        action_list = message.get("actionList", [])
+        
+        if not action_list or len(action_list) <= 1:
+            return candidates
+        
+        # 评估所有其他动作（除了PASS和主要选择）
+        evaluated = []
+        for idx in range(len(action_list)):
+            if idx == primary_idx or idx == 0:  # 跳过主要选择和PASS
+                continue
+            
+            if not self._is_valid_action(idx, message):
+                continue
+            
+            # 为每个动作评分（使用较低的基准分）
+            score = self._score_yf_action(idx, message, converted_message)
+            # 降低非主要选择的评分（相对于主要选择）
+            score = score * 0.7  # 主要选择的70%
+            
+            evaluated.append((idx, score))
+        
+        # 选择 top-k
+        evaluated.sort(key=lambda x: x[1], reverse=True)
+        candidates = evaluated[:top_k]
+        
+        return candidates
     
     def _is_valid_action(self, action: int, message: dict) -> bool:
         """
