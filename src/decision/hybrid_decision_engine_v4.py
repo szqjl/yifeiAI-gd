@@ -365,37 +365,38 @@ class HybridDecisionEngineV4:
                 self.yf_adapter = YFAdapter(self.player_id)
                 self.logger.info("YFAdapter initialized (lazy)")
             
-            # 调用yf_adapter.decide(message)
-            action = self.yf_adapter.decide(message)
+            # Task 2.1: YFAdapter.decide() 现在直接返回候选列表
+            yf_candidates = self.yf_adapter.decide(message)
             
-            # 验证返回的action有效性
-            if action is None:
-                # YF返回None，表示触发Layer 2/3，返回空列表
-                self.logger.debug("YF returned None, triggering Layer 2/3")
+            # YFAdapter.decide() 现在返回 List[tuple] 格式
+            # 如果返回空列表，表示应该触发Layer 2/3
+            if not yf_candidates:
+                self.logger.debug("YF returned empty candidates list, triggering Layer 2/3")
                 return []
             
+            # 验证候选的有效性
             action_list = message.get("actionList", [])
-            if not action_list:
-                # 空动作列表，只有0（PASS）有效
-                if action == 0:
-                    candidates.append((0, 100.0))  # YF的主要选择，高分
-                    return candidates
-                else:
-                    self.logger.warning(f"Invalid action {action} for empty actionList")
-                    return []
+            valid_candidates = []
             
-            # 检查action是否在有效范围内
-            if 0 <= action < len(action_list):
-                # YF的主要选择，给予最高基础评分
-                candidates.append((action, 100.0))
-                
-                # 可选：添加YF的次优选择（如果YF支持返回多个候选）
-                # 目前YF只返回单一动作，所以只有一个候选
-                
-                self.logger.debug(f"YF generated {len(candidates)} candidate(s), primary: {action}")
-                return candidates
+            for action_idx, score in yf_candidates:
+                # 验证动作索引有效性
+                if action_list:
+                    if 0 <= action_idx < len(action_list):
+                        valid_candidates.append((action_idx, score))
+                    else:
+                        self.logger.warning(f"YF candidate {action_idx} out of range [0, {len(action_list)})")
+                else:
+                    # 空动作列表，只有0（PASS）有效
+                    if action_idx == 0:
+                        valid_candidates.append((0, score))
+                    else:
+                        self.logger.warning(f"Invalid action {action_idx} for empty actionList")
+            
+            if valid_candidates:
+                self.logger.debug(f"YF generated {len(valid_candidates)} valid candidate(s)")
+                return valid_candidates
             else:
-                self.logger.warning(f"Action {action} out of range [0, {len(action_list)})")
+                self.logger.warning("YF candidates all invalid, returning empty list")
                 return []
                 
         except Exception as e:
