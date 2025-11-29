@@ -15,7 +15,7 @@ echo 2. 测试导入lalala客户端
 echo 3. 显示可用的客户端
 echo.
 
-python -c "from src.communication.lalala_adapter import *; print('✓ 适配器导入成功')"
+py -c "from src.communication.lalala_adapter import *; print('✓ 适配器导入成功')"
 
 if errorlevel 1 (
     echo.
@@ -24,7 +24,7 @@ if errorlevel 1 (
     echo 可能原因:
     echo 1. D:\NYGD\lalala 目录不存在
     echo 2. lalala目录中缺少client1-4.py文件
-    echo 3. 缺少ws4py库: pip install ws4py
+    echo 3. 缺少ws4py库: py -m pip install ws4py
     echo.
 ) else (
     echo.

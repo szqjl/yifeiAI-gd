@@ -11,7 +11,7 @@ echo       关闭GUI窗口后，此窗口会自动关闭
 echo.
 
 REM 启动GUI（会阻塞直到GUI关闭）
-python batch_executor_gui.py
+py batch_executor_gui.py
 
 REM 检查退出码
 if errorlevel 1 (
@@ -26,8 +26,8 @@ if errorlevel 1 (
     echo 3. 程序执行出错
     echo.
     echo 解决方法:
-    echo 1. 确认Python已安装: python --version
-    echo 2. 安装依赖: pip install -r requirements.txt
+    echo 1. 确认Python已安装: py --version
+    echo 2. 安装依赖: py -m pip install -r requirements.txt
     echo 3. 重新运行并查看错误信息
     echo.
     pause

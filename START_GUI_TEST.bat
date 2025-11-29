@@ -15,7 +15,7 @@ echo.
 
 echo [步骤 1/4] 检查Python环境...
 echo ────────────────────────────────────────
-python --version 2>nul
+py --version 2>nul
 if errorlevel 1 (
     echo ❌ Python未安装或未添加到PATH
     echo.
@@ -30,7 +30,7 @@ echo.
 
 echo [步骤 2/4] 检查GUI模块...
 echo ────────────────────────────────────────
-python -c "import tkinter; print('✅ GUI模块正常')" 2>nul
+py -c "import tkinter; print('✅ GUI模块正常')" 2>nul
 if errorlevel 1 (
     echo ❌ tkinter模块检查失败
     echo.
@@ -56,7 +56,7 @@ echo 正在启动...
 echo.
 
 REM 启动GUI并捕获输出
-python test_gui_launch.py
+py test_gui_launch.py
 
 echo.
 echo [步骤 4/4] 完成
