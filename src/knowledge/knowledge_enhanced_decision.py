@@ -177,10 +177,42 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
         greater_pos = message.get("greaterPos", -1)
         cur_pos = message.get("curPos", -1)
         
-        # 计算位置关系
-        teammate_pos = (my_pos + 2) % 4
-        next_pos = (my_pos + 1) % 4
-        prev_pos = (my_pos - 1) % 4
+        # 计算位置关系（掼蛋4人游戏，位置编号0-3）
+        # 
+        # 【重要】位置关系说明（根据平台使用说明和lalala代码）：
+        # 
+        # 1. 组队规则（平台规则）：
+        #    - 第1个连接的玩家（位置0）和第3个连接的玩家（位置2）自动为一队
+        #    - 第2个连接的玩家（位置1）和第4个连接的玩家（位置3）自动为一队
+        #    - 队友（teammate/对家）：位置 = (my_pos + 2) % 4
+        #      例如：玩家0的队友是玩家2，玩家1的队友是玩家3
+        # 
+        # 2. 出牌顺序（已通过实际日志验证）：
+        #    - 出牌顺序：顺时针循环 0 → 1 → 2 → 3 → 0
+        #    - 下家（next）：下一个出牌的玩家，位置 = (my_pos + 1) % 4
+        #      例如：玩家0的下家是玩家1，玩家1的下家是玩家2，玩家2的下家是玩家3，玩家3的下家是玩家0
+        #    - 上家（prev）：上一个出牌的玩家，位置 = (my_pos - 1) % 4 = (my_pos + 3) % 4
+        #      例如：玩家0的上家是玩家3，玩家1的上家是玩家0，玩家2的上家是玩家1，玩家3的上家是玩家2
+        #    - 注意：游戏开始时第一个出牌者可能不是0号，但一旦开始，顺序固定为顺时针
+        # 
+        # 3. 对手（opponent）：
+        #    - 对方队伍的玩家，包括下家和上家
+        #    - 例如：玩家0的对手是玩家1（下家）和玩家3（上家）
+        # 
+        # 4. 关键字段说明：
+        #    - myPos: 我的位置（0-3）
+        #    - curPos: 当前出牌者的位置（-1表示无人出牌，如开局、接风等）
+        #    - greaterPos: 当前最大动作持有者的位置（-1表示无最大动作）
+        # 
+        # 5. 位置编号示例：
+        #    假设玩家0是我：
+        #    - 队友（对家）：玩家2
+        #    - 下家：玩家1
+        #    - 上家：玩家3
+        #    - 对手：玩家1和玩家3
+        teammate_pos = (my_pos + 2) % 4  # 队友（对家）
+        next_pos = (my_pos + 1) % 4      # 下家（对手）
+        prev_pos = (my_pos - 1) % 4      # 上家（对手），等价于 (my_pos + 3) % 4
         
         # 获取剩余牌数
         cards_left = {}
@@ -197,15 +229,99 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
             action_type = action[0] if len(action) > 0 else "PASS"
             score = base_score
             
-            # 策略1：队友保护
+            # 策略1：队友保护（验证并完善）
+            # 参考：lalala策略和关键规则层实现
+            teammate_cards = cards_left.get(teammate_pos, 27)
+            
+            # 条件1：队友是最大牌持有者（控场）
             if greater_pos == teammate_pos:
-                # 队友是最大牌持有者
-                if cards_left.get(teammate_pos, 27) <= 5:
-                    # 队友快走完了
+                # 关键情况：队友剩余1-2张牌（即将获胜）
+                if teammate_cards <= 2:
                     if action_type == "PASS":
-                        score += 100  # 强烈鼓励PASS，让队友走
+                        score += 150  # 极强烈鼓励PASS，让队友走
+                    else:
+                        score -= 80   # 严重惩罚出牌
+                
+                # 重要情况：队友剩余3-5张牌（残局阶段）
+                elif teammate_cards <= 5:
+                    # 检查当前牌值（如果是被动模式）
+                    if not is_active:
+                        cur_action = message.get("curAction", [])
+                        if cur_action and len(cur_action) >= 2:
+                            try:
+                                card_value = self._get_card_value(cur_action[1])
+                                # 如果队友出的是大牌（A或以上），让队友走
+                                if card_value >= 14:  # A=14, 2=15, Joker=16/17
+                                    if action_type == "PASS":
+                                        score += 120  # 强烈鼓励PASS
+                                    else:
+                                        score -= 60   # 惩罚出牌
+                                # 如果队友出的是中等牌（10-K），适度保护
+                                elif card_value >= 10:
+                                    if action_type == "PASS":
+                                        score += 80   # 鼓励PASS
+                                    else:
+                                        score -= 30   # 轻微惩罚出牌
+                            except:
+                                # 无法解析牌值，使用默认规则
+                                if action_type == "PASS":
+                                    score += 100
+                                else:
+                                    score -= 50
+                        else:
+                            # 没有当前动作（主动模式），队友控场时鼓励PASS
+                            if action_type == "PASS":
+                                score += 100
+                            else:
+                                score -= 50
+                    else:
+                        # 主动模式，队友控场时适度保护
+                        if action_type == "PASS":
+                            score += 60
+                        else:
+                            score -= 30
+                
+                # 中等情况：队友剩余6-8张牌（接近残局）
+                elif teammate_cards <= 8:
+                    # 只在队友出非常大的牌时保护（2或Joker）
+                    if not is_active:
+                        cur_action = message.get("curAction", [])
+                        if cur_action and len(cur_action) >= 2:
+                            try:
+                                card_value = self._get_card_value(cur_action[1])
+                                if card_value >= 15:  # 2或Joker
+                                    if action_type == "PASS":
+                                        score += 50   # 适度鼓励PASS
+                                    else:
+                                        score -= 20   # 轻微惩罚
+                            except:
+                                pass
+            
+            # 条件2：队友刚出牌（被动模式，队友是上一个出牌者）
+            elif not is_active and cur_pos == teammate_pos:
+                # 队友刚出牌，我们被动响应
+                teammate_cards = cards_left.get(teammate_pos, 27)
+                
+                # 如果队友快走完了，让队友继续控场
+                if teammate_cards <= 3:
+                    if action_type == "PASS":
+                        score += 100  # 强烈鼓励PASS
                     else:
                         score -= 50   # 惩罚出牌
+                elif teammate_cards <= 6:
+                    # 检查队友出的牌值
+                    cur_action = message.get("curAction", [])
+                    if cur_action and len(cur_action) >= 2:
+                        try:
+                            card_value = self._get_card_value(cur_action[1])
+                            # 队友出大牌，让队友走
+                            if card_value >= 14:
+                                if action_type == "PASS":
+                                    score += 70
+                                else:
+                                    score -= 35
+                        except:
+                            pass
             
             # 策略2：对手压制
             opponent_cards = [
@@ -249,6 +365,41 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
         enhanced_evaluations.sort(key=lambda x: x[1], reverse=True)
         
         return enhanced_evaluations
+    
+    def _get_card_value(self, rank: str) -> int:
+        """
+        获取牌值的数字表示
+        
+        Task 3.2: 添加辅助方法，用于队友保护规则中的牌值判断
+        
+        Args:
+            rank: 牌面值（如 "3", "J", "A", "2", "B", "R"）
+            
+        Returns:
+            数字值（3-17）
+            - 3-9: 3-9
+            - T/10: 10
+            - J: 11
+            - Q: 12
+            - K: 13
+            - A: 14
+            - 2: 15
+            - B (小王): 16
+            - R (大王): 17
+        """
+        if not rank:
+            return 0
+        
+        rank_map = {
+            '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+            'T': 10, '10': 10,
+            'J': 11, 'Q': 12, 'K': 13, 'A': 14,
+            '2': 15,
+            'B': 16,  # Small Joker (小王)
+            'R': 17   # Big Joker (大王)
+        }
+        
+        return rank_map.get(str(rank).upper(), 0)
     
     def _calculate_knowledge_bonus(self, action: List, 
                                    skills: List[Dict],
