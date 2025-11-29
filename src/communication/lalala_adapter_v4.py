@@ -53,10 +53,7 @@ class LalalaAdapter:
         self.logger = logging.getLogger(f"LalalaAdapter-P{player_id}")
         
         # 初始化lalala的State和Action
-        # 注意：lalala使用字符串名称，我们需要转换
-        client_name = f"client{player_id + 1}"
-        self.lalala_state = State(client_name)
-        self.lalala_action = Action(client_name)
+        self._initialize_lalala_state()
         
         self.logger.info(f"LalalaAdapter initialized for player {player_id}")
     
@@ -449,6 +446,139 @@ class LalalaAdapter:
             )
         
         return is_valid
+    
+    # ========== 状态管理方法 ==========
+    
+    def _initialize_lalala_state(self):
+        """
+        Initialize lalala State and Action objects.
+        
+        This method creates new instances of State and Action for this adapter,
+        ensuring proper isolation between different adapter instances.
+        """
+        try:
+            # lalala使用player_id直接初始化
+            # player_id就是玩家在游戏中的位置 (0-3)
+            
+            # 创建State实例 - 直接使用player_id
+            self.lalala_state = State(self.player_id)
+            
+            # 创建Action实例 - 直接使用player_id
+            self.lalala_action = Action(self.player_id)
+            
+            # 验证状态初始化
+            if not self._validate_state():
+                raise RuntimeError("State validation failed after initialization")
+            
+            self.logger.info(
+                f"lalala state initialized: player_id={self.player_id}"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize lalala state: {e}", exc_info=True)
+            raise RuntimeError(f"State initialization failed: {e}")
+    
+    def _update_lalala_state(self, message: dict):
+        """
+        Update lalala state with new message.
+        
+        This method calls lalala's state.parse() to update internal state
+        based on the game message.
+        
+        Args:
+            message: Converted message in lalala format
+            
+        Raises:
+            RuntimeError: If state update fails
+        """
+        try:
+            # 调用lalala的parse方法更新状态
+            self.lalala_state.parse(message)
+            
+            # 验证状态更新后的完整性
+            if not self._validate_state():
+                self.logger.warning("State validation failed after update")
+            
+            self.logger.debug(
+                f"State updated: stage={message.get('stage')}, "
+                f"type={message.get('type')}"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Failed to update lalala state: {e}", exc_info=True)
+            raise RuntimeError(f"State update failed: {e}")
+    
+    def _validate_state(self) -> bool:
+        """
+        Validate that lalala state has all required fields.
+        
+        Returns:
+            True if state is valid, False otherwise
+        """
+        try:
+            # 检查State对象存在
+            if self.lalala_state is None:
+                self.logger.error("lalala_state is None")
+                return False
+            
+            # 检查关键字段存在
+            required_fields = [
+                'history', 'remain_cards', 'play_cards',
+                'remain_cards_classbynum', 'pass_num', 'my_pass_num'
+            ]
+            
+            for field in required_fields:
+                if not hasattr(self.lalala_state, field):
+                    self.logger.error(f"Missing required field: {field}")
+                    return False
+            
+            # 检查history结构
+            if not isinstance(self.lalala_state.history, dict):
+                self.logger.error("history is not a dict")
+                return False
+            
+            # 检查所有玩家的history都存在
+            for player_id in ['0', '1', '2', '3']:
+                if player_id not in self.lalala_state.history:
+                    self.logger.error(f"Missing history for player {player_id}")
+                    return False
+            
+            # 检查remain_cards结构
+            if not isinstance(self.lalala_state.remain_cards, dict):
+                self.logger.error("remain_cards is not a dict")
+                return False
+            
+            required_suits = ['S', 'H', 'C', 'D']
+            for suit in required_suits:
+                if suit not in self.lalala_state.remain_cards:
+                    self.logger.error(f"Missing suit in remain_cards: {suit}")
+                    return False
+            
+            self.logger.debug("State validation passed")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"State validation error: {e}", exc_info=True)
+            return False
+    
+    def reset(self):
+        """
+        Reset lalala state for a new game.
+        
+        This method reinitializes the State and Action objects,
+        clearing all game history and preparing for a new game.
+        """
+        try:
+            self.logger.info("Resetting lalala state")
+            
+            # 重新初始化状态
+            self._initialize_lalala_state()
+            
+            self.logger.info("lalala state reset complete")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to reset state: {e}", exc_info=True)
+            raise RuntimeError(f"State reset failed: {e}")
 
 
 # 测试和调试函数
