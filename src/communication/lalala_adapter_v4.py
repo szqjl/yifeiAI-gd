@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-LalalaAdapter V4 - Enhanced Data Conversion for Hybrid Decision Engine
-增强版lalala适配器 - 用于V4混合决策引擎
+YFAdapter V4 - Enhanced Data Conversion for Hybrid Decision Engine
+增强版YF适配器 - 用于V4混合决策引擎
 
 核心功能：
 1. 数据格式转换（字符串 -> 列表）
@@ -16,61 +16,66 @@ import os
 from typing import Union, List, Dict, Optional
 import copy
 
-# 添加lalala目录到路径
+# 添加lalala目录到路径（使用原版lalala的底层模块）
 LALALA_PATH = r"D:\NYGD\lalala"
 if LALALA_PATH not in sys.path:
     sys.path.insert(0, LALALA_PATH)
 
-# 导入lalala核心模块
+# 导入lalala核心模块（底层实现）
 try:
     from state import State
     from action import Action
 except ImportError as e:
-    print(f"✗ 导入lalala模块失败: {e}")
+    print(f"✗ 导入底层模块失败: {e}")
     print(f"请确保 {LALALA_PATH} 存在且包含state.py和action.py")
     # 在V4中，我们不立即退出，而是抛出异常让上层处理
-    raise ImportError(f"Failed to import lalala modules from {LALALA_PATH}: {e}")
+    raise ImportError(f"Failed to import base modules from {LALALA_PATH}: {e}")
 
 
-class LalalaAdapter:
+class YFAdapter:
     """
-    Adapter for lalala strategy with robust data conversion.
+    Adapter for YF strategy with robust data conversion.
     
     This adapter handles all data format conversions between the game server
-    format and lalala's expected format, with comprehensive error handling.
+    format and YF's expected format, with comprehensive error handling.
     """
     
     def __init__(self, player_id: int):
         """
-        Initialize LalalaAdapter.
+        Initialize YFAdapter.
         
         Args:
             player_id: Player position (0-3)
         """
         self.player_id = player_id
-        self.lalala_state = None
-        self.lalala_action = None
-        self.logger = logging.getLogger(f"LalalaAdapter-P{player_id}")
+        self.yf_state = None
+        self.yf_action = None
+        self.logger = logging.getLogger(f"YFAdapter-P{player_id}")
         
-        # 初始化lalala的State和Action
-        self._initialize_lalala_state()
+        # 初始化YF的State和Action
+        self._initialize_yf_state()
         
-        self.logger.info(f"LalalaAdapter initialized for player {player_id}")
+        self.logger.info(f"YFAdapter initialized for player {player_id}")
     
-    def decide(self, message: dict) -> int:
+    def decide(self, message: dict) -> List[tuple]:
         """
-        Make decision using lalala strategy.
+        Generate candidate actions using YF strategy.
+        
+        Task 2.1: 修改为返回候选动作列表而非单一动作
         
         Args:
             message: Game state message from server
             
         Returns:
-            Action index (0 for PASS, 1+ for play actions)
+            List of (action_idx, score) tuples, sorted by score descending
+            Returns empty list if YF fails or should trigger Layer 2/3
             
         Raises:
             ValueError: If data conversion fails
-            RuntimeError: If lalala decision fails
+            RuntimeError: If YF decision fails
         """
+        candidates = []
+        
         try:
             # 深拷贝消息，避免修改原始数据
             message_copy = copy.deepcopy(message)
@@ -78,37 +83,49 @@ class LalalaAdapter:
             # 转换消息格式
             converted_message = self._convert_message(message_copy)
             
-            # 使用lalala的状态解析
-            self.lalala_state.parse(converted_message)
+            # 使用YF的状态解析
+            self.yf_state.parse(converted_message)
             
-            # 使用lalala的决策逻辑
-            action_index = self._make_lalala_decision(converted_message)
+            # 使用YF的决策逻辑
+            action_index = self._make_yf_decision(converted_message)
+            
+            # Task 2.1: 移除返回None的逻辑，改为返回空列表
+            # 如果action_index为None，表示应该触发Layer 2/3，返回空列表
+            if action_index is None:
+                self.logger.debug("YF returned None, returning empty candidates list")
+                return []  # 返回空列表，触发Layer 2/3
             
             # 验证动作有效性
             if not self._is_valid_action(action_index, message):
-                raise ValueError(f"lalala returned invalid action: {action_index}")
+                self.logger.warning(f"YF returned invalid action: {action_index}, returning empty list")
+                return []
             
-            self.logger.debug(f"lalala decision: {action_index}")
-            return action_index
+            # Task 2.1: 返回候选列表格式
+            # YF的主要选择，给予最高基础评分（100.0）
+            candidates.append((action_index, 100.0))
+            
+            self.logger.debug(f"YF generated 1 candidate: action={action_index}, score=100.0")
+            return candidates
             
         except Exception as e:
-            self.logger.error(f"lalala decision failed: {e}", exc_info=True)
-            raise
+            self.logger.error(f"YF decision failed: {e}", exc_info=True)
+            # Task 2.1: 失败时返回空列表而非抛出异常
+            return []
     
     def _convert_message(self, message: dict) -> dict:
         """
-        Convert message format for lalala compatibility.
+        Convert message format for YF compatibility.
         
         Critical conversions:
         - Card format: string -> list (e.g., "H4" -> ["H", "4"])
-        - Player positions: system -> lalala mapping
+        - Player positions: system -> YF mapping
         - publicInfo.playArea: handle all card types
         
         Args:
             message: Original message from server
             
         Returns:
-            Converted message compatible with lalala
+            Converted message compatible with YF
             
         Raises:
             ValueError: If conversion fails
@@ -157,7 +174,7 @@ class LalalaAdapter:
             cards: Cards in various formats
             
         Returns:
-            List of cards in lalala format [["suit", "rank"], ...]
+            List of cards in YF format [["suit", "rank"], ...]
             
         Raises:
             ValueError: If card format is invalid
@@ -189,7 +206,7 @@ class LalalaAdapter:
     
     def _convert_single_card(self, card: Union[str, List]) -> List:
         """
-        Convert a single card to lalala format.
+        Convert a single card to YF format.
         
         Args:
             card: Single card (string or list)
@@ -361,7 +378,7 @@ class LalalaAdapter:
         Convert player position mapping if needed.
         
         This ensures that teammate and opponent relationships are preserved
-        correctly when converting between system and lalala formats.
+        correctly when converting between system and YF formats.
         
         Args:
             message: Message with player position information
@@ -369,7 +386,7 @@ class LalalaAdapter:
         Returns:
             Message with converted player positions
         """
-        # lalala使用myPos来标识玩家位置
+        # YF使用myPos来标识玩家位置
         # 我们的系统使用player_id (0-3)
         # 确保myPos字段存在且正确
         if "myPos" not in message:
@@ -377,48 +394,116 @@ class LalalaAdapter:
         
         # 验证队友/对手关系
         # 在掼蛋中：0和2是队友，1和3是队友
-        # 这个映射在lalala中也是一样的，所以不需要额外转换
+        # 这个映射在YF中也是一样的，所以不需要额外转换
         
         return message
     
-    def _make_lalala_decision(self, message: dict) -> int:
+    def _make_yf_decision(self, message: dict) -> Optional[int]:
         """
-        Use lalala's decision logic to select an action.
+        Use YF's decision logic to select an action.
+        
+        Task 2.1: 保持返回单一动作或None，由decide()方法转换为列表格式
         
         Args:
-            message: Converted message in lalala format
+            message: Converted message in YF format
             
         Returns:
-            Action index
+            Action index (or None to trigger Layer 2/3)
             
         Raises:
-            RuntimeError: If lalala decision fails
+            RuntimeError: If YF decision fails
         """
         try:
-            # 提取lalala需要的参数
+            # 提取YF需要的参数
             action_list = message.get("actionList", [])
             
             if not action_list:
                 self.logger.warning("Empty actionList, returning 0 (PASS)")
                 return 0
             
-            # 调用lalala的rule_parse方法
-            act_index = self.lalala_action.rule_parse(
-                message,
-                self.lalala_state._myPos,
-                self.lalala_state.remain_cards,
-                self.lalala_state.history,
-                self.lalala_state.remain_cards_classbynum,
-                self.lalala_state.pass_num,
-                self.lalala_state.my_pass_num,
-                self.lalala_state.tribute_result
+            # 调用YF的rule_parse方法
+            # 添加详细日志用于诊断
+            cur_pos = message.get("curPos", -1)
+            greater_pos = message.get("greaterPos", -1)
+            my_pos = self.yf_state._myPos
+            cur_action = message.get("curAction", [])
+            action_list_len = len(action_list)
+            public_info = message.get("publicInfo", [])
+            
+            # 使用INFO级别确保日志可见
+            self.logger.info(
+                f"[YF-P{self.player_id}] Decision context: "
+                f"myPos={my_pos}, curPos={cur_pos}, greaterPos={greater_pos}, "
+                f"teammate={(my_pos+2)%4 if my_pos is not None else None}, "
+                f"curAction={cur_action[0] if cur_action else 'None'}, "
+                f"actionList_size={action_list_len}"
             )
+            
+            act_index = self.yf_action.rule_parse(
+                message,
+                self.yf_state._myPos,
+                self.yf_state.remain_cards,
+                self.yf_state.history,
+                self.yf_state.remain_cards_classbynum,
+                self.yf_state.pass_num,
+                self.yf_state.my_pass_num,
+                self.yf_state.tribute_result
+            )
+            
+            self.logger.info(
+                f"[YF-P{self.player_id}] Decided: action_index={act_index}, "
+                f"action={action_list[act_index] if 0 <= act_index < action_list_len else 'INVALID'}"
+            )
+            
+            # 检测过于保守的决策，触发Layer 2/3
+            if act_index == 0 and len(action_list) > 1:  # 选择了PASS且有其他选择
+                # 获取剩余牌数
+                cards_left = {}
+                for i, info in enumerate(public_info):
+                    if isinstance(info, dict):
+                        cards_left[i] = info.get('rest', 27)
+                
+                teammate_pos = (my_pos + 2) % 4
+                next_pos = (my_pos + 1) % 4
+                prev_pos = (my_pos - 1) % 4
+                
+                # 检测关键场景
+                should_use_layer3 = False
+                reason = ""
+                
+                # 场景1：对手快走完了
+                opponent_min = min(
+                    cards_left.get(next_pos, 27),
+                    cards_left.get(prev_pos, 27)
+                )
+                if opponent_min <= 5:
+                    should_use_layer3 = True
+                    reason = f"对手快走完(剩{opponent_min}张)"
+                
+                # 场景2：对手连续控场
+                if greater_pos not in [my_pos, teammate_pos, -1]:
+                    if self.yf_state.pass_num >= 2:  # 我方连续PASS 2次
+                        should_use_layer3 = True
+                        reason = f"对手连续控场(我方已PASS {self.yf_state.pass_num}次)"
+                
+                # 场景3：队友已PASS且对手控场
+                if cur_pos == teammate_pos and cur_action and cur_action[0] == "PASS":
+                    if greater_pos not in [my_pos, teammate_pos, -1]:
+                        should_use_layer3 = True
+                        reason = "队友PASS且对手控场"
+                
+                if should_use_layer3:
+                    self.logger.warning(
+                        f"[YF-P{self.player_id}] 检测到过于保守: {reason}, "
+                        f"触发Layer 2/3进行更积极的决策"
+                    )
+                    return None  # 返回None触发Layer 2/3
             
             return act_index
             
         except Exception as e:
-            self.logger.error(f"lalala rule_parse failed: {e}", exc_info=True)
-            raise RuntimeError(f"lalala decision failed: {e}")
+            self.logger.error(f"YF rule_parse failed: {e}", exc_info=True)
+            raise RuntimeError(f"YF decision failed: {e}")
     
     def _is_valid_action(self, action: int, message: dict) -> bool:
         """
@@ -449,51 +534,52 @@ class LalalaAdapter:
     
     # ========== 状态管理方法 ==========
     
-    def _initialize_lalala_state(self):
+    def _initialize_yf_state(self):
         """
-        Initialize lalala State and Action objects.
+        Initialize YF State and Action objects.
         
         This method creates new instances of State and Action for this adapter,
         ensuring proper isolation between different adapter instances.
         """
         try:
-            # lalala使用player_id直接初始化
-            # player_id就是玩家在游戏中的位置 (0-3)
+            # YF的State和Action需要传入name参数（字符串标识）
+            # myPos会在parse(message)时从message中获取
             
-            # 创建State实例 - 直接使用player_id
-            self.lalala_state = State(self.player_id)
+            # 创建State实例 - 传入字符串名称作为标识
+            client_name = f"yf_v4_p{self.player_id}"
+            self.yf_state = State(client_name)
             
-            # 创建Action实例 - 直接使用player_id
-            self.lalala_action = Action(self.player_id)
+            # 创建Action实例 - 传入字符串名称作为标识
+            self.yf_action = Action(client_name)
             
             # 验证状态初始化
             if not self._validate_state():
                 raise RuntimeError("State validation failed after initialization")
             
             self.logger.info(
-                f"lalala state initialized: player_id={self.player_id}"
+                f"YF state initialized: player_id={self.player_id}"
             )
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize lalala state: {e}", exc_info=True)
+            self.logger.error(f"Failed to initialize YF state: {e}", exc_info=True)
             raise RuntimeError(f"State initialization failed: {e}")
     
-    def _update_lalala_state(self, message: dict):
+    def _update_yf_state(self, message: dict):
         """
-        Update lalala state with new message.
+        Update YF state with new message.
         
-        This method calls lalala's state.parse() to update internal state
+        This method calls YF's state.parse() to update internal state
         based on the game message.
         
         Args:
-            message: Converted message in lalala format
+            message: Converted message in YF format
             
         Raises:
             RuntimeError: If state update fails
         """
         try:
-            # 调用lalala的parse方法更新状态
-            self.lalala_state.parse(message)
+            # 调用YF的parse方法更新状态
+            self.yf_state.parse(message)
             
             # 验证状态更新后的完整性
             if not self._validate_state():
@@ -505,20 +591,20 @@ class LalalaAdapter:
             )
             
         except Exception as e:
-            self.logger.error(f"Failed to update lalala state: {e}", exc_info=True)
+            self.logger.error(f"Failed to update YF state: {e}", exc_info=True)
             raise RuntimeError(f"State update failed: {e}")
     
     def _validate_state(self) -> bool:
         """
-        Validate that lalala state has all required fields.
+        Validate that YF state has all required fields.
         
         Returns:
             True if state is valid, False otherwise
         """
         try:
             # 检查State对象存在
-            if self.lalala_state is None:
-                self.logger.error("lalala_state is None")
+            if self.yf_state is None:
+                self.logger.error("yf_state is None")
                 return False
             
             # 检查关键字段存在
@@ -528,29 +614,29 @@ class LalalaAdapter:
             ]
             
             for field in required_fields:
-                if not hasattr(self.lalala_state, field):
+                if not hasattr(self.yf_state, field):
                     self.logger.error(f"Missing required field: {field}")
                     return False
             
             # 检查history结构
-            if not isinstance(self.lalala_state.history, dict):
+            if not isinstance(self.yf_state.history, dict):
                 self.logger.error("history is not a dict")
                 return False
             
             # 检查所有玩家的history都存在
             for player_id in ['0', '1', '2', '3']:
-                if player_id not in self.lalala_state.history:
+                if player_id not in self.yf_state.history:
                     self.logger.error(f"Missing history for player {player_id}")
                     return False
             
             # 检查remain_cards结构
-            if not isinstance(self.lalala_state.remain_cards, dict):
+            if not isinstance(self.yf_state.remain_cards, dict):
                 self.logger.error("remain_cards is not a dict")
                 return False
             
             required_suits = ['S', 'H', 'C', 'D']
             for suit in required_suits:
-                if suit not in self.lalala_state.remain_cards:
+                if suit not in self.yf_state.remain_cards:
                     self.logger.error(f"Missing suit in remain_cards: {suit}")
                     return False
             
@@ -563,18 +649,18 @@ class LalalaAdapter:
     
     def reset(self):
         """
-        Reset lalala state for a new game.
+        Reset YF state for a new game.
         
         This method reinitializes the State and Action objects,
         clearing all game history and preparing for a new game.
         """
         try:
-            self.logger.info("Resetting lalala state")
+            self.logger.info("Resetting YF state")
             
             # 重新初始化状态
-            self._initialize_lalala_state()
+            self._initialize_yf_state()
             
-            self.logger.info("lalala state reset complete")
+            self.logger.info("YF state reset complete")
             
         except Exception as e:
             self.logger.error(f"Failed to reset state: {e}", exc_info=True)
@@ -584,7 +670,7 @@ class LalalaAdapter:
 # 测试和调试函数
 def test_card_conversion():
     """测试牌格式转换功能"""
-    adapter = LalalaAdapter(0)
+    adapter = YFAdapter(0)
     
     test_cases = [
         # (输入, 期望输出, 描述)
