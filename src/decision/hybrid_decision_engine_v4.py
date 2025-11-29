@@ -217,9 +217,46 @@ class HybridDecisionEngineV4:
         Returns:
             Action index if successful, None if failed
         """
-        # TODO: Implement in Task 6
-        # This will use KnowledgeEnhancedDecision for pattern matching
-        return None
+        try:
+            # 延迟初始化KnowledgeEnhancedDecisionEngine（首次使用时）
+            if self.knowledge_enhanced is None:
+                from src.knowledge.knowledge_enhanced_decision import KnowledgeEnhancedDecisionEngine
+                from game_logic.enhanced_state import EnhancedGameStateManager
+                
+                # 创建状态管理器
+                state_manager = EnhancedGameStateManager(self.player_id)
+                self.knowledge_enhanced = KnowledgeEnhancedDecisionEngine(state_manager)
+                self.logger.info("KnowledgeEnhancedDecisionEngine initialized (lazy)")
+            
+            # 调用knowledge_enhanced.decide(message)
+            action = self.knowledge_enhanced.decide(message)
+            
+            # 验证返回的action有效性
+            action_list = message.get("actionList", [])
+            if not action_list:
+                # 空动作列表，只有0（PASS）有效
+                if action == 0:
+                    return action
+                else:
+                    self.logger.warning(f"Invalid action {action} for empty actionList")
+                    return None
+            
+            # 检查action是否为整数
+            if not isinstance(action, int):
+                self.logger.warning(f"Action {action} is not an integer")
+                return None
+            
+            # 检查action是否在有效范围内
+            if 0 <= action < len(action_list):
+                return action
+            else:
+                self.logger.warning(f"Action {action} out of range [0, {len(action_list)})")
+                return None
+                
+        except Exception as e:
+            # 错误处理：捕获异常，返回None
+            self.logger.error(f"KnowledgeEnhanced decision error: {e}", exc_info=True)
+            return None
     
     def _random_valid_action(self, message: dict) -> int:
         """
