@@ -323,19 +323,146 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
                         except:
                             pass
             
-            # 策略2：对手压制
+            # 策略2：对手压制（验证并完善）
+            # 参考：lalala策略和关键规则层实现
             opponent_cards = [
                 cards_left.get(next_pos, 27),
                 cards_left.get(prev_pos, 27)
             ]
             min_opponent_cards = min(opponent_cards)
+            max_opponent_cards = max(opponent_cards)
             
-            if min_opponent_cards <= 5:
-                # 对手快走完了
+            # 关键情况：对手剩余1-3张牌（即将获胜）
+            if min_opponent_cards <= 3:
+                # 必须压制！强烈鼓励出牌
                 if action_type != "PASS":
-                    score += 80  # 强烈鼓励出牌压制
+                    # 检查是否能够压制当前动作
+                    if not is_active:
+                        cur_action = message.get("curAction", [])
+                        if cur_action and len(cur_action) > 0:
+                            # 被动模式，检查是否能压制对手
+                            if action_type == cur_action[0] or action_type == "Bomb":
+                                # 同类型或炸弹，可以压制
+                                score += 150  # 极强烈鼓励压制
+                            else:
+                                # 不同类型，无法压制，但还是要出牌
+                                score += 100  # 强烈鼓励出牌
+                        else:
+                            # 没有当前动作，鼓励出牌
+                            score += 120
+                    else:
+                        # 主动模式，对手快走完，必须出牌压制
+                        score += 120
                 else:
-                    score -= 40  # 惩罚PASS
+                    # PASS是严重错误
+                    score -= 100  # 严重惩罚PASS
+            
+            # 重要情况：对手剩余4张牌
+            # 规则："火不打四" - 对手4张时可能是炸弹，不要轻易用炸弹
+            elif min_opponent_cards == 4:
+                if not is_active:
+                    # 被动模式，可以出牌，但避免用炸弹
+                    cur_action = message.get("curAction", [])
+                    if cur_action and len(cur_action) > 0:
+                        if action_type == "Bomb":
+                            # 对手4张，可能是炸弹，不要轻易用炸弹
+                            score -= 30  # 轻微惩罚用炸弹
+                        elif action_type == cur_action[0] or action_type == "Bomb":
+                            # 可以压制，但不是炸弹
+                            score += 60  # 鼓励出牌压制
+                        else:
+                            score += 30  # 适度鼓励出牌
+                    else:
+                        score += 40
+                else:
+                    # 主动模式，适度出牌
+                    if action_type != "PASS":
+                        if action_type == "Bomb":
+                            score -= 20  # 避免用炸弹
+                        else:
+                            score += 50
+                    else:
+                        score -= 20
+            
+            # 重要情况：对手剩余5张牌
+            # 规则："逢五出对" - 对手5张时优先出对子
+            elif min_opponent_cards == 5:
+                if not is_active:
+                    # 被动模式
+                    cur_action = message.get("curAction", [])
+                    if cur_action and len(cur_action) > 0:
+                        # 如果当前是对子，优先出对子压制
+                        if cur_action[0] == "Pair" and action_type == "Pair":
+                            score += 100  # 强烈鼓励出对子压制
+                        elif action_type == "Pair":
+                            # 主动出对子（虽然是被动模式，但可以主动出对子）
+                            score += 80
+                        elif action_type != "PASS":
+                            score += 60  # 鼓励出牌
+                        else:
+                            score -= 40  # 惩罚PASS
+                    else:
+                        # 被动模式但没有当前动作（接风等情况），鼓励出对子
+                        if action_type == "Pair":
+                            score += 80
+                        elif action_type != "PASS":
+                            score += 50
+                        else:
+                            score -= 30
+                else:
+                    # 主动模式，鼓励出对子
+                    if action_type == "Pair":
+                        score += 70
+                    elif action_type != "PASS":
+                        score += 50
+                    else:
+                        score -= 30
+            
+            # 中等情况：对手剩余6-8张牌（接近残局）
+            elif min_opponent_cards <= 8:
+                if not is_active:
+                    # 被动模式，可以适度压制
+                    cur_action = message.get("curAction", [])
+                    if cur_action and len(cur_action) > 0:
+                        # 检查是否能用小牌压制
+                        if action_type == cur_action[0]:
+                            # 同类型，检查牌值
+                            try:
+                                if len(action) >= 2:
+                                    card_value = self._get_card_value(action[1])
+                                    if card_value <= 10:  # 小牌，安全
+                                        score += 70  # 鼓励用小牌压制
+                                    elif card_value <= 13:  # 中等牌
+                                        score += 50
+                                    else:  # 大牌，谨慎
+                                        score += 30
+                            except:
+                                score += 50
+                        elif action_type != "PASS":
+                            score += 40
+                        else:
+                            score -= 20
+                    else:
+                        if action_type != "PASS":
+                            score += 40
+                else:
+                    # 主动模式，适度出牌
+                    if action_type != "PASS":
+                        score += 30
+                    else:
+                        score -= 15
+            
+            # 一般情况：对手剩余9-15张牌（中局）
+            elif min_opponent_cards <= 15:
+                # 适度关注，但不强制
+                if not is_active:
+                    cur_action = message.get("curAction", [])
+                    if cur_action and len(cur_action) > 0:
+                        if action_type != "PASS":
+                            score += 20  # 适度鼓励出牌
+                else:
+                    if action_type != "PASS":
+                        score += 15
             
             # 策略3：对手控场检测
             if greater_pos != teammate_pos and greater_pos != my_pos and greater_pos != -1:
