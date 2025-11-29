@@ -230,17 +230,30 @@ class BatchExecutorGUI:
         #     "src/communication/run_lalala_client4.py"
         # ]
         
-        # 选项2：使用N版本（第一次优化版，推荐）
-        default_clients = [
-            "src/communication/Test_N1.py",                  # 0号位 - N1（第一次优化）
-            "src/communication/run_lalala_client3.py",       # 1号位 - lalala对手1
-            "src/communication/Test_N2.py",                  # 2号位 - N2（第一次优化）
-            "src/communication/run_lalala_client4.py"        # 3号位 - lalala对手2
-        ]
+        # 选项2：使用N版本（第一次优化版）
+        # default_clients = [
+        #     "src/communication/Test_N1.py",                  # 0号位 - N1（第一次优化）
+        #     "src/communication/run_lalala_client3.py",       # 1号位 - lalala对手1
+        #     "src/communication/Test_N2.py",                  # 2号位 - N2（第一次优化）
+        #     "src/communication/run_lalala_client4.py"        # 3号位 - lalala对手2
+        # ]
         # 队伍分组：
         # 队伍A（您的队）：0号(Test_N1) + 2号(Test_N2)
         # 队伍B（lalala队）：1号(client3) + 3号(client4)
         # 注：N版本基于lalala一等奖代码学习和参考
+        
+        # 选项3：使用V4混合决策引擎（最新版本，4层决策保护）⭐ 推荐
+        default_clients = [
+            "src/communication/yf1_v4.py",                   # 0号位 - YiFei V4
+            "src/communication/run_lalala_client3.py",       # 1号位 - lalala对手1
+            "src/communication/yf2_v4.py",                   # 2号位 - YiFei V4
+            "src/communication/run_lalala_client4.py"        # 3号位 - lalala对手2
+        ]
+        # 队伍分组：
+        # 队伍A（YiFei V4队）：0号(yf1_v4) + 2号(yf2_v4)
+        # 队伍B（lalala队）：1号(client3) + 3号(client4)
+        # 注：V4版本使用HybridDecisionEngineV4，具有4层决策保护机制
+        #     lalala → DecisionEngine → KnowledgeEnhanced → Random
         
         # 检查哪些客户端存在
         existing_clients = [c for c in default_clients if os.path.exists(c)]
