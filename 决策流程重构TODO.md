@@ -74,10 +74,12 @@
 
 **文件**: `src/communication/lalala_adapter_v4.py`
 
-#### Task 2.1: 修改 decide() 方法
-- [ ] 重命名 `decide()` 为 `generate_candidates()`
-- [ ] 返回候选动作列表 `List[tuple]` 格式: `[(action_idx, score), ...]`
-- [ ] 移除触发 Layer 2/3 的逻辑（返回 None）
+#### ✅ Task 2.1: 修改 decide() 方法 (已完成)
+- [x] 保持 `decide()` 方法名（向后兼容）
+- [x] 返回候选动作列表 `List[tuple]` 格式: `[(action_idx, score), ...]`
+- [x] 移除触发 Layer 2/3 的逻辑（返回 None），改为返回空列表
+- [x] 更新 `_try_yf()` 方法适配新格式
+- [x] 所有测试通过 (5/5)
 
 #### Task 2.2: 添加候选评分
 - [ ] 为 YF 返回的动作添加基础评分
