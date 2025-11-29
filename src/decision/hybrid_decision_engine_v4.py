@@ -202,7 +202,7 @@ class HybridDecisionEngineV4:
         try:
             # 延迟初始化LalalaAdapter（首次使用时）
             if self.lalala_adapter is None:
-                from src.communication.lalala_adapter_v4 import LalalaAdapter
+                from communication.lalala_adapter_v4 import LalalaAdapter
                 self.lalala_adapter = LalalaAdapter(self.player_id)
                 self.logger.info("LalalaAdapter initialized (lazy)")
             
@@ -295,7 +295,7 @@ class HybridDecisionEngineV4:
         try:
             # 延迟初始化KnowledgeEnhancedDecisionEngine（首次使用时）
             if self.knowledge_enhanced is None:
-                from src.knowledge.knowledge_enhanced_decision import KnowledgeEnhancedDecisionEngine
+                from knowledge.knowledge_enhanced_decision import KnowledgeEnhancedDecisionEngine
                 from game_logic.enhanced_state import EnhancedGameStateManager
                 
                 # 创建状态管理器
@@ -482,4 +482,29 @@ class DecisionStatistics:
     
     def reset(self):
         """Reset statistics for new game."""
-        self.__init__()
+        self.layer_usage = {
+            "lalala": {"success": 0, "failure": 0, "total_time": 0.0},
+            "DecisionEngine": {"success": 0, "failure": 0, "total_time": 0.0},
+            "KnowledgeEnhanced": {"success": 0, "failure": 0, "total_time": 0.0},
+            "Random": {"success": 0, "failure": 0, "total_time": 0.0}
+        }
+        self.error_log = []
+        self.decision_count = 0
+
+    def reset(self):
+        """
+        Reset the engine for a new game.
+        
+        Clears statistics and resets state.
+        """
+        self.stats.reset()
+        self.logger.info("HybridDecisionEngineV4 reset for new game")
+    
+    def get_statistics(self) -> dict:
+        """
+        Get decision statistics.
+        
+        Returns:
+            Dictionary with layer usage statistics
+        """
+        return self.stats.get_summary()
