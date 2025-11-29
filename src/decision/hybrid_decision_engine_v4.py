@@ -124,9 +124,37 @@ class HybridDecisionEngineV4:
         Returns:
             Action index if successful, None if failed
         """
-        # TODO: Implement in Task 4
-        # This will use LalalaAdapter to make decisions
-        return None
+        try:
+            # 延迟初始化LalalaAdapter（首次使用时）
+            if self.lalala_adapter is None:
+                from src.communication.lalala_adapter_v4 import LalalaAdapter
+                self.lalala_adapter = LalalaAdapter(self.player_id)
+                self.logger.info("LalalaAdapter initialized (lazy)")
+            
+            # 调用lalala_adapter.decide(message)
+            action = self.lalala_adapter.decide(message)
+            
+            # 验证返回的action有效性
+            action_list = message.get("actionList", [])
+            if not action_list:
+                # 空动作列表，只有0（PASS）有效
+                if action == 0:
+                    return action
+                else:
+                    self.logger.warning(f"Invalid action {action} for empty actionList")
+                    return None
+            
+            # 检查action是否在有效范围内
+            if 0 <= action < len(action_list):
+                return action
+            else:
+                self.logger.warning(f"Action {action} out of range [0, {len(action_list)})")
+                return None
+                
+        except Exception as e:
+            # 错误处理：捕获异常，返回None
+            self.logger.error(f"lalala decision error: {e}", exc_info=True)
+            return None
     
     def _try_decision_engine(self, message: dict) -> Optional[int]:
         """
