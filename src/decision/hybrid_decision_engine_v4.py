@@ -70,49 +70,124 @@ class HybridDecisionEngineV4:
             Action index (0 for PASS, 1+ for play actions)
         """
         start_time = time.time()
+        performance_threshold = self.config.get("performance_threshold", 1.0)
         
         # Layer 1: lalala (Primary)
         try:
+            layer_start = time.time()
             action = self._try_lalala(message)
+            layer_duration = time.time() - layer_start
+            
             if action is not None:
                 duration = time.time() - start_time
                 self.stats.record_success("lalala", duration)
-                self.logger.info(f"Layer 1 (lalala) succeeded: action={action}, time={duration:.3f}s")
+                
+                # Performance warning
+                if layer_duration > performance_threshold:
+                    self.logger.warning(
+                        f"Layer 1 (lalala) slow: {layer_duration:.3f}s > {performance_threshold}s threshold"
+                    )
+                
+                self.logger.info(f"✓ Layer 1 (lalala) succeeded: action={action}, time={duration:.3f}s")
                 return action
+            else:
+                self.logger.warning("Layer 1 (lalala) returned None, falling back to Layer 2")
+                self.stats.record_failure("lalala", "Returned None")
+                
         except Exception as e:
-            self.logger.warning(f"Layer 1 (lalala) failed: {e}")
-            self.stats.record_failure("lalala", str(e))
+            duration = time.time() - layer_start
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            self.logger.error(
+                f"✗ Layer 1 (lalala) failed after {duration:.3f}s: {error_msg}",
+                exc_info=True
+            )
+            self.stats.record_failure("lalala", error_msg)
         
         # Layer 2: DecisionEngine (Fallback 1)
         try:
+            layer_start = time.time()
             action = self._try_decision_engine(message)
+            layer_duration = time.time() - layer_start
+            
             if action is not None:
                 duration = time.time() - start_time
                 self.stats.record_success("DecisionEngine", duration)
-                self.logger.info(f"Layer 2 (DecisionEngine) succeeded: action={action}, time={duration:.3f}s")
+                
+                # Performance warning
+                if layer_duration > performance_threshold * 1.5:
+                    self.logger.warning(
+                        f"Layer 2 (DecisionEngine) slow: {layer_duration:.3f}s > {performance_threshold * 1.5}s threshold"
+                    )
+                
+                self.logger.info(f"✓ Layer 2 (DecisionEngine) succeeded: action={action}, time={duration:.3f}s")
                 return action
+            else:
+                self.logger.warning("Layer 2 (DecisionEngine) returned None, falling back to Layer 3")
+                self.stats.record_failure("DecisionEngine", "Returned None")
+                
         except Exception as e:
-            self.logger.warning(f"Layer 2 (DecisionEngine) failed: {e}")
-            self.stats.record_failure("DecisionEngine", str(e))
+            duration = time.time() - layer_start
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            self.logger.error(
+                f"✗ Layer 2 (DecisionEngine) failed after {duration:.3f}s: {error_msg}",
+                exc_info=True
+            )
+            self.stats.record_failure("DecisionEngine", error_msg)
         
         # Layer 3: Knowledge Enhanced (Fallback 2)
         try:
+            layer_start = time.time()
             action = self._try_knowledge_enhanced(message)
+            layer_duration = time.time() - layer_start
+            
             if action is not None:
                 duration = time.time() - start_time
                 self.stats.record_success("KnowledgeEnhanced", duration)
-                self.logger.info(f"Layer 3 (KnowledgeEnhanced) succeeded: action={action}, time={duration:.3f}s")
+                
+                # Performance warning
+                if layer_duration > performance_threshold * 2.0:
+                    self.logger.warning(
+                        f"Layer 3 (KnowledgeEnhanced) slow: {layer_duration:.3f}s > {performance_threshold * 2.0}s threshold"
+                    )
+                
+                self.logger.info(f"✓ Layer 3 (KnowledgeEnhanced) succeeded: action={action}, time={duration:.3f}s")
                 return action
+            else:
+                self.logger.warning("Layer 3 (KnowledgeEnhanced) returned None, falling back to Layer 4")
+                self.stats.record_failure("KnowledgeEnhanced", "Returned None")
+                
         except Exception as e:
-            self.logger.warning(f"Layer 3 (KnowledgeEnhanced) failed: {e}")
-            self.stats.record_failure("KnowledgeEnhanced", str(e))
+            duration = time.time() - layer_start
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            self.logger.error(
+                f"✗ Layer 3 (KnowledgeEnhanced) failed after {duration:.3f}s: {error_msg}",
+                exc_info=True
+            )
+            self.stats.record_failure("KnowledgeEnhanced", error_msg)
         
-        # Layer 4: Random (Guaranteed)
-        action = self._random_valid_action(message)
-        duration = time.time() - start_time
-        self.stats.record_success("Random", duration)
-        self.logger.info(f"Layer 4 (Random) used: action={action}, time={duration:.3f}s")
-        return action
+        # Layer 4: Random (Guaranteed - MUST NEVER FAIL)
+        try:
+            layer_start = time.time()
+            action = self._random_valid_action(message)
+            layer_duration = time.time() - layer_start
+            duration = time.time() - start_time
+            
+            self.stats.record_success("Random", duration)
+            self.logger.warning(
+                f"⚠ Layer 4 (Random) used as last resort: action={action}, time={duration:.3f}s"
+            )
+            return action
+            
+        except Exception as e:
+            # CRITICAL: Layer 4 should NEVER fail
+            # If it does, we have a serious problem
+            self.logger.critical(
+                f"CRITICAL: Layer 4 (Random) failed! This should never happen: {e}",
+                exc_info=True
+            )
+            # Emergency fallback: return 0 (PASS)
+            self.logger.critical("Emergency fallback: returning 0 (PASS)")
+            return 0
     
     def _try_lalala(self, message: dict) -> Optional[int]:
         """
@@ -262,25 +337,51 @@ class HybridDecisionEngineV4:
         """
         Guaranteed fallback: select random valid action.
         
-        This method always succeeds and returns a valid action.
+        This method MUST ALWAYS succeed and return a valid action.
+        Multiple safety checks ensure it never fails.
         
         Args:
             message: Game state message
             
         Returns:
-            Random action index from actionList
+            Random action index from actionList (guaranteed valid)
         """
-        action_list = message.get("actionList", [])
-        
-        if not action_list:
-            self.logger.warning("Empty actionList, returning 0 (PASS)")
+        try:
+            # Safety check 1: Validate message is a dict
+            if not isinstance(message, dict):
+                self.logger.error(f"Invalid message type: {type(message)}, returning 0")
+                return 0
+            
+            # Safety check 2: Get actionList with default
+            action_list = message.get("actionList", [])
+            
+            # Safety check 3: Handle empty or invalid actionList
+            if not action_list or not isinstance(action_list, list):
+                self.logger.warning("Empty or invalid actionList, returning 0 (PASS)")
+                return 0
+            
+            # Safety check 4: Ensure actionList has valid length
+            list_length = len(action_list)
+            if list_length <= 0:
+                self.logger.warning("actionList length <= 0, returning 0 (PASS)")
+                return 0
+            
+            # Select random action from available actions
+            # Use modulo as extra safety to ensure valid index
+            action_index = random.randint(0, list_length - 1)
+            action_index = action_index % list_length  # Extra safety
+            
+            self.logger.debug(f"Random selection from {list_length} actions: {action_index}")
+            return action_index
+            
+        except Exception as e:
+            # CRITICAL: Even random selection failed
+            # This should be impossible, but handle it anyway
+            self.logger.critical(
+                f"CRITICAL: Random selection failed: {e}. Returning 0 (PASS) as emergency fallback",
+                exc_info=True
+            )
             return 0
-        
-        # Select random action from available actions
-        action_index = random.randint(0, len(action_list) - 1)
-        
-        self.logger.debug(f"Random selection from {len(action_list)} actions: {action_index}")
-        return action_index
     
     def get_statistics(self) -> dict:
         """
