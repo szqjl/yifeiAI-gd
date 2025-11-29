@@ -39,6 +39,7 @@ This implementation plan breaks down the Hybrid Decision Engine V4 into discrete
 
 - [x] 3. Enhance LalalaAdapter with robust data conversion
 
+
   - Update `src/communication/lalala_adapter.py` (or create new version)
   - Implement `_convert_cards()` with string-to-list conversion
   - Implement `_convert_play_area()` for all card types
@@ -59,7 +60,8 @@ This implementation plan breaks down the Hybrid Decision Engine V4 into discrete
   - **Property 9: Player Position Preservation**
   - **Validates: Requirements 2.5**
 
-- [ ] 4. Implement Layer 1: lalala decision logic
+- [x] 4. Implement Layer 1: lalala decision logic
+
   - Implement `_try_lalala()` method in HybridDecisionEngineV4
   - Call LalalaAdapter.decide() with proper error handling
   - Validate returned action is in valid range
