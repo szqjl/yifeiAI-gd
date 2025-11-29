@@ -150,7 +150,7 @@ class YF1_V4_Client:
             
             # Reset for next game
             self.decision_count = 0
-            self.decision_engine.reset()
+            self.decision_engine.reset_statistics()
     
     def validate_action(self, act_index: int, action_list: list) -> bool:
         """Validate that action index is in valid range"""
