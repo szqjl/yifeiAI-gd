@@ -215,41 +215,43 @@ class HybridDecisionEngineV4:
         candidates = []
         candidate_indices = set()  # Track unique candidates to avoid duplicates
         
-        # Try Layer 1: YF Strategy
+        # ========== Layer 1: YF Strategy (Task 1.3.1) ==========
+        # 修改为调用返回候选列表的方法
         try:
-            yf_action = self._try_yf(message)
-            if yf_action is not None:
-                # YF returned a single action, give it high base score
-                candidates.append((yf_action, 100.0, "YF"))
-                candidate_indices.add(yf_action)
-                self.logger.debug(f"YF candidate: action={yf_action}")
+            yf_candidates = self._try_yf(message)  # 现在返回 List[tuple] (action_idx, score)
+            
+            for action_idx, score in yf_candidates:
+                if action_idx not in candidate_indices:
+                    # YF的候选，保持原有评分，标记来源为YF
+                    candidates.append((action_idx, score, "YF"))
+                    candidate_indices.add(action_idx)
+                    self.logger.debug(f"YF candidate: action={action_idx}, score={score:.1f}")
+            
+            if yf_candidates:
+                self.logger.debug(f"YF generated {len(yf_candidates)} candidate(s)")
+            
         except Exception as e:
             self.logger.warning(f"YF candidate generation failed: {e}")
         
-        # Try Layer 2: DecisionEngine (evaluation-based)
+        # ========== Layer 2: DecisionEngine (Task 1.3.2) ==========
+        # 修改为调用返回候选列表的方法
         try:
-            de_action = self._try_decision_engine(message)
-            if de_action is not None and de_action not in candidate_indices:
-                # DecisionEngine returned action, give it medium base score
-                candidates.append((de_action, 80.0, "DecisionEngine"))
-                candidate_indices.add(de_action)
-                self.logger.debug(f"DecisionEngine candidate: action={de_action}")
+            de_candidates = self._try_decision_engine(message)  # 现在返回 List[tuple] (action_idx, score)
+            
+            for action_idx, score in de_candidates:
+                if action_idx not in candidate_indices:
+                    # DecisionEngine的候选，保持原有评分，标记来源为DecisionEngine
+                    candidates.append((action_idx, score, "DecisionEngine"))
+                    candidate_indices.add(action_idx)
+                    self.logger.debug(f"DecisionEngine candidate: action={action_idx}, score={score:.1f}")
+            
+            if de_candidates:
+                self.logger.debug(f"DecisionEngine generated {len(de_candidates)} candidate(s)")
+            
         except Exception as e:
             self.logger.warning(f"DecisionEngine candidate generation failed: {e}")
         
-        # Enhanced: Generate additional candidates from DecisionEngine's top evaluations
-        try:
-            additional_candidates = self._get_top_evaluations(message, top_k=3)
-            for idx, score in additional_candidates:
-                if idx not in candidate_indices:
-                    # Scale score to base_score range (50-90)
-                    base_score = 50.0 + (score / 100.0) * 40.0
-                    candidates.append((idx, base_score, "DecisionEngine"))
-                    candidate_indices.add(idx)
-                    self.logger.debug(f"DecisionEngine additional candidate: action={idx}, score={base_score:.1f}")
-        except Exception as e:
-            self.logger.debug(f"Failed to get additional evaluations: {e}")
-        
+        # ========== Fallback: If no candidates ==========
         # If no candidates, add all valid actions with low scores
         if not candidates:
             action_list = message.get("actionList", [])
@@ -258,7 +260,7 @@ class HybridDecisionEngineV4:
                     candidates.append((idx, 50.0, "Fallback"))
                 self.logger.warning(f"Using fallback: all {len(action_list)} actions as candidates")
         
-        self.logger.debug(f"Generated {len(candidates)} candidates from Layer 1+2")
+        self.logger.debug(f"Generated {len(candidates)} total candidates from Layer 1+2")
         return candidates
     
     def _enhance_candidates(self, candidates: List[tuple], message: dict) -> List[tuple]:
@@ -341,16 +343,21 @@ class HybridDecisionEngineV4:
     
     # ========== Legacy Layer Methods (for candidate generation) ==========
     
-    def _try_yf(self, message: dict) -> Optional[int]:
+    def _try_yf(self, message: dict) -> List[tuple]:
         """
-        Try YF decision layer.
+        Try YF decision layer and return candidate actions.
+        
+        Task 1.3: 修改为返回候选动作列表而非单一动作
         
         Args:
             message: Game state message
             
         Returns:
-            Action index if successful, None if failed
+            List of (action_idx, score) tuples, sorted by score descending
+            Returns empty list if YF fails or returns None
         """
+        candidates = []
+        
         try:
             # 延迟初始化YFAdapter（首次使用时）
             if self.yf_adapter is None:
@@ -362,41 +369,55 @@ class HybridDecisionEngineV4:
             action = self.yf_adapter.decide(message)
             
             # 验证返回的action有效性
-            # 首先检查action是否为None
             if action is None:
-                return None  # 触发下一层
+                # YF返回None，表示触发Layer 2/3，返回空列表
+                self.logger.debug("YF returned None, triggering Layer 2/3")
+                return []
             
             action_list = message.get("actionList", [])
             if not action_list:
                 # 空动作列表，只有0（PASS）有效
                 if action == 0:
-                    return action
+                    candidates.append((0, 100.0))  # YF的主要选择，高分
+                    return candidates
                 else:
                     self.logger.warning(f"Invalid action {action} for empty actionList")
-                    return None
+                    return []
             
             # 检查action是否在有效范围内
             if 0 <= action < len(action_list):
-                return action
+                # YF的主要选择，给予最高基础评分
+                candidates.append((action, 100.0))
+                
+                # 可选：添加YF的次优选择（如果YF支持返回多个候选）
+                # 目前YF只返回单一动作，所以只有一个候选
+                
+                self.logger.debug(f"YF generated {len(candidates)} candidate(s), primary: {action}")
+                return candidates
             else:
                 self.logger.warning(f"Action {action} out of range [0, {len(action_list)})")
-                return None
+                return []
                 
         except Exception as e:
-            # 错误处理：捕获异常，返回None
+            # 错误处理：捕获异常，返回空列表
             self.logger.error(f"YF decision error: {e}", exc_info=True)
-            return None
+            return []
     
-    def _try_decision_engine(self, message: dict) -> Optional[int]:
+    def _try_decision_engine(self, message: dict) -> List[tuple]:
         """
-        Try DecisionEngine layer.
+        Try DecisionEngine layer and return candidate actions.
+        
+        Task 1.3: 修改为返回候选动作列表而非单一动作
         
         Args:
             message: Game state message
             
         Returns:
-            Action index if successful, None if failed
+            List of (action_idx, score) tuples, sorted by score descending
+            Returns empty list if DecisionEngine fails
         """
+        candidates = []
+        
         try:
             # 延迟初始化DecisionEngine（首次使用时）
             if self.decision_engine is None:
@@ -408,35 +429,50 @@ class HybridDecisionEngineV4:
                 self.decision_engine = DecisionEngine(state_manager)
                 self.logger.info("DecisionEngine initialized (lazy)")
             
-            # 调用decision_engine.decide(message)
-            action = self.decision_engine.decide(message)
+            # 获取所有评估结果（top-k）
+            evaluations = self._get_top_evaluations(message, top_k=5)
             
-            # 验证返回的action有效性
-            action_list = message.get("actionList", [])
-            if not action_list:
-                # 空动作列表，只有0（PASS）有效
-                if action == 0:
-                    return action
-                else:
-                    self.logger.warning(f"Invalid action {action} for empty actionList")
-                    return None
-            
-            # 检查action是否为整数
-            if not isinstance(action, int):
-                self.logger.warning(f"Action {action} is not an integer")
-                return None
-            
-            # 检查action是否在有效范围内
-            if 0 <= action < len(action_list):
-                return action
+            if evaluations:
+                # 将评估结果转换为候选列表
+                # 评估结果已经是 (action_idx, score) 格式
+                candidates = evaluations
+                self.logger.debug(
+                    f"DecisionEngine generated {len(candidates)} candidates: "
+                    f"{[idx for idx, _ in candidates[:3]]}..."
+                )
             else:
-                self.logger.warning(f"Action {action} out of range [0, {len(action_list)})")
-                return None
+                # 如果获取评估失败，尝试使用decide()方法获取单一动作
+                action = self.decision_engine.decide(message)
+                
+                # 验证返回的action有效性
+                action_list = message.get("actionList", [])
+                if not action_list:
+                    if action == 0:
+                        candidates.append((0, 80.0))
+                        return candidates
+                    else:
+                        self.logger.warning(f"Invalid action {action} for empty actionList")
+                        return []
+                
+                # 检查action是否为整数
+                if not isinstance(action, int):
+                    self.logger.warning(f"Action {action} is not an integer")
+                    return []
+                
+                # 检查action是否在有效范围内
+                if 0 <= action < len(action_list):
+                    candidates.append((action, 80.0))
+                    self.logger.debug(f"DecisionEngine fallback: single candidate {action}")
+                else:
+                    self.logger.warning(f"Action {action} out of range [0, {len(action_list)})")
+                    return []
+            
+            return candidates
                 
         except Exception as e:
-            # 错误处理：捕获异常，返回None
+            # 错误处理：捕获异常，返回空列表
             self.logger.error(f"DecisionEngine decision error: {e}", exc_info=True)
-            return None
+            return []
     
     def _get_top_evaluations(self, message: dict, top_k: int = 3) -> List[tuple]:
         """
