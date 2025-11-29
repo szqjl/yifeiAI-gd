@@ -289,26 +289,11 @@ class HybridDecisionEngineV4:
             if not action_list:
                 return candidates
             
-            # Convert candidates to evaluation format
-            evaluations = [(idx, score) for idx, score, _ in candidates]
-            
-            # Apply knowledge rules
-            enhanced_evaluations = self.knowledge_enhanced._apply_knowledge_rules(
-                evaluations, action_list, message, 
-                is_active=(message.get("type") == "active")
+            # Task 3.1: 使用新的 enhance_candidates() 方法
+            # 直接调用公共接口，简化代码
+            enhanced_candidates = self.knowledge_enhanced.enhance_candidates(
+                candidates, message
             )
-            
-            # Convert back to candidate format
-            enhanced_candidates = []
-            for idx, enhanced_score in enhanced_evaluations:
-                # Find original layer
-                original_layer = "Unknown"
-                for orig_idx, _, layer in candidates:
-                    if orig_idx == idx:
-                        original_layer = layer
-                        break
-                
-                enhanced_candidates.append((idx, enhanced_score, original_layer))
             
             return enhanced_candidates
             

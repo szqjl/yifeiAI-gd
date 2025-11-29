@@ -95,10 +95,12 @@
 
 **文件**: `src/knowledge/knowledge_enhanced_decision.py`
 
-#### Task 3.1: 修改为增强评分模式
-- [ ] 添加 `enhance_candidates(candidates, message)` 方法
-- [ ] 接收候选列表，返回增强后的评分列表
-- [ ] 保留现有的 `_apply_knowledge_rules()` 逻辑
+#### ✅ Task 3.1: 修改为增强评分模式 (已完成)
+- [x] 添加 `enhance_candidates(candidates, message)` 方法
+- [x] 接收候选列表，返回增强后的评分列表
+- [x] 保留现有的 `_apply_knowledge_rules()` 逻辑
+- [x] 更新 `hybrid_decision_engine_v4.py` 使用新接口
+- [x] 所有测试通过 (5/5)
 
 #### Task 3.2: 完善策略规则
 - [ ] 验证队友保护规则正确性
