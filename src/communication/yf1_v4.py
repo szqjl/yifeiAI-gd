@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Test1_V4 - Hybrid Decision Engine V4 Client (Player 0)
+yf1_v4 - YiFei AI V4 Client (Player 0)
 Uses HybridDecisionEngineV4 with 4-layer fallback protection
 """
 import asyncio
@@ -23,17 +23,17 @@ logging.basicConfig(
 )
 
 
-class Test1V4Client:
+class YF1_V4_Client:
     """
-    Test1_V4 Client - Player 0
+    YiFei AI V4 Client - Player 0
     Uses HybridDecisionEngineV4 for robust decision making
     """
     
     def __init__(self, player_id=0):
         self.player_id = player_id
-        self.user_info = "Test1_V4"
+        self.user_info = "yf1_v4"
         self.websocket = None
-        self.logger = logging.getLogger(f"Test1_V4")
+        self.logger = logging.getLogger(f"yf1_v4")
         
         # Initialize HybridDecisionEngineV4
         config = {
@@ -48,7 +48,7 @@ class Test1V4Client:
         self.decision_count = 0
         self.game_count = 0
         
-        self.logger.info(f"✓ Test1_V4 initialized (Player {player_id})")
+        self.logger.info(f"✓ yf1_v4 initialized (Player {player_id})")
     
     async def connect(self):
         """Connect to game server"""
@@ -165,7 +165,7 @@ class Test1V4Client:
 
 async def main():
     """Main entry point"""
-    client = Test1_V4_Client(player_id=0)
+    client = YF1_V4_Client(player_id=0)
     await client.connect()
 
 
