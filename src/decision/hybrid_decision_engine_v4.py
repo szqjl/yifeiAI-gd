@@ -61,14 +61,14 @@ class HybridDecisionEngineV4:
     
     def decide(self, message: dict) -> int:
         """
-        Make a decision using enhanced architecture with critical rules.
+        Make a decision using enhanced architecture (增强模式).
         
-        New Architecture:
-        0. Critical Rules (Hard Constraints) - Immediate return
-        1. Layer 1: YF (Primary)
-        2. Layer 2: DecisionEngine (Fallback 1)
-        3. Layer 3: Knowledge Enhanced (Fallback 2)
-        4. Layer 4: Random Selection (Guaranteed)
+        Enhanced Architecture (Task 1.2):
+        0. Critical Rules (Hard Constraints) - Immediate return if triggered
+        1. Generate Candidates (Layer 1 + Layer 2) - Multiple candidates from each layer
+        2. Knowledge Enhancement (Layer 3) - Score all candidates with knowledge rules
+        3. Select Best Action - Choose highest scored candidate
+        4. Random Fallback (Guaranteed) - Always succeeds as last resort
         
         Args:
             message: Game state message from server
@@ -79,7 +79,9 @@ class HybridDecisionEngineV4:
         start_time = time.time()
         performance_threshold = self.config.get("performance_threshold", 1.0)
         
-        # Layer 0: Critical Rules (Hard Constraints)
+        # ========== Step 0: Critical Rules Check (Task 1.2.1 & 1.2.2) ==========
+        # 在 decide() 开头添加关键规则检查
+        # 如果关键规则触发，直接返回动作
         try:
             critical_start = time.time()
             critical_action = self._apply_critical_rules(message)
@@ -101,122 +103,243 @@ class HybridDecisionEngineV4:
             self.logger.error(f"Critical rules check failed: {e}", exc_info=True)
             # Continue to normal layers
         
-        # Layer 1: YF (Primary)
+        # ========== Step 1: Generate Candidates (Task 1.2.3) ==========
+        # 修改 Layer 1/2 为候选生成模式
+        # 从 Layer 1 (YF) 和 Layer 2 (DecisionEngine) 生成多个候选动作
         try:
-            layer_start = time.time()
-            action = self._try_yf(message)
-            layer_duration = time.time() - layer_start
+            candidates_start = time.time()
+            candidates = self._generate_candidates(message)
+            candidates_duration = time.time() - candidates_start
             
-            if action is not None:
+            if not candidates:
+                # No candidates generated, fall back to random
+                self.logger.warning("No candidates generated, using random fallback")
+                action = self._random_valid_action(message)
                 duration = time.time() - start_time
-                self.stats.record_success("YF", duration)
-                
-                # Performance warning
-                if layer_duration > performance_threshold:
-                    self.logger.warning(
-                        f"Layer 1 (YF) slow: {layer_duration:.3f}s > {performance_threshold}s threshold"
-                    )
-                
-                self.logger.info(f"✓ Layer 1 (YF) succeeded: action={action}, time={duration:.3f}s")
+                self.stats.record_success("Random", duration)
                 return action
-            else:
-                self.logger.warning("Layer 1 (YF) returned None, falling back to Layer 2")
-                self.stats.record_failure("YF", "Returned None")
-                
-        except Exception as e:
-            duration = time.time() - layer_start
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            self.logger.error(
-                f"✗ Layer 1 (YF) failed after {duration:.3f}s: {error_msg}",
-                exc_info=True
-            )
-            self.stats.record_failure("YF", error_msg)
-        
-        # Layer 2: DecisionEngine (Fallback 1)
-        try:
-            layer_start = time.time()
-            action = self._try_decision_engine(message)
-            layer_duration = time.time() - layer_start
             
-            if action is not None:
-                duration = time.time() - start_time
-                self.stats.record_success("DecisionEngine", duration)
-                
-                # Performance warning
-                if layer_duration > performance_threshold * 1.5:
-                    self.logger.warning(
-                        f"Layer 2 (DecisionEngine) slow: {layer_duration:.3f}s > {performance_threshold * 1.5}s threshold"
-                    )
-                
-                self.logger.info(f"✓ Layer 2 (DecisionEngine) succeeded: action={action}, time={duration:.3f}s")
-                return action
-            else:
-                self.logger.warning("Layer 2 (DecisionEngine) returned None, falling back to Layer 3")
-                self.stats.record_failure("DecisionEngine", "Returned None")
-                
-        except Exception as e:
-            duration = time.time() - layer_start
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            self.logger.error(
-                f"✗ Layer 2 (DecisionEngine) failed after {duration:.3f}s: {error_msg}",
-                exc_info=True
+            self.logger.debug(
+                f"Generated {len(candidates)} candidates in {candidates_duration:.3f}s "
+                f"(from Layer 1+2)"
             )
-            self.stats.record_failure("DecisionEngine", error_msg)
-        
-        # Layer 3: Knowledge Enhanced (Fallback 2)
-        try:
-            layer_start = time.time()
-            action = self._try_knowledge_enhanced(message)
-            layer_duration = time.time() - layer_start
             
-            if action is not None:
-                duration = time.time() - start_time
-                self.stats.record_success("KnowledgeEnhanced", duration)
-                
-                # Performance warning
-                if layer_duration > performance_threshold * 2.0:
-                    self.logger.warning(
-                        f"Layer 3 (KnowledgeEnhanced) slow: {layer_duration:.3f}s > {performance_threshold * 2.0}s threshold"
-                    )
-                
-                self.logger.info(f"✓ Layer 3 (KnowledgeEnhanced) succeeded: action={action}, time={duration:.3f}s")
-                return action
-            else:
-                self.logger.warning("Layer 3 (KnowledgeEnhanced) returned None, falling back to Layer 4")
-                self.stats.record_failure("KnowledgeEnhanced", "Returned None")
-                
         except Exception as e:
-            duration = time.time() - layer_start
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            self.logger.error(
-                f"✗ Layer 3 (KnowledgeEnhanced) failed after {duration:.3f}s: {error_msg}",
-                exc_info=True
-            )
-            self.stats.record_failure("KnowledgeEnhanced", error_msg)
-        
-        # Layer 4: Random (Guaranteed - MUST NEVER FAIL)
-        try:
-            layer_start = time.time()
+            # Candidate generation failed, fall back to random
+            self.logger.error(f"Candidate generation failed: {e}", exc_info=True)
             action = self._random_valid_action(message)
-            layer_duration = time.time() - layer_start
+            duration = time.time() - start_time
+            self.stats.record_success("Random", duration)
+            return action
+        
+        # ========== Step 2: Knowledge Enhancement (Task 1.2.4) ==========
+        # 添加 Layer 3 增强评分
+        # 对所有候选动作应用知识库规则进行评分增强
+        try:
+            enhance_start = time.time()
+            enhanced_candidates = self._enhance_candidates(candidates, message)
+            enhance_duration = time.time() - enhance_start
+            
+            if not enhanced_candidates:
+                # Enhancement failed, use original candidates
+                self.logger.warning("Enhancement failed, using original candidates")
+                enhanced_candidates = candidates
+            else:
+                self.logger.debug(
+                    f"Enhanced {len(enhanced_candidates)} candidates in {enhance_duration:.3f}s "
+                    f"(Layer 3 applied)"
+                )
+                self.stats.record_success("KnowledgeEnhanced", enhance_duration)
+            
+        except Exception as e:
+            # Enhancement failed, use original candidates
+            self.logger.error(f"Knowledge enhancement failed: {e}", exc_info=True)
+            enhanced_candidates = candidates
+        
+        # ========== Step 3: Select Best Action (Task 1.2.5) ==========
+        # 选择最优动作返回
+        # 从增强后的候选列表中选择评分最高的动作
+        try:
+            select_start = time.time()
+            best_action = self._select_best(enhanced_candidates)
+            select_duration = time.time() - select_start
+            
             duration = time.time() - start_time
             
-            self.stats.record_success("Random", duration)
-            self.logger.warning(
-                f"⚠ Layer 4 (Random) used as last resort: action={action}, time={duration:.3f}s"
+            # Determine which layer provided the final decision
+            # (for statistics tracking)
+            if len(enhanced_candidates) != len(candidates):
+                # Knowledge layer modified candidates
+                decision_layer = "KnowledgeEnhanced"
+            else:
+                # Using original candidates
+                decision_layer = "Hybrid"
+            
+            self.stats.record_success(decision_layer, duration)
+            
+            # Log decision details
+            best_score = next((score for idx, score, _ in enhanced_candidates if idx == best_action), 0)
+            best_layer = next((layer for idx, _, layer in enhanced_candidates if idx == best_action), "Unknown")
+            
+            self.logger.info(
+                f"✓ Decision complete: action={best_action} (score={best_score:.1f}, "
+                f"layer={best_layer}), candidates={len(candidates)}, time={duration:.3f}s"
             )
-            return action
+            
+            return best_action
             
         except Exception as e:
-            # CRITICAL: Layer 4 should NEVER fail
-            # If it does, we have a serious problem
-            self.logger.critical(
-                f"CRITICAL: Layer 4 (Random) failed! This should never happen: {e}",
-                exc_info=True
+            # Selection failed, fall back to random
+            self.logger.error(f"Action selection failed: {e}", exc_info=True)
+            action = self._random_valid_action(message)
+            duration = time.time() - start_time
+            self.stats.record_success("Random", duration)
+            return action
+    
+    # ========== Enhanced Architecture Methods ==========
+    
+    def _generate_candidates(self, message: dict) -> List[tuple]:
+        """
+        Generate candidate actions from Layer 1 (YF) and Layer 2 (DecisionEngine).
+        
+        Enhanced mode: Generate multiple candidates from each layer for better selection.
+        
+        Returns list of (action_index, base_score, source_layer) tuples.
+        
+        Args:
+            message: Game state message
+            
+        Returns:
+            List of candidates: [(action_idx, score, layer), ...]
+        """
+        candidates = []
+        candidate_indices = set()  # Track unique candidates to avoid duplicates
+        
+        # Try Layer 1: YF Strategy
+        try:
+            yf_action = self._try_yf(message)
+            if yf_action is not None:
+                # YF returned a single action, give it high base score
+                candidates.append((yf_action, 100.0, "YF"))
+                candidate_indices.add(yf_action)
+                self.logger.debug(f"YF candidate: action={yf_action}")
+        except Exception as e:
+            self.logger.warning(f"YF candidate generation failed: {e}")
+        
+        # Try Layer 2: DecisionEngine (evaluation-based)
+        try:
+            de_action = self._try_decision_engine(message)
+            if de_action is not None and de_action not in candidate_indices:
+                # DecisionEngine returned action, give it medium base score
+                candidates.append((de_action, 80.0, "DecisionEngine"))
+                candidate_indices.add(de_action)
+                self.logger.debug(f"DecisionEngine candidate: action={de_action}")
+        except Exception as e:
+            self.logger.warning(f"DecisionEngine candidate generation failed: {e}")
+        
+        # Enhanced: Generate additional candidates from DecisionEngine's top evaluations
+        try:
+            additional_candidates = self._get_top_evaluations(message, top_k=3)
+            for idx, score in additional_candidates:
+                if idx not in candidate_indices:
+                    # Scale score to base_score range (50-90)
+                    base_score = 50.0 + (score / 100.0) * 40.0
+                    candidates.append((idx, base_score, "DecisionEngine"))
+                    candidate_indices.add(idx)
+                    self.logger.debug(f"DecisionEngine additional candidate: action={idx}, score={base_score:.1f}")
+        except Exception as e:
+            self.logger.debug(f"Failed to get additional evaluations: {e}")
+        
+        # If no candidates, add all valid actions with low scores
+        if not candidates:
+            action_list = message.get("actionList", [])
+            if action_list:
+                for idx in range(len(action_list)):
+                    candidates.append((idx, 50.0, "Fallback"))
+                self.logger.warning(f"Using fallback: all {len(action_list)} actions as candidates")
+        
+        self.logger.debug(f"Generated {len(candidates)} candidates from Layer 1+2")
+        return candidates
+    
+    def _enhance_candidates(self, candidates: List[tuple], message: dict) -> List[tuple]:
+        """
+        Enhance candidates using Layer 3 (Knowledge).
+        
+        Args:
+            candidates: List of (action_idx, base_score, layer) tuples
+            message: Game state message
+            
+        Returns:
+            Enhanced list of (action_idx, enhanced_score, layer) tuples
+        """
+        try:
+            # Initialize knowledge layer if needed
+            if self.knowledge_enhanced is None:
+                from knowledge.knowledge_enhanced_decision import KnowledgeEnhancedDecisionEngine
+                from game_logic.enhanced_state import EnhancedGameStateManager
+                
+                state_manager = EnhancedGameStateManager()
+                self.knowledge_enhanced = KnowledgeEnhancedDecisionEngine(state_manager)
+                self.logger.info("KnowledgeEnhancedDecisionEngine initialized (lazy)")
+            
+            # Extract action list
+            action_list = message.get("actionList", [])
+            if not action_list:
+                return candidates
+            
+            # Convert candidates to evaluation format
+            evaluations = [(idx, score) for idx, score, _ in candidates]
+            
+            # Apply knowledge rules
+            enhanced_evaluations = self.knowledge_enhanced._apply_knowledge_rules(
+                evaluations, action_list, message, 
+                is_active=(message.get("type") == "active")
             )
-            # Emergency fallback: return 0 (PASS)
-            self.logger.critical("Emergency fallback: returning 0 (PASS)")
-            return 0
+            
+            # Convert back to candidate format
+            enhanced_candidates = []
+            for idx, enhanced_score in enhanced_evaluations:
+                # Find original layer
+                original_layer = "Unknown"
+                for orig_idx, _, layer in candidates:
+                    if orig_idx == idx:
+                        original_layer = layer
+                        break
+                
+                enhanced_candidates.append((idx, enhanced_score, original_layer))
+            
+            return enhanced_candidates
+            
+        except Exception as e:
+            self.logger.error(f"Knowledge enhancement error: {e}", exc_info=True)
+            return candidates
+    
+    def _select_best(self, candidates: List[tuple]) -> int:
+        """
+        Select the best action from enhanced candidates.
+        
+        Args:
+            candidates: List of (action_idx, score, layer) tuples
+            
+        Returns:
+            Best action index
+        """
+        if not candidates:
+            return 0  # PASS as fallback
+        
+        # Sort by score (descending)
+        sorted_candidates = sorted(candidates, key=lambda x: x[1], reverse=True)
+        
+        # Return best action
+        best_action, best_score, best_layer = sorted_candidates[0]
+        
+        self.logger.debug(
+            f"Best action: {best_action} (score={best_score:.1f}, layer={best_layer})"
+        )
+        
+        return best_action
+    
+    # ========== Legacy Layer Methods (for candidate generation) ==========
     
     def _try_yf(self, message: dict) -> Optional[int]:
         """
@@ -314,6 +437,52 @@ class HybridDecisionEngineV4:
             # 错误处理：捕获异常，返回None
             self.logger.error(f"DecisionEngine decision error: {e}", exc_info=True)
             return None
+    
+    def _get_top_evaluations(self, message: dict, top_k: int = 3) -> List[tuple]:
+        """
+        Get top-k evaluated actions from DecisionEngine.
+        
+        This method directly accesses DecisionEngine's evaluator to get
+        multiple high-scoring candidates instead of just the best one.
+        
+        Args:
+            message: Game state message
+            top_k: Number of top candidates to return
+            
+        Returns:
+            List of (action_idx, score) tuples, sorted by score descending
+        """
+        try:
+            # Ensure DecisionEngine is initialized
+            if self.decision_engine is None:
+                from decision.decision_engine import DecisionEngine
+                from game_logic.enhanced_state import EnhancedGameStateManager
+                
+                state_manager = EnhancedGameStateManager()
+                self.decision_engine = DecisionEngine(state_manager)
+            
+            # Get action list
+            action_list = message.get("actionList", [])
+            if not action_list:
+                return []
+            
+            # Get current action for passive decision
+            cur_action = message.get("curAction")
+            
+            # Use DecisionEngine's evaluator to get all evaluations
+            evaluations = self.decision_engine.evaluator.evaluate_all_actions(
+                action_list, cur_action
+            )
+            
+            # Sort by score descending and take top-k
+            sorted_evaluations = sorted(evaluations, key=lambda x: x[1], reverse=True)
+            top_evaluations = sorted_evaluations[:top_k]
+            
+            return top_evaluations
+            
+        except Exception as e:
+            self.logger.debug(f"Failed to get top evaluations: {e}")
+            return []
     
     def _try_knowledge_enhanced(self, message: dict) -> Optional[int]:
         """
@@ -504,11 +673,13 @@ class HybridDecisionEngineV4:
         cards_left: dict
     ) -> Optional[int]:
         """
-        Check if we should protect teammate.
+        Check if we should protect teammate (队友保护).
+        
+        Based on knowledge base: 传牌技巧 - 残局传牌
         
         Conditions:
         - Teammate is leading (has the greatest card)
-        - Teammate has few cards left (<=5)
+        - Teammate has few cards left
         - We should PASS to let teammate win
         
         Args:
@@ -528,24 +699,41 @@ class HybridDecisionEngineV4:
         # Check teammate's remaining cards
         teammate_cards = cards_left.get(teammate_pos, 27)
         
-        # Critical: Teammate has very few cards
-        if teammate_cards <= 3:
+        # Critical: Teammate has 1-2 cards (about to win)
+        if teammate_cards <= 2:
             self.logger.info(
                 f"[Critical Rule] Teammate protection: teammate has {teammate_cards} cards, PASS"
             )
             return 0  # PASS
         
-        # Important: Teammate has few cards
+        # Important: Teammate has 3-5 cards (endgame phase)
         if teammate_cards <= 5:
             # Check if current card is high value
             cur_action = message.get("curAction", [])
             if cur_action and len(cur_action) >= 2:
                 try:
                     card_value = self._get_card_value(cur_action[1])
-                    if card_value >= 14:  # A or higher
+                    # A or higher, let teammate take it
+                    if card_value >= 14:
                         self.logger.info(
                             f"[Critical Rule] Teammate protection: teammate has {teammate_cards} cards "
                             f"and high card ({cur_action[1]}), PASS"
+                        )
+                        return 0  # PASS
+                except:
+                    pass
+        
+        # Moderate: Teammate has 6-8 cards (approaching endgame)
+        if teammate_cards <= 8:
+            # Only PASS if teammate played very high card (2 or Joker)
+            cur_action = message.get("curAction", [])
+            if cur_action and len(cur_action) >= 2:
+                try:
+                    card_value = self._get_card_value(cur_action[1])
+                    if card_value >= 15:  # 2 or Joker
+                        self.logger.info(
+                            f"[Critical Rule] Teammate protection: teammate has {teammate_cards} cards "
+                            f"and very high card ({cur_action[1]}), PASS"
                         )
                         return 0  # PASS
                 except:
@@ -562,12 +750,12 @@ class HybridDecisionEngineV4:
         cards_left: dict
     ) -> Optional[int]:
         """
-        Check if we must suppress opponent.
+        Check if we must suppress opponent (对手压制).
         
-        Conditions:
-        - Opponent has very few cards left (<=5)
-        - We must play a card to prevent opponent from winning
-        - Find the best card to beat current action
+        Based on knowledge base:
+        - "火不打四" (Don't bomb when opponent has 4 cards)
+        - "逢五出对" (Play pair when opponent has 5 cards)
+        - 残局传牌策略
         
         Args:
             message: Game state message
@@ -584,9 +772,15 @@ class HybridDecisionEngineV4:
         prev_cards = cards_left.get(prev_pos, 27)
         min_opponent_cards = min(next_cards, prev_cards)
         
-        # Critical: Opponent is about to win
+        # Rule: "火不打四" - Don't bomb when opponent has 4 cards
+        # (likely a bomb itself, waste to bomb it)
+        if min_opponent_cards == 4:
+            # Don't force bombing, let normal layers handle it
+            return None
+        
+        # Critical: Opponent has 1-3 cards (about to win)
         if min_opponent_cards <= 3:
-            # Find best action to beat current card
+            # Must suppress! Find best action to beat current card
             action = self._find_best_beat_action(message, action_list)
             if action is not None and action != 0:
                 self.logger.info(
@@ -595,17 +789,42 @@ class HybridDecisionEngineV4:
                 )
                 return action
         
-        # Important: Opponent has few cards
-        if min_opponent_cards <= 5:
-            # Check if we're in passive mode and can beat
+        # Important: Opponent has 5 cards
+        # Rule: "逢五出对" - Play pair when opponent has 5 cards
+        if min_opponent_cards == 5:
+            # Check if we're in passive mode
+            if message.get("type") == "passive":
+                # Try to find a pair to play
+                cur_action = message.get("curAction", [])
+                if cur_action and cur_action[0] == "Pair":
+                    # Current action is pair, try to beat it
+                    action = self._find_best_beat_action(message, action_list)
+                    if action is not None and action != 0:
+                        self.logger.info(
+                            f"[Critical Rule] 逢五出对: opponent has 5 cards, "
+                            f"beat pair with action {action}"
+                        )
+                        return action
+        
+        # Moderate: Opponent has 6-8 cards (approaching endgame)
+        if min_opponent_cards <= 8:
+            # Only suppress if we're in passive mode and can easily beat
             if message.get("type") == "passive":
                 action = self._find_best_beat_action(message, action_list)
                 if action is not None and action != 0:
-                    self.logger.info(
-                        f"[Critical Rule] Opponent suppression: opponent has {min_opponent_cards} cards, "
-                        f"beat with action {action}"
-                    )
-                    return action
+                    # Check if it's a small card (not wasting big cards)
+                    action_obj = action_list[action]
+                    if len(action_obj) >= 2:
+                        try:
+                            card_value = self._get_card_value(action_obj[1])
+                            if card_value <= 10:  # Small card, safe to play
+                                self.logger.info(
+                                    f"[Critical Rule] Opponent suppression: opponent has {min_opponent_cards} cards, "
+                                    f"beat with small card action {action}"
+                                )
+                                return action
+                        except:
+                            pass
         
         return None
     
