@@ -491,20 +491,22 @@ class DecisionStatistics:
         self.error_log = []
         self.decision_count = 0
 
-    def reset(self):
-        """
-        Reset the engine for a new game.
-        
-        Clears statistics and resets state.
-        """
-        self.stats.reset()
-        self.logger.info("HybridDecisionEngineV4 reset for new game")
+
+
+# Add methods to HybridDecisionEngineV4 class
+def _add_methods_to_engine():
+    """Add reset_statistics and get_statistics methods to HybridDecisionEngineV4"""
     
-    def get_statistics(self) -> dict:
-        """
-        Get decision statistics.
-        
-        Returns:
-            Dictionary with layer usage statistics
-        """
+    def reset_statistics(self):
+        """Reset statistics for new game."""
+        self.stats.reset()
+        self.logger.info("Statistics reset")
+    
+    def get_statistics(self):
+        """Get decision statistics."""
         return self.stats.get_summary()
+    
+    HybridDecisionEngineV4.reset_statistics = reset_statistics
+    HybridDecisionEngineV4.get_statistics = get_statistics
+
+_add_methods_to_engine()
