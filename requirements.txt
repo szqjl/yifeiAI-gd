@@ -12,3 +12,7 @@ pytest-cov>=4.0.0
 
 # 其他依赖
 pyyaml>=6.0
+
+# RL Dependencies
+gymnasium>=0.29.0
+torch>=2.0.0
