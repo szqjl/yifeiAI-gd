@@ -2,7 +2,7 @@
 # @Time       : 12020/10/1 21:32
 # @Author     : Duofeng Wu
 # @File       : action.py
-# @Description: 閸斻劋缍旂猾
+# @Description: 动作类
 
 from random import randint
 import copy
@@ -11,18 +11,18 @@ from utils import *
 # from utils import one_hand
 from random import random
 
-# 娑撻懟杈ㄦ瀮鐎靛湱鍙庣悰
+# 英文到中文的映射
 ENG2CH = {
-    "Single": "閸楁洖绱",
-    "Pair": "鐎电懓鐡",
-    "Trips": "娑撳婄炊",
-    "ThreePair": "娑撳庣箾鐎",
-    "ThreeWithTwo": "娑撳婄敨娴",
-    "TwoTrips": "闁姐垺婢",
-    "Straight": "妞ゅ搫鐡",
-    "StraightFlush": "閸氬矁濮虫い",
-    "Bomb": "閻愮胯剨",
-    "PASS": "鏉"
+    "Single": "单张",
+    "Pair": "对子",
+    "Trips": "三张",
+    "ThreePair": "三连对",
+    "ThreeWithTwo": "三带二",
+    "TwoTrips": "钢板",
+    "Straight": "顺子",
+    "StraightFlush": "同花顺",
+    "Bomb": "炸弹",
+    "PASS": "过"
 }
 
 
@@ -30,6 +30,12 @@ ENG2CH = {
 class Action(object):
 
     def __init__(self,name):
+        import warnings
+        warnings.warn(
+            "Action class is deprecated. Please use src.decision.decision_engine.DecisionEngine instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.action = []
         self.act_range = -1
 
@@ -1309,7 +1315,7 @@ class Action(object):
                     return get_card_from_bomb(bomb_list, key)
             return bomb_list[0][0]
 
-        combined_handcards, handCards_bomb_info = combine_handcards(handCards, rank, card_val)  # 鐏忓棙澧滈悧宀绮嶉崥鍫ｆ崳閺
+        combined_handcards, handCards_bomb_info = combine_handcards(handCards, rank, card_val)  # 组合手牌并获取炸弹信息
 
         combined_temp = {"Single": [], "Trips": [], "Pair": [], "Bomb": []}
         temp_bomb_info = {}
@@ -1358,16 +1364,16 @@ class Action(object):
         self.action = msg["actionList"]
         if len(self.action) == 1:
             return 0
-        if msg["stage"] == "play" and msg["greaterPos"] != mypos and msg["curPos"] != -1:  # 鐞氶崝銊ュ毉閻
+        if msg["stage"] == "play" and msg["greaterPos"] != mypos and msg["curPos"] != -1:  # 被动出牌阶段
             # try:
 
             numofplayers = [history['0']["remain"],history['1']["remain"],history['2']["remain"],history['3']["remain"]]
             numofnext = numofplayers[(mypos + 1) % 4]
             if numofnext != 0:
-                print("娑撳鎯扮箷閺堝坿瀵鐘靛".format(numofnext))
+                print("下家剩余牌数: {}".format(numofnext))
             else:
                 numofpre = numofplayers[(mypos - 1) % 4]
-                print("娑撳璺哄嚒鐎瑰瞼澧濋敍灞肩瑐鐎规儼绻曢張澧坿瀵鐘靛".format(numofpre))
+                print("下家已出完，上家剩余牌数: {}".format(numofpre))
             # print(msg['curAction'])
             self.act = self.passive(self.action, msg["handCards"], msg["curRank"], msg['curAction'],msg["greaterAction"],mypos,
                                     msg["greaterPos"],remaincards, numofplayers,pass_num,my_pass_num,remain_cards_classbynum)
@@ -1376,13 +1382,13 @@ class Action(object):
             #     print(str(e))
             #     self.act = 1
 
-        elif msg["stage"] == "play" and (msg["greaterPos"] == -1 or msg["curPos"] == -1):  # 缁楁稉閸欍儲鍎忛崘鍏镐簰閸欏﹣瀵岄崝銊﹀剰閸
+        elif msg["stage"] == "play" and (msg["greaterPos"] == -1 or msg["curPos"] == -1):  # 主动出牌阶段
             # try:
             numofplayers = [history['0']["remain"], history['1']["remain"], history['2']["remain"],
                             history['3']["remain"]]
             numofnext = numofplayers[(mypos + 1) % 4]
             if numofnext != 0:
-                print("娑撳鎯扮箷閺堝坿瀵鐘靛".format(numofnext))
+                print("下家剩余牌数: {}".format(numofnext))
             else:
                 numofpre = numofplayers[(mypos - 1) % 4]
             self.act = self.active(self.action, msg["handCards"], msg["curRank"],numofplayers,mypos,remaincards)

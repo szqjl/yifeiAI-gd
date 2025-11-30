@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-閸愬磭鐡ュ鏇熸惛濡鈥虫健 (Decision Engine)
-閸旂喕鍏橀敍
-- 娑撹插З/鐞氶崝銊ュ枀缁涙牕鍨庣粋
-- 鐠嬪啰鏁ら柊宥呮値缁涙牜鏆
-- 缂佺厧鎮庣拠鍕鍙婇崪灞藉枀缁
-- 闂嗗棙鍨氶悧灞界锋稉鎾绘，婢跺嫮鎮
-- 闂嗗棙鍨氭径姘娲滅槐鐘虹槑娴
-- 闂嗗棙鍨氶弮鍫曟？閹貉冨煑
+决策引擎 (Decision Engine)
+功能：
+- 主动/被动出牌决策
+- 配合策略集成
+- 多因素评估
+- 决策时间控制
+- 快速决策模式
+- 进贡/还贡决策
 """
 
 import random
@@ -15,7 +15,7 @@ import sys
 from typing import Dict, List, Optional
 from pathlib import Path
 
-# 濞ｈ插瀞rc閻╄ぐ鏇炲煂鐠哄板嫸绱欐俊鍌涚亯鏉╂ɑ鐥呴張澶涚礆
+# 将 src 目录添加到系统路径
 if str(Path(__file__).parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -28,7 +28,7 @@ from decision.decision_timer import DecisionTimer
 
 
 class DecisionEngine:
-    """閸愬磭鐡ュ鏇熸惛閿涘牅瀵岄崝/鐞氶崝銊ュ瀻缁備紮绱"""
+    """决策引擎类，负责所有出牌决策"""
     
     def __init__(self, state_manager: EnhancedGameStateManager, max_decision_time: float = 0.8):
         self.state = state_manager
@@ -39,78 +39,78 @@ class DecisionEngine:
     
     def decide(self, message: Dict) -> int:
         """
-        娑撹插枀缁涙牕鍤遍弫甯绱欑敮锔芥傞梻瀛樺付閸掕圭礆
+        核心决策方法
         
         Args:
-            message: 楠炲啿褰撮崣鎴︿胶娈慳ct濞戝牊浼
+            message: 游戏状态消息
         
         Returns:
-            闁澶嬪ㄩ惃鍕濮╂担婊呭偍瀵
+            决策结果索引
         """
-        # 瀵婵瀣鈩冩
+        # 开始计时
         self.timer.start()
         
         action_list = message.get("actionList", [])
         if not action_list:
             return 0
         
-        # 婵″倹鐏夐崣閺堝夌存稉閸斻劋缍旈敍宀娲块幒銉ㄧ箲閸
+        # 只有一个动作（通常是PASS或必出），直接返回
         if len(action_list) == 1:
             return 0
         
-        # 閺嶈勫祦濞撳憡鍨欓梼鑸电敻澶嬪ㄩ崘宕囩摜閺傜懓绱
+        # 获取当前阶段
         stage = message.get("stage", "play")
         
         try:
             if stage == "play":
                 if self.state.is_passive_play():
-                    # 鐞氶崝銊ュ毉閻楀矉绱欓棁鐟曚礁甯囬崚璁圭礆
+                    # 被动出牌（管牌）
                     return self.passive_decision(message, action_list)
                 else:
-                    # 娑撹插З閸戣櫣澧濋敍鍫㈠芳閸忓牆鍤閻楀本鍨ㄩ幒銉╁函绱
+                    # 主动出牌
                     return self.active_decision(message, action_list)
             elif stage == "tribute":
                 return self.tribute_decision(message, action_list)
             elif stage == "back":
                 return self.back_decision(message, action_list)
             else:
-                # 閸忔湹绮閹鍛鍠岄梾蹇旀簚闁澶嬪
+                # 其他阶段，随机选择
                 index_range = message.get("indexRange", len(action_list) - 1)
                 return random.randint(0, index_range)
         finally:
-            # 鐠佹澘缍嶉崘宕囩摜閺冨爼妫
+            # 检查决策时间
             elapsed = self.timer.get_elapsed_time()
             if elapsed > self.timer.max_time * 0.8:
-                print(f"Warning: Decision took {elapsed:.3f}s (閹恒儴绻庣搾鍛妞 {self.timer.max_time}s")
+                print(f"Warning: Decision took {elapsed:.3f}s (Max {self.timer.max_time}s)")
     
     def active_decision(self, message: Dict, action_list: List[List]) -> int:
         """
-        娑撹插З閸戣櫣澧濋崘宕囩摜閿涘牏宸奸崗鍫濆毉閻楀本鍨ㄩ幒銉╁函绱
+        主动出牌决策
         
         Args:
-            message: 楠炲啿褰村☉鍫熶紖
-            action_list: 閸欓柅澶婂З娴ｆ粌鍨鐞
+            message: 游戏消息
+            action_list: 可选动作列表
         
         Returns:
-            闁澶嬪ㄩ惃鍕濮╂担婊呭偍瀵
+            决策结果索引
         """
         handcards = message.get("handCards", [])
         rank = message.get("curRank", "2")
         
-        # 娴ｈ法鏁ゆ径姘娲滅槐鐘虹槑娴兼壆閮寸紒
+        # 多因素评估所有动作
         evaluations = self.evaluator.evaluate_all_actions(action_list, None)
         
-        # 濡閺屻儲妞傞梻杈剧礉婵″倹鐏夐弮鍫曟？娑撳秴鐕傜礉閻╁瓨甯存潻鏂挎礀閺堟担鍐插З娴
+        # 如果超时，返回评估分最高的动作
         if self.timer.check_timeout():
             if evaluations:
                 return evaluations[0][0]
             return 0
         
-        # 娴兼ê鍘涢柅澶嬪ㄧ拠鍕鍨庢傛兼畱閸斻劋缍
+        # 选择非PASS的最佳动作
         for idx, score in evaluations:
             action = action_list[idx]
             if action[0] != "PASS":
-                # 濡閺屻儲妞傞梻
+                # 再次检查超时
                 if self.timer.check_timeout():
                     return idx
                 return idx
@@ -119,14 +119,14 @@ class DecisionEngine:
     
     def passive_decision(self, message: Dict, action_list: List[List]) -> int:
         """
-        鐞氶崝銊ュ毉閻楀苯鍠呯粵鏍电礄闂囩憰浣稿竾閸掕圭礆
+        被动出牌决策（管牌）
         
         Args:
-            message: 楠炲啿褰村☉鍫熶紖
-            action_list: 閸欓柅澶婂З娴ｆ粌鍨鐞
+            message: 游戏消息
+            action_list: 可选动作列表
         
         Returns:
-            闁澶嬪ㄩ惃鍕濮╂担婊呭偍瀵
+            决策结果索引
         """
         cur_action = message.get("curAction")
         greater_action = message.get("greaterAction")
@@ -135,22 +135,22 @@ class DecisionEngine:
         
         target_action = greater_action if greater_action else cur_action
         
-        # 1. 鐠囧嫪鍙婇柊宥呮値閺堣桨绱
+        # 1. 配合策略评估
         cooperation_result = self.cooperation.get_cooperation_strategy(
             action_list, cur_action, greater_action
         )
         
-        # 2. 婵″倹鐏夋惔鏃囥儵鍘ら崥鍫ユЕ閸欏剁礉鏉╂柨娲朠ASS
+        # 2. 如果建议PASS，则PASS
         if cooperation_result.get("should_pass"):
             return 0
         
-        # 3. 婵″倹鐏夐棁鐟曚焦甯撮弴鍧楁Е閸欏剁礉闁澶嬪ㄩ張娴ｅ啿濮╂担
+        # 3. 如果建议接管，选择最佳动作
         if cooperation_result.get("should_take_over"):
             best_index = cooperation_result.get("best_action_index")
             if best_index is not None:
                 return best_index
         
-        # 4. 娴ｈ法鏁ら悧灞界锋稉鎾绘，婢跺嫮鎮婇崳
+        # 4. 使用特定牌型处理器
         if target_action and target_action[0] != "PASS":
             card_type = target_action[0]
             handler = CardTypeHandlerFactory.get_handler(
@@ -158,9 +158,9 @@ class DecisionEngine:
             )
             
             if handler:
-                # 濡閺屻儲妞傞梻
+                # 如果超时
                 if self.timer.check_timeout():
-                    # 鐡掑懏妞傞敍灞煎▏閻銊ユ彥闁鐔峰枀缁
+                    # 快速决策
                     return self._quick_decision(action_list, target_action)
                 
                 result = handler.handle_passive(
@@ -170,35 +170,35 @@ class DecisionEngine:
                 if result != -1:
                     return result
         
-        # 5. 娴ｈ法鏁ゆ径姘娲滅槐鐘虹槑娴兼壆閮寸紒鐔剁稊娑撳搫鍥
+        # 5. 多因素评估
         if not self.timer.check_timeout():
             evaluations = self.evaluator.evaluate_all_actions(action_list, target_action)
             for idx, score in evaluations:
                 if action_list[idx][0] != "PASS":
                     return idx
         
-        # 6. 婵″倹鐏夐弮鐘崇《閸樺鍩楅幋鏍绉撮弮璁圭礉鏉╂柨娲朠ASS
+        # 6. 默认PASS
         return 0
     
     def _quick_decision(self, action_list: List[List], target_action: List) -> int:
         """
-        韫囬柅鐔峰枀缁涙牭绱欑搾鍛妞傞弮鍓佹畱婢跺洭澶嬫煙濡楀牞绱
+        快速决策（超时保护）
         
         Args:
-            action_list: 閸欓柅澶婂З娴ｆ粌鍨鐞
-            target_action: 閻╅弽鍥уЗ娴
+            action_list: 可选动作列表
+            target_action: 目标动作
         
         Returns:
-            閸斻劋缍旂槐銏犵穿
+            决策结果索引
         """
         if not target_action or target_action[0] == "PASS":
-            # 娑撹插З閸戣櫣澧濋敍宀勫嬪ㄧ粭娑撴稉闂堟扛ASS閸斻劋缍
+            # 主动出牌，选择第一个非PASS动作
             for i, action in enumerate(action_list[1:], 1):
                 if action[0] != "PASS":
                     return i
             return 0
         
-        # 鐞氶崝銊ュ毉閻楀矉绱濊箛闁鐔风粯澹橀崣娴犮儱甯囬崚鍓佹畱閸斻劋缍
+        # 被动出牌，选择比目标大的最小动作
         target_value = self.cooperation._calculate_action_value(target_action)
         for i, action in enumerate(action_list[1:], 1):
             if action[0] == "PASS":
@@ -211,25 +211,25 @@ class DecisionEngine:
     
     def tribute_decision(self, message: Dict, action_list: List[List]) -> int:
         """
-        鏉╂稖纭閸愬磭鐡
+        进贡决策
         
         Args:
-            message: 楠炲啿褰村☉鍫熶紖
-            action_list: 閸欓柅澶婂З娴ｆ粌鍨鐞
+            message: 游戏消息
+            action_list: 可选动作列表
         
         Returns:
-            闁澶嬪ㄩ惃鍕濮╂担婊呭偍瀵
+            决策结果索引
         """
-        # 缁涙牜鏆愰敍姘朵缉閸忓秷绻樼拹鈥插瘜閻
+        # 获取当前级牌（红桃）
         cur_rank = message.get("curRank", "2")
-        rank_card = f"H{cur_rank}"  # 娑撹崵澧濋柅姘鐖堕弰缁俱垺
+        rank_card = f"H{cur_rank}"  # 红桃级牌
         
-        # 濡閺屻儳娑撴稉閸斻劋缍旈弰閸氾箑瀵橀崥娑撹崵澧
+        # 如果有进贡动作
         if len(action_list) > 0:
             first_action = action_list[0]
             if isinstance(first_action, list) and len(first_action) > 2:
                 if rank_card in first_action[2]:
-                    # 婵″倹鐏夐張澶屾禍灞奸嚋閸斻劋缍旈敍宀勫嬪ㄧ粭娴滃奔閲
+                    # 如果包含级牌，优先保留
                     if len(action_list) > 1:
                         return 1
         
@@ -237,18 +237,17 @@ class DecisionEngine:
     
     def back_decision(self, message: Dict, action_list: List[List]) -> int:
         """
-        鏉╂跨閸愬磭鐡
+        还贡决策
         
         Args:
-            message: 楠炲啿褰村☉鍫熶紖
-            action_list: 閸欓柅澶婂З娴ｆ粌鍨鐞
+            message: 游戏消息
+            action_list: 可选动作列表
         
         Returns:
-            闁澶嬪ㄩ惃鍕濮╂担婊呭偍瀵
+            决策结果索引
         """
-        # 缁涙牜鏆愰敍姘崇箷鐠愨崇毈閻
-        # TODO: 鐎圭偟骞囬弴瀛樻ら懗鐣屾畱鏉╂跨缁涙牜鏆
+        # 默认选择第一个动作
         
-        # 娑撳瓨妞傜圭偟骞囬敍姘跺嬪ㄧ粭娑撴稉閸斻劋缍
+        # TODO: 实现更智能的还贡策略
         return 0
 
