@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-婢舵艾娲滅槐鐘虹槑娴兼澘娅掑Ο鈥虫健 (Multi Factor Evaluator)
-閸旂喕鍏橀敍
-- 缂佺厧鎮庨懓鍐妾绘径姘閲滈崶鐘电岀拠鍕鍙婇崝銊ょ稊
-- 閹绘劒绶电紒鐓庢値鐠囧嫬鍨
+多因素评估器 (Multi Factor Evaluator)
+功能：
+- 综合评估出牌动作的价值
+- 结合牌型、剩余牌、配合、风险等因素
 """
 
 from typing import Dict, List, Optional, Tuple
 import sys
 from pathlib import Path
 
-# 濞ｈ插瀞rc閻╄ぐ鏇炲煂鐠哄
+# 将 src 目录添加到系统路径
 if str(Path(__file__).parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -20,24 +20,24 @@ from decision.cooperation import CooperationStrategy
 
 
 class MultiFactorEvaluator:
-    """婢舵艾娲滅槐鐘虹槑娴兼澘娅"""
+    """多因素评估器类"""
     
     def __init__(self, state_manager: EnhancedGameStateManager, 
                  combiner: HandCombiner,
                  cooperation: CooperationStrategy):
         """
-        閸掓繂瀣瀵叉径姘娲滅槐鐘虹槑娴兼澘娅
+        初始化多因素评估器
         
         Args:
-            state_manager: 閻樿埖浣猴紕鎮婇崳
-            combiner: 閹靛澧濈紒鍕鎮庨崳
-            cooperation: 闁板秴鎮庣粵鏍鏆
+            state_manager: 游戏状态管理器
+            combiner: 手牌组合器
+            cooperation: 配合策略
         """
         self.state = state_manager
         self.combiner = combiner
         self.cooperation = cooperation
         
-        # 閺夊啴鍣搁柊宥囩枂
+        # 评估权重配置
         self.weights = {
             "remaining_cards": 0.25,
             "card_type_value": 0.20,
@@ -50,14 +50,14 @@ class MultiFactorEvaluator:
     def evaluate_all_actions(self, action_list: List[List], 
                             target_action: Optional[List] = None) -> List[Tuple[int, float]]:
         """
-        鐠囧嫪鍙婇幍閺堝婂З娴
+        评估所有可选动作
         
         Args:
-            action_list: 閸斻劋缍旈崚妤勩
-            target_action: 閻╅弽鍥уЗ娴ｆ粣绱欑悮閸斻劌鍤閻楀本妞傞棁鐟曚礁甯囬崚璁圭礆
+            action_list: 动作列表
+            target_action: 目标动作（被动出牌时）
         
         Returns:
-            鐠囧嫪鍙婄紒鎾寸亯閸掓勩冮敍灞剧壐瀵蹇庤礋 [(缁便垹绱, 鐠囧嫬鍨), ...]閿涘本瀵滅拠鍕鍨庨梽宥呯碍閹烘帒鍨
+            评估结果列表 [(索引, 分数), ...]，按分数降序排列
         """
         evaluations = []
         
@@ -68,49 +68,49 @@ class MultiFactorEvaluator:
                 score = self._evaluate_action(action, target_action)
             evaluations.append((idx, score))
         
-        # 閹稿庣槑閸掑棝妾锋惔蹇斿笓鎼
+        # 按分数降序排序
         evaluations.sort(key=lambda x: x[1], reverse=True)
         return evaluations
     
     def _evaluate_action(self, action: List, target_action: Optional[List]) -> float:
         """
-        鐠囧嫪鍙婇崡鏇氶嚋閸斻劋缍
+        评估单个动作
         
         Args:
-            action: 閸斻劋缍
-            target_action: 閻╅弽鍥уЗ娴
+            action: 动作
+            target_action: 目标动作
         
         Returns:
-            缂佺厧鎮庣拠鍕鍨
+            评估分数
         """
         scores = {}
         
-        # 1. 閻楀苯鐎锋禒宄
+        # 1. 牌型价值
         scores["card_type_value"] = self._evaluate_card_type_value(action)
         
-        # 2. 閸撯晙缍戦悧灞炬殶閸ョ姷绀
+        # 2. 剩余牌数影响
         scores["remaining_cards"] = self._evaluate_remaining_cards(action)
         
-        # 3. 闁板秴鎮庨崶鐘电
+        # 3. 配合度
         scores["cooperation"] = self._evaluate_cooperation(action, target_action)
         
-        # 4. 妞嬪酣娅撻崶鐘电
+        # 4. 风险评估
         scores["risk"] = self._evaluate_risk(action)
         
-        # 5. 閺冭埖婧閸ョ姷绀
+        # 5. 时机评估
         scores["timing"] = self._evaluate_timing(action, target_action)
         
-        # 6. 閹靛澧濈紒鎾寸閸ョ姷绀
+        # 6. 手牌结构影响
         scores["hand_structure"] = self._evaluate_hand_structure(action)
         
-        # 缂佺厧鎮庣拠鍕鍨
+        # 计算加权总分
         total_score = sum(scores[factor] * self.weights[factor] 
                          for factor in scores)
         
         return total_score
     
     def _evaluate_card_type_value(self, action: List) -> float:
-        """鐠囧嫪鍙婇悧灞界锋禒宄"""
+        """评估牌型价值"""
         if not action or action[0] == "PASS":
             return 0.0
         
@@ -128,54 +128,54 @@ class MultiFactorEvaluator:
         
         base_value = type_values.get(action[0], 1.0)
         
-        # 瑜版帊绔撮崠鏍у煂0-1閼煎啫娲
+        # 归一化到 0-1
         return min(base_value / 20.0, 1.0)
     
     def _evaluate_remaining_cards(self, action: List) -> float:
-        """鐠囧嫪鍙婇崜鈺缍戦悧灞炬殶閸ョ姷绀"""
-        # 缁犻崠鏍х杽閻滃府绱伴悧灞炬殶鐡掑﹤鐨鐡掑﹤銈
+        """评估剩余牌数影响"""
+        # 出牌越多，剩余越少，分数越高
         cards = action[2] if len(action) > 2 else []
         card_count = len(cards) if isinstance(cards, list) else 1
         
-        # 瑜版帊绔撮崠鏍电窗閸嬪洩鐐娓舵径27瀵鐘靛
+        # 假设初始27张牌
         return 1.0 - (card_count / 27.0)
     
     def _evaluate_cooperation(self, action: List, target_action: Optional[List]) -> float:
-        """鐠囧嫪鍙婇柊宥呮値閸ョ姷绀"""
+        """评估配合度"""
         if not target_action:
-            return 0.5  # 娑撹插З閸戣櫣澧濋敍宀勫帳閸氬牆娲滅槐鐘辫厬缁
+            return 0.5  # 主动出牌，默认配合度
         
-        # 婵″倹鐏夐惄閺嶅洤濮╂担婊勬Ц闂冪喎寮搁惃鍕剁礉鐠囧嫪鍙婇柊宥呮値娴犲嘲
+        # 计算动作价值
         action_value = self.cooperation._calculate_action_value(action)
         target_value = self.cooperation._calculate_action_value(target_action)
         
-        # 婵″倹鐏夐懗钘夊竾閸掓湹绲炬稉宥堢箖鎼达讣绱濋柊宥呮値娴犲嘲濂哥彯
+        # 如果动作价值大于目标价值
         if action_value > target_value:
             diff = action_value - target_value
-            if diff < 5:  # 闁鍌氬抽崢瀣鍩
+            if diff < 5:  # 价值差异小，配合度高
                 return 0.8
-            else:  # 鏉╁洤瀹抽崢瀣鍩
+            else:  # 价值差异大，配合度低
                 return 0.4
         
-        return 0.2  # 閺冪姵纭堕崢瀣鍩
+        return 0.2  # 无法管上
     
     def _evaluate_risk(self, action: List) -> float:
-        """鐠囧嫪鍙婃嬪酣娅撻崶鐘电"""
-        # 缁犻崠鏍х杽閻滃府绱伴悙绋胯剨妞嬪酣娅撴担搴绱濈亸蹇曞濇嬪酣娅撴
+        """评估风险"""
+        # 炸弹风险高，单张对子风险低
         if action[0] == "Bomb":
-            return 0.9  # 娴ｅ酣搴ㄦ珦
+            return 0.9  # 高风险
         elif action[0] in ["Single", "Pair"]:
-            return 0.3  # 妤傛﹢搴ㄦ珦
+            return 0.3  # 低风险
         else:
-            return 0.6  # 娑撶粵澶愬酣娅
+            return 0.6  # 中等风险
     
     def _evaluate_timing(self, action: List, target_action: Optional[List]) -> float:
-        """鐠囧嫪鍙婇弮鑸垫簚閸ョ姷绀"""
-        # 缁犻崠鏍х杽閻
+        """评估时机"""
+        # 暂未实现复杂时机评估
         return 0.5
     
     def _evaluate_hand_structure(self, action: List) -> float:
-        """鐠囧嫪鍙婇幍瀣澧濈紒鎾寸閸ョ姷绀"""
-        # 缁犻崠鏍х杽閻
+        """评估手牌结构影响"""
+        # 暂未实现复杂结构评估
         return 0.5
 
