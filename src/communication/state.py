@@ -144,8 +144,8 @@ class State(object):
         }
         鐠囪渹绮庨崷銊ョ懓绨查惃鍑SON閺嶇厧绱℃稉瀣鍧楁６鐎电懓绨查惃鍕鐤勬笟瀣鐫橀幀褝绱濋懟銉︺倖妞傜拋鍧楁６閸忔湹绮鐏炵偞褍鍨瀵板牊婀侀崣閼宠姤妲告稊瀣澧犳径鍕鎮婇弮鑸垫弓閺囧瓨鏌婇惃鍕鐤勬笟瀣鐫橀幀褝绱濇稉宥呭徔閺堝婂櫙绾閹褋
         """
-        # TODO: 闁澶嬪滈崣閼风悰灞戒粵閸戝搫鍙炬禒鏍у嫮鎮
-        print("濞撳憡鍨欏婵, 閹存垶妲竰{}閸欒渹缍呴敍灞惧滈悧宀嬬窗{}".format(self._myPos, self._handCards))
+        # TODO: 选手可以自行做出其他处理
+        print("游戏开始, 我是{}号位，手牌：{}".format(self._myPos, self._handCards))
 
 
     def notify_play(self):
@@ -186,8 +186,8 @@ class State(object):
                 self.my_pass_num = 0
 
 
-        # TODO: 闁澶嬪滈崣閼风悰灞戒粵閸戝搫鍙炬禒鏍у嫮鎮
-        print("{}閸欒渹缍呴幍鎾冲毉{}閿 閺堟径褍濮╂担婊璐焮{}閸欒渹缍呴幍鎾冲毉閻ㄥ墦{}".format(self._curPos, self._curAction, self._greaterPos, self._greaterAction),"鏉╃偟鐢籶ass閺佹壆娲伴敍", self.pass_num)
+        # TODO: 选手可以自行做出其他处理
+        print("{}号位打出{}， 最大动作为{}号位打出的{}".format(self._curPos, self._curAction, self._greaterPos, self._greaterAction),"连续pass数目：", self.pass_num)
 
 
     def notify_tribute(self):
@@ -206,7 +206,7 @@ class State(object):
         for tribute_result in self._result:
             tribute_pos, receive_tribute_pos, card = tribute_result
 
-            print("{}閸欒渹缍呴崥鎲憓閸欒渹缍呮潻娑滅{}".format(tribute_pos, receive_tribute_pos, card))
+            print("{}号位进贡给{}号位牌{}".format(tribute_pos, receive_tribute_pos, card))
 
 
     def notify_anti(self):
@@ -221,9 +221,9 @@ class State(object):
         }
         鐠囪渹绮庨崷銊ョ懓绨查惃鍑SON閺嶇厧绱℃稉瀣鍧楁６鐎电懓绨查惃鍕鐤勬笟瀣鐫橀幀褝绱濋懟銉︺倖妞傜拋鍧楁６閸忔湹绮鐏炵偞褍鍨瀵板牊婀侀崣閼宠姤妲告稊瀣澧犳径鍕鎮婇弮鑸垫弓閺囧瓨鏌婇惃鍕鐤勬笟瀣鐫橀幀褝绱濇稉宥呭徔閺堝婂櫙绾閹褋
         """
-        # TODO: 闁澶嬪滈崣閼风悰灞戒粵閸戝搫鍙炬禒鏍у嫮鎮
+        # TODO: 选手可以自行做出其他处理
         for pos in self._antiPos:
-            print("{}閸欒渹缍呴悳鈺佽埖濮夌拹".format(pos))
+            print("{}号位抗贡".format(pos))
 
     def notify_back(self):
         """
@@ -236,10 +236,10 @@ class State(object):
         }
         鐠囪渹绮庨崷銊ョ懓绨查惃鍑SON閺嶇厧绱℃稉瀣鍧楁６鐎电懓绨查惃鍕鐤勬笟瀣鐫橀幀褝绱濋懟銉︺倖妞傜拋鍧楁６閸忔湹绮鐏炵偞褍鍨瀵板牊婀侀崣閼宠姤妲告稊瀣澧犳径鍕鎮婇弮鑸垫弓閺囧瓨鏌婇惃鍕鐤勬笟瀣鐫橀幀褝绱濇稉宥呭徔閺堝婂櫙绾閹褋
         """
-        # TODO: 闁澶嬪滈崣閼风悰灞戒粵閸戝搫鍙炬禒鏍у嫮鎮
+        # TODO: 选手可以自行做出其他处理
         for back_result in self._result:
             back_pos, receive_back_pos, card = back_result
-            print("{}閸欒渹缍呴崥鎲憓閸欒渹缍呮潻妯跨{}".format(back_pos, receive_back_pos, card))
+            print("{}号位还贡给{}号位牌{}".format(back_pos, receive_back_pos, card))
 
     def notify_episode_over(self):
         """
@@ -292,11 +292,11 @@ class State(object):
         # end 1020
         self.pass_num = 0
         self.my_pass_num = 0
-        # TODO: 闁澶嬪滈崣閼风悰灞戒粵閸戝搫鍙炬禒鏍у嫮鎮
-        print("鐎电懓鐪缂佹挻娼閿涘苯鐣閻楀本鈥崇碍娑撶皶{}閿涘瞼绮ㄩ弶鐔告傞幍閹垫挾娈戠粵澶岄獓娑撶皶{}".format(self._order, self._curRank))
+        # TODO: 选手可以自行做出其他处理
+        print("本局结束，名次为{}，当前等级为{}".format(self._order, self._curRank))
         for rest in self._restCards:
             rest_pos, rest_cards = rest
-            print("{}閸欒渹缍呴崜鈺缍戦崡锛勫漿{}".format(rest_pos, rest_cards))
+            print("{}号位剩余牌数: {}".format(rest_pos, rest_cards))
 
     def notify_game_over(self):
         """
@@ -346,8 +346,8 @@ class State(object):
         self.remain_cards_classbynum.append(2)
         self.remain_cards_classbynum.append(2)
         # end 1020
-        # TODO: 闁澶嬪滈崣閼风悰灞戒粵閸戝搫鍙炬禒鏍у嫮鎮
-        print("瑜版挸澧犵拋缂佸啯鈩冩殶娑撶皶{}, 鐠佹儳鐣鹃惃鍕鐖堕幋蹇斺剝鏆熸稉绨晑".format(self._curTimes, self._settingTimes))
+        # TODO: 选手可以自行做出其他处理
+        print("达到设定场次, 其中0号位胜利{}次，1号位胜利{}次，2号位胜利{}次，3号位胜利{}次".format(self._curTimes, self._settingTimes))
 
     def notify_game_result(self):
         """
@@ -361,9 +361,9 @@ class State(object):
         }
         鐠囪渹绮庨崷銊ョ懓绨查惃鍑SON閺嶇厧绱℃稉瀣鍧楁６鐎电懓绨查惃鍕鐤勬笟瀣鐫橀幀褝绱濋懟銉︺倖妞傜拋鍧楁６閸忔湹绮鐏炵偞褍鍨瀵板牊婀侀崣閼宠姤妲告稊瀣澧犳径鍕鎮婇弮鑸垫弓閺囧瓨鏌婇惃鍕鐤勬笟瀣鐫橀幀褝绱濇稉宥呭徔閺堝婂櫙绾閹褋
         """
-        # TODO: 闁澶嬪滈崣閼风悰灞戒粵閸戝搫鍙炬禒鏍у嫮鎮
-        print("鏉堟儳鍩岀拋鎯х暰閸︾儤, 閸忔湹鑵0閸欒渹缍呴懗婊冨焺{}濞嗏槄绱1閸欒渹缍呴懗婊冨焺{}濞嗏槄绱2閸欒渹缍呴懗婊冨焺{}濞嗏槄绱3閸欒渹缍呴懗婊冨焺{}濞".format(*self._victoryNum))
-        print("閸忔湹鑵戦獮鍐茬湰濞嗏剝鏆熼敍0閸欒渹缍呴獮鍐茬湰{}濞嗏槄绱1閸欒渹缍呴獮鍐茬湰{}濞嗏槄绱2閸欒渹缍呴獮鍐茬湰{}濞嗏槄绱3閸欒渹缍呴獮鍐茬湰{}濞".format(*self._draws))
+        # TODO: 选手可以自行做出其他处理
+        print("游戏结束, 其中0号位胜利{}次，1号位胜利{}次，2号位胜利{}次，3号位胜利{}次".format(*self._victoryNum))
+        print("其中平局次数为，0号位平局{}次，1号位平局{}次，2号位平局{}次，3号位平局{}次".format(*self._draws))
 
     def act_play(self):
         """
@@ -395,9 +395,9 @@ class State(object):
                 self.play_cards[str(i)] = []
             else:
                 self.play_cards[str(i)] = self._publicInfo[i]["playArea"][2]
-        # TODO: 闁澶嬪滈崣閼风悰灞戒粵閸戝搫鍙炬禒鏍у嫮鎮
-        print("鎴戞柟绛夌骇锛歿{}锛 瀵规柟绛夌骇锛歿{}锛 褰撳墠绛夌骇{}".format(self._selfRank, self._oppoRank, self._curRank))
-        print("褰撳墠鍔ㄤ綔涓簕{}鍙-鍔ㄤ綔{}锛 鏈澶у姩浣滀负{}鍙-鍔ㄤ綔{}".format(
+        # TODO: 选手可以自行做出其他处理
+        print("我方等级：{}， 对方等级：{}， 当前等级{}".format(self._selfRank, self._oppoRank, self._curRank))
+        print("当前动作为{}号-动作{}， 最大动作为{}号-动作{}".format(
             self._curPos, self._curAction, self._greaterPos, self._greaterAction)
         )
 
@@ -427,9 +427,9 @@ class State(object):
         }
         鐠囪渹绮庨崷銊ョ懓绨查惃鍑SON閺嶇厧绱℃稉瀣鍧楁６鐎电懓绨查惃鍕鐤勬笟瀣鐫橀幀褝绱濋懟銉︺倖妞傜拋鍧楁６閸忔湹绮鐏炵偞褍鍨瀵板牊婀侀崣閼宠姤妲告稊瀣澧犳径鍕鎮婇弮鑸垫弓閺囧瓨鏌婇惃鍕鐤勬笟瀣鐫橀幀褝绱濇稉宥呭徔閺堝婂櫙绾閹褋
         """
-        # TODO: 閫夋墜鍙鑷琛屽仛鍑哄叾浠栧勭悊
-        print("鎴戞柟绛夌骇锛歿{}锛 瀵规柟绛夌骇锛歿{}锛 褰撳墠绛夌骇{}".format(self._selfRank, self._oppoRank, self._curRank))
-        print("杞鍒拌嚜宸辫繘璐★紝鍙杩涜础鐨勭墝鏈: ")
+        # TODO: 选手可以自行做出其他处理
+        print("我方等级：{}， 对方等级：{}， 当前等级{}".format(self._selfRank, self._oppoRank, self._curRank))
+        print("轮到自己进贡，可以进贡的牌有: ")
 
     def act_back(self):
         """
@@ -456,6 +456,6 @@ class State(object):
         }
         鐠囪渹绮庨崷銊ョ懓绨查惃鍑SON閺嶇厧绱℃稉瀣鍧楁６鐎电懓绨查惃鍕鐤勬笟瀣鐫橀幀褝绱濋懟銉︺倖妞傜拋鍧楁６閸忔湹绮鐏炵偞褍鍨瀵板牊婀侀崣閼宠姤妲告稊瀣澧犳径鍕鎮婇弮鑸垫弓閺囧瓨鏌婇惃鍕鐤勬笟瀣鐫橀幀褝绱濇稉宥呭徔閺堝婂櫙绾閹褋
         """
-        # TODO: 閫夋墜鍙鑷琛屽仛鍑哄叾浠栧勭悊
-        print("鎴戞柟绛夌骇锛歿{}锛 瀵规柟绛夌骇锛歿{}锛 褰撳墠绛夌骇{}".format(self._selfRank, self._oppoRank, self._curRank))
-        print("杞鍒拌嚜宸辫繕璐★紝鍙杩樿础鐨勭墝鏈:")
+        # TODO: 选手可以自行做出其他处理
+        print("我方等级：{}， 对方等级：{}， 当前等级{}".format(self._selfRank, self._oppoRank, self._curRank))
+        print("轮到自己还贡，可以还贡的牌有:")
