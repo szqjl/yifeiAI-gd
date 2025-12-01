@@ -718,6 +718,17 @@ class HybridDecisionEngineV4:
         if greater_pos != teammate_pos:
             return None
         
+        # **关键规则：永远不要用炸弹压制队友的炸弹**
+        cur_action = message.get("curAction", [])
+        if cur_action and len(cur_action) > 0:
+            action_type = cur_action[0] if isinstance(cur_action, list) else str(cur_action)
+            # 如果队友打了炸弹，绝对不能压制
+            if action_type == "Bomb":
+                self.logger.info(
+                    f"[Critical Rule] Teammate protection: teammate played BOMB, MUST PASS"
+                )
+                return 0  # PASS
+        
         # Check teammate's remaining cards
         teammate_cards = cards_left.get(teammate_pos, 27)
         
@@ -731,7 +742,6 @@ class HybridDecisionEngineV4:
         # Important: Teammate has 3-5 cards (endgame phase)
         if teammate_cards <= 5:
             # Check if current card is high value
-            cur_action = message.get("curAction", [])
             if cur_action and len(cur_action) >= 2:
                 try:
                     card_value = self._get_card_value(cur_action[1])
@@ -748,7 +758,6 @@ class HybridDecisionEngineV4:
         # Moderate: Teammate has 6-8 cards (approaching endgame)
         if teammate_cards <= 8:
             # Only PASS if teammate played very high card (2 or Joker)
-            cur_action = message.get("curAction", [])
             if cur_action and len(cur_action) >= 2:
                 try:
                     card_value = self._get_card_value(cur_action[1])
