@@ -51,8 +51,15 @@ class ExampleClient(WebSocketClient):
 
 
 if __name__ == '__main__':
+    # 设置stdout编码为UTF-8，避免Windows下的编码问题
+    import sys
+    if sys.platform == 'win32':
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    
     try:
-        # 淇鏀逛负绂荤嚎骞冲彴閰嶇疆锛堢鍙23456锛孶RL鏍煎紡/game/client3锛
+        # 修改为离线平台配置（端口23456，URL格式/game/client3）
         ws = ExampleClient('ws://127.0.0.1:23456/game/client3')
         ws.connect()
         ws.run_forever()

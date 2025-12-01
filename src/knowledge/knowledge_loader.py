@@ -68,11 +68,11 @@ class KnowledgeLoader:
                 if end_idx > 3:
                     yaml_str = content[3:end_idx].strip()
                     if yaml is not None:
-                    try:
-                        frontmatter = yaml.safe_load(yaml_str) or {}
-                    except Exception:
+                        try:
+                            frontmatter = yaml.safe_load(yaml_str) or {}
+                        except Exception:
                             # YAML解析失败，跳过frontmatter，使用默认值
-                        frontmatter = {}
+                            frontmatter = {}
                     else:
                         # yaml模块不可用，尝试简单的键值对解析
                         frontmatter = self._parse_simple_frontmatter(yaml_str)
