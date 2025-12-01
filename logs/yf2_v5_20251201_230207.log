@@ -1,0 +1,12 @@
+[23:02:07] [websocket_manager.yf2_v5] [INFO] WebSocket Manager initialized for yf2_v5
+[23:02:07] [websocket_manager.yf2_v5] [INFO]   - URI: ws://127.0.0.1:23456/game/yf2_v5
+[23:02:07] [websocket_manager.yf2_v5] [INFO]   - Reconnect interval: 5s
+[23:02:07] [websocket_manager.yf2_v5] [INFO]   - Heartbeat interval: 30s
+[23:02:07] [websocket_manager.yf2_v5] [INFO]   - Timeout: 10s
+[23:02:07] [HybridV4-P2] [INFO] HybridDecisionEngineV4 initialized
+[23:02:09] [yf2_v5] [INFO] ✓ RL Engine initialized
+[23:02:09] [yf2_v5] [INFO] ✓ yf2_v5 initialized (Player 2)
+[23:02:09] [yf2_v5] [INFO]   - RL Engine: Available
+[23:02:09] [yf2_v5] [INFO]   - Hybrid Decision: True
+[23:02:09] [websocket_manager.yf2_v5] [INFO] Connecting to ws://127.0.0.1:23456/game/yf2_v5... (attempt 1)
+[23:02:09] [websocket_manager.yf2_v5] [INFO] ✓ Connected to server: ws://127.0.0.1:23456/game/yf2_v5
