@@ -51,8 +51,14 @@ class RLDecisionEngine:
         desired_cards = self.get_action(state_info)
         desired_set = set(desired_cards)
         
+        # Debug: Print actionList for troubleshooting
+        if desired_cards:
+            print(f"[RL Debug] Desired cards: {desired_cards}")
+            print(f"[RL Debug] Available actions: {[a[2] if len(a) >= 3 else a for a in action_list[:5]]}")  # Show first 5
+        
         # Find matching action in actionList
         best_idx = 0
+        best_match_score = -1
         
         for i, action in enumerate(action_list):
             # action format: ['Single', '3', ['H3']] or ['PASS', 'PASS', 'PASS']
@@ -63,13 +69,28 @@ class RLDecisionEngine:
                 
             # Extract cards from action
             # Action structure: [Type, Rank, [Cards]]
-            if len(action) >= 3 and isinstance(action[2], list):
-                action_cards = action[2]
+            if len(action) >= 3:
+                action_cards = action[2] if isinstance(action[2], list) else []
+                
+                # Exact match
                 if set(action_cards) == desired_set:
                     return i
+                
+                # Partial match scoring (fallback)
+                if desired_cards and action_cards:
+                    match_count = len(set(action_cards) & desired_set)
+                    match_score = match_count / max(len(action_cards), len(desired_cards))
+                    if match_score > best_match_score:
+                        best_match_score = match_score
+                        best_idx = i
                     
-        # If no exact match, fallback to PASS (or random/first valid)
-        print(f"RL desired {desired_cards} but not found in actionList. Falling back to 0.")
+        # If we found a partial match, use it
+        if best_match_score > 0.5:
+            print(f"RL desired {desired_cards} - using partial match (score: {best_match_score:.2f}) at index {best_idx}")
+            return best_idx
+            
+        # If no match, fallback to PASS (index 0)
+        print(f"RL desired {desired_cards} but not found in actionList. Falling back to 0 (PASS).")
         return 0
 
     def get_action(self, state_info: Dict) -> List[str]:
