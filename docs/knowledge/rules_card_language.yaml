@@ -1,0 +1,166 @@
+# 牌语分析规则
+# 从 docs/knowledge/skills/04_common_skills/02_card_language.md 提取
+
+rules:
+  # 规则1：首发出小单牌，是牌力强的信息
+  - id: opening_small_single_strong
+    name: 首发出小单牌牌力强
+    description: 开局首发出小单牌，是牌力强的信息，队友要配合让队友争头游
+    source: 掼蛋牌语.md
+    condition:
+      type: and
+      conditions:
+        - field: phase
+          op: "=="
+          value: "opening"
+        - field: is_first_action
+          op: "=="
+          value: true
+        - field: action_type
+          op: "=="
+          value: "Single"
+        - field: single_rank
+          op: "<"
+          value: 10
+    actions:
+      - action_type: PASS
+        score_adjust: 80
+        description: 队友牌力强，鼓励PASS配合
+    priority: 7
+    game_phase: opening
+
+  # 规则2：开局出对子，情况不明
+  - id: opening_pair_uncertain
+    name: 开局出对子情况不明
+    description: 开局出对子，情况不明对子先行，出于尝试沟通，了解队友牌力
+    source: 掼蛋牌语.md
+    condition:
+      type: and
+      conditions:
+        - field: phase
+          op: "=="
+          value: "opening"
+        - field: is_first_action
+          op: "=="
+          value: true
+        - field: action_type
+          op: "=="
+          value: "Pair"
+    actions:
+      - action_type: Pair
+        score_adjust: 40
+        description: 中等对子防守，不建议卡压
+    priority: 5
+    game_phase: opening
+
+  # 规则3：开局出三张，一般是弱牌
+  - id: opening_trips_weak
+    name: 开局出三张弱牌
+    description: 开局出小三张，向队友表示牌力弱，一般属于捣蛋牌、干扰牌
+    source: 掼蛋牌语.md
+    condition:
+      type: and
+      conditions:
+        - field: phase
+          op: "=="
+          value: "opening"
+        - field: is_first_action
+          op: "=="
+          value: true
+        - field: action_type
+          op: "=="
+          value: "Trips"
+    actions:
+      - action_type: PASS
+        score_adjust: 60
+        description: 队友牌力弱，鼓励让队友上手
+    priority: 6
+    game_phase: opening
+
+  # 规则4：三带顺子少，出顺对子多
+  - id: three_with_two_straight_relation
+    name: 三带二与顺子关系
+    description: 队友出三带二，原则上就顺子少；队友出顺子，原则上就对子多
+    source: 掼蛋牌语.md
+    condition:
+      type: and
+      conditions:
+        - field: teammate_last_action
+          op: "=="
+          value: "ThreeWithTwo"
+    actions:
+      - action_type: ThreeWithTwo
+        score_adjust: 100
+        description: 鼓励送三带二，不要出顺子
+      - action_type: Straight
+        score_adjust: -50
+        description: 惩罚出顺子
+    priority: 8
+    game_phase: midgame
+
+  # 规则5：队友出顺子，送顺子或对子
+  - id: teammate_straight_send_straight_or_pair
+    name: 队友出顺子送顺子或对子
+    description: 队友若出的是顺子，队友上手后就要送顺子，送不了顺子就出对子或单张
+    source: 掼蛋牌语.md
+    condition:
+      type: and
+      conditions:
+        - field: teammate_last_action
+          op: "=="
+          value: "Straight"
+    actions:
+      - action_type: Straight
+        score_adjust: 100
+        description: 鼓励送顺子
+      - action_type: Pair
+        score_adjust: 60
+        description: 也可以送对子
+      - action_type: ThreeWithTwo
+        score_adjust: -50
+        description: 不要出三带二
+    priority: 8
+    game_phase: midgame
+
+  # 规则6：不接对手牌，可能保留牌型
+  - id: opponent_pass_keep_pattern
+    name: 对手不接牌保留牌型
+    description: 对手不接牌，可能没有这种牌型、或不是其优势牌型、或正在保留各种牌型
+    source: 掼蛋牌语.md
+    condition:
+      type: and
+      conditions:
+        - field: opponent_last_action
+          op: "=="
+          value: "PASS"
+        - field: cur_pos
+          op: "!="
+          value: "my_pos"
+    actions:
+      - action_type: other
+        score_adjust: 30
+        description: 可以继续出相同牌型试探
+    priority: 4
+    game_phase: midgame
+
+  # 规则7：上家出小单张，牌力较强
+  - id: prev_small_single_strong
+    name: 上家出小单张牌力强
+    description: 上家跟出最小单张牌，表明牌力较强，需要处理一些难以出掉牌
+    source: 掼蛋牌语.md
+    condition:
+      type: and
+      conditions:
+        - field: prev_pos_last_action
+          op: "=="
+          value: "Single"
+        - field: prev_pos_single_rank
+          op: "<"
+          value: 10
+    actions:
+      - action_type: PASS
+        score_adjust: 50
+        description: 上家牌力强，适度让牌
+    priority: 5
+    game_phase: midgame
+

@@ -220,7 +220,7 @@ class BatchExecutorGUI:
                 break
         
         # 默认客户端脚本（您的AI vs lalala一等奖AI）
-        # 座位分配：0号和2号是对家（一队），1号和3号是对家（一队）
+        # 座位分配：0号和2号是队友（一队），1号和3号是队友（一队）
         
         # 选项1：使用原始AI（知识库版本，较弱）
         # default_clients = [

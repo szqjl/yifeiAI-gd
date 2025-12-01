@@ -28,7 +28,7 @@ src/communication/Test1.py, src/communication/run_lalala_client3.py, src/communi
 - 2号位：Test2（你的AI）
 - 3号位：lalala client4（对手）
 
-**队伍分组**（掼蛋规则：0+2对家，1+3对家）：
+**队伍分组**（掼蛋规则：0+2队友，1+3队友）：
 - 队伍A（你的队）：0号(Test1) + 2号(Test2)
 - 队伍B（lalala队）：1号(client3) + 3号(client4)
 
