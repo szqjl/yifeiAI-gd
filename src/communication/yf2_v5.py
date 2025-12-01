@@ -409,6 +409,12 @@ class YF2_V5_Client:
 
 async def main():
     """Main entry point"""
+    # 设置stdout编码为UTF-8，避免Windows下的编码问题
+    if sys.platform == 'win32':
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    
     client = YF2_V5_Client(player_id=2)
     await client.connect()
 
