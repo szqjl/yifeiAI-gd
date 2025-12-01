@@ -1,81 +1,99 @@
 import torch
+import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from src.rl_agent.model import GuandanModel
+from .model import GuandanPolicyNet
 
 class PPOAgent:
-    """
-    PPO Agent for Guandan.
-    """
-    def __init__(self, input_dim=115, lr=3e-4, gamma=0.99, clip_ratio=0.2):
-        self.model = GuandanModel(input_dim)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+    def __init__(self, input_dim=512, action_dim=108, lr=0.0003, gamma=0.99, eps_clip=0.2, K_epochs=4):
         self.gamma = gamma
-        self.clip_ratio = clip_ratio
+        self.eps_clip = eps_clip
+        self.K_epochs = K_epochs
         
-    def act(self, state, deterministic=False):
-        """Select an action."""
-        with torch.no_grad():
-            action, log_prob = self.model.select_action(state, deterministic)
-        return action, log_prob
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-    def learn(self, batch):
+        self.policy = GuandanPolicyNet(input_dim, 256, action_dim).to(self.device)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=lr)
+        
+        self.policy_old = GuandanPolicyNet(input_dim, 256, action_dim).to(self.device)
+        self.policy_old.load_state_dict(self.policy.state_dict())
+        
+        self.MseLoss = nn.MSELoss()
+
+    def select_action(self, state):
         """
-        Update model using PPO loss.
-        Batch is a dictionary of numpy arrays.
+        Select action for a given state.
+        Returns: action (numpy), log_prob (float)
         """
-        states = torch.FloatTensor(batch['states'])
-        actions = torch.LongTensor(batch['actions'])
-        old_log_probs = torch.FloatTensor(batch['log_probs'])
-        rewards = torch.FloatTensor(batch['rewards'])
-        dones = torch.FloatTensor(batch['dones'])
-        next_states = torch.FloatTensor(batch['next_states'])
-        
-        # Calculate Returns and Advantages (Simplified)
-        # For true PPO, we need GAE. Here we use simple Monte Carlo or TD targets.
-        # Let's use simple TD target for now: r + gamma * V(s')
-        
         with torch.no_grad():
-            _, next_values = self.model(next_states)
-            targets = rewards + self.gamma * next_values.squeeze(-1) * (1 - dones)
+            state = torch.FloatTensor(state).to(self.device)
+            logits = self.policy_old(state)
             
-        # PPO Update Loop
-        for _ in range(5): # 5 epochs
-            action_logits, values = self.model(states)
-            values = values.squeeze(-1)
+            # For MultiBinary, we treat each card as independent Bernoulli
+            # This is a simplification. In reality, card choices are highly correlated.
+            # But for V1, this allows the agent to select multiple cards.
+            probs = torch.sigmoid(logits)
+            dist = torch.distributions.Bernoulli(probs)
             
-            # Calculate Advantage
-            advantages = targets - values.detach()
+            action = dist.sample()
+            log_prob = dist.log_prob(action).sum() # Sum log probs of all cards
             
-            # Calculate new log probs
-            # Reshape actions to match logits shape logic if needed, but Categorical handles it.
-            # logits: (B, 54, 3)
-            probs = torch.nn.functional.softmax(action_logits, dim=-1)
-            dist = torch.distributions.Categorical(probs)
-            new_log_probs = dist.log_prob(actions).sum(dim=-1)
+            return action.cpu().numpy(), log_prob.item()
+
+    def update(self, memory):
+        """
+        Update policy using PPO.
+        memory: list of (state, action, log_prob, reward, done)
+        """
+        # Convert memory to tensors
+        states = torch.FloatTensor(np.array([t[0] for t in memory])).to(self.device)
+        actions = torch.FloatTensor(np.array([t[1] for t in memory])).to(self.device)
+        old_log_probs = torch.FloatTensor(np.array([t[2] for t in memory])).to(self.device)
+        rewards = torch.FloatTensor(np.array([t[3] for t in memory])).to(self.device)
+        dones = torch.FloatTensor(np.array([t[4] for t in memory])).to(self.device)
+        
+        # Monte Carlo Estimate of Rewards
+        returns = []
+        discounted_reward = 0
+        for reward, is_done in zip(reversed(rewards), reversed(dones)):
+            if is_done:
+                discounted_reward = 0
+            discounted_reward = reward + (self.gamma * discounted_reward)
+            returns.insert(0, discounted_reward)
+            
+        returns = torch.FloatTensor(returns).to(self.device)
+        # Normalize returns
+        returns = (returns - returns.mean()) / (returns.std() + 1e-7)
+        
+        # PPO Update
+        for _ in range(self.K_epochs):
+            # Evaluate old actions and values
+            logits = self.policy(states)
+            probs = torch.sigmoid(logits)
+            dist = torch.distributions.Bernoulli(probs)
+            
+            log_probs = dist.log_prob(actions).sum(dim=1)
+            entropy = dist.entropy().sum(dim=1)
             
             # Ratio
-            ratio = torch.exp(new_log_probs - old_log_probs)
+            ratios = torch.exp(log_probs - old_log_probs)
             
-            # Clipped Loss
-            surr1 = ratio * advantages
-            surr2 = torch.clamp(ratio, 1 - self.clip_ratio, 1 + self.clip_ratio) * advantages
-            actor_loss = -torch.min(surr1, surr2).mean()
+            # Surrogate Loss
+            surr1 = ratios * returns
+            surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) * returns
             
-            # Critic Loss
-            critic_loss = torch.nn.functional.mse_loss(values, targets)
-            
-            # Total Loss
-            loss = actor_loss + 0.5 * critic_loss
+            loss = -torch.min(surr1, surr2) - 0.01 * entropy
             
             self.optimizer.zero_grad()
-            loss.backward()
+            loss.mean().backward()
             self.optimizer.step()
             
-        return loss.item()
+        # Update old policy
+        self.policy_old.load_state_dict(self.policy.state_dict())
 
     def save(self, path):
-        torch.save(self.model.state_dict(), path)
-        
+        torch.save(self.policy.state_dict(), path)
+
     def load(self, path):
-        self.model.load_state_dict(torch.load(path))
+        self.policy.load_state_dict(torch.load(path, map_location=self.device))
+        self.policy_old.load_state_dict(self.policy.state_dict())

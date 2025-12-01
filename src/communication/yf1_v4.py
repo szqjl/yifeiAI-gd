@@ -12,8 +12,10 @@ from pathlib import Path
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent)) # Add project root
 
 from decision.hybrid_decision_engine_v4 import HybridDecisionEngineV4
+from decision.rl_decision_engine import RLDecisionEngine
 from communication.game_recorder import GameRecorder
 
 # Configure logging
@@ -59,6 +61,10 @@ class YF1_V4_Client:
             "performance_threshold": 1.0
         }
         self.decision_engine = HybridDecisionEngineV4(player_id, config)
+        self.rl_engine = RLDecisionEngine() # Load RL Engine
+        self.use_rl = True # Toggle for V5
+        self.hand_cards = [] # Track current hand
+        
         
         # Statistics
         self.decision_count = 0
@@ -124,8 +130,18 @@ class YF1_V4_Client:
             return
         
         try:
-            # Use HybridDecisionEngineV4 to make decision
-            act_index = self.decision_engine.decide(data)
+            # Use HybridDecisionEngineV4 or RL to make decision
+            if self.use_rl:
+                # Inject hand cards for RL engine
+                data['handCards'] = self.hand_cards
+                act_index = self.rl_engine.decide(data)
+                
+                # Update hand cards after decision (Optimistic update)
+                # Actually, we should wait for 'play' notification to update hand, 
+                # but for deciding, we need current hand.
+                # The 'play' notification will come later.
+            else:
+                act_index = self.decision_engine.decide(data)
             
             # Get decision details for recording
             decision_context = {
@@ -158,6 +174,7 @@ class YF1_V4_Client:
         if stage == "beginning":
             # 获取初始手牌信息
             hand_cards = data.get("handCards", [])
+            self.hand_cards = hand_cards # Store for RL engine
             my_pos = data.get("myPos", self.player_id)
             
             # 打印手牌信息（与lalala客户端格式一致）
@@ -242,6 +259,15 @@ class YF1_V4_Client:
                 action_str = f"{cur_pos}号位打出{cur_action}"
                 greater_str = f"最大动作为{greater_pos}号位打出的{greater_action}" if greater_action else ""
                 self.logger.info(f"{action_str}， {greater_str}")
+                
+                # Update my hand cards if I played
+                if cur_pos == self.player_id:
+                    # cur_action format: ['Single', '3', ['H3']]
+                    if len(cur_action) >= 3 and isinstance(cur_action[2], list):
+                        played_cards = cur_action[2]
+                        for card in played_cards:
+                            if card in self.hand_cards:
+                                self.hand_cards.remove(card)
             
             # 记录到游戏记录器
             context = {
