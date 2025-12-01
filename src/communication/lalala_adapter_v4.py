@@ -16,6 +16,12 @@ import os
 from typing import Union, List, Dict, Optional
 import copy
 
+# 设置控制台编码为UTF-8
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 # 添加lalala目录到路径（使用原版lalala的底层模块）
 LALALA_PATH = r"D:\NYGD\lalala"
 if LALALA_PATH not in sys.path:
