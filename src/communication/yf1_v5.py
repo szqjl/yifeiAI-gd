@@ -390,6 +390,9 @@ class YF1_V5_Client:
             result["layer_stats"] = stats["layer_usage"]
             self.game_recorder.end_game(result)
             
+            # 保存战绩到 game_scores.json（用于GUI显示）
+            self._save_game_scores(victory_num)
+            
             # Reset for next game
             self.decision_count = 0
             self.rl_decision_count = 0
@@ -399,6 +402,56 @@ class YF1_V5_Client:
     def validate_action(self, act_index: int, action_list: list) -> bool:
         """Validate that action index is in valid range"""
         return 0 <= act_index < len(action_list)
+    
+    def _save_game_scores(self, victory_num: list):
+        """
+        保存战绩到 game_scores.json（用于GUI显示）
+        
+        Args:
+            victory_num: 胜利次数列表 [pos0_wins, pos1_wins, pos2_wins, pos3_wins]
+        """
+        import json
+        from pathlib import Path
+        
+        score_file = Path("game_scores.json")
+        
+        # 读取现有战绩
+        if score_file.exists():
+            try:
+                with open(score_file, 'r', encoding='utf-8') as f:
+                    scores = json.load(f)
+            except:
+                scores = {"team_a_wins": 0, "team_b_wins": 0, "total_games": 0}
+        else:
+            scores = {"team_a_wins": 0, "team_b_wins": 0, "total_games": 0}
+        
+        # 判断获胜队伍
+        # Team A: 0号位(yf1_v5) + 2号位(yf2_v5)
+        # Team B: 1号位 + 3号位
+        if len(victory_num) >= 4:
+            team_a_score = victory_num[0] + victory_num[2]  # 0号位 + 2号位
+            team_b_score = victory_num[1] + victory_num[3]  # 1号位 + 3号位
+            
+            # 更新战绩
+            if team_a_score > team_b_score:
+                scores["team_a_wins"] += 1
+                self.logger.info(f"Team A wins! ({team_a_score} vs {team_b_score})")
+            elif team_b_score > team_a_score:
+                scores["team_b_wins"] += 1
+                self.logger.info(f"Team B wins! ({team_b_score} vs {team_a_score})")
+            else:
+                # 平局，不增加胜场
+                self.logger.info(f"Draw! ({team_a_score} vs {team_b_score})")
+            
+            scores["total_games"] += 1
+        
+        # 保存到文件
+        try:
+            with open(score_file, 'w', encoding='utf-8') as f:
+                json.dump(scores, f, indent=2, ensure_ascii=False)
+            self.logger.info(f"Game scores saved: Team A {scores['team_a_wins']}/{scores['total_games']}, Team B {scores['team_b_wins']}/{scores['total_games']}")
+        except Exception as e:
+            self.logger.error(f"Failed to save game scores: {e}")
     
     async def send_action(self, act_index: int):
         """Send action to server using WebSocket manager"""
