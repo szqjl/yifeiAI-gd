@@ -1,0 +1,151 @@
+# 相生相克规则
+# 从 docs/knowledge/skills/04_common_skills/03_card_interactions.md 提取
+
+rules:
+  # 规则1：顺子和三带二相克
+  - id: straight_vs_three_with_two
+    name: 顺子与三带二相克
+    description: 顺子和三带二相克，对手出顺子多，则三带二少；对手出三带二多，则顺子少
+    source: 掼蛋相生相克.md
+    condition:
+      type: and
+      conditions:
+        - field: opponent_straight_count
+          op: ">="
+          value: 2
+    actions:
+      - action_type: ThreeWithTwo
+        score_adjust: 80
+        description: 对手顺子多，鼓励出三带二
+    priority: 7
+    game_phase: midgame
+
+  # 规则2：三带二多，顺子少
+  - id: three_with_two_many_straight_few
+    name: 三带二多顺子少
+    description: 对手出三带二多，则顺子少，应该出顺子
+    source: 掼蛋相生相克.md
+    condition:
+      type: and
+      conditions:
+        - field: opponent_three_with_two_count
+          op: ">="
+          value: 2
+    actions:
+      - action_type: Straight
+        score_adjust: 80
+        description: 对手三带二多，鼓励出顺子
+    priority: 7
+    game_phase: midgame
+
+  # 规则3：对子与三张相克
+  - id: pair_vs_trips
+    name: 对子与三张相克
+    description: 对子与三张相克，对手一直在打对子，则打三张；对手首打三张，则打对子
+    source: 掼蛋相生相克.md
+    condition:
+      type: and
+      conditions:
+        - field: opponent_pair_count
+          op: ">="
+          value: 3
+    actions:
+      - action_type: Trips
+        score_adjust: 70
+        description: 对手对子多，鼓励出三张
+    priority: 6
+    game_phase: midgame
+
+  # 规则4：对手首打三张，打对子
+  - id: opponent_first_trips_play_pair
+    name: 对手首打三张打对子
+    description: 对手首打三张，要么对子少，要么对子大，则打对子
+    source: 掼蛋相生相克.md
+    condition:
+      type: and
+      conditions:
+        - field: opponent_first_action
+          op: "=="
+          value: "Trips"
+        - field: phase
+          op: "=="
+          value: "opening"
+    actions:
+      - action_type: Pair
+        score_adjust: 70
+        description: 对手首打三张，鼓励出对子
+    priority: 6
+    game_phase: opening
+
+  # 规则5：单牌少，对子多；对子少，单牌多
+  - id: single_pair_complementary
+    name: 单牌对子互补
+    description: 单牌和对子互补，对手单牌少，一般对子多；对手对子少，一般单牌多
+    source: 掼蛋相生相克.md
+    condition:
+      type: and
+      conditions:
+        - field: opponent_single_count
+          op: "<="
+          value: 2
+    actions:
+      - action_type: Pair
+        score_adjust: 60
+        description: 对手单牌少，鼓励出对子
+    priority: 5
+    game_phase: midgame
+
+  # 规则6：炸多，则三带二少
+  - id: bomb_many_three_with_two_few
+    name: 炸弹多三带二少
+    description: 炸弹多，则三带二少，原因很简单，四个头、五个头或同花顺多，三带二自然就少
+    source: 掼蛋相生相克.md
+    condition:
+      type: and
+      conditions:
+        - field: opponent_bomb_count
+          op: ">="
+          value: 2
+    actions:
+      - action_type: ThreeWithTwo
+        score_adjust: 50
+        description: 对手炸弹多，鼓励出三带二
+    priority: 5
+    game_phase: midgame
+
+  # 规则7：炸弹多则单张概率高
+  - id: bomb_many_single_probable
+    name: 炸弹多单张概率高
+    description: 炸弹多则单张概率就高一些，可以根据对手炸弹数量来判断单张的概率
+    source: 掼蛋相生相克.md
+    condition:
+      type: and
+      conditions:
+        - field: opponent_bomb_count
+          op: ">="
+          value: 2
+    actions:
+      - action_type: Single
+        score_adjust: 40
+        description: 对手炸弹多，可以出单张试探
+    priority: 4
+    game_phase: midgame
+
+  # 规则8：组顺子通常会形成单和对子
+  - id: straight_creates_single_pair
+    name: 组顺子形成单和对子
+    description: 组顺子通常会形成单张和对子的局面，牌手主动出过顺子后，又套了一手顺子，则可能有对子
+    source: 掼蛋相生相克.md
+    condition:
+      type: and
+      conditions:
+        - field: opponent_straight_count
+          op: ">="
+          value: 2
+    actions:
+      - action_type: Pair
+        score_adjust: 50
+        description: 对手顺子多，可能有对子，鼓励出对子
+    priority: 5
+    game_phase: midgame
+

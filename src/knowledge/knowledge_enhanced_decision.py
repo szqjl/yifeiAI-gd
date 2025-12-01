@@ -17,6 +17,7 @@ if str(Path(__file__).parent.parent) not in sys.path:
 from decision.decision_engine import DecisionEngine
 from game_logic.enhanced_state import EnhancedGameStateManager
 from knowledge.knowledge_loader import KnowledgeLoader
+from knowledge.knowledge_translator import KnowledgeTranslator
 
 
 class KnowledgeEnhancedDecisionEngine(DecisionEngine):
@@ -24,18 +25,20 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
     
     def __init__(self, state_manager: EnhancedGameStateManager, 
                  knowledge_loader: Optional[KnowledgeLoader] = None,
+                 knowledge_translator: Optional[KnowledgeTranslator] = None,
                  max_decision_time: float = 0.8):
         """
-        ????????????
+        初始化知识增强决策引擎
         
         Args:
-            state_manager: ?????
-            knowledge_loader: ??????????None?????
-            max_decision_time: ??????
+            state_manager: 游戏状态管理器
+            knowledge_loader: 知识加载器，如果为None则自动创建
+            knowledge_translator: 规则转化器，如果为None则自动创建
+            max_decision_time: 最大决策时间
         """
         super().__init__(state_manager, max_decision_time)
         
-        # ?????????
+        # 初始化知识加载器
         if knowledge_loader is None:
             try:
                 self.knowledge_loader = KnowledgeLoader()
@@ -44,6 +47,16 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
                 self.knowledge_loader = None
         else:
             self.knowledge_loader = knowledge_loader
+        
+        # 初始化规则转化器
+        if knowledge_translator is None:
+            try:
+                self.knowledge_translator = KnowledgeTranslator(self.knowledge_loader)
+            except Exception as e:
+                print(f"Warning: Failed to initialize knowledge translator: {e}")
+                self.knowledge_translator = None
+        else:
+            self.knowledge_translator = knowledge_translator
     
     def active_decision(self, message: Dict, action_list: List[List]) -> int:
         """
@@ -184,7 +197,7 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
         # 1. 组队规则（平台规则）：
         #    - 第1个连接的玩家（位置0）和第3个连接的玩家（位置2）自动为一队
         #    - 第2个连接的玩家（位置1）和第4个连接的玩家（位置3）自动为一队
-        #    - 队友（teammate/对家）：位置 = (my_pos + 2) % 4
+        #    - 队友（teammate）：位置 = (my_pos + 2) % 4
         #      例如：玩家0的队友是玩家2，玩家1的队友是玩家3
         # 
         # 2. 出牌顺序（已通过实际日志验证）：
@@ -206,11 +219,11 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
         # 
         # 5. 位置编号示例：
         #    假设玩家0是我：
-        #    - 队友（对家）：玩家2
+        #    - 队友：玩家2
         #    - 下家：玩家1
         #    - 上家：玩家3
         #    - 对手：玩家1和玩家3
-        teammate_pos = (my_pos + 2) % 4  # 队友（对家）
+        teammate_pos = (my_pos + 2) % 4  # 队友
         next_pos = (my_pos + 1) % 4      # 下家（对手）
         prev_pos = (my_pos - 1) % 4      # 上家（对手），等价于 (my_pos + 3) % 4
         
@@ -224,12 +237,35 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
         
         # 应用核心策略
         enhanced_evaluations = []
+        
+        # 构建游戏状态字典（用于规则转化器）
+        game_state = {
+            "publicInfo": public_info,
+            "myPos": my_pos,
+            "greaterPos": greater_pos,
+            "curPos": cur_pos,
+            "isActive": is_active,
+            "curAction": message.get("curAction", [])
+        }
+        
         for idx, base_score in evaluations:
             action = action_list[idx]
             action_type = action[0] if len(action) > 0 else "PASS"
             score = base_score
             
-            # 策略1：队友保护（验证并完善）
+            # 优先使用规则转化器（如果可用）
+            if self.knowledge_translator:
+                try:
+                    translator_score = self.knowledge_translator.enhance_score(
+                        action_type, base_score, game_state
+                    )
+                    # 使用规则转化器的结果（保留原有逻辑作为补充）
+                    score = translator_score
+                except Exception as e:
+                    # 如果规则转化器出错，继续使用原有逻辑
+                    pass
+            
+            # 策略1：队友保护（验证并完善）- 保留作为补充逻辑
             # 参考：lalala策略和关键规则层实现
             teammate_cards = cards_left.get(teammate_pos, 27)
             
@@ -533,30 +569,34 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
                                    message: Dict,
                                    is_active: bool) -> float:
         """
-        ???????????
+        根据知识库技能计算加分（根据priority动态调整加分幅度）
         
         Args:
-            action: ??
-            skills: ??????
-            message: ????
-            is_active: ??????
-        
+            action: 动作
+            skills: 相关技能列表
+            message: 游戏消息
+            is_active: 是否主动
+            
         Returns:
-            ?????0-50??
+            加分值（0-50）
         """
         bonus = 0.0
         
-        # ??????????????
+        # 遍历所有相关技能，根据priority动态调整加分
         for skill in skills:
-            priority = skill.get('priority', 0)
+            priority = skill.get('priority', 1)
             
-            # ?????????
-            if priority >= 5:  # ??????
-                bonus += 15.0
-            elif priority >= 3:  # ??????
-                bonus += 8.0
-            else:  # ??????
-                bonus += 2.0
+            # 根据priority动态计算加分幅度
+            # priority范围通常是1-10，我们将其映射到不同的加分值
+            # priority=1: 基础加分2.0, priority=5: 基础加分10.0, priority=10: 基础加分20.0
+            # 使用线性映射：base_bonus = 2.0 + (priority - 1) * (18.0 / 9.0)
+            base_bonus = 2.0 + (priority - 1) * (18.0 / 9.0)
+            
+            # 对于高优先级技能（priority >= 8），额外加权
+            if priority >= 8:
+                base_bonus *= 1.2  # 高优先级技能额外20%加权
+            
+            bonus += base_bonus
         
-        # ??????
+        # 限制最大加分值
         return min(bonus, 50.0)

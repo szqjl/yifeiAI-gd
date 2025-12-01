@@ -1,7 +1,13 @@
 import os
-import yaml
 from pathlib import Path
 from typing import Dict, List, Optional
+
+# 尝试导入yaml，如果失败则使用空实现
+try:
+    import yaml
+except ImportError:
+    yaml = None
+    print("Warning: PyYAML is not installed. YAML frontmatter parsing will be disabled.")
 
 class KnowledgeLoader:
     def __init__(self, knowledge_dir: str = "docs/knowledge"):
@@ -61,11 +67,15 @@ class KnowledgeLoader:
                 end_idx = content.find('---', 3)
                 if end_idx > 3:
                     yaml_str = content[3:end_idx].strip()
-                    try:
-                        frontmatter = yaml.safe_load(yaml_str) or {}
-                    except Exception:
-                        # YAML瑙ｆ瀽澶辫触锛岃烦杩噁rontmatter锛屼娇鐢ㄩ粯璁ゅ
-                        frontmatter = {}
+                    if yaml is not None:
+                        try:
+                            frontmatter = yaml.safe_load(yaml_str) or {}
+                        except Exception:
+                            # YAML解析失败，跳过frontmatter，使用默认值
+                            frontmatter = {}
+                    else:
+                        # yaml模块不可用，尝试简单的键值对解析
+                        frontmatter = self._parse_simple_frontmatter(yaml_str)
                     content = content[end_idx + 3:].strip()
             
             # 鎻愬彇鐗屽瀷锛堢畝鍗曞叧閿璇嶅尮閰嶏級
@@ -88,6 +98,43 @@ class KnowledgeLoader:
             # 濡傛灉闇瑕佽皟璇曪紝鍙浠ュ彇娑堜笅闈㈢殑娉ㄩ噴
             # print(f"Error parsing {file_path}: {e}")
             return None
+    
+    def _parse_simple_frontmatter(self, yaml_str: str) -> Dict:
+        """
+        简单的frontmatter解析（当yaml模块不可用时使用）
+        
+        Args:
+            yaml_str: YAML格式的字符串
+            
+        Returns:
+            解析后的字典
+        """
+        frontmatter = {}
+        lines = yaml_str.split('\n')
+        for line in lines:
+            line = line.strip()
+            # 跳过注释行
+            if line.startswith('#') or not line:
+                continue
+            if ':' in line:
+                key, value = line.split(':', 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                # 处理列表值（简单处理）
+                if value.startswith('[') and value.endswith(']'):
+                    value = [v.strip().strip('"').strip("'") for v in value[1:-1].split(',')]
+                # 处理布尔值
+                elif value.lower() == 'true':
+                    value = True
+                elif value.lower() == 'false':
+                    value = False
+                # 处理数字值（包括负数）
+                elif value.lstrip('-').isdigit():
+                    value = int(value)
+                elif value.lstrip('-').replace('.', '', 1).isdigit():
+                    value = float(value)
+                frontmatter[key] = value
+        return frontmatter
     
     def _extract_card_types(self, content: str) -> List[str]:
         """浠庡唴瀹逛腑鎻愬彇鐗屽瀷鍏抽敭璇"""
