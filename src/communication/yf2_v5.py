@@ -256,6 +256,11 @@ class YF2_V5_Client:
             self.hand_cards = hand_cards # Store for RL engine
             my_pos = data.get("myPos", self.player_id)
             
+            # 更新实际位置（服务器分配的）
+            if my_pos != self.player_id:
+                self.logger.info(f"Position updated: {self.player_id} -> {my_pos}")
+                self.player_id = my_pos
+            
             # 打印手牌信息（与lalala客户端格式一致）
             print(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
             self.logger.info(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
