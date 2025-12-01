@@ -1,0 +1,1523 @@
+{
+  "game_id": "20251201223154421655",
+  "start_time": "2025-12-01T22:31:54.421655",
+  "player_id": 1,
+  "player_name": "yf1_v5",
+  "initial_hand": [
+    "S2",
+    "S3",
+    "S4",
+    "H4",
+    "C4",
+    "D4",
+    "S6",
+    "D6",
+    "H7",
+    "C7",
+    "D7",
+    "C8",
+    "S9",
+    "C9",
+    "ST",
+    "HT",
+    "CT",
+    "CJ",
+    "DJ",
+    "HQ",
+    "CQ",
+    "CQ",
+    "SK",
+    "DK",
+    "CA",
+    "DA",
+    "HR"
+  ],
+  "all_players_hands": {
+    "1": [
+      "S2",
+      "S3",
+      "S4",
+      "H4",
+      "C4",
+      "D4",
+      "S6",
+      "D6",
+      "H7",
+      "C7",
+      "D7",
+      "C8",
+      "S9",
+      "C9",
+      "ST",
+      "HT",
+      "CT",
+      "CJ",
+      "DJ",
+      "HQ",
+      "CQ",
+      "CQ",
+      "SK",
+      "DK",
+      "CA",
+      "DA",
+      "HR"
+    ]
+  },
+  "game_info": {
+    "selfRank": null,
+    "oppoRank": null,
+    "curRank": null
+  },
+  "actions": [
+    {
+      "timestamp": "2025-12-01T22:31:54.462809",
+      "cur_pos": 1,
+      "cur_action": "['Single', '2', ['S2']]",
+      "greater_pos": 1,
+      "greater_action": "['Single', '2', ['S2']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.467458",
+      "cur_pos": 2,
+      "cur_action": "['Single', '9', ['D9']]",
+      "greater_pos": 2,
+      "greater_action": "['Single', '9', ['D9']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.476641",
+      "cur_pos": 3,
+      "cur_action": "['Single', 'Q', ['DQ']]",
+      "greater_pos": 3,
+      "greater_action": "['Single', 'Q', ['DQ']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.479883",
+      "cur_pos": 0,
+      "cur_action": "['Single', 'A', ['HA']]",
+      "greater_pos": 0,
+      "greater_action": "['Single', 'A', ['HA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.483767",
+      "cur_pos": 1,
+      "cur_action": "['Bomb', '4', ['S4', 'H4', 'C4', 'D4']]",
+      "greater_pos": 1,
+      "greater_action": "['Bomb', '4', ['S4', 'H4', 'C4', 'D4']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.485272",
+      "cur_pos": 2,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 1,
+      "greater_action": "['Bomb', '4', ['S4', 'H4', 'C4', 'D4']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.494450",
+      "cur_pos": 3,
+      "cur_action": "['Bomb', '9', ['S9', 'H9', 'C9', 'D9']]",
+      "greater_pos": 3,
+      "greater_action": "['Bomb', '9', ['S9', 'H9', 'C9', 'D9']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.500263",
+      "cur_pos": 0,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 3,
+      "greater_action": "['Bomb', '9', ['S9', 'H9', 'C9', 'D9']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.508400",
+      "cur_pos": 1,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 3,
+      "greater_action": "['Bomb', '9', ['S9', 'H9', 'C9', 'D9']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.512476",
+      "cur_pos": 2,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 3,
+      "greater_action": "['Bomb', '9', ['S9', 'H9', 'C9', 'D9']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.522507",
+      "cur_pos": 3,
+      "cur_action": "['Single', '2', ['H2']]",
+      "greater_pos": 3,
+      "greater_action": "['Single', '2', ['H2']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.523315",
+      "cur_pos": 0,
+      "cur_action": "['Single', '4', ['H4']]",
+      "greater_pos": 0,
+      "greater_action": "['Single', '4', ['H4']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.536909",
+      "cur_pos": 1,
+      "cur_action": "['Single', 'T', ['HT']]",
+      "greater_pos": 1,
+      "greater_action": "['Single', 'T', ['HT']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.539134",
+      "cur_pos": 2,
+      "cur_action": "['Single', 'K', ['CK']]",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'K', ['CK']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.541811",
+      "cur_pos": 3,
+      "cur_action": "['Single', 'A', ['SA']]",
+      "greater_pos": 3,
+      "greater_action": "['Single', 'A', ['SA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.543175",
+      "cur_pos": 0,
+      "cur_action": "['Single', 'B', ['SB']]",
+      "greater_pos": 0,
+      "greater_action": "['Single', 'B', ['SB']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.558676",
+      "cur_pos": 1,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['Single', 'B', ['SB']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.559296",
+      "cur_pos": 2,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['Single', 'B', ['SB']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.561836",
+      "cur_pos": 3,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['Single', 'B', ['SB']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.565712",
+      "cur_pos": 0,
+      "cur_action": "['Single', '7', ['S7']]",
+      "greater_pos": 0,
+      "greater_action": "['Single', '7', ['S7']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.572078",
+      "cur_pos": 1,
+      "cur_action": "['Single', 'Q', ['CQ']]",
+      "greater_pos": 1,
+      "greater_action": "['Single', 'Q', ['CQ']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.576492",
+      "cur_pos": 2,
+      "cur_action": "['Single', 'A', ['HA']]",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'A', ['HA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.587891",
+      "cur_pos": 3,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'A', ['HA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.588635",
+      "cur_pos": 0,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'A', ['HA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.592803",
+      "cur_pos": 1,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'A', ['HA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.597402",
+      "cur_pos": 2,
+      "cur_action": "['Straight', '3', ['C3', 'S4', 'S5', 'H6', 'S7']]",
+      "greater_pos": 2,
+      "greater_action": "['Straight', '3', ['C3', 'S4', 'S5', 'H6', 'S7']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.604267",
+      "cur_pos": 3,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Straight', '3', ['C3', 'S4', 'S5', 'H6', 'S7']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.605756",
+      "cur_pos": 0,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Straight', '3', ['C3', 'S4', 'S5', 'H6', 'S7']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.623874",
+      "cur_pos": 1,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Straight', '3', ['C3', 'S4', 'S5', 'H6', 'S7']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.624781",
+      "cur_pos": 2,
+      "cur_action": "['ThreeWithTwo', '2', ['S2', 'C2', 'D2', 'S5', 'D5']]",
+      "greater_pos": 2,
+      "greater_action": "['ThreeWithTwo', '2', ['S2', 'C2', 'D2', 'S5', 'D5']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.627632",
+      "cur_pos": 3,
+      "cur_action": "['ThreeWithTwo', '7', ['H7', 'C7', 'D7', 'H5', 'D5']]",
+      "greater_pos": 3,
+      "greater_action": "['ThreeWithTwo', '7', ['H7', 'C7', 'D7', 'H5', 'D5']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.631042",
+      "cur_pos": 0,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 3,
+      "greater_action": "['ThreeWithTwo', '7', ['H7', 'C7', 'D7', 'H5', 'D5']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.647207",
+      "cur_pos": 1,
+      "cur_action": "['ThreeWithTwo', '9', ['S9', 'H9', 'C9', 'S6', 'D6']]",
+      "greater_pos": 1,
+      "greater_action": "['ThreeWithTwo', '9', ['S9', 'H9', 'C9', 'S6', 'D6']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.653202",
+      "cur_pos": 2,
+      "cur_action": "['ThreeWithTwo', 'Q', ['SQ', 'HQ', 'DQ', 'HT', 'CT']]",
+      "greater_pos": 2,
+      "greater_action": "['ThreeWithTwo', 'Q', ['SQ', 'HQ', 'DQ', 'HT', 'CT']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.654767",
+      "cur_pos": 3,
+      "cur_action": "['ThreeWithTwo', 'K', ['HK', 'CK', 'DK', 'C4', 'D4']]",
+      "greater_pos": 3,
+      "greater_action": "['ThreeWithTwo', 'K', ['HK', 'CK', 'DK', 'C4', 'D4']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.658189",
+      "cur_pos": 0,
+      "cur_action": "['Bomb', '8', ['S8', 'H8', 'C8', 'D8']]",
+      "greater_pos": 0,
+      "greater_action": "['Bomb', '8', ['S8', 'H8', 'C8', 'D8']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.667898",
+      "cur_pos": 1,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['Bomb', '8', ['S8', 'H8', 'C8', 'D8']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.670151",
+      "cur_pos": 2,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['Bomb', '8', ['S8', 'H8', 'C8', 'D8']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.672262",
+      "cur_pos": 3,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['Bomb', '8', ['S8', 'H8', 'C8', 'D8']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.674949",
+      "cur_pos": 0,
+      "cur_action": "['ThreeWithTwo', '3', ['S3', 'H3', 'C3', 'H2', 'D2']]",
+      "greater_pos": 0,
+      "greater_action": "['ThreeWithTwo', '3', ['S3', 'H3', 'C3', 'H2', 'D2']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.691410",
+      "cur_pos": 1,
+      "cur_action": "['ThreeWithTwo', '7', ['H7', 'C7', 'D7', 'CA', 'DA']]",
+      "greater_pos": 1,
+      "greater_action": "['ThreeWithTwo', '7', ['H7', 'C7', 'D7', 'CA', 'DA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.692642",
+      "cur_pos": 2,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 1,
+      "greater_action": "['ThreeWithTwo', '7', ['H7', 'C7', 'D7', 'CA', 'DA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.700793",
+      "cur_pos": 3,
+      "cur_action": "['ThreeWithTwo', '8', ['S8', 'H8', 'D8', 'H3', 'D3']]",
+      "greater_pos": 3,
+      "greater_action": "['ThreeWithTwo', '8', ['S8', 'H8', 'D8', 'H3', 'D3']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.702213",
+      "cur_pos": 0,
+      "cur_action": "['Bomb', '6', ['S6', 'H6', 'C6', 'C6', 'D6']]",
+      "greater_pos": 0,
+      "greater_action": "['Bomb', '6', ['S6', 'H6', 'C6', 'C6', 'D6']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.717420",
+      "cur_pos": 1,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['Bomb', '6', ['S6', 'H6', 'C6', 'C6', 'D6']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.718568",
+      "cur_pos": 2,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['Bomb', '6', ['S6', 'H6', 'C6', 'C6', 'D6']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.725149",
+      "cur_pos": 3,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['Bomb', '6', ['S6', 'H6', 'C6', 'C6', 'D6']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.726685",
+      "cur_pos": 0,
+      "cur_action": "['ThreeWithTwo', '5', ['H5', 'C5', 'C5', 'DT', 'DT']]",
+      "greater_pos": 0,
+      "greater_action": "['ThreeWithTwo', '5', ['H5', 'C5', 'C5', 'DT', 'DT']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.735504",
+      "cur_pos": 1,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['ThreeWithTwo', '5', ['H5', 'C5', 'C5', 'DT', 'DT']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.736412",
+      "cur_pos": 2,
+      "cur_action": "['Bomb', 'J', ['SJ', 'HJ', 'HJ', 'CJ', 'DJ']]",
+      "greater_pos": 2,
+      "greater_action": "['Bomb', 'J', ['SJ', 'HJ', 'HJ', 'CJ', 'DJ']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.749736",
+      "cur_pos": 3,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Bomb', 'J', ['SJ', 'HJ', 'HJ', 'CJ', 'DJ']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.750436",
+      "cur_pos": 0,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Bomb', 'J', ['SJ', 'HJ', 'HJ', 'CJ', 'DJ']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.764690",
+      "cur_pos": 1,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Bomb', 'J', ['SJ', 'HJ', 'HJ', 'CJ', 'DJ']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.765836",
+      "cur_pos": 2,
+      "cur_action": "['Pair', 'A', ['CA', 'DA']]",
+      "greater_pos": 2,
+      "greater_action": "['Pair', 'A', ['CA', 'DA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.768714",
+      "cur_pos": 3,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Pair', 'A', ['CA', 'DA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.769629",
+      "cur_pos": 0,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Pair', 'A', ['CA', 'DA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.793929",
+      "cur_pos": 1,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Pair', 'A', ['CA', 'DA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.799985",
+      "cur_pos": 2,
+      "cur_action": "['Single', 'B', ['SB']]",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'B', ['SB']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.800553",
+      "cur_pos": 3,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'B', ['SB']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.801578",
+      "cur_pos": 0,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'B', ['SB']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.818258",
+      "cur_pos": 1,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'B', ['SB']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.824667",
+      "cur_pos": 2,
+      "cur_action": "['Single', 'R', ['HR']]",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'R', ['HR']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.826881",
+      "cur_pos": 3,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'R', ['HR']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.833735",
+      "cur_pos": 0,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 2,
+      "greater_action": "['Single', 'R', ['HR']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.834987",
+      "cur_pos": 0,
+      "cur_action": "['Pair', 'K', ['SK', 'HK']]",
+      "greater_pos": 0,
+      "greater_action": "['Pair', 'K', ['SK', 'HK']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.839000",
+      "cur_pos": 1,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['Pair', 'K', ['SK', 'HK']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.843144",
+      "cur_pos": 3,
+      "cur_action": "['PASS', 'PASS', 'PASS']",
+      "greater_pos": 0,
+      "greater_action": "['Pair', 'K', ['SK', 'HK']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.844150",
+      "cur_pos": 0,
+      "cur_action": "['Single', 'Q', ['SQ']]",
+      "greater_pos": 0,
+      "greater_action": "['Single', 'Q', ['SQ']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.858712",
+      "cur_pos": 1,
+      "cur_action": "['Single', 'K', ['SK']]",
+      "greater_pos": 1,
+      "greater_action": "['Single', 'K', ['SK']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.861921",
+      "cur_pos": 3,
+      "cur_action": "['Single', 'A', ['SA']]",
+      "greater_pos": 3,
+      "greater_action": "['Single', 'A', ['SA']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.863872",
+      "cur_pos": 0,
+      "cur_action": "['Single', 'R', ['HR']]",
+      "greater_pos": 0,
+      "greater_action": "['Single', 'R', ['HR']]",
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": []
+      }
+    }
+  ],
+  "my_decisions": [
+    {
+      "timestamp": "2025-12-01T22:31:54.434870",
+      "action_index": 0,
+      "action": [
+        "tribute",
+        "tribute",
+        [
+          "HR"
+        ]
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": -1,
+        "greaterPos": -1,
+        "actionList_size": 1,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.452428",
+      "action_index": 0,
+      "action": [
+        "Single",
+        "2",
+        [
+          "S2"
+        ]
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": -1,
+        "greaterPos": -1,
+        "actionList_size": 474,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.482447",
+      "action_index": 1,
+      "action": [
+        "Bomb",
+        "4",
+        [
+          "S4",
+          "H4",
+          "C4",
+          "D4"
+        ]
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 0,
+        "actionList_size": 4,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.506382",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 3,
+        "actionList_size": 1,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.528539",
+      "action_index": 11,
+      "action": [
+        "Single",
+        "T",
+        [
+          "HT"
+        ]
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 0,
+        "actionList_size": 23,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.547312",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 0,
+        "actionList_size": 3,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.570770",
+      "action_index": 10,
+      "action": [
+        "Single",
+        "Q",
+        [
+          "CQ"
+        ]
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 0,
+        "actionList_size": 17,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.591476",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 2,
+        "actionList_size": 3,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.615609",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 2,
+        "actionList_size": 179,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.638293",
+      "action_index": 1,
+      "action": [
+        "ThreeWithTwo",
+        "9",
+        [
+          "S9",
+          "H9",
+          "C9",
+          "S6",
+          "D6"
+        ]
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 3,
+        "actionList_size": 12,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.663989",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 0,
+        "actionList_size": 1,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.687289",
+      "action_index": 5,
+      "action": [
+        "ThreeWithTwo",
+        "7",
+        [
+          "H7",
+          "C7",
+          "D7",
+          "CA",
+          "DA"
+        ]
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 0,
+        "actionList_size": 6,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.713564",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 0,
+        "actionList_size": 1,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.730368",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 0,
+        "actionList_size": 1,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.754680",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 2,
+        "actionList_size": 1,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.785809",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 2,
+        "actionList_size": 1,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.807709",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 2,
+        "actionList_size": 1,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.837590",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 0,
+        "actionList_size": 1,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    },
+    {
+      "timestamp": "2025-12-01T22:31:54.854593",
+      "action_index": 1,
+      "action": [
+        "Single",
+        "K",
+        [
+          "SK"
+        ]
+      ],
+      "score": null,
+      "layer": null,
+      "candidates_count": 0,
+      "context": {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 0,
+        "actionList_size": 3,
+        "version": "v5",
+        "decision_type": "hybrid"
+      }
+    }
+  ],
+  "result": {
+    "victoryNum": [
+      3,
+      0,
+      3,
+      0
+    ],
+    "draws": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "total_decisions": 541,
+    "game_count": 1,
+    "rl_decisions": 541,
+    "knowledge_decisions": 1513,
+    "layer_stats": {
+      "CriticalRules": {
+        "success": 0,
+        "failure": 0,
+        "total_time": 0.0
+      },
+      "YF": {
+        "success": 0,
+        "failure": 0,
+        "total_time": 0.0
+      },
+      "DecisionEngine": {
+        "success": 0,
+        "failure": 0,
+        "total_time": 0.0
+      },
+      "KnowledgeEnhanced": {
+        "success": 0,
+        "failure": 0,
+        "total_time": 0.0
+      },
+      "Random": {
+        "success": 0,
+        "failure": 0,
+        "total_time": 0.0
+      }
+    }
+  },
+  "end_time": "2025-12-01T22:31:54.870641",
+  "duration": 0.448986
+}
