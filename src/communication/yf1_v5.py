@@ -259,7 +259,19 @@ class YF1_V5_Client:
             # 更新实际位置（服务器分配的）
             if my_pos != self.player_id:
                 self.logger.info(f"Position updated: {self.player_id} -> {my_pos}")
+                old_player_id = self.player_id
                 self.player_id = my_pos
+                
+                # 重新初始化决策引擎（使用新的 player_id）
+                self.logger.info(f"Reinitializing decision engine with player_id={my_pos}")
+                config = {
+                    "enable_lalala": True,
+                    "enable_fallback": True,
+                    "log_level": "INFO",
+                    "performance_threshold": 1.0
+                }
+                self.decision_engine = HybridDecisionEngineV4(my_pos, config)
+                self.logger.info(f"Decision engine reinitialized for position {my_pos}")
             
             # 打印手牌信息（与lalala客户端格式一致）
             print(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
