@@ -13,12 +13,17 @@ from pathlib import Path
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent)) # Add project root
+sys.path.append('D:\\guandanscore\\YiFeiAI-GD\\src\\decision')
 
 from decision.hybrid_decision_engine_v4 import HybridDecisionEngineV4
 from decision.rl_decision_engine import RLDecisionEngine
 from communication.game_recorder import GameRecorder
 from communication.websocket_manager import WebSocketManager
-from ..decision import card_power_evaluator, single_card_strategy, bomb_strategy, endgame_strategy, main_decision
+from card_power_evaluator import calculate_card_power
+from single_card_strategy import single_card_strategy
+from bomb_strategy import bomb_strategy
+from endgame_strategy import endgame_strategy
+from main_decision import main_decision
 
 # Configure logging
 import os
