@@ -68,11 +68,11 @@ class KnowledgeLoader:
                 if end_idx > 3:
                     yaml_str = content[3:end_idx].strip()
                     if yaml is not None:
-                        try:
-                            frontmatter = yaml.safe_load(yaml_str) or {}
-                        except Exception:
+                    try:
+                        frontmatter = yaml.safe_load(yaml_str) or {}
+                    except Exception:
                             # YAML解析失败，跳过frontmatter，使用默认值
-                            frontmatter = {}
+                        frontmatter = {}
                     else:
                         # yaml模块不可用，尝试简单的键值对解析
                         frontmatter = self._parse_simple_frontmatter(yaml_str)
@@ -169,6 +169,14 @@ class KnowledgeLoader:
         
         # 鎸夐樁娈靛垎绫
         phase = item['phase']
+        # 处理phase可能是列表的情况（从YAML frontmatter解析时可能是列表）
+        if isinstance(phase, list):
+            # 如果是列表，使用第一个元素，或者用逗号连接
+            phase = phase[0] if phase else 'general'
+        elif not isinstance(phase, str):
+            # 如果不是字符串也不是列表，转换为字符串
+            phase = str(phase) if phase else 'general'
+        
         if phase not in self.skills_by_phase:
             self.skills_by_phase[phase] = []
         self.skills_by_phase[phase].append(item)

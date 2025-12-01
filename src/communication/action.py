@@ -969,9 +969,25 @@ class Action(object):
                 numofplayers,pass_num,my_pass_num,remain_cards_classbynum):
 
         # 安全检查：确保curAction和greaterAction格式正确
-        if not curAction or len(curAction) < 3:
+        # 处理None值的情况
+        if curAction is None:
             curAction = ["PASS", "PASS", "PASS"]
-        if not greaterAction or len(greaterAction) < 3:
+        elif not isinstance(curAction, list):
+            curAction = ["PASS", "PASS", "PASS"]
+        elif len(curAction) < 3:
+            curAction = ["PASS", "PASS", "PASS"]
+        elif curAction[0] is None or curAction[1] is None or curAction[2] is None:
+            # 如果任何元素是None，使用PASS
+            curAction = ["PASS", "PASS", "PASS"]
+        
+        if greaterAction is None:
+            greaterAction = ["PASS", "PASS", "PASS"]
+        elif not isinstance(greaterAction, list):
+            greaterAction = ["PASS", "PASS", "PASS"]
+        elif len(greaterAction) < 3:
+            greaterAction = ["PASS", "PASS", "PASS"]
+        elif greaterAction[0] is None or greaterAction[1] is None or greaterAction[2] is None:
+            # 如果任何元素是None，使用PASS
             greaterAction = ["PASS", "PASS", "PASS"]
         
         rank_card = 'H' + str(rank)

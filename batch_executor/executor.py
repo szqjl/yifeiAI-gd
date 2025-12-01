@@ -12,6 +12,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 from typing import Optional
 import logging
 
@@ -177,6 +178,11 @@ class BatchExecutor:
         self._running = False
         self._current_state = None
         
+        # 保存项目根目录（用于路径解析）
+        self.project_root = Path(__file__).parent.parent
+        self.logger.debug(f"项目根目录: {self.project_root}")
+        self.logger.debug(f"当前工作目录: {os.getcwd()}")
+        
         # 导入所需模块
         from .diagnostic import DiagnosticModule
         from .process_monitor import ProcessMonitor
@@ -188,7 +194,7 @@ class BatchExecutor:
         self.diagnostic = DiagnosticModule()
         self.process_monitor = ProcessMonitor()
         self.tracker = ScoreTracker(score_file)
-        self.restart_manager = RestartManager(self.process_monitor)
+        self.restart_manager = RestartManager(self.process_monitor, self.project_root)
         self.validator = InputValidator()
         
         # 初始化信号处理器（仅在主线程中）
