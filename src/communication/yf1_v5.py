@@ -18,6 +18,7 @@ from decision.hybrid_decision_engine_v4 import HybridDecisionEngineV4
 from decision.rl_decision_engine import RLDecisionEngine
 from communication.game_recorder import GameRecorder
 from communication.websocket_manager import WebSocketManager
+from ..decision import card_power_evaluator, single_card_strategy, bomb_strategy, endgame_strategy, main_decision
 
 # Configure logging
 import os
