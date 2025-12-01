@@ -51,8 +51,17 @@ class InteractiveReplay:
             normalized_hands[pos] = hand_cards
         
         self.all_players_hands_sets = {}
+        self.all_players_hands_lists = {}  # 保存列表形式，用于追踪剩余手牌
         for pos, hand_cards in normalized_hands.items():
             self.all_players_hands_sets[pos] = self._normalize_hand_cards(hand_cards)
+            # 保存规范化的手牌列表
+            normalized_list = []
+            for c in hand_cards:
+                if isinstance(c, str):
+                    normalized_list.append(c)
+                elif isinstance(c, list) and len(c) >= 2:
+                    normalized_list.append(f"{c[0]}{c[1]}")
+            self.all_players_hands_lists[pos] = normalized_list
         
         # 保留旧的initial_hand_set以兼容
         my_pos = game_data['player_id']
@@ -173,6 +182,53 @@ class InteractiveReplay:
         
         return cards
     
+    def _calculate_remaining_hand_cards(self, step: int) -> Dict[int, list]:
+        """计算到指定步骤时每个玩家的剩余手牌（实际牌面）"""
+        # 复制初始手牌
+        remaining_hands = {}
+        for pos, hand_list in self.all_players_hands_lists.items():
+            remaining_hands[pos] = hand_list.copy()
+        
+        # 遍历到当前步骤的所有动作，移除已打出的牌
+        actions = self.game_data.get('actions', [])
+        for i in range(min(step + 1, len(actions))):
+            action = actions[i]
+            cur_pos = action['cur_pos']
+            cur_action = action['cur_action']
+            
+            # 解析cur_action
+            if isinstance(cur_action, str):
+                try:
+                    import ast
+                    cur_action = ast.literal_eval(cur_action)
+                except:
+                    continue
+            
+            if not cur_action or (isinstance(cur_action, list) and len(cur_action) == 0):
+                continue
+            
+            if isinstance(cur_action, list) and cur_action[0] == "PASS":
+                continue
+            
+            # 获取打出的牌
+            if isinstance(cur_action, list) and len(cur_action) > 2:
+                action_cards = cur_action[2]
+                if action_cards and cur_pos in remaining_hands:
+                    # 规范化打出的牌
+                    played_cards = []
+                    for c in action_cards:
+                        if isinstance(c, str):
+                            played_cards.append(c)
+                        elif isinstance(c, list) and len(c) >= 2:
+                            played_cards.append(f"{c[0]}{c[1]}")
+                    
+                    # 从剩余手牌中移除打出的牌
+                    for card in played_cards:
+                        if card in remaining_hands[cur_pos]:
+                            remaining_hands[cur_pos].remove(card)
+        
+        return remaining_hands
+    
     def _get_action_type_stats(self, step: int) -> Dict[str, int]:
         """统计到指定步骤时的牌型使用情况"""
         stats = {}
@@ -240,12 +296,13 @@ class InteractiveReplay:
                 stats_str += f"{action_type}:{count}  "
             print(stats_str)
         
-        # 显示所有玩家的初始手牌
+        # 显示所有玩家的当前手牌（初始或剩余）
+        my_pos = self.game_data['player_id']
+        teammate_pos = (my_pos + 2) % 4
+        
+        # 获取当前剩余手牌
         if self.current_step == 0:
-            my_pos = self.game_data['player_id']
-            teammate_pos = (my_pos + 2) % 4
-            
-            # 获取所有玩家的手牌
+            # 第0步显示初始手牌
             all_hands = self.game_data.get('all_players_hands', {})
             if not all_hands:
                 # 兼容旧格式
@@ -261,73 +318,79 @@ class InteractiveReplay:
                         continue
                 normalized_hands[pos] = hand_cards
             all_hands = normalized_hands
+            title = "【所有玩家初始手牌】"
+        else:
+            # 其他步骤显示剩余手牌
+            remaining_hands = self._calculate_remaining_hand_cards(self.current_step)
+            all_hands = remaining_hands
+            title = "【所有玩家剩余手牌】"
+        
+        print(f"\n{title}:")
+        print("-" * 80)
+        
+        from collections import Counter
+        
+        # 牌点大小顺序
+        rank_order = {'3': 1, '4': 2, '5': 3, '6': 4, '7': 5, '8': 6, '9': 7, 
+                     'T': 8, 'J': 9, 'Q': 10, 'K': 11, 'A': 12, '2': 13, 
+                     'B': 14, 'R': 15}
+        
+        # 花色顺序（同牌点时按此顺序）
+        suit_order = {'C': 1, 'D': 2, 'H': 3, 'S': 4, 'B': 5, 'R': 6}
+        
+        suits = {'H': '红桃', 'S': '黑桃', 'C': '梅花', 'D': '方块', 'B': '小王', 'R': '大王'}
+        
+        # 按牌点大小排序，同牌点按花色排序
+        def card_sort_key(card):
+            if len(card) < 2:
+                return (999, 999)
+            suit = card[0]
+            rank = card[1]
+            rank_val = rank_order.get(rank, 999)
+            suit_val = suit_order.get(suit, 999)
+            return (rank_val, suit_val)
+        
+        def format_hand(hand_cards):
+            """格式化手牌显示"""
+            if not hand_cards:
+                return "已出完"
             
-            print(f"\n【所有玩家初始手牌】:")
-            print("-" * 80)
-            
-            from collections import Counter
-            
-            # 牌点大小顺序
-            rank_order = {'3': 1, '4': 2, '5': 3, '6': 4, '7': 5, '8': 6, '9': 7, 
-                         'T': 8, 'J': 9, 'Q': 10, 'K': 11, 'A': 12, '2': 13, 
-                         'B': 14, 'R': 15}
-            
-            # 花色顺序（同牌点时按此顺序）
-            suit_order = {'C': 1, 'D': 2, 'H': 3, 'S': 4, 'B': 5, 'R': 6}
-            
-            suits = {'H': '红桃', 'S': '黑桃', 'C': '梅花', 'D': '方块', 'B': '小王', 'R': '大王'}
-            
-            # 按牌点大小排序，同牌点按花色排序
-            def card_sort_key(card):
-                if len(card) < 2:
-                    return (999, 999)
-                suit = card[0]
-                rank = card[1]
-                rank_val = rank_order.get(rank, 999)
-                suit_val = suit_order.get(suit, 999)
-                return (rank_val, suit_val)
-            
-            def format_hand(hand_cards):
-                """格式化手牌显示"""
-                if not hand_cards:
-                    return "未知"
-                
-                # 处理不同格式的手牌
-                normalized_cards = []
-                for c in hand_cards:
-                    if isinstance(c, str):
-                        normalized_cards.append(c)
-                    elif isinstance(c, list) and len(c) >= 2:
-                        normalized_cards.append(f"{c[0]}{c[1]}")
-                    else:
-                        normalized_cards.append(str(c))
-                
-                card_counts = Counter(normalized_cards)
-                hand_display = []
-                for card in sorted(card_counts.keys(), key=card_sort_key):
-                    count = card_counts[card]
-                    suit = card[0] if len(card) > 0 else ''
-                    rank = card[1] if len(card) > 1 else ''
-                    suit_name = suits.get(suit, suit)
-                    if count > 1:
-                        hand_display.append(f"{suit_name}{rank}({count})")
-                    else:
-                        hand_display.append(f"{suit_name}{rank}")
-                return ' '.join(hand_display)
-            
-            # 显示每个玩家的手牌
-            for pos in range(4):
-                if pos == my_pos:
-                    label = "我"
-                elif pos == teammate_pos:
-                    label = "队友"
+            # 处理不同格式的手牌
+            normalized_cards = []
+            for c in hand_cards:
+                if isinstance(c, str):
+                    normalized_cards.append(c)
+                elif isinstance(c, list) and len(c) >= 2:
+                    normalized_cards.append(f"{c[0]}{c[1]}")
                 else:
-                    label = "对手"
-                
-                hand_cards = all_hands.get(pos, [])
-                total_count = len(hand_cards) if hand_cards else 0
-                hand_display = format_hand(hand_cards)
-                print(f"  {pos}号位({label}): {total_count}张 - {hand_display}")
+                    normalized_cards.append(str(c))
+            
+            card_counts = Counter(normalized_cards)
+            hand_display = []
+            for card in sorted(card_counts.keys(), key=card_sort_key):
+                count = card_counts[card]
+                suit = card[0] if len(card) > 0 else ''
+                rank = card[1] if len(card) > 1 else ''
+                suit_name = suits.get(suit, suit)
+                if count > 1:
+                    hand_display.append(f"{suit_name}{rank}({count})")
+                else:
+                    hand_display.append(f"{suit_name}{rank}")
+            return ' '.join(hand_display)
+        
+        # 显示每个玩家的手牌
+        for pos in range(4):
+            if pos == my_pos:
+                label = "我"
+            elif pos == teammate_pos:
+                label = "队友"
+            else:
+                label = "对手"
+            
+            hand_cards = all_hands.get(pos, [])
+            total_count = len(hand_cards) if hand_cards else 0
+            hand_display = format_hand(hand_cards)
+            print(f"  {pos}号位({label}): {total_count}张 - {hand_display}")
         
         # 显示当前步骤及之前的步骤
         print(f"\n【出牌过程】:")
