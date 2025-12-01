@@ -1,230 +1,170 @@
 import random
-from typing import List, Dict, Tuple, Optional
-import copy
-from src.game_logic.hand_combiner import HandCombiner
+from typing import List, Tuple, Dict, Optional
+from collections import Counter
+import itertools
+
+# Card Constants
+# 2-A: 0-12
+# Small Joker: 52, Big Joker: 53
+# Suits are implicit in 0-51 (0-12: Spades, 13-25: Hearts, 26-38: Clubs, 39-51: Diamonds) - SIMPLIFIED for logic
+# Actually for Guandan, rank matters more.
+# Let's map 0-53 to Ranks 2-Joker for easier logic.
+# 2,3,4,5,6,7,8,9,10,J,Q,K,A -> 0-12
+# Level Card (Current Level) -> Special handling needed?
+# For V1 Engine, let's stick to standard ranking first, then add Level Card logic.
+# Standard Rank Order: 2,3,4,5,6,7,8,9,10,J,Q,K,A, Small, Big
+# Values: 2=0, ..., A=12, Small=13, Big=14
 
 class GameEngine:
-    """
-    A pure logic game engine for Guandan.
-    Manages the state of the game, validates moves, and determines the winner.
-    """
-    def __init__(self, rank: str = '2'):
-        self.rank = rank
-        self.combiner = HandCombiner()
-        self.reset()
+    def __init__(self, level_card_rank: int = 0):
+        """
+        Initialize the game engine.
+        :param level_card_rank: The rank of the current level card (0=2, 12=A).
+        """
+        self.level_card_rank = level_card_rank
+        # 4 Players: 0, 1, 2, 3. Team 0&2, Team 1&3.
+        self.hands = {0: [], 1: [], 2: [], 3: []}
+        self.current_player = 0
+        self.history = []
+        self.table_cards = [] # (player_id, cards, type, value)
+        self.pass_count = 0
+        self.finished_players = []
+        self.rank_map = self._init_rank_map()
+
+    def _init_rank_map(self):
+        # Maps internal card ID (0-53) to Logic Rank (0-15)
+        # 0-51: 4 suits of 13 cards.
+        # 0-12: 2-A
+        # 52: Small Joker (14)
+        # 53: Big Joker (15)
+        # Level Card (Heart) -> 13 (Wild/Special) - Simplified for now: Level Card is just highest non-joker
+        rank_map = {}
+        for i in range(52):
+            base_rank = i % 13
+            if base_rank == self.level_card_rank:
+                # Level card is higher than A (12) but lower than Joker (14)
+                logic_rank = 13 
+            else:
+                # Adjust for level card being pulled out
+                # e.g. if Level is 5 (rank 3), then 2,3,4,6...
+                # Actually, standard Guandan order: 2,3,4,5,6,7,8,9,10,J,Q,K,A
+                # If 5 is level, order: 2,3,4,6,7,8,9,10,J,Q,K,A, 5, Small, Big
+                if base_rank < self.level_card_rank:
+                    logic_rank = base_rank
+                else:
+                    logic_rank = base_rank # Keep original relative order for now, handle level skip later
+                    # Wait, if 5 is level, 6 is > 4.
+                    # Let's use a simpler static value system for now and refine.
+                    pass
+            
+            # RE-DESIGN: Use a static value table based on level_card_rank
+            # 2=2, ... A=14.
+            # Level Card = 15.
+            # Small Joker = 16.
+            # Big Joker = 17.
+            pass
+        return {} # Placeholder
+
+    def get_card_value(self, card_id: int) -> int:
+        """
+        Get the logical value of a card for comparison.
+        """
+        if card_id == 53: return 17 # Big Joker
+        if card_id == 52: return 16 # Small Joker
+        
+        base_rank = card_id % 13 # 0(2) - 12(A)
+        
+        # Adjust base_rank to 2-14 scale
+        value = base_rank + 2 
+        
+        if base_rank == self.level_card_rank:
+            # Heart Level Card is highest level card? For now treat all level cards same
+            return 15
+            
+        return value
 
     def reset(self):
-        """Initialize a new game."""
-        # 1. Create Deck (Two decks of cards)
-        self.deck = self._create_deck()
-        random.shuffle(self.deck)
-
-        # 2. Deal Cards (27 cards per player, 4 players)
+        """Shuffle and deal cards."""
+        deck = list(range(54)) * 2 # Two decks
+        random.shuffle(deck)
         self.hands = {
-            0: sorted(self.deck[0:27], key=self._card_sort_key),
-            1: sorted(self.deck[27:54], key=self._card_sort_key),
-            2: sorted(self.deck[54:81], key=self._card_sort_key),
-            3: sorted(self.deck[81:108], key=self._card_sort_key)
+            0: sorted(deck[0:27]),
+            1: sorted(deck[27:54]),
+            2: sorted(deck[54:81]),
+            3: sorted(deck[81:108])
         }
-        
-        # 3. Game State
-        self.current_player = 0  # Start with player 0 (randomize later?)
-        self.last_play = None    # (player_id, action_type, cards)
-        self.pass_count = 0      # Number of consecutive passes
-        self.finished_players = [] # Order of players who finished
-        self.history = []        # Log of actions
+        self.current_player = 0 # Randomize or fixed?
+        self.history = []
+        self.table_cards = []
+        self.pass_count = 0
+        self.finished_players = []
+        return self.get_state()
 
-    def _create_deck(self) -> List[str]:
-        """Create a double deck of cards."""
-        suits = ['S', 'H', 'C', 'D']
-        ranks = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
-        deck = [s + r for s in suits for r in ranks] * 2
-        deck += ['SB', 'HR'] * 2  # Small Joker (Black), Big Joker (Red) - 2 of each
-        return deck
-
-    def _card_sort_key(self, card: str) -> int:
-        """Helper to sort cards for display/logic."""
-        # Value map for sorting
-        card_val = {
-            "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "T": 10, "J": 11,
-            "Q": 12, "K": 13, "A": 14, "B": 16, "R": 17
-        }
-        # Adjust for Level Card (Rank)
-        card_val[self.rank] = 15
-        
-        if len(card) == 2:
-            return card_val.get(card[1], 0)
-        return 0
-
-    def get_state(self) -> Dict:
-        """Return the current game state."""
+    def get_state(self):
+        """Return current game state."""
         return {
             'hands': self.hands,
             'current_player': self.current_player,
-            'last_play': self.last_play,
-            'pass_count': self.pass_count,
-            'finished_players': self.finished_players,
-            'rank': self.rank
+            'table_cards': self.table_cards,
+            'finished_players': self.finished_players
         }
 
-    def step(self, action: List[str]) -> Tuple[Dict, float, bool, Dict]:
+    def step(self, action: List[int]):
         """
-        Execute an action for the current player.
-        
-        Args:
-            action: List of card codes (e.g., ['H2', 'S2']) or [] for PASS.
-            
-        Returns:
-            next_state, reward, done, info
+        Execute an action (play cards).
+        :param action: List of card IDs. Empty list for PASS.
         """
         player = self.current_player
         
-        # 1. Validate Action
-        if not self._is_legal(player, action):
-            # For RL training, we might want to return a large negative reward and NOT end the episode,
-            # or end it. Here we'll return negative reward and continue (or let agent retry).
-            # But standard Gym env usually steps.
-            # Let's return negative reward and NOT change state (invalid move).
-            return self.get_state(), -10, False, {"error": "Illegal move"}
-
-        # 2. Execute Action
         if not action: # PASS
+            if self.pass_count >= 3:
+                # Cannot pass if you are the leader (everyone else passed)
+                # Or if new round
+                if not self.table_cards or self.table_cards[-1][0] == player:
+                     raise ValueError("Cannot pass when leading")
+            
             self.pass_count += 1
-            self.history.append((player, 'PASS', []))
-        else:
-            self.pass_count = 0
-            # Remove cards from hand
-            for card in action:
-                if card in self.hands[player]:
-                    self.hands[player].remove(card)
+            self.history.append((player, [], "PASS"))
             
-            # Identify card type
-            card_type = self._get_action_type(action)
-            self.last_play = (player, card_type, action)
-            self.history.append((player, card_type, action))
+            # Move to next player
+            self._next_player()
+            
+            # If 3 passes, clear table (new round)
+            # Note: Need to handle finished players (they auto-pass)
+            active_players = 4 - len(self.finished_players)
+            # Logic for clearing table needs to be robust for finished players
+            if self.pass_count >= active_players - 1:
+                 # Leader logic here
+                 pass
+            
+            return self.get_state(), 0, False, {}
 
-        # 3. Check Win Condition
-        if len(self.hands[player]) == 0 and player not in self.finished_players:
+        # PLAY CARDS
+        # 1. Validate ownership
+        if not all(c in self.hands[player] for c in action):
+            raise ValueError("Player does not have these cards")
+            
+        # 2. Validate Rule (is_legal)
+        # TODO: Implement full rule check
+        
+        # 3. Execute
+        for c in action:
+            self.hands[player].remove(c)
+            
+        self.pass_count = 0
+        self.table_cards.append((player, action, "UNKNOWN_TYPE", 0)) # Need type recognition
+        
+        # Check Win
+        if not self.hands[player]:
             self.finished_players.append(player)
-
-        # Game over when 3 players finish
-        done = len(self.finished_players) >= 3 
-        
-        # Calculate reward (simple placeholder)
-        reward = 0
-        if len(self.hands[player]) == 0:
-            reward = 100 # Bonus for finishing
-
-        # 4. Next Player
-        self._advance_turn()
-
-        return self.get_state(), reward, done, {}
-
-    def _advance_turn(self):
-        """Move to the next active player."""
-        if self.pass_count >= 3:
-            # New round, clear last play
-            self.last_play = None
-            self.pass_count = 0
-        
-        next_p = (self.current_player + 1) % 4
-        # Skip finished players
-        while next_p in self.finished_players and len(self.finished_players) < 4:
-             next_p = (next_p + 1) % 4
-        self.current_player = next_p
-
-    def _get_card_val_map(self) -> Dict[str, int]:
-        card_val = {
-            "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "T": 10, "J": 11,
-            "Q": 12, "K": 13, "A": 14, "B": 16, "R": 17
-        }
-        card_val[self.rank] = 15
-        return card_val
-
-    def _get_action_type(self, action: List[str]) -> str:
-        """Identify the type of the action using HandCombiner."""
-        if not action:
-            return "PASS"
             
-        card_val = self._get_card_val_map()
-        # combine_handcards returns all possible combinations.
-        sorted_cards, bomb_info = self.combiner.combine_handcards(action, self.rank, card_val)
+        done = len(self.finished_players) >= 3 # Game ends when 3 players finish (or team logic)
         
-        # Check counts to determine type
-        # Note: HandCombiner in src/game_logic only detects Single, Pair, Trips, Bomb (basic).
-        # It does NOT detect Straights yet. We need to extend this later.
+        self._next_player()
         
-        if len(sorted_cards["Bomb"]) == 1 and len(sorted_cards["Bomb"][0]) == len(action):
-            return "Bomb"
-            
-        if len(sorted_cards["Trips"]) == len(action) and len(action) == 3:
-            return "Trips"
-            
-        if len(sorted_cards["Pair"]) == len(action) and len(action) == 2:
-            return "Pair"
-            
-        if len(sorted_cards["Single"]) == len(action) and len(action) == 1:
-            return "Single"
-            
-        return "Unknown"
+        return self.get_state(), 0, done, {}
 
-    def _is_legal(self, player: int, action: List[str]) -> bool:
-        """Check if the action is legal."""
-        # 1. Check if player has these cards
-        hand = self.hands[player]
-        # Create a frequency map to handle duplicates correctly
-        hand_counts = {}
-        for card in hand:
-            hand_counts[card] = hand_counts.get(card, 0) + 1
-            
-        for card in action:
-            if hand_counts.get(card, 0) > 0:
-                hand_counts[card] -= 1
-            else:
-                return False
-        
-        # 2. Check if it beats the last play
-        if not action:
-            # Can't pass if you are the leader (last_play is None or last_play was cleared)
-            return self.last_play is not None
-        
-        action_type = self._get_action_type(action)
-        if action_type == "Unknown":
-            return False
-
-        if self.last_play is None:
-            return True # Any valid combination is allowed
-        
-        last_player, last_type, last_cards = self.last_play
-        
-        # Logic for beating cards
-        # 1. Bomb/StraightFlush beats everything else
-        is_bomb = action_type in ["Bomb", "StraightFlush"]
-        last_is_bomb = last_type in ["Bomb", "StraightFlush"]
-        
-        if is_bomb and not last_is_bomb:
-            return True
-        if not is_bomb and last_is_bomb:
-            return False
-            
-        # 2. Must be same type and greater value
-        if action_type != last_type:
-            return False
-            
-        if len(action) != len(last_cards):
-            return False
-            
-        # Compare values
-        return self._compare_values(action, last_cards, action_type)
-
-    def _compare_values(self, action: List[str], last: List[str], ctype: str) -> bool:
-        """Compare values of two actions of same type."""
-        card_val = self._get_card_val_map()
-        
-        # Get representative value for the combination
-        def get_repr_val(cards):
-            # Simplified: Max value in the set
-            return max(self._card_sort_key(c) for c in cards)
-            
-        return get_repr_val(action) > get_repr_val(last)
-
+    def _next_player(self):
+        self.current_player = (self.current_player + 1) % 4
+        while self.current_player in self.finished_players:
+             self.current_player = (self.current_player + 1) % 4
