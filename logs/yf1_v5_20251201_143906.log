@@ -1,0 +1,79 @@
+[14:39:06] [websocket_manager.yf1_v5] [INFO] WebSocket Manager initialized for yf1_v5
+[14:39:06] [websocket_manager.yf1_v5] [INFO]   - URI: ws://127.0.0.1:23456/game/yf1_v5
+[14:39:06] [websocket_manager.yf1_v5] [INFO]   - Reconnect interval: 5s
+[14:39:06] [websocket_manager.yf1_v5] [INFO]   - Heartbeat interval: 30s
+[14:39:06] [websocket_manager.yf1_v5] [INFO]   - Timeout: 10s
+[14:39:06] [HybridV4-P0] [INFO] HybridDecisionEngineV4 initialized
+[14:39:07] [yf1_v5] [INFO] ✓ RL Engine initialized
+[14:39:07] [yf1_v5] [INFO] ✓ yf1_v5 initialized (Player 0)
+[14:39:07] [yf1_v5] [INFO]   - RL Engine: Available
+[14:39:07] [yf1_v5] [INFO]   - Hybrid Decision: True
+[14:39:07] [websocket_manager.yf1_v5] [INFO] Connecting to ws://127.0.0.1:23456/game/yf1_v5... (attempt 1)
+[14:39:07] [websocket_manager.yf1_v5] [INFO] ✓ Connected to server: ws://127.0.0.1:23456/game/yf1_v5
+[14:39:14] [yf1_v5] [INFO] 游戏开始, 我是0号位，手牌：['S3', 'C3', 'H5', 'C5', 'H6', 'D6', 'H7', 'D7', 'H8', 'C8', 'S9', 'HT', 'CT', 'DT', 'CJ', 'DJ', 'SQ', 'HQ', 'CQ', 'HK', 'HA', 'HA', 'DA', 'D2', 'D2', 'SB', 'SB']
+[14:39:14] [YFAdapter-P0] [INFO] YF state initialized: player_id=0
+[14:39:14] [YFAdapter-P0] [INFO] YFAdapter initialized for player 0
+[14:39:14] [HybridV4-P0] [INFO] YFAdapter initialized (lazy)
+[14:39:14] [YFAdapter-P0] [INFO] [YF-P0] Decision context: myPos=0, curPos=-1, greaterPos=-1, teammate=2, curAction=[, actionList_size=250
+[14:39:14] [YFAdapter-P0] [ERROR] YF rule_parse failed: name 'rankfour' is not defined
+Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\communication\lalala_adapter_v4.py", line 456, in _make_yf_decision
+    act_index = self.yf_action.rule_parse(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\action.py", line 1410, in rule_parse
+    self.act = self.active(self.action, msg["handCards"], msg["curRank"],numofplayers,mypos,remaincards)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\action.py", line 1161, in active
+    index =rankfour(twotrips_actionlist, threepair_actionlist, actionList, cur[1], cur[2])
+           ^^^^^^^^
+NameError: name 'rankfour' is not defined
+[14:39:14] [YFAdapter-P0] [ERROR] YF decision failed: YF decision failed: name 'rankfour' is not defined
+Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\communication\lalala_adapter_v4.py", line 456, in _make_yf_decision
+    act_index = self.yf_action.rule_parse(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\action.py", line 1410, in rule_parse
+    self.act = self.active(self.action, msg["handCards"], msg["curRank"],numofplayers,mypos,remaincards)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\action.py", line 1161, in active
+    index =rankfour(twotrips_actionlist, threepair_actionlist, actionList, cur[1], cur[2])
+           ^^^^^^^^
+NameError: name 'rankfour' is not defined
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\communication\lalala_adapter_v4.py", line 90, in decide
+    action_index = self._make_yf_decision(converted_message)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\lalala_adapter_v4.py", line 520, in _make_yf_decision
+    raise RuntimeError(f"YF decision failed: {e}")
+RuntimeError: YF decision failed: name 'rankfour' is not defined
+[14:39:14] [HybridV4-P0] [INFO] DecisionEngine initialized (lazy)
+[14:39:14] [HybridV4-P0] [ERROR] Knowledge enhancement error: expected an indented block after 'if' statement on line 70 (knowledge_loader.py, line 71)
+Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\decision\hybrid_decision_engine_v4.py", line 280, in _enhance_candidates
+    from knowledge.knowledge_enhanced_decision import KnowledgeEnhancedDecisionEngine
+  File "D:\YiFeiAI-GD\src\knowledge\knowledge_enhanced_decision.py", line 19, in <module>
+    from knowledge.knowledge_loader import KnowledgeLoader
+  File "D:\YiFeiAI-GD\src\knowledge\knowledge_loader.py", line 71
+    try:
+    ^^^
+IndentationError: expected an indented block after 'if' statement on line 70
+[14:39:14] [yf1_v5] [INFO] 0号位打出['Single', '3', ['S3']]， 最大动作为0号位打出的['Single', '3', ['S3']]
+[14:39:14] [yf1_v5] [INFO] 1号位打出['Single', '2', ['S2']]， 最大动作为1号位打出的['Single', '2', ['S2']]
+[14:39:14] [yf1_v5] [INFO] 2号位打出['PASS', 'PASS', 'PASS']， 最大动作为1号位打出的['Single', '2', ['S2']]
+[14:39:14] [yf1_v5] [INFO] 3号位打出['PASS', 'PASS', 'PASS']， 最大动作为1号位打出的['Single', '2', ['S2']]
+[14:39:14] [YFAdapter-P0] [INFO] [YF-P0] Decision context: myPos=0, curPos=3, greaterPos=1, teammate=2, curAction=[, actionList_size=2
+[14:39:14] [YFAdapter-P0] [INFO] [YF-P0] Decided: action_index=0, action=['PASS', 'PASS', 'PASS']
+[14:39:14] [HybridV4-P0] [ERROR] Knowledge enhancement error: expected an indented block after 'if' statement on line 70 (knowledge_loader.py, line 71)
+Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\decision\hybrid_decision_engine_v4.py", line 280, in _enhance_candidates
+    from knowledge.knowledge_enhanced_decision import KnowledgeEnhancedDecisionEngine
+  File "D:\YiFeiAI-GD\src\knowledge\knowledge_enhanced_decision.py", line 19, in <module>
+    from knowledge.knowledge_loader import KnowledgeLoader
+  File "D:\YiFeiAI-GD\src\knowledge\knowledge_loader.py", line 71
+    try:
+    ^^^
+IndentationError: expected an indented block after 'if' statement on line 70
+[14:39:14] [yf1_v5] [INFO] 0号位打出['PASS', 'PASS', 'PASS']， 最大动作为1号位打出的['Single', '2', ['S2']]

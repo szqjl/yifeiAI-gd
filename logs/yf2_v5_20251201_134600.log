@@ -1,0 +1,14 @@
+[13:46:00] [websocket_manager.yf2_v5] [INFO] WebSocket Manager initialized for yf2_v5
+[13:46:00] [websocket_manager.yf2_v5] [INFO]   - URI: ws://127.0.0.1:23456/game/yf2_v5
+[13:46:00] [websocket_manager.yf2_v5] [INFO]   - Reconnect interval: 5s
+[13:46:00] [websocket_manager.yf2_v5] [INFO]   - Heartbeat interval: 30s
+[13:46:00] [websocket_manager.yf2_v5] [INFO]   - Timeout: 10s
+[13:46:00] [HybridV4-P2] [INFO] HybridDecisionEngineV4 initialized
+[13:46:01] [yf2_v5] [INFO] ✓ RL Engine initialized
+[13:46:01] [yf2_v5] [INFO] ✓ yf2_v5 initialized (Player 2)
+[13:46:01] [yf2_v5] [INFO]   - RL Engine: Available
+[13:46:01] [yf2_v5] [INFO]   - Hybrid Decision: True
+[13:46:01] [websocket_manager.yf2_v5] [INFO] Connecting to ws://127.0.0.1:23456/game/yf2_v5... (attempt 1)
+[13:46:01] [websocket_manager.yf2_v5] [INFO] ✓ Connected to server: ws://127.0.0.1:23456/game/yf2_v5
+[13:46:28] [yf2_v5] [INFO] 游戏开始, 我是2号位，手牌：['S3', 'C3', 'D3', 'C4', 'D4', 'D5', 'S7', 'H7', 'S8', 'H8', 'D8', 'S9', 'HT', 'SJ', 'CJ', 'HQ', 'DQ', 'DQ', 'HK', 'CK', 'CK', 'HA', 'CA', 'CA', 'S2', 'H2', 'HR']
+[13:46:28] [yf2_v5] [INFO] 0号位打出['Single', '8', ['C8']]， 最大动作为0号位打出的['Single', '8', ['C8']]

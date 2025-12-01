@@ -1,0 +1,34 @@
+[14:39:12] [websocket_manager.yf2_v5] [INFO] WebSocket Manager initialized for yf2_v5
+[14:39:12] [websocket_manager.yf2_v5] [INFO]   - URI: ws://127.0.0.1:23456/game/yf2_v5
+[14:39:12] [websocket_manager.yf2_v5] [INFO]   - Reconnect interval: 5s
+[14:39:12] [websocket_manager.yf2_v5] [INFO]   - Heartbeat interval: 30s
+[14:39:12] [websocket_manager.yf2_v5] [INFO]   - Timeout: 10s
+[14:39:12] [HybridV4-P2] [INFO] HybridDecisionEngineV4 initialized
+[14:39:13] [yf2_v5] [INFO] ✓ RL Engine initialized
+[14:39:13] [yf2_v5] [INFO] ✓ yf2_v5 initialized (Player 2)
+[14:39:13] [yf2_v5] [INFO]   - RL Engine: Available
+[14:39:13] [yf2_v5] [INFO]   - Hybrid Decision: True
+[14:39:13] [websocket_manager.yf2_v5] [INFO] Connecting to ws://127.0.0.1:23456/game/yf2_v5... (attempt 1)
+[14:39:13] [websocket_manager.yf2_v5] [INFO] ✓ Connected to server: ws://127.0.0.1:23456/game/yf2_v5
+[14:39:14] [yf2_v5] [INFO] 游戏开始, 我是2号位，手牌：['H3', 'S4', 'H4', 'D4', 'D4', 'S5', 'S6', 'C6', 'D6', 'S7', 'D7', 'S8', 'D8', 'C9', 'ST', 'ST', 'CT', 'DT', 'CJ', 'DJ', 'SQ', 'SK', 'DK', 'S2', 'H2', 'C2', 'HR']
+[14:39:14] [yf2_v5] [INFO] 0号位打出['Single', '3', ['S3']]， 最大动作为0号位打出的['Single', '3', ['S3']]
+[14:39:14] [yf2_v5] [INFO] 1号位打出['Single', '2', ['S2']]， 最大动作为1号位打出的['Single', '2', ['S2']]
+[14:39:14] [YFAdapter-P2] [INFO] YF state initialized: player_id=2
+[14:39:14] [YFAdapter-P2] [INFO] YFAdapter initialized for player 2
+[14:39:14] [HybridV4-P2] [INFO] YFAdapter initialized (lazy)
+[14:39:14] [YFAdapter-P2] [INFO] [YF-P2] Decision context: myPos=2, curPos=1, greaterPos=1, teammate=0, curAction=[, actionList_size=14
+[14:39:14] [YFAdapter-P2] [INFO] [YF-P2] Decided: action_index=0, action=['PASS', 'PASS', 'PASS']
+[14:39:14] [HybridV4-P2] [INFO] DecisionEngine initialized (lazy)
+[14:39:14] [HybridV4-P2] [ERROR] Knowledge enhancement error: expected an indented block after 'if' statement on line 70 (knowledge_loader.py, line 71)
+Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\decision\hybrid_decision_engine_v4.py", line 280, in _enhance_candidates
+    from knowledge.knowledge_enhanced_decision import KnowledgeEnhancedDecisionEngine
+  File "D:\YiFeiAI-GD\src\knowledge\knowledge_enhanced_decision.py", line 19, in <module>
+    from knowledge.knowledge_loader import KnowledgeLoader
+  File "D:\YiFeiAI-GD\src\knowledge\knowledge_loader.py", line 71
+    try:
+    ^^^
+IndentationError: expected an indented block after 'if' statement on line 70
+[14:39:14] [yf2_v5] [INFO] 2号位打出['PASS', 'PASS', 'PASS']， 最大动作为1号位打出的['Single', '2', ['S2']]
+[14:39:14] [yf2_v5] [INFO] 3号位打出['PASS', 'PASS', 'PASS']， 最大动作为1号位打出的['Single', '2', ['S2']]
+[14:39:14] [yf2_v5] [INFO] 0号位打出['PASS', 'PASS', 'PASS']， 最大动作为1号位打出的['Single', '2', ['S2']]

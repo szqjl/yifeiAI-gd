@@ -78,21 +78,38 @@ class LalalaWebsocketsClient:
         if "handCards" in data:
             data["handCards"] = convert_cards_list(data["handCards"])
         
-        if "curAction" in data and isinstance(data["curAction"], list):
-            if len(data["curAction"]) > 2 and data["curAction"][2] != "PASS":
-                data["curAction"] = [
-                    data["curAction"][0],
-                    data["curAction"][1],
-                    convert_cards_list(data["curAction"][2])
-                ]
+        # 处理curAction和greaterAction，确保它们不是None
+        if "curAction" in data:
+            if data["curAction"] is None:
+                data["curAction"] = ["PASS", "PASS", "PASS"]
+            elif isinstance(data["curAction"], list):
+                # 检查是否有None值
+                if len(data["curAction"]) < 3 or any(x is None for x in data["curAction"]):
+                    data["curAction"] = ["PASS", "PASS", "PASS"]
+                elif len(data["curAction"]) > 2 and data["curAction"][2] != "PASS":
+                    data["curAction"] = [
+                        data["curAction"][0],
+                        data["curAction"][1],
+                        convert_cards_list(data["curAction"][2])
+                    ]
+            else:
+                data["curAction"] = ["PASS", "PASS", "PASS"]
         
-        if "greaterAction" in data and isinstance(data["greaterAction"], list):
-            if len(data["greaterAction"]) > 2 and data["greaterAction"][2] != "PASS":
-                data["greaterAction"] = [
-                    data["greaterAction"][0],
-                    data["greaterAction"][1],
-                    convert_cards_list(data["greaterAction"][2])
-                ]
+        if "greaterAction" in data:
+            if data["greaterAction"] is None:
+                data["greaterAction"] = ["PASS", "PASS", "PASS"]
+            elif isinstance(data["greaterAction"], list):
+                # 检查是否有None值
+                if len(data["greaterAction"]) < 3 or any(x is None for x in data["greaterAction"]):
+                    data["greaterAction"] = ["PASS", "PASS", "PASS"]
+                elif len(data["greaterAction"]) > 2 and data["greaterAction"][2] != "PASS":
+                    data["greaterAction"] = [
+                        data["greaterAction"][0],
+                        data["greaterAction"][1],
+                        convert_cards_list(data["greaterAction"][2])
+                    ]
+            else:
+                data["greaterAction"] = ["PASS", "PASS", "PASS"]
         
         if "actionList" in data:
             new_action_list = []

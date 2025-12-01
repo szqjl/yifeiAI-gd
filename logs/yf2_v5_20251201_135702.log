@@ -1,0 +1,69 @@
+[13:57:02] [websocket_manager.yf2_v5] [INFO] WebSocket Manager initialized for yf2_v5
+[13:57:02] [websocket_manager.yf2_v5] [INFO]   - URI: ws://127.0.0.1:23456/game/yf2_v5
+[13:57:02] [websocket_manager.yf2_v5] [INFO]   - Reconnect interval: 5s
+[13:57:02] [websocket_manager.yf2_v5] [INFO]   - Heartbeat interval: 30s
+[13:57:02] [websocket_manager.yf2_v5] [INFO]   - Timeout: 10s
+[13:57:02] [HybridV4-P2] [INFO] HybridDecisionEngineV4 initialized
+[13:57:03] [yf2_v5] [INFO] ✓ RL Engine initialized
+[13:57:03] [yf2_v5] [INFO] ✓ yf2_v5 initialized (Player 2)
+[13:57:03] [yf2_v5] [INFO]   - RL Engine: Available
+[13:57:03] [yf2_v5] [INFO]   - Hybrid Decision: True
+[13:57:03] [websocket_manager.yf2_v5] [INFO] Connecting to ws://127.0.0.1:23456/game/yf2_v5... (attempt 1)
+[13:57:03] [websocket_manager.yf2_v5] [INFO] ✓ Connected to server: ws://127.0.0.1:23456/game/yf2_v5
+[13:57:26] [yf2_v5] [INFO] 游戏开始, 我是2号位，手牌：['D3', 'D4', 'D4', 'C5', 'H6', 'S7', 'H7', 'H7', 'D7', 'S9', 'H9', 'H9', 'C9', 'ST', 'HT', 'CJ', 'CJ', 'DQ', 'CK', 'SA', 'HA', 'CA', 'DA', 'DA', 'S2', 'C2', 'SB']
+[13:57:26] [YFAdapter-P2] [INFO] YF state initialized: player_id=2
+[13:57:26] [YFAdapter-P2] [INFO] YFAdapter initialized for player 2
+[13:57:26] [HybridV4-P2] [INFO] YFAdapter initialized (lazy)
+[13:57:26] [YFAdapter-P2] [INFO] [YF-P2] Decision context: myPos=2, curPos=-1, greaterPos=-1, teammate=0, curAction=[, actionList_size=266
+[13:57:26] [YFAdapter-P2] [ERROR] YF rule_parse failed: cannot unpack non-iterable NoneType object
+Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\communication\lalala_adapter_v4.py", line 456, in _make_yf_decision
+    act_index = self.yf_action.rule_parse(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\action.py", line 1394, in rule_parse
+    self.act = self.active(self.action, msg["handCards"], msg["curRank"],numofplayers,mypos,remaincards)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\action.py", line 1116, in active
+    sorted_cards,single_actionlist, pair_actionlist, trips_actionlist, threepair_actionlist,threetwo_actionlist, twotrips_actionlist, straight_actionlist = self.getlist(
+                                                                                                                                                            ^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\action.py", line 1050, in getlist
+    sorted_cards, bomb_info = combine_handcards(handcards, rank,card_value_s2v)
+    ^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: cannot unpack non-iterable NoneType object
+[13:57:26] [YFAdapter-P2] [ERROR] YF decision failed: YF decision failed: cannot unpack non-iterable NoneType object
+Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\communication\lalala_adapter_v4.py", line 456, in _make_yf_decision
+    act_index = self.yf_action.rule_parse(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\action.py", line 1394, in rule_parse
+    self.act = self.active(self.action, msg["handCards"], msg["curRank"],numofplayers,mypos,remaincards)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\action.py", line 1116, in active
+    sorted_cards,single_actionlist, pair_actionlist, trips_actionlist, threepair_actionlist,threetwo_actionlist, twotrips_actionlist, straight_actionlist = self.getlist(
+                                                                                                                                                            ^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\action.py", line 1050, in getlist
+    sorted_cards, bomb_info = combine_handcards(handcards, rank,card_value_s2v)
+    ^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: cannot unpack non-iterable NoneType object
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\communication\lalala_adapter_v4.py", line 90, in decide
+    action_index = self._make_yf_decision(converted_message)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\YiFeiAI-GD\src\communication\lalala_adapter_v4.py", line 520, in _make_yf_decision
+    raise RuntimeError(f"YF decision failed: {e}")
+RuntimeError: YF decision failed: cannot unpack non-iterable NoneType object
+[13:57:26] [HybridV4-P2] [INFO] DecisionEngine initialized (lazy)
+[13:57:26] [HybridV4-P2] [ERROR] Knowledge enhancement error: expected an indented block after 'if' statement on line 70 (knowledge_loader.py, line 71)
+Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\decision\hybrid_decision_engine_v4.py", line 280, in _enhance_candidates
+    from knowledge.knowledge_enhanced_decision import KnowledgeEnhancedDecisionEngine
+  File "D:\YiFeiAI-GD\src\knowledge\knowledge_enhanced_decision.py", line 19, in <module>
+    from knowledge.knowledge_loader import KnowledgeLoader
+  File "D:\YiFeiAI-GD\src\knowledge\knowledge_loader.py", line 71
+    try:
+    ^^^
+IndentationError: expected an indented block after 'if' statement on line 70
+[13:57:26] [yf2_v5] [INFO] 2号位打出['Single', '3', ['D3']]， 最大动作为2号位打出的['Single', '3', ['D3']]
