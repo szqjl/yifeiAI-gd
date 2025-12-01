@@ -407,6 +407,8 @@ class YF2_V5_Client:
         """
         保存战绩到 game_scores.json（用于GUI显示）
         
+        注意：位置是服务器动态分配的，需要根据实际 myPos 判断队友
+        
         Args:
             victory_num: 胜利次数列表 [pos0_wins, pos1_wins, pos2_wins, pos3_wins]
         """
@@ -421,24 +423,38 @@ class YF2_V5_Client:
                 with open(score_file, 'r', encoding='utf-8') as f:
                     scores = json.load(f)
             except:
-                scores = {"team_a_wins": 0, "team_b_wins": 0, "total_games": 0}
+                scores = {"team_a_wins": 0, "team_b_wins": 0, "total_games": 0, "my_pos": None, "teammate_pos": None}
         else:
-            scores = {"team_a_wins": 0, "team_b_wins": 0, "total_games": 0}
+            scores = {"team_a_wins": 0, "team_b_wins": 0, "total_games": 0, "my_pos": None, "teammate_pos": None}
+        
+        # 记录位置信息（用于调试）
+        if scores.get("my_pos") is None:
+            scores["my_pos"] = self.player_id
+            teammate_pos = (self.player_id + 2) % 4
+            scores["teammate_pos"] = teammate_pos
+            self.logger.info(f"Position info saved: my_pos={self.player_id}, teammate_pos={teammate_pos}")
         
         # 判断获胜队伍
-        # Team A: 0号位(yf1_v5) + 2号位(yf2_v5)
-        # Team B: 1号位 + 3号位
+        # 在掼蛋中，0和2是队友，1和3是队友
+        # 但实际位置是服务器分配的，所以用 self.player_id 来判断
         if len(victory_num) >= 4:
-            team_a_score = victory_num[0] + victory_num[2]  # 0号位 + 2号位
-            team_b_score = victory_num[1] + victory_num[3]  # 1号位 + 3号位
+            my_pos = self.player_id
+            teammate_pos = (my_pos + 2) % 4
+            opponent1_pos = (my_pos + 1) % 4
+            opponent2_pos = (my_pos + 3) % 4
+            
+            # Team A: yf1_v5 + yf2_v5 (我方)
+            team_a_score = victory_num[my_pos] + victory_num[teammate_pos]
+            # Team B: 对手
+            team_b_score = victory_num[opponent1_pos] + victory_num[opponent2_pos]
             
             # 更新战绩
             if team_a_score > team_b_score:
                 scores["team_a_wins"] += 1
-                self.logger.info(f"Team A wins! ({team_a_score} vs {team_b_score})")
+                self.logger.info(f"YF Team wins! (pos {my_pos}+{teammate_pos}: {team_a_score} vs pos {opponent1_pos}+{opponent2_pos}: {team_b_score})")
             elif team_b_score > team_a_score:
                 scores["team_b_wins"] += 1
-                self.logger.info(f"Team B wins! ({team_b_score} vs {team_a_score})")
+                self.logger.info(f"Opponent Team wins! (pos {opponent1_pos}+{opponent2_pos}: {team_b_score} vs pos {my_pos}+{teammate_pos}: {team_a_score})")
             else:
                 # 平局，不增加胜场
                 self.logger.info(f"Draw! ({team_a_score} vs {team_b_score})")
@@ -449,7 +465,7 @@ class YF2_V5_Client:
         try:
             with open(score_file, 'w', encoding='utf-8') as f:
                 json.dump(scores, f, indent=2, ensure_ascii=False)
-            self.logger.info(f"Game scores saved: Team A {scores['team_a_wins']}/{scores['total_games']}, Team B {scores['team_b_wins']}/{scores['total_games']}")
+            self.logger.info(f"Game scores saved: YF Team {scores['team_a_wins']}/{scores['total_games']}, Opponent Team {scores['team_b_wins']}/{scores['total_games']}")
         except Exception as e:
             self.logger.error(f"Failed to save game scores: {e}")
     
