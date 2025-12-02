@@ -177,7 +177,7 @@ class YF1_V4_Client:
             self.hand_cards = hand_cards # Store for RL engine
             my_pos = data.get("myPos", self.player_id)
             
-            # 打印手牌信息（与lalala客户端格式一致）
+            # 打印手牌信息
             print(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
             self.logger.info(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
             
@@ -254,7 +254,7 @@ class YF1_V4_Client:
             greater_pos = data.get("greaterPos", -1)
             greater_action = data.get("greaterAction", [])
             
-            # 格式化出牌信息（与lalala客户端格式一致）
+            # 格式化出牌信息
             if cur_action and len(cur_action) > 0 and cur_action[0] != "PASS":
                 action_str = f"{cur_pos}号位打出{cur_action}"
                 greater_str = f"最大动作为{greater_pos}号位打出的{greater_action}" if greater_action else ""
