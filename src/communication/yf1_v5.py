@@ -24,6 +24,8 @@ from decision.bomb_strategy import bomb_strategy
 from decision.endgame_strategy import endgame_strategy
 from decision.main_decision import main_decision
 from decision.card_grouping_strategy import grouping_strategy
+from decision.bomb_selector import select_bomb_priority, should_use_bomb
+from communication.utils import combine_handcards, is_inStraight
 
 # Configure logging
 import os
@@ -87,9 +89,9 @@ class YF1_V5_Client:
         
         # V5特性：智能决策融合
         self.use_hybrid_decision = True  # 使用混合决策（RL + Knowledge + Rule-based）
-        self.rl_weight = 0.25  # RL决策权重（降低）
-        self.knowledge_weight = 0.4  # 知识库权重（降低）
-        self.rule_weight = 0.35  # 规则引擎权重（提高，优先策略建议）
+        self.rl_weight = 0.2  # RL决策权重（降低）
+        self.knowledge_weight = 0.3  # 知识库权重（降低）
+        self.rule_weight = 0.5  # 规则引擎权重（大幅提高，优先策略建议）
         
         self.hand_cards = [] # Track current hand
         
@@ -99,6 +101,10 @@ class YF1_V5_Client:
         self.rl_decision_count = 0
         self.knowledge_decision_count = 0
         self.strategy_decision_count = 0  # 新增策略决策计数
+        
+        # 维护连续PASS计数（用于special模式）
+        self.pass_num = 0  # 全局连续PASS次数
+        self.my_pass_num = 0  # 自己连续PASS次数
         
         # Initialize game recorder
         self.game_recorder = GameRecorder(player_id, "yf1_v5")
@@ -234,6 +240,22 @@ class YF1_V5_Client:
         # 判断是否为主动出牌
         is_active = (cur_pos == -1 or greater_pos == -1)
         
+        # 计算队友位置（0和2是队友，1和3是队友）
+        teammate_pos = (my_pos + 2) % 4
+        
+        # 获取连续PASS次数（从data中获取，如果没有则使用维护的值）
+        pass_num = data.get("pass_num", self.pass_num)
+        my_pass_num = data.get("my_pass_num", self.my_pass_num)
+        
+        # 获取对手剩余牌数列表（用于判断残局）
+        opponent_rest_cards_list = [27, 27, 27]
+        if public_info and isinstance(public_info, list):
+            for i, info in enumerate(public_info):
+                if isinstance(info, dict):
+                    rest = info.get("rest", 27)
+                    if i < len(opponent_rest_cards_list):
+                        opponent_rest_cards_list[i] = rest
+        
         return {
             "hand_cards": hand_cards,
             "game_phase": game_phase,
@@ -243,7 +265,12 @@ class YF1_V5_Client:
             "cur_pos": cur_pos,
             "greater_pos": greater_pos,
             "is_active": is_active,
-            "cur_rank": data.get("curRank", "2")
+            "cur_rank": data.get("curRank", "2"),
+            "my_pos": self.player_id,
+            "teammate_pos": teammate_pos,
+            "pass_num": pass_num,
+            "my_pass_num": my_pass_num,
+            "opponent_rest_cards_list": opponent_rest_cards_list
         }
     
     def _apply_strategy_suggestions(self, game_state: dict, action_list: list) -> list:
@@ -257,9 +284,43 @@ class YF1_V5_Client:
         hand_cards = game_state["hand_cards"]
         game_phase = game_state["game_phase"]
         opponent_rest_cards = game_state["opponent_rest_cards"]
+        pass_num = game_state.get("pass_num", 0)
+        my_pass_num = game_state.get("my_pass_num", 0)
+        cur_rank = game_state.get("cur_rank", "2")
         
         if not hand_cards:
             return candidates
+        
+        # 准备手牌组合信息（用于normal/special模式判断）
+        # 获取牌值映射
+        rank_map = {'3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, 'T':10, 'J':11, 'Q':12, 'K':13, 'A':14, '2':15, 'B':16, 'R':17}
+        card_val = rank_map.copy()
+        card_val[cur_rank] = 15
+        
+        # 组合手牌，获取天然单张、炸弹、顺子等信息
+        sorted_cards, bomb_info = combine_handcards(hand_cards, cur_rank, card_val)
+        single_member = sorted_cards.get("Single", [])
+        bomb_member = []
+        for bomb in sorted_cards.get("Bomb", []):
+            bomb_member.extend(bomb)
+        straight_member = []
+        if sorted_cards.get("Straight"):
+            straight_member.extend(sorted_cards["Straight"][0] if sorted_cards["Straight"] else [])
+        if sorted_cards.get("StraightFlush"):
+            straight_member.extend(sorted_cards["StraightFlush"][0] if sorted_cards["StraightFlush"] else [])
+        
+        # 获取当前牌型的最大值（用于残局判断）
+        greater_action = game_state.get("greater_action", [])
+        max_val = 0
+        if greater_action and len(greater_action) > 0:
+            greater_cards = greater_action[2] if len(greater_action) > 2 and isinstance(greater_action[2], list) else []
+            if greater_cards:
+                greater_rank = greater_cards[0][1] if len(greater_cards[0]) >= 2 else ""
+                max_val = card_val.get(greater_rank, 0)
+        
+        # 获取下家剩余牌数（用于残局判断）
+        opponent_rest_cards_list = game_state.get("opponent_rest_cards_list", [27, 27, 27])
+        numofnext = opponent_rest_cards_list[1] if len(opponent_rest_cards_list) > 1 else 27
         
         try:
             # 策略应用顺序（按优先级）：
@@ -274,7 +335,8 @@ class YF1_V5_Client:
                 hand_cards=hand_cards,
                 action_list=action_list,
                 game_phase=game_phase,
-                power=5.0  # 先用默认牌力，后续会更新
+                power=5.0,  # 先用默认牌力，后续会更新
+                cur_rank=game_state.get("cur_rank", "2")  # 传递级牌信息
             )
             
             # 2. 计算牌力（基于组牌后的手牌评估）
@@ -294,7 +356,7 @@ class YF1_V5_Client:
             has_king = any('B' in card or 'b' in card for card in hand_cards)  # 王
             has_level_card = any(game_state["cur_rank"] in card for card in hand_cards)  # 级牌
             # 检查是否有Q以上的对子
-            rank_map = {'3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, 'T':10, 'J':11, 'Q':12, 'K':13, 'A':14, '2':15, 'B':16}
+            rank_map = {'3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, 'T':10, 'J':11, 'Q':12, 'K':13, 'A':14, '2':15, 'B':16, 'R':17}
             rank_count = {}
             for card in hand_cards:
                 if len(card) >= 2:
@@ -303,6 +365,95 @@ class YF1_V5_Client:
                     rank_count[rank] = rank_count.get(rank, 0) + 1
             has_pair_above_q = any(count >= 2 and rank >= 12 for rank, count in rank_count.items())
             
+            # 统计单张数量
+            single_card_count = sum(1 for count in rank_count.values() if count == 1)
+            
+            # 统计炸弹数量（从power_result中获取）
+            bomb_count = (power_result['details'].get('bomb_super_high', 0) + 
+                         power_result['details'].get('bomb_mid', 0) + 
+                         power_result['details'].get('bomb_normal', 0))
+            
+            # 判断是否有顺子或三带二（从action_list中判断）
+            has_straight_or_three_with_two = any(
+                action[0] in ["Straight", "STRAIGHT", "THREE_WITH_TWO", "ThreeWithTwo"] 
+                for action in action_list if action and len(action) > 0
+            )
+            
+            # 判断是否上家出单（顺上家）
+            cur_pos = game_state.get("cur_pos", -1)
+            greater_pos = game_state.get("greater_pos", -1)
+            my_pos = game_state.get("my_pos", self.player_id)
+            is_upper_hand = False
+            if greater_pos != -1:
+                # 上家位置 = (my_pos - 1) % 4
+                upper_hand_pos = (my_pos - 1) % 4
+                if greater_pos == upper_hand_pos:
+                    greater_action = game_state.get("greater_action", [])
+                    if greater_action and len(greater_action) > 0:
+                        greater_type = greater_action[0] if isinstance(greater_action, list) else str(greater_action)
+                        if greater_type in ["Single", "SINGLE"]:
+                            is_upper_hand = True
+            
+            # 判断对手是否不接小单牌（简化：需要历史记录，这里暂时设为False）
+            opponent_not_accept_small_single = False  # TODO: 需要从历史记录中判断
+            
+            # 获取队友剩余牌数（简化：从game_state中获取，如果没有则用默认值）
+            teammate_rest_cards = game_state.get("teammate_rest_cards", 27)
+            
+            # 判断是否主动出牌
+            is_active = game_state.get("is_active", False)
+            
+            # 判断是否双贡（简化：根据游戏阶段判断）
+            is_double_tribute = (game_phase == "opening" and opponent_rest_cards >= 25)
+            
+            # 判断队友是否需要单牌（简化：需要从历史记录中判断）
+            teammate_needs_single = False  # TODO: 需要从历史记录中判断
+            
+            # 判断对手是否需要单牌（简化：需要从历史记录中判断）
+            opponent_needs_single = False  # TODO: 需要从历史记录中判断
+            
+            # 判断是否刚炸过（简化：需要从历史记录中判断）
+            just_bombed = False  # TODO: 需要从历史记录中判断
+            
+            # 判断是否有顺子（从action_list中判断）
+            has_straight = any(
+                action[0] in ["Straight", "STRAIGHT"] 
+                for action in action_list if action and len(action) > 0
+            )
+            
+            # 提取单张牌点列表（用于判断高单/中单/低单）
+            single_card_ranks = []
+            for card in hand_cards:
+                if len(card) >= 2:
+                    rank_str = card[1] if len(card) == 2 else card[1:2]
+                    if rank_count.get(rank_map.get(rank_str, 0), 0) == 1:  # 是单张
+                        single_card_ranks.append(rank_str)
+            
+            # 获取对手剩余牌数列表（简化：需要从game_state中获取）
+            opponent_rest_cards_list = game_state.get("opponent_rest_cards_list", [27, 27, 27])
+            
+            # 获取队友剩余牌数详情
+            teammate_rest_cards_detail = game_state.get("teammate_rest_cards", 27)
+            
+            # 判断对手是否有单张（简化：需要从历史记录中判断）
+            opponent_has_single = False  # TODO: 需要从历史记录中判断
+            
+            # 获取对手出顺子历史（简化：需要从历史记录中获取）
+            opponent_straight_history = game_state.get("opponent_straight_history", [])
+            
+            # 获取队友出顺子历史（简化：需要从历史记录中获取）
+            teammate_straight_history = game_state.get("teammate_straight_history", [])
+            
+            # 判断头游是否已跑（简化：需要从game_state中获取）
+            is_first_place_finished = game_state.get("is_first_place_finished", False)
+            
+            # 获取自己剩余牌数
+            my_rest_cards = len(hand_cards)
+            
+            # 判断是否报双/报单（简化：需要从game_state中获取）
+            is_reported_double = game_state.get("is_reported_double", False)
+            is_reported_single = game_state.get("is_reported_single", False)
+            
             single_sugg = single_card_strategy(
                 game_phase=game_phase,
                 power=power,
@@ -310,21 +461,125 @@ class YF1_V5_Client:
                 has_bomb=has_bomb,
                 has_king=has_king,
                 has_level_card=has_level_card,
-                has_pair_above_q=has_pair_above_q
+                has_pair_above_q=has_pair_above_q,
+                has_straight=has_straight,
+                is_double_tribute=is_double_tribute,
+                teammate_needs_single=teammate_needs_single,
+                opponent_needs_single=opponent_needs_single,
+                just_bombed=just_bombed,
+                single_card_count=single_card_count,
+                bomb_count=bomb_count,
+                has_straight_or_three_with_two=has_straight_or_three_with_two,
+                is_upper_hand=is_upper_hand,
+                opponent_not_accept_small_single=opponent_not_accept_small_single,
+                teammate_rest_cards=teammate_rest_cards,
+                is_active=is_active,
+                single_card_ranks=single_card_ranks,
+                opponent_rest_cards_list=opponent_rest_cards_list,
+                teammate_rest_cards_detail=teammate_rest_cards_detail,
+                opponent_has_single=opponent_has_single,
+                opponent_straight_history=opponent_straight_history,
+                teammate_straight_history=teammate_straight_history,
+                is_first_place_finished=is_first_place_finished,
+                my_rest_cards=my_rest_cards,
+                is_reported_double=is_reported_double,
+                is_reported_single=is_reported_single
             )
             
-            # 4. 炸弹策略（基于牌力评估结果）
+            # 4. 炸弹策略（基于牌力评估结果，应用完整知识体系）
+            # 提取对手动作信息
+            greater_action = game_state.get("greater_action", [])
+            opponent_action_type = 'none'
+            opponent_action_rank = 0
+            opponent_action_cards = []
+            if greater_action and len(greater_action) > 0:
+                opponent_action_type = greater_action[0] if isinstance(greater_action, list) else str(greater_action)
+                opponent_action_cards = greater_action[2] if len(greater_action) > 2 and isinstance(greater_action[2], list) else []
+                # 计算牌点（简化：根据牌型判断）
+                if opponent_action_type in ["Single", "SINGLE"]:
+                    if opponent_action_cards:
+                        rank_str = opponent_action_cards[0][1] if len(opponent_action_cards[0]) >= 2 else ""
+                        rank_map = {'3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, 'T':10, 'J':11, 'Q':12, 'K':13, 'A':14, '2':15, 'B':16, 'R':17}
+                        opponent_action_rank = rank_map.get(rank_str, 0)
+                elif opponent_action_type in ["Pair", "PAIR"]:
+                    if opponent_action_cards:
+                        rank_str = opponent_action_cards[0][1] if len(opponent_action_cards[0]) >= 2 else ""
+                        rank_map = {'3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, 'T':10, 'J':11, 'Q':12, 'K':13, 'A':14, '2':15, 'B':16, 'R':17}
+                        opponent_action_rank = rank_map.get(rank_str, 0)
+            
+            # 判断是否为最后一家
+            cur_pos = game_state.get("cur_pos", -1)
+            greater_pos = game_state.get("greater_pos", -1)
+            my_pos = game_state.get("my_pos", self.player_id)
+            is_last_player = (cur_pos == 3) or (greater_pos != -1 and (greater_pos + 1) % 4 == my_pos)
+            
+            # 判断能否改变牌型（简化：如果对手出的是我方没有的牌型）
+            can_change_card_type = opponent_action_type not in ["PASS", "none"] and opponent_action_type not in ["Single", "SINGLE", "Pair", "PAIR"]
+            
+            # 判断牌型是否明朗（简化：根据游戏阶段）
+            card_type_clear = game_phase != "opening"
+            
             bomb_sugg = bomb_strategy(
                 game_phase=game_phase,
                 power=power,
-                opponent_rest_cards=opponent_rest_cards
+                opponent_rest_cards=opponent_rest_cards,
+                opponent_action_type=opponent_action_type.lower() if opponent_action_type else 'none',
+                opponent_action_rank=opponent_action_rank,
+                opponent_action_cards=opponent_action_cards,
+                cur_pos=cur_pos,
+                greater_pos=greater_pos,
+                my_pos=my_pos,
+                teammate_pos=(my_pos + 2) % 4,  # 队友位置
+                can_change_card_type=can_change_card_type,
+                is_last_player=is_last_player,
+                has_clear_next_action=True,  # 简化：假设有明确出牌
+                card_type_clear=card_type_clear
             )
             
-            # 5. 残局策略（基于牌力评估结果）
+            # 5. 残局策略（基于牌力评估结果，集成单张技巧残局规则）
+            # 获取对手剩余牌数列表（简化：需要从game_state中获取）
+            opponent_rest_cards_list = game_state.get("opponent_rest_cards_list", [27, 27, 27])
+            
+            # 判断头游是否已跑（简化：需要从game_state中获取）
+            is_first_place_finished = game_state.get("is_first_place_finished", False)
+            
+            # 获取自己剩余牌数
+            my_rest_cards = len(hand_cards)
+            
+            # 判断是否报双/报单（简化：需要从game_state中获取）
+            is_reported_double = game_state.get("is_reported_double", False)
+            is_reported_single = game_state.get("is_reported_single", False)
+            
+            # 获取下家剩余牌数
+            lower_hand_rest_cards = opponent_rest_cards_list[1] if len(opponent_rest_cards_list) > 1 else 27
+            
+            # 获取级牌
+            cur_rank = game_state.get("cur_rank", "2")
+            rank_card = f"H{cur_rank}"
+            
+            # 准备 sorted_cards 和 bomb_info（需要从手牌组合中获取）
+            # 由于 calculate_card_power 不返回 sorted_cards，我们需要从 grouping_strategy 或重新计算
+            # 简化处理：使用空字典，bomb_selector 会处理这种情况
+            sorted_cards_dict = {}
+            bomb_info_dict = {}
+            # 尝试从 grouping_sugg 中获取（如果有的话）
+            # 如果没有，bomb_selector 会根据 action_list 和 hand_cards 进行判断
+            
             endgame_sugg = endgame_strategy(
                 opponent_rest_cards=opponent_rest_cards,
                 power=power,
-                has_bomb=has_bomb
+                has_bomb=has_bomb,
+                opponent_rest_cards_list=opponent_rest_cards_list,
+                is_reported_double=is_reported_double,
+                is_reported_single=is_reported_single,
+                is_first_place_finished=is_first_place_finished,
+                my_rest_cards=my_rest_cards,
+                lower_hand_rest_cards=lower_hand_rest_cards,
+                action_list=action_list,  # 传入动作列表，用于判断能否一手出完
+                hand_cards=hand_cards,  # 传入手牌，用于判断能否一手出完
+                sorted_cards=sorted_cards_dict,  # 传入已组合的手牌
+                bomb_info=bomb_info_dict,  # 传入炸弹信息
+                rank_card=rank_card  # 传入级牌
             )
             
             # 3. 根据策略建议调整动作评分
@@ -344,12 +599,51 @@ class YF1_V5_Client:
                 # 基础策略评分：所有动作都有基础评分
                 base_strategy_score = 20.0
                 
+                # 主动出牌时，优先选择优势牌型（顺子、三带二等）
+                is_active = game_state.get("is_active", False)
+                if is_active and action_type != "PASS":
+                    # 主动出牌时，大牌型（顺子、三带二等）大幅加分
+                    if action_type in ["Straight", "STRAIGHT", "THREE_WITH_TWO", "ThreeWithTwo"]:
+                        score_adjustment += 50.0
+                        strategy_reason = "主动出牌：优先大牌型"
+                    # 主动出牌时，对子、三张等中等牌型加分
+                    elif action_type in ["Pair", "PAIR", "Trips", "TRIPS"]:
+                        score_adjustment += 30.0
+                        strategy_reason = "主动出牌：中等牌型"
+                    # 主动出牌时，单张减分（除非是级牌、大王等）
+                    elif action_type in ["Single", "SINGLE"]:
+                        if action_cards:
+                            card_rank = action_cards[0][1] if len(action_cards[0]) >= 2 else ""
+                            if card_rank not in ['2', 'B', 'R']:  # 不是级牌、大王
+                                score_adjustment -= 20.0
+                                strategy_reason = "主动出牌：避免小单张"
+                
                 # 策略应用顺序（按优先级）：
+                # 0. 保护队友机制（最高优先级：当队友已经压制对手时，不应该再次压制）
                 # 1. 组牌策略（优先：减少轮次、减少单牌）
                 # 2. 牌力评估（用于后续策略判断）
                 # 3. 单牌策略
                 # 4. 炸弹策略
                 # 5. 残局策略
+                
+                # 0. 保护队友机制：当队友已经压制了对手的牌型时，不应该再次压制
+                teammate_pos = game_state.get("teammate_pos", -1)
+                greater_pos = game_state.get("greater_pos", -1)
+                greater_action = game_state.get("greater_action", [])
+                
+                # 如果队友已经压制了对手（greater_pos == teammate_pos），且当前动作也是压制动作
+                if greater_pos == teammate_pos and action_type != "PASS":
+                    # 检查是否与队友的牌型相同或相似
+                    if greater_action and len(greater_action) > 0:
+                        greater_type = greater_action[0] if isinstance(greater_action, list) else str(greater_action)
+                        # 如果当前动作与队友的牌型相同，大幅减分（不应该重复压制）
+                        if action_type == greater_type:
+                            score_adjustment -= 100.0  # 大幅减分，避免重复压制
+                            strategy_reason = f"保护队友：队友已用{greater_type}压制，不应重复压制"
+                        # 如果当前动作是更大的牌型（如炸弹压制顺子），也减分（队友已经压制，不需要再压制）
+                        elif action_type in ["Bomb", "BOMB", "StraightFlush"] and greater_type not in ["Bomb", "BOMB", "StraightFlush"]:
+                            score_adjustment -= 80.0  # 减分，避免浪费炸弹
+                            strategy_reason = f"保护队友：队友已用{greater_type}压制，不应再用炸弹压制"
                 
                 # 1. 组牌策略（优先应用：减少轮次、减少单牌）
                 for grouping_item in grouping_sugg.get("suggestions", []):
@@ -362,6 +656,85 @@ class YF1_V5_Client:
                 
                 # 2. 牌力评估（已计算，用于后续策略判断）
                 # power, has_bomb 已在上面计算
+                
+                # 通用规则：单张在开始阶段和中期，不要越过三级超打
+                # 规则：在opening和mid阶段，单张出牌时，不应该超过当前牌型三级以上
+                if action_type == "Single" or action_type == "SINGLE":
+                    if game_phase in ["opening", "mid"]:
+                        # 检查是否有当前牌型（greater_action）
+                        greater_action = game_state.get("greater_action", [])
+                        if greater_action and len(greater_action) > 0:
+                            greater_type = greater_action[0] if isinstance(greater_action, list) else str(greater_action)
+                            # 如果当前牌型也是单张，检查是否超过三级
+                            if greater_type in ["Single", "SINGLE"]:
+                                greater_cards = greater_action[2] if len(greater_action) > 2 and isinstance(greater_action[2], list) else []
+                                if greater_cards and action_cards:
+                                    # 获取当前牌型和动作牌型的点数
+                                    rank_map = {'3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, 'T':10, 'J':11, 'Q':12, 'K':13, 'A':14, '2':15, 'B':16, 'R':17}
+                                    greater_rank_str = greater_cards[0][1] if len(greater_cards[0]) >= 2 else ""
+                                    action_rank_str = action_cards[0][1] if len(action_cards[0]) >= 2 else ""
+                                    greater_rank = rank_map.get(greater_rank_str, 0)
+                                    action_rank = rank_map.get(action_rank_str, 0)
+                                    
+                                    # 如果超过三级（action_rank > greater_rank + 3），减分
+                                    if action_rank > greater_rank + 3:
+                                        score_adjustment -= 40.0  # 大幅减分，避免超打
+                                        strategy_reason = f"通用规则：单张在{game_phase}阶段，不应超过三级超打（当前{greater_rank_str}，出{action_rank_str}超过三级）"
+                
+                # 主动出牌策略（基于优先级和阈值）
+                # 优先级：对子 > 三张 > 三带二 > 顺子 > 三连对/钢板 > 单张
+                # cur = [9,10,9,8,10,10,2] 对应 [单张, 三连对1, 三连对2, 三带二, 顺子, 三带二2, 其他]
+                if is_active and action_type != "PASS":
+                    active_cur = [9, 10, 9, 8, 10, 10, 2]  # 固定阈值
+                    
+                    # 获取动作的牌值（用于判断是否小于阈值）
+                    action_rank_val_for_active = action_rank_val if 'action_rank_val' in locals() else 0
+                    if not action_rank_val_for_active and action_cards:
+                        action_card = action_cards[0]
+                        action_rank_str = action_card[1] if len(action_card) >= 2 else ""
+                        action_rank_val_for_active = card_val.get(action_rank_str, 0)
+                    
+                    # 1. 对子优先级最高（+80分）
+                    if action_type == "Pair" or action_type == "PAIR":
+                        score_adjustment += 80.0
+                        strategy_reason = "主动出牌策略：对子优先级最高"
+                    
+                    # 2. 三张优先级第二（+70分）
+                    elif action_type == "Trips" or action_type == "TRIPS":
+                        score_adjustment += 70.0
+                        strategy_reason = "主动出牌策略：三张优先级第二"
+                    
+                    # 3. 三带二优先级第三（+60分，但需要满足阈值条件）
+                    elif action_type == "ThreeWithTwo" or action_type == "THREE_WITH_TWO":
+                        if action_rank_val_for_active < active_cur[3]:  # cur[3] = 8
+                            score_adjustment += 60.0
+                            strategy_reason = "主动出牌策略：三带二优先级第三（满足阈值）"
+                        else:
+                            score_adjustment += 40.0  # 不满足阈值，降低优先级
+                            strategy_reason = "主动出牌策略：三带二（不满足阈值）"
+                    
+                    # 4. 顺子优先级第四（+50分，但需要满足阈值条件）
+                    elif action_type == "Straight" or action_type == "STRAIGHT":
+                        if action_rank_val_for_active < active_cur[4]:  # cur[4] = 10
+                            score_adjustment += 50.0
+                            strategy_reason = "主动出牌策略：顺子优先级第四（满足阈值）"
+                        else:
+                            score_adjustment += 30.0  # 不满足阈值，降低优先级
+                            strategy_reason = "主动出牌策略：顺子（不满足阈值）"
+                    
+                    # 5. 三连对/钢板优先级第五（+40分）
+                    elif action_type == "ThreePair" or action_type == "THREE_PAIR" or action_type == "TwoTrips" or action_type == "TWO_TRIPS":
+                        score_adjustment += 40.0
+                        strategy_reason = "主动出牌策略：三连对/钢板优先级第五"
+                    
+                    # 6. 单张优先级最低（+20分，但需要满足阈值条件）
+                    elif action_type == "Single" or action_type == "SINGLE":
+                        if action_rank_val_for_active < active_cur[0]:  # cur[0] = 9
+                            score_adjustment += 20.0
+                            strategy_reason = "主动出牌策略：单张优先级最低（满足阈值）"
+                        else:
+                            score_adjustment -= 30.0  # 不满足阈值，大幅减分
+                            strategy_reason = "主动出牌策略：单张（不满足阈值，避免出大单）"
                 
                 # 3. 单牌策略（基于牌力评估结果）
                 # 根据动作类型应用策略
@@ -392,6 +765,27 @@ class YF1_V5_Client:
                                 # 进贡大王后出单，加分
                                 score_adjustment += 30.0
                                 strategy_reason = "单牌策略：进贡后出单"
+                            elif "出高单" in single_action:
+                                # 高单出牌，对高单张（Q、K、A、2、B、R）加分
+                                if action_card_count == 1:
+                                    card_rank = action_cards[0][1] if len(action_cards[0]) >= 2 else ""
+                                    if card_rank in ['Q', 'K', 'A', '2', 'B', 'R']:
+                                        score_adjustment += 45.0
+                                        strategy_reason = "单牌策略：出高单（挡住下家中低单）"
+                            elif "出中单" in single_action:
+                                # 中单出牌，对中单张（J、T、9）加分
+                                if action_card_count == 1:
+                                    card_rank = action_cards[0][1] if len(action_cards[0]) >= 2 else ""
+                                    if card_rank in ['J', 'T', '9']:
+                                        score_adjustment += 35.0
+                                        strategy_reason = "单牌策略：出中单（水闸试探）"
+                            elif "出低单" in single_action:
+                                # 低单出牌，对小单张（3-8）加分
+                                if action_card_count == 1:
+                                    card_rank = action_cards[0][1] if len(action_cards[0]) >= 2 else ""
+                                    if card_rank in ['3', '4', '5', '6', '7', '8']:
+                                        score_adjustment += 30.0
+                                        strategy_reason = "单牌策略：出低单（传牌给对家）"
                             elif "控下家单" in single_action or "卡小" in single_reason:
                                 # 控下家单，对小单张加分
                                 if action_card_count == 1:
@@ -411,11 +805,29 @@ class YF1_V5_Client:
                                 # 顺子出中间单，加分
                                 score_adjustment += 25.0
                                 strategy_reason = "单牌策略：顺子出中间"
+                            elif "卡点出单" in single_action or "发级牌" in single_reason:
+                                # 卡点出单，对级牌加分
+                                if action_card_count == 1:
+                                    card_rank = action_cards[0][1] if len(action_cards[0]) >= 2 else ""
+                                    if card_rank == game_state.get("cur_rank", "2"):
+                                        score_adjustment += 50.0
+                                        strategy_reason = "单牌策略：卡点出单（发级牌）"
+                            elif "报双诱拆" in single_reason:
+                                # 报双打单诱拆，加分
+                                score_adjustment += 40.0
+                                strategy_reason = "单牌策略：报双打单诱拆"
+                            elif "倒着打" in single_action:
+                                # 出单倒着打，对高单张加分
+                                if action_card_count == 1:
+                                    card_rank = action_cards[0][1] if len(action_cards[0]) >= 2 else ""
+                                    if card_rank in ['Q', 'K', 'A', '2', 'B', 'R']:
+                                        score_adjustment += 35.0
+                                        strategy_reason = "单牌策略：出单倒着打（从大往小）"
                             else:
                                 # 一般出单建议
                                 score_adjustment += 30.0
                                 strategy_reason = "单牌策略：出单"
-                        elif "不出小单" in single_action or "不出单" in single_action:
+                        elif "不出小单" in single_action or "不出单" in single_action or "不打单" in single_action:
                             # 不建议出单，对单张动作减分
                             score_adjustment -= 25.0
                             strategy_reason = "单牌策略：不出单"
@@ -426,6 +838,10 @@ class YF1_V5_Client:
                                 if card_rank in ['3', '4', '5', '6', '7', '8', '9']:
                                     score_adjustment -= 30.0
                                     strategy_reason = "单牌策略：不出小单"
+                        elif "报单打非单" in single_reason:
+                            # 报单不打单，对单张动作减分
+                            score_adjustment -= 30.0
+                            strategy_reason = "单牌策略：报单不打单"
                     
                     # 2. 出对相关建议
                     elif action_type == "Pair" or action_type == "PAIR":
@@ -463,6 +879,41 @@ class YF1_V5_Client:
                             score_adjustment += 25.0
                             strategy_reason = "单牌策略：顺子出中间"
                 
+                # 4. 炸弹策略（基于牌力评估结果）- 关键策略，防止浪费炸弹
+                # 同花顺（StraightFlush）也是炸弹的一种，应该遵守炸弹使用规则
+                if action_type == "BOMB" or "BOMB" in str(action_type).upper() or action_type == "Bomb" or action_type == "StraightFlush":
+                    # 检查炸弹策略建议
+                    bomb_suggestions = bomb_sugg.get("suggestions", [])
+                    should_not_bomb = False
+                    for sugg in bomb_suggestions:
+                        if "炸" in sugg.get("action", "") and "不炸" not in sugg.get("action", ""):
+                            score_adjustment += 40.0
+                            strategy_reason = sugg.get("reason", "")
+                            break
+                        elif "不炸" in sugg.get("action", ""):
+                            should_not_bomb = True
+                            strategy_reason = sugg.get("reason", "")
+                    
+                    # 如果没有明确的"应该炸"建议，检查是否不应该炸
+                    if not should_not_bomb:
+                        # 检查当前牌型：单张、对子、三张等小牌型不值得炸
+                        greater_action = game_state.get("greater_action", [])
+                        if greater_action and len(greater_action) > 0:
+                            greater_type = greater_action[0] if isinstance(greater_action, list) else str(greater_action)
+                            greater_cards = greater_action[2] if len(greater_action) > 2 and isinstance(greater_action[2], list) else []
+                            greater_card_count = len(greater_cards)
+                            
+                            # 单张、对子、三张不值得炸（除非残局）
+                            if greater_type in ["Single", "SINGLE", "Pair", "PAIR", "Trips", "TRIPS"]:
+                                if opponent_rest_cards > 10:  # 非残局
+                                    should_not_bomb = True
+                                    strategy_reason = f"炸弹策略：{greater_type}不值得炸（非残局）"
+                    
+                    # 如果不应该炸，大幅减分（直接抵消基础分）
+                    if should_not_bomb:
+                        score_adjustment -= 200.0  # 大幅减分，确保不会被选中
+                        strategy_reason = f"炸弹策略：{strategy_reason}"
+                
                 # 根据牌力调整（增强）
                 if power >= 8:
                     # 强牌，非PASS动作大幅加分
@@ -473,10 +924,66 @@ class YF1_V5_Client:
                     if action_type == "PASS" or action_card_count <= 2:
                         score_adjustment += 20.0
                 
-                # 残局阶段额外加分
-                if game_phase == "endgame":
-                    if action_type != "PASS":
-                        score_adjustment += 15.0
+                # 5. 残局策略（最后应用：根据残局情况，集成单张技巧残局规则）
+                endgame_action = endgame_sugg.get("action", "")
+                endgame_reason = endgame_sugg.get("reason", "")
+                
+                # 5.0 优先判断：能否一手出完（one_hand函数逻辑）
+                if "一手出完" in endgame_action and "one_hand_index" in endgame_sugg:
+                    one_hand_index = endgame_sugg.get("one_hand_index", -1)
+                    if one_hand_index == idx:
+                        # 当前动作可以一手出完，大幅加分
+                        score_adjustment += 100.0  # 大幅加分，优先选择
+                        strategy_reason = f"残局策略：{endgame_reason}"
+                    elif one_hand_index != -1:
+                        # 有其他动作可以一手出完，当前动作减分
+                        score_adjustment -= 50.0
+                        strategy_reason = f"残局策略：有其他动作可以一手出完，当前动作不是最优"
+                
+                if game_phase == "endgame" or opponent_rest_cards <= 10:
+                    # 1. 残局忌给下家顺牌：下家剩一张，不出小单
+                    if "忌给下家顺牌" in endgame_reason or "不出小单" in endgame_action:
+                        if action_type == "Single" or action_type == "SINGLE":
+                            if action_card_count == 1:
+                                card_rank = action_cards[0][1] if len(action_cards[0]) >= 2 else ""
+                                if card_rank in ['3', '4', '5', '6', '7', '8', '9', 'T', 'J']:
+                                    score_adjustment -= 50.0
+                                    strategy_reason = "残局策略：忌给下家顺牌，不出小单"
+                    
+                    # 2. 报双.须打单诱其拆
+                    elif "报双诱拆" in endgame_reason or "打单" in endgame_action:
+                        if action_type == "Single" or action_type == "SINGLE":
+                            score_adjustment += 40.0
+                            strategy_reason = "残局策略：报双打单诱拆"
+                    
+                    # 3. 报单.只能打非单牌型
+                    elif "报单打非单" in endgame_reason or "不打单" in endgame_action:
+                        if action_type == "Single" or action_type == "SINGLE":
+                            score_adjustment -= 30.0
+                            strategy_reason = "残局策略：报单不打单"
+                        elif action_type != "PASS":
+                            # 非单牌型加分
+                            score_adjustment += 35.0
+                            strategy_reason = "残局策略：报单打非单牌型"
+                    
+                    # 4. 出单倒着打：从大往小打
+                    elif "倒着打" in endgame_action or "从大往小" in endgame_reason:
+                        if action_type == "Single" or action_type == "SINGLE":
+                            if action_card_count == 1:
+                                card_rank = action_cards[0][1] if len(action_cards[0]) >= 2 else ""
+                                # 高单张加分，小单张减分
+                                if card_rank in ['Q', 'K', 'A', '2', 'B', 'R']:
+                                    score_adjustment += 35.0
+                                    strategy_reason = "残局策略：出单倒着打（从大往小）"
+                                elif card_rank in ['3', '4', '5', '6', '7', '8', '9']:
+                                    score_adjustment -= 30.0
+                                    strategy_reason = "残局策略：倒着打，不先打最小的"
+                    
+                    # 原有残局逻辑
+                    else:
+                        if action_type != "PASS":
+                            score_adjustment += 15.0
+                            strategy_reason = "残局策略：残局阶段出牌"
                 
                 # 1. 组牌策略（优先应用：减少轮次、减少单牌）
                 for grouping_item in grouping_sugg.get("suggestions", []):
@@ -488,8 +995,13 @@ class YF1_V5_Client:
                         break
                 
                 # 为所有动作生成策略评分（即使没有特殊调整）
-                # 提高基础评分，让策略建议更有竞争力
-                base_score = 100.0 * self.rule_weight  # 提高基础规则评分到100
+                # 大幅提高基础评分，让策略建议更有竞争力（不乘以权重，直接使用高分）
+                base_score = 150.0  # 提高基础规则评分到150（不乘以权重）
+                
+                # 主动出牌时，进一步提高基础评分，确保主动出牌优先
+                if is_active and action_type != "PASS":
+                    base_score += 30.0  # 主动出牌额外加分
+                
                 final_score = base_score + score_adjustment + base_strategy_score
                 # 确保评分不为负数，至少保持基础评分
                 if final_score < 0:
@@ -498,8 +1010,8 @@ class YF1_V5_Client:
                 candidates.append((idx, final_score, f"Strategy-{strategy_reason[:20]}"))
                 self.strategy_decision_count += 1
                 
-                # 只在有重要调整时记录详细日志
-                if abs(score_adjustment) > 10.0:
+                # 记录所有策略建议（改为info级别，便于调试）
+                if abs(score_adjustment) > 5.0 or "组牌策略" in strategy_reason:
                     self.logger.info(
                         f"Strategy suggestion: action={idx}, type={action_type}, "
                         f"score={final_score:.1f}, adjustment={score_adjustment:.1f}, reason={strategy_reason}"
@@ -577,10 +1089,14 @@ class YF1_V5_Client:
         candidates.sort(key=lambda x: x[1], reverse=True)
         best_action, best_score, best_source = candidates[0]
         
-        self.logger.debug(
+        # 记录前3个候选，便于调试
+        top_candidates = candidates[:3] if len(candidates) >= 3 else candidates
+        self.logger.info(
             f"Hybrid decision: action={best_action}, score={best_score:.1f}, "
-            f"source={best_source}, candidates={len(candidates)}"
+            f"source={best_source}, total_candidates={len(candidates)}"
         )
+        if len(top_candidates) > 1:
+            self.logger.info(f"Top candidates: {[(idx, f'{score:.1f}', src) for idx, score, src in top_candidates]}")
         
         return best_action
     
@@ -611,7 +1127,7 @@ class YF1_V5_Client:
                 self.decision_engine = HybridDecisionEngineV4(my_pos, config)
                 self.logger.info(f"Decision engine reinitialized for position {my_pos}")
             
-            # 打印手牌信息（与lalala客户端格式一致）
+            # 打印手牌信息
             print(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
             self.logger.info(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
             

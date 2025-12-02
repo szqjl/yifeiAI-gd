@@ -228,7 +228,7 @@ class BatchExecutorGUI:
                 self.server_path_var.set(os.path.abspath(path))
                 break
         
-        # 默认客户端脚本（您的AI vs lalala一等奖AI）
+        # 默认客户端脚本（您的AI vs 对手AI）
         # 座位分配：0号和2号是队友（一队），1号和3号是队友（一队）
         
         # 选项1：使用原始AI（知识库版本，较弱）
@@ -242,25 +242,24 @@ class BatchExecutorGUI:
         # 选项2：使用N版本（第一次优化版）
         # default_clients = [
         #     "src/communication/Test_N1.py",                  # 0号位 - N1（第一次优化）
-        #     "src/communication/run_lalala_client3.py",       # 1号位 - lalala对手1
+        #     "src/communication/run_lalala_client3.py",       # 1号位 - 对手1
         #     "src/communication/Test_N2.py",                  # 2号位 - N2（第一次优化）
-        #     "src/communication/run_lalala_client4.py"        # 3号位 - lalala对手2
+        #     "src/communication/run_lalala_client4.py"        # 3号位 - 对手2
         # ]
         # 队伍分组：
         # 队伍A（您的队）：0号(Test_N1) + 2号(Test_N2)
-        # 队伍B（lalala队）：1号(client3) + 3号(client4)
-        # 注：N版本基于lalala一等奖代码学习和参考
+        # 队伍B（对手队）：1号(client3) + 3号(client4)
         
         # 选项3：使用V5智能混合决策系统（最新版本，RL+知识库+规则引擎）⭐ 推荐
         default_clients = [
             "src/communication/yf1_v5.py",                   # 0号位 - YiFei V5
-            "src/communication/run_lalala_client3.py",       # 1号位 - lalala对手1
+            "src/communication/run_lalala_client3.py",       # 1号位 - 对手1
             "src/communication/yf2_v5.py",                   # 2号位 - YiFei V5
-            "src/communication/run_lalala_client4.py"        # 3号位 - lalala对手2
+            "src/communication/run_lalala_client4.py"        # 3号位 - 对手2
         ]
         # 队伍分组：
         # 队伍A（YiFei V5队）：0号(yf1_v5) + 2号(yf2_v5)
-        # 队伍B（lalala队）：1号(client3) + 3号(client4)
+        # 队伍B（对手队）：1号(client3) + 3号(client4)
         # 注：V5版本使用智能混合决策系统，具有RL决策引擎集成、知识库增强、规则引擎和智能决策融合
         #     RL决策 + 知识库增强决策 + 规则引擎决策 → 智能融合
         
@@ -343,7 +342,7 @@ class BatchExecutorGUI:
   胜场: {team_a_wins}
   胜率: {team_a_rate:.2f}%
 
-队伍B (lalala):
+队伍B (对手):
   胜场: {team_b_wins}
   胜率: {team_b_rate:.2f}%
 

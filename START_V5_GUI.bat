@@ -21,7 +21,7 @@ echo 正在启动GUI...
 echo ========================================
 echo.
 
-python batch_executor_gui.py
+py batch_executor_gui.py
 
 pause
 
