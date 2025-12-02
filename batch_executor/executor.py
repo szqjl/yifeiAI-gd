@@ -154,7 +154,8 @@ class BatchExecutor:
         diagnose_only: bool = False,
         state_file: str = "execution_state.json",
         score_file: str = "game_scores.json",
-        enable_signal_handler: bool = True
+        enable_signal_handler: bool = True,
+        visible_server: bool = False
     ):
         """
         初始化批量执行器
@@ -167,6 +168,7 @@ class BatchExecutor:
             state_file: 执行状态保存文件
             score_file: 战绩保存文件
             enable_signal_handler: 是否启用信号处理器（GUI模式下应设为False）
+            visible_server: 是否在Windows上显示服务器控制台窗口
         """
         self.target_games = target_games
         self.server_path = server_path
@@ -177,6 +179,7 @@ class BatchExecutor:
         self.logger = logging.getLogger("batch_executor")
         self._running = False
         self._current_state = None
+        self.visible_server = visible_server
         
         # 保存项目根目录（用于路径解析）
         self.project_root = Path(__file__).parent.parent
@@ -402,12 +405,28 @@ class BatchExecutor:
                 # 启动服务器
                 server_process = self.restart_manager.restart_server(
                     self.server_path,
-                    batch_games
+                    batch_games,
+                    visible_server=self.visible_server
                 )
                 
                 if server_process is None:
                     self.logger.error("服务器启动失败，停止执行")
                     break
+                
+                # restart_manager.restart_server() 已经等待服务器就绪
+                # 检测到 "ready for connect" 后会立即返回
+                # 这里只需要额外等待2秒确保端口完全监听
+                self.logger.info("服务器已就绪，等待2秒确保端口完全监听...")
+                import time
+                time.sleep(2)
+                
+                # 验证服务器进程仍在运行
+                if server_process.poll() is not None:
+                    self.logger.error(f"服务器进程已退出，返回码: {server_process.returncode}")
+                    self.logger.error("请检查服务器窗口或日志，查看启动失败原因")
+                    break
+                
+                self.logger.info("✓ 服务器端口就绪，开始启动客户端...")
                 
                 # 启动客户端
                 client_processes = self.restart_manager.restart_clients(
