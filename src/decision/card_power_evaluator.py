@@ -170,7 +170,7 @@ def calculate_card_power(hand_cards: List[str], game_phase: str = 'opening', my_
         has_straight = straight_count > 0 or straight_flush_count > 0
         has_three_with_two = any(sum(counts.values()) >= 3 for counts in rank_suit_count.values()) and has_pair
         has_single = any(sum(counts.values()) == 1 for counts in rank_suit_count.values())
-        has_bomb = len(bomb_combinations) > 0
+        has_bomb = (combinations['bomb_super_high'] + combinations['bomb_mid'] + combinations['bomb_normal']) > 0
 
         if opponent_rest_cards == 5 and has_pair:
             endgame_bonus += 1

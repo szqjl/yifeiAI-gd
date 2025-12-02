@@ -216,6 +216,8 @@ class BatchExecutorGUI:
         """加载默认配置"""
         # 尝试找到服务器可执行文件
         possible_paths = [
+            "../GDAI/离线平台/windows/guandan_offline_v1006.exe",  # 优先：标准位置
+            "D:/GDAI/离线平台/windows/guandan_offline_v1006.exe",   # 绝对路径
             "guandan_offline_v1006.exe",
             "../guandan_offline_v1006.exe",
             "server/guandan_offline_v1006.exe"

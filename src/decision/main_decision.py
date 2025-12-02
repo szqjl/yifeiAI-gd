@@ -1,10 +1,8 @@
-import sys
-sys.path.append('D:\\guandanscore\\YiFeiAI-GD\\src\\decision')
 from typing import Dict, List
-from card_power_evaluator import calculate_card_power
-from single_card_strategy import single_card_strategy
-from bomb_strategy import bomb_strategy
-from endgame_strategy import endgame_strategy
+from .card_power_evaluator import calculate_card_power
+from .single_card_strategy import single_card_strategy
+from .bomb_strategy import bomb_strategy
+from .endgame_strategy import endgame_strategy
 
 def main_decision(
     hand_cards: List[str],
