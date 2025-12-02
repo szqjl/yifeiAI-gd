@@ -41,6 +41,7 @@ class RestartManager:
         self,
         server_path: str,
         game_count: int,
+        visible_server: bool = False,  # Add this parameter
         max_retries: int = 3,
         wait_time: int = 15
     ) -> Optional[subprocess.Popen]:
@@ -79,52 +80,115 @@ class RestartManager:
                 
                 # 启动服务器进程
                 # 捕获输出以便读取战绩，但不阻塞
+                creationflags = 0
+                if hasattr(subprocess, 'CREATE_NO_WINDOW'):
+                    creationflags = subprocess.CREATE_NO_WINDOW
+
+                if visible_server and sys.platform == 'win32':
+                    if hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
+                        creationflags = subprocess.CREATE_NEW_CONSOLE
+                    else:
+                        # Fallback for older Python versions
+                        creationflags = 0  # Let it create default window
+
                 process = subprocess.Popen(
                     command,
                     cwd=server_dir,  # 设置工作目录
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
-                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+                    creationflags=creationflags,  # 设置创建标志
                     text=True,
                     bufsize=1  # 行缓冲
                 )
                 
                 logger.info(f"服务器进程已启动，PID: {process.pid}")
                 
-                # 等待服务器就绪
-                logger.info(f"等待服务器就绪 ({wait_time}秒)...")
-                
-                # 分阶段等待，每2秒检查一次进程状态
+                # Enhanced waiting loop with real-time stdout reading
                 check_interval = 2
                 elapsed = 0
                 server_output_lines = []
-                
+
+                logger.info(f"服务器窗口已启动，PID: {process.pid}")
+                logger.info("等待服务器输出 'ready for connect' 或类似就绪消息...")
+
                 while elapsed < wait_time:
                     time.sleep(min(check_interval, wait_time - elapsed))
                     elapsed += check_interval
                     
-                    # 检查进程状态
+                    # Try to read available stdout lines (may be limited in CREATE_NEW_CONSOLE mode)
+                    try:
+                        if process.stdout:
+                            while True:
+                                line = process.stdout.readline()
+                                if not line:
+                                    break
+                                line = line.strip()
+                                if line:
+                                    server_output_lines.append(line)
+                                    logger.info(f"[服务器] {line}")
+                                    # Check for readiness message
+                                    if any(keyword in line.lower() for keyword in ["ready for connect", "server started", "listening", "waiting for players", "ready"]):
+                                        logger.info("✓ 检测到服务器就绪消息!")
+                                        # We can break early if ready message found
+                                        elapsed = wait_time  # Force exit loop
+                                        break
+                    except Exception as read_error:
+                        # In CREATE_NEW_CONSOLE mode, stdout might not be available
+                        logger.debug(f"读取服务器输出时出错 (正常在可见窗口模式): {read_error}")
+                    
+                    # Check process status
                     return_code = process.poll()
                     if return_code is not None:
-                        # 进程已退出，尝试读取输出
                         logger.warning(f"服务器进程在 {elapsed} 秒后退出，返回码: {return_code}")
+                        # Read any remaining output
                         try:
                             if process.stdout:
-                                # 读取剩余输出
                                 remaining = process.stdout.read()
                                 if remaining:
-                                    server_output_lines = remaining.splitlines()
+                                    remaining_lines = [line.strip() for line in remaining.splitlines() if line.strip()]
+                                    server_output_lines.extend(remaining_lines)
+                                    for line in remaining_lines[-5:]:
+                                        logger.info(f"[服务器最终输出] {line}")
                         except:
                             pass
                         break
-                
-                # 输出服务器日志（如果有）
+
+                # If using visible window, check port instead of stdout
+                if visible_server and sys.platform == 'win32':
+                    logger.info("服务端窗口已可见，检查端口是否监听...")
+                    # Try to detect if port 23456 is listening
+                    import socket
+                    port_ready = False
+                    for _ in range(5):  # Try 5 times
+                        try:
+                            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            sock.settimeout(1)
+                            result = sock.connect_ex(('127.0.0.1', 23456))
+                            sock.close()
+                            if result == 0:
+                                logger.info("✓ 检测到服务器端口23456已监听!")
+                                port_ready = True
+                                break
+                        except:
+                            pass
+                        time.sleep(1)
+                    
+                    if not port_ready:
+                        logger.warning("未能检测到端口监听，但继续执行（服务器可能需要更多时间）")
+                    logger.info("如果连接失败，请检查服务器窗口输出")
+
+                # Log captured output summary
                 if server_output_lines:
-                    logger.info("服务器输出（最后10行）:")
-                    for line in server_output_lines[-10:]:
+                    logger.info(f"捕获到服务器输出 {len(server_output_lines)} 行 (最后5行):")
+                    for line in server_output_lines[-5:]:
                         logger.info(f"  {line}")
-                
-                # 最终检查进程是否仍在运行
+                else:
+                    if visible_server:
+                        logger.info("无捕获输出 (正常，可见窗口模式)，请查看弹出的服务端窗口")
+                    else:
+                        logger.warning("无服务器输出，服务器可能未正常启动")
+
+                # Final check
                 if process.poll() is None:
                     logger.info("✓ 服务器启动成功，进程正在运行")
                     self.server_process = process
@@ -133,11 +197,11 @@ class RestartManager:
                     return_code = process.returncode
                     logger.error(f"✗ 服务器进程已终止，返回码: {return_code}")
                     if server_output_lines:
-                        logger.error("服务器错误输出:")
-                        for line in server_output_lines[-5:]:
+                        logger.error("服务器错误输出 (最后10行):")
+                        for line in server_output_lines[-10:]:
                             logger.error(f"  {line}")
                     else:
-                        logger.error("提示: 服务器可能启动失败，请检查服务器路径和参数是否正确")
+                        logger.error("提示: 服务器可能启动失败，请检查服务器路径、参数和权限")
                     
             except FileNotFoundError:
                 logger.error(f"服务器可执行文件不存在: {server_path}")
@@ -159,7 +223,7 @@ class RestartManager:
     def restart_clients(
         self,
         client_scripts: List[str],
-        wait_between: int = 3
+        wait_between: int = 3  # 3 seconds between clients to ensure connection order
     ) -> List[subprocess.Popen]:
         """
         重启所有客户端
@@ -267,10 +331,16 @@ class RestartManager:
                 logger.info(f"客户端 {i + 1} 已启动，PID: {process.pid}")
                 processes.append(process)
                 
-                # 等待后再启动下一个客户端
+                # 等待后再启动下一个客户端 (确保顺序连接)
                 if i < len(client_scripts) - 1:
-                    logger.info(f"等待{wait_between}秒后启动下一个客户端...")
+                    logger.info(f"等待 {wait_between} 秒后启动下一个客户端（确保连接顺序）...")
                     time.sleep(wait_between)
+                    
+                    # 验证当前客户端进程仍在运行
+                    if process.poll() is None:
+                        logger.info(f"✓ 客户端 {i + 1} 进程运行正常")
+                    else:
+                        logger.warning(f"⚠ 客户端 {i + 1} 进程已退出，返回码: {process.returncode}")
                     
             except FileNotFoundError:
                 logger.error(f"客户端脚本不存在: {script_path}")
