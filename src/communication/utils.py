@@ -202,6 +202,13 @@ def combine_handcards(handcards, rank, card_val):
                 nowhandcards.append(handcards[i])
 
     else:
+        # 识别并特殊处理红桃配（H2）
+        wild_card = None
+        for card in handcards:
+            if card == 'H2':  # 红桃2是百搭牌
+                wild_card = card
+                break
+        
         # 避免拆三张牌为对子：统计每张牌的数量
         card_count = {}
         for card in handcards:
@@ -210,9 +217,15 @@ def combine_handcards(handcards, rank, card_val):
                 card_count[rank] = 0
             card_count[rank] += 1
         
-        # 优先使用单张和对子组成顺子，避免拆三张牌
+        # 优先使用单张和对子组成顺子，避免拆三张牌和使用红桃配
         for i in range(0, len(handcards)):
             card = handcards[i]
+            
+            # 优先保留红桃配，不用于组普通顺子
+            if card == wild_card:
+                nowhandcards.append(card)
+                continue
+                
             rank = card[-1]
             if rank in Straight:
                 # 如果这张牌有三张，且不是最后一张需要的牌，跳过
@@ -231,6 +244,48 @@ def combine_handcards(handcards, rank, card_val):
                 Straight.remove(rank)
             else:
                 nowhandcards.append(card)
+        
+        # 如果没有成功组成顺子，且有红桃配，尝试使用红桃配补顺子
+        if len(tmp) < 5 and wild_card:
+            # 重新收集可以组成顺子的牌，包括红桃配
+            Straight = []
+            if len(st) > 0:
+                for i in range(st[0], st[0] + 5):
+                    if 1 < i < 10:
+                        Straight.append(str(i))
+                    if i % 13 == 1:
+                        Straight.append('A')
+                    if i == 10:
+                        Straight.append('T')
+                    if i == 11:
+                        Straight.append('J')
+                    if i == 12:
+                        Straight.append('Q')
+                    if i == 13:
+                        Straight.append('K')
+            
+            # 重置临时列表
+            tmp = []
+            nowhandcards = []
+            wild_used = False
+            
+            for i in range(0, len(handcards)):
+                card = handcards[i]
+                rank = card[-1]
+                
+                if not wild_used and card == wild_card:
+                    # 只有在缺少一张牌时才使用红桃配
+                    if len(Straight) > 0:
+                        tmp.append(card)
+                        wild_used = True
+                        Straight.pop(0)  # 使用红桃配补第一张缺少的牌
+                    else:
+                        nowhandcards.append(card)
+                elif rank in Straight:
+                    tmp.append(card)
+                    Straight.remove(rank)
+                else:
+                    nowhandcards.append(card)
 
     newcards = {}
     newcards["Single"] = []
