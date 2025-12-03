@@ -9,12 +9,12 @@ import json
 import sys
 import logging
 from pathlib import Path
+import time  # Add at top if not present
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent)) # Add project root
-
-from decision.hybrid_decision_engine_v4 import HybridDecisionEngineV4
+from decision.hybrid_decision_engine_v5 import HybridDecisionEngineV5
 from decision.rl_decision_engine import RLDecisionEngine
 from communication.game_recorder import GameRecorder
 from communication.websocket_manager import WebSocketManager
@@ -49,6 +49,9 @@ logging.basicConfig(
     ]
 )
 
+# Add after imports:
+DELAY_BEFORE_CONNECT = 9  # seconds, longer than yf1 to ensure position order
+
 
 class YF2_V5_Client:
     """
@@ -68,14 +71,13 @@ class YF2_V5_Client:
         self.ws_manager = WebSocketManager(self.user_info, use_local=use_local_websocket)
         self.websocket = None  # 保持向后兼容
         
-        # Initialize HybridDecisionEngineV4 (基础决策引擎)
+        # Initialize HybridDecisionEngineV5 (基础决策引擎)
         config = {
-            "enable_lalala": True,
             "enable_fallback": True,
             "log_level": "INFO",
             "performance_threshold": 1.0
         }
-        self.decision_engine = HybridDecisionEngineV4(player_id, config)
+        self.decision_engine = HybridDecisionEngineV5(player_id, config)
         
         # Initialize RL Engine (V5增强：更智能的RL集成)
         try:
@@ -118,6 +120,9 @@ class YF2_V5_Client:
         """Connect to game server using configured WebSocket manager"""
         try:
             # 使用 WebSocket 管理器连接
+            self.logger.info(f"[yf2_v5] 等待连接延迟 {DELAY_BEFORE_CONNECT} 秒，确保第三个位置...")
+            time.sleep(DELAY_BEFORE_CONNECT)
+            self.logger.info(f"[yf2_v5] 开始连接 ws://127.0.0.1:23456/game/yf2_v5")
             connected = await self.ws_manager.connect()
             if not connected:
                 self.logger.error("Failed to connect to server")
@@ -165,7 +170,7 @@ class YF2_V5_Client:
             if self.use_hybrid_decision:
                 act_index = self._hybrid_decision(data, action_list)
             else:
-                # 回退到V4决策
+                # 回退到默认决策
                 act_index = self.decision_engine.decide(data)
             
             # Get decision details for recording
@@ -175,7 +180,7 @@ class YF2_V5_Client:
                 "greaterPos": data.get("greaterPos", -1),
                 "actionList_size": len(action_list),
                 "version": "v5",
-                "decision_type": "hybrid" if self.use_hybrid_decision else "v4_fallback"
+                "decision_type": "hybrid" if self.use_hybrid_decision else "default_fallback"
             }
             
             # Record decision
@@ -602,6 +607,9 @@ class YF2_V5_Client:
                 # 主动出牌时，优先选择优势牌型（顺子、三带二等）
                 is_active = game_state.get("is_active", False)
                 if is_active and action_type != "PASS":
+                    # 检查是否有王或级牌（用于单张策略优先级调整）
+                    has_king_or_level = has_king or has_level_card
+                    
                     # 主动出牌时，大牌型（顺子、三带二等）大幅加分
                     if action_type in ["Straight", "STRAIGHT", "THREE_WITH_TWO", "ThreeWithTwo"]:
                         score_adjustment += 50.0
@@ -610,11 +618,24 @@ class YF2_V5_Client:
                     elif action_type in ["Pair", "PAIR", "Trips", "TRIPS"]:
                         score_adjustment += 30.0
                         strategy_reason = "主动出牌：中等牌型"
-                    # 主动出牌时，单张减分（除非是级牌、大王等）
+                    # 主动出牌时，单张策略调整
                     elif action_type in ["Single", "SINGLE"]:
                         if action_cards:
                             card_rank = action_cards[0][1] if len(action_cards[0]) >= 2 else ""
-                            if card_rank not in ['2', 'B', 'R']:  # 不是级牌、大王
+                            # 有王或级牌保护时，单张不应该减分，而是加分
+                            if has_king_or_level:
+                                # 有王/级牌保护，单张能回收，加分
+                                score_adjustment += 30.0
+                                strategy_reason = "主动出牌：有王/级牌保护，单张能回收"
+                            # 级牌、大王等本身就有较高价值，加分
+                            elif card_rank in ['2', 'B', 'R']:
+                                score_adjustment += 25.0
+                                strategy_reason = "主动出牌：级牌/大王单张，有价值"
+                            # 其他单张，根据牌力情况调整减分幅度
+                            elif power >= 7:  # 牌力强时，单张减分幅度降低
+                                score_adjustment -= 10.0
+                                strategy_reason = "主动出牌：牌力强，单张减分幅度降低"
+                            else:
                                 score_adjustment -= 20.0
                                 strategy_reason = "主动出牌：避免小单张"
                 
@@ -936,13 +957,25 @@ class YF2_V5_Client:
                 # 4. 炸弹策略（基于牌力评估结果）- 关键策略，防止浪费炸弹
                 # 同花顺（StraightFlush）也是炸弹的一种，应该遵守炸弹使用规则
                 if action_type == "BOMB" or "BOMB" in str(action_type).upper() or action_type == "Bomb" or action_type == "StraightFlush":
-                    # 4.1 检查是否应该使用炸弹（根据炸弹数量和对手剩余牌数）
+                    # 4.1 计算牌力等级
+                    power_level = "medium"
+                    if power < 5:
+                        power_level = "weak"
+                    elif power >= 7:
+                        power_level = "strong"
+                    
+                    # 4.2 检查是否应该使用炸弹（根据炸弹数量和对手剩余牌数）
                     should_use, use_reason = should_use_bomb(
                         bomb_count=bomb_count,
                         opponent_rest_cards=opponent_rest_cards,
                         game_phase=game_phase,
                         my_rest_cards=my_rest_cards,
-                        power=power
+                        power=power,
+                        my_pos=game_state.get("my_pos", self.player_id),
+                        cur_pos=game_state.get("cur_pos", -1),
+                        greater_pos=game_state.get("greater_pos", -1),
+                        teammate_pos=game_state.get("teammate_pos", -1),
+                        power_level=power_level
                     )
                     
                     # 4.2 检查炸弹策略建议
@@ -1121,7 +1154,7 @@ class YF2_V5_Client:
         
         融合多种决策源：
         1. RL决策（如果可用）
-        2. 知识库增强决策（HybridDecisionEngineV4）
+        2. 知识库增强决策（HybridDecisionEngineV5）
         3. 规则引擎决策（新增策略：牌力评估、单牌策略、炸弹策略、残局策略）
         
         Args:
@@ -1135,7 +1168,7 @@ class YF2_V5_Client:
         
         # 1. 获取基础决策引擎的候选（包含知识库增强）
         try:
-            # 使用V4引擎生成候选（已经包含知识库增强）
+            # 使用V5引擎生成候选（已经包含知识库增强）
             base_candidates = self.decision_engine._generate_candidates(data)
             if base_candidates:
                 # 增强候选（知识库已应用）
@@ -1173,9 +1206,9 @@ class YF2_V5_Client:
         except Exception as e:
             self.logger.warning(f"Strategy decision failed: {e}", exc_info=True)
         
-        # 4. 如果没有候选，使用V4引擎的decide方法
+        # 4. 如果没有候选，使用V5引擎的decide方法
         if not candidates:
-            self.logger.warning("No candidates from hybrid decision, using V4 fallback")
+            self.logger.warning("No candidates from hybrid decision, using default fallback")
             return self.decision_engine.decide(data)
         
         # 5. 选择最优动作（按加权评分排序）

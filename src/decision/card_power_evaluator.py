@@ -37,7 +37,14 @@ def find_best_combinations(rank_suit_count: Dict[int, Dict[str, int]]) -> Dict:
     # Get all available ranks
     all_ranks = sorted([r for r in rank_suit_count if any(rank_suit_count[r].values()) > 0])
     
-    # Find possible steel板 (连三带二)
+    # 1. 首先检测炸弹（最高优先级）
+    bomb_combinations = []
+    for rank in all_ranks:
+        total_count = sum(rank_suit_count[rank].values())
+        if total_count >= 4:
+            bomb_combinations.append((rank, total_count))
+    
+    # 2. Find possible steel板 (连三带二)
     steel_board_combinations = []
     used_ranks = set()
     i = 0
@@ -52,7 +59,7 @@ def find_best_combinations(rank_suit_count: Dict[int, Dict[str, int]]) -> Dict:
                 used_ranks.update([r1, r2, r3])
         i += 1
     
-    # Find possible straight flushes by suit
+    # 3. Find possible straight flushes by suit
     straight_flush_combinations = {'S': [], 'H': [], 'D': [], 'C': []}
     for suit in ['S', 'H', 'D', 'C']:
         suit_ranks = [r for r in all_ranks if suit in rank_suit_count[r] and rank_suit_count[r][suit] > 0]
@@ -71,7 +78,7 @@ def find_best_combinations(rank_suit_count: Dict[int, Dict[str, int]]) -> Dict:
                         used_ranks.update(suit_ranks[j:j+5])
             j += 1
     
-    # Find mixed straights (杂顺): longest first, non-overlapping
+    # 4. Find mixed straights (杂顺): longest first, non-overlapping
     straight_combinations = []
     j = 0
     while j < len(all_ranks) - 4:
@@ -86,13 +93,6 @@ def find_best_combinations(rank_suit_count: Dict[int, Dict[str, int]]) -> Dict:
             max_length += 1
         else:
             j += 1
-
-    bomb_combinations = []
-    for rank in all_ranks:
-        if rank not in used_ranks:
-            total_count = sum(rank_suit_count[rank].values())
-            if total_count >= 4:
-                bomb_combinations.append((rank, total_count))
     
     return {
         'steel_board': len(steel_board_combinations),
@@ -126,11 +126,12 @@ def calculate_card_power(hand_cards: List[str], game_phase: str = 'opening', my_
     steel_board_count = combinations['steel_board']
     power += steel_board_count * 1
     
-    # 3. 炸弹 (剩余的炸弹)
+    # 3. 炸弹 (最高优先级)
     straight_count = len(combinations['straight_combinations'])
     power += combinations['bomb_super_high'] * 4 + combinations['bomb_mid'] * 3 + combinations['bomb_normal'] * 2
     
     # 4. 高牌 (A, 2, 王)
+    # 14=A, 15=2, 16=小王, 17=大王
     high_cards = sum(1 for rank in rank_suit_count if rank >= 14 and sum(rank_suit_count[rank].values()) > 0)
     power += high_cards
     

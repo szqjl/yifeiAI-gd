@@ -34,8 +34,19 @@ def bomb_strategy(
     # ========== 第二节：炸什么牌 ==========
     
     # 1. 改变牌路、牌型（90%的炸弹作用）
+    # 当对手出己方没有的牌型，或余牌已无顺套，及时利用炸弹制止，扭转到己家优势牌型
     if can_change_card_type:
         suggestions.append({'action': '炸（改牌路）', 'reason': '改变牌路，转到己方优势牌型。'})
+    
+    # 1.1 对手出己方没有的牌型时，果断开炸
+    # 如对手出顺，队友都没有这个牌型，果断开炸，改走单、对子，或与顺子相佐的三带二牌型
+    if opponent_action_type in ['straight', 'three_with_two'] and not has_better_combo:
+        # 对手出了我方没有的牌型（has_better_combo=False），果断开炸
+        suggestions.append({'action': '炸（改牌路）', 'reason': '对手出我方没有的牌型，果断开炸，改变牌路到己方优势牌型。'})
+    
+    # 1.2 枪打第一顺
+    if opponent_action_type == 'straight' and len(opponent_action_cards) >= 5:
+        suggestions.append({'action': '炸（枪打第一顺）', 'reason': '枪打第一顺，改走单、对子。'})
     
     # 2. 炸常规牌型的控牌
     if opponent_action_type == 'single' and opponent_action_rank >= 15:  # 大王

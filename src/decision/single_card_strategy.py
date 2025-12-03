@@ -48,6 +48,21 @@ def single_card_strategy(
     if teammate_straight_history is None:
         teammate_straight_history = []
     
+    # 特殊情形：对方任何一家只剩下一张牌，根据角色出不同的单
+    opponent_any_one_rest_one = any(rest == 1 for rest in opponent_rest_cards_list)
+    if opponent_any_one_rest_one:
+        # 根据牌力判断角色：主攻（power >= 7）、助攻（power < 5）、中等（5 <= power < 7）
+        if power >= 7:  # 主攻
+            action = "出第二小的单（主攻角色）"
+            reason = "对方任何一家剩一张牌，主攻角色出第二小的单，防止送对手出牌。"
+        elif power < 5:  # 助攻
+            action = "出第二大的单（助攻角色）"
+            reason = "对方任何一家剩一张牌，助攻角色出第二大的单，配合队友。"
+        else:  # 中等牌力
+            action = "出第二小的单（中等牌力）"
+            reason = "对方任何一家剩一张牌，中等牌力出第二小的单，平衡攻防。"
+        return {'action': action, 'reason': reason}
+    
     # （四）残局出单（44-49行）
     # 残局优先 (opponent_rest_cards <=10)
     if game_phase == 'endgame' or opponent_rest_cards <= 10:
@@ -58,7 +73,6 @@ def single_card_strategy(
             if lower_hand_rest == 1:
                 action = "不出小单（忌给下家顺牌）"
                 reason = "下家剩一张，出小单等于送对手一炸。"
-                return {'action': action, 'reason': reason}
         
         # 2. 报双.须打单诱其拆
         if is_reported_double:
@@ -72,12 +86,20 @@ def single_card_strategy(
             reason = "报单，只能打非单牌型，自己打不完时可递送给队友接牌。"
             return {'action': action, 'reason': reason}
         
-        # 4. 出单倒着打。在"头游"已经跑了的情况下，剩下两家对手的时候，在对手也是单牌的情况下，可以"从大往小"打
-        if is_first_place_finished and my_rest_cards > 1:
+        # 4. 自己剩3张牌，有王可回收时，先出小单，再用王回收冲刺
+        if my_rest_cards == 3 and has_king:
+            # 剩3张牌，有王可回收，先出最小的单，再用王回收
+            action = "出小单（有王回收）"
+            reason = "自己剩3张牌，有王可回收，先出小单，再用王回收冲刺。"
+            return {'action': action, 'reason': reason}
+        
+        # 5. 出单倒着打。在"头游"已经跑了的情况下，剩下两家对手的时候，在对手也是单牌的情况下，可以"从大往小"打
+        # 但如果自己有王可回收，优先先出小单
+        if is_first_place_finished and my_rest_cards > 1 and not has_king:
             # 判断对手是否也是单牌（简化：根据剩余牌数判断）
             if opponent_rest_cards <= my_rest_cards:
                 action = "出单倒着打（从大往小）"
-                reason = "头游已跑，对手也是单牌，从大往小打，切不可先打最小的那张。"
+                reason = "头游已跑，对手也是单牌且自己无王回收，从大往小打。"
                 return {'action': action, 'reason': reason}
         
         # 原有残局逻辑
@@ -114,52 +136,108 @@ def single_card_strategy(
 
     # 开局/中期
     if game_phase == 'opening':
-        # 1. 有王有级牌，单张有保护、能回手
-        if has_king or has_level_card:
-            action = "起始出单（有保护）"
-            reason = "有王/级牌保护，能回手。"
-        # 2. 有两个以上的炸弹，其他轮次可套，单张是最难处理的轮次
-        elif bomb_count >= 2:
-            action = "出单（多炸保护）"
-            reason = "有两个+炸弹，单张难处理，先出。"
-        # 3. 单张特别多，几乎除了炸弹就是单
-        elif single_card_count >= 8:
-            action = "出单（单张多）"
-            reason = "单张特别多，几乎除了炸弹就是单，先出单。"
-        # 4. 吃双贡获得牌权后出单
-        elif is_double_tribute and is_active:
-            if has_king:
-                action = "出单（进贡大王）"
-                reason = "进贡大王，对家可接。"
-            else:
-                action = "出单（双贡后）"
-                reason = "吃双贡获得牌权后出单。"
-        # 5. 手中有一炸，外加一顺（夯），还有两单张，要先出一单
-        elif bomb_count >= 1 and has_straight_or_three_with_two and single_card_count >= 2:
-            action = "出单（一炸一顺两单）"
-            reason = "手中有一炸，外加一顺（夯），还有两单张，要先出一单。"
-        # 6. 顺上家出单（上家是朋友）
-        elif is_upper_hand:
-            action = "顺上家出单"
-            reason = "上家的单牌，对自己有利，上家是朋友。"
+        # 1. 优先检查牌力，牌力弱时应用助攻策略（核心规则）
+        if power < 5:
+            # 牌力弱，定位为助攻，优先配合队友
+            if not is_active:  # 被动跟牌情况
+                # 1.1 核心原则：牌力弱，定位助攻时，开局和前期要考虑保留各种牌型
+                # 保留可能的牌型组合（顺子、对子、三张等），以备后期狙击对方相应牌型
+                has_possible_combinations = has_straight or has_straight_or_three_with_two or has_pair_above_q
+                if has_possible_combinations:  # 有任何可能的牌型组合时，优先保留
+                    action = "不出单（保留牌型组合）"
+                    reason = "牌力弱，定位助攻，保留各种牌型组合（顺子、对子、三张等），避免过早破坏牌型，以备后期狙击对方相应牌型。"
+                # 1.2 避免浪费牌力：开局阶段，不越级跟牌或压制，让队友有机会过牌
+                elif is_upper_hand and opponent_rest_cards > 20:  # 上家出单，开局阶段
+                    action = "不出单（避免压制小单）"
+                    reason = "牌力弱，开局阶段不使用大单压制小单，保留牌力，让队友先有机会过牌。"
+                # 1.3 配合队友：观察队友牌力，让队友有机会发挥
+                elif teammate_rest_cards <= opponent_rest_cards:  # 队友剩余牌数少，可能牌力强
+                    action = "不出单（让队友发挥）"
+                    reason = "队友剩余牌数少，可能牌力较强，让队友有机会发挥，作为助攻先观察。"
+                else:
+                    action = "不出单（助攻定位）"
+                    reason = "牌力弱，定位助攻，优先配合队友，避免过早消耗牌力和破坏牌型。"
+            else:  # 主动出牌情况
+                # 主动出牌时的队友保护机制
+                if teammate_rest_cards <= my_rest_cards:
+                    # 队友剩余牌数少，可能牌力强，应该让队友主导
+                    action = "让队友主导（助攻定位）"
+                    reason = "牌力弱，主动出牌时，队友剩余牌数少，可能牌力强，让队友主导，避免压制队友。"
+                else:
+                    action = "主动不出单（助攻定位）"
+                    reason = "牌力弱，主动出牌时避免出单，优先考虑保留牌型组合，为队友创造机会。"
+        # 2. 牌力强时的常规处理
         else:
-            action = "不出单"
-            reason = "双贡不出单，暂缓走。"
+            # 2.1 有王有级牌，单张有保护、能回手
+            if has_king or has_level_card:
+                action = "起始出单（有保护）"
+                reason = "有王/级牌保护，能回手。"
+            # 2.2 有两个以上的炸弹，其他轮次可套，单张是最难处理的轮次
+            elif bomb_count >= 2:
+                action = "出单（多炸保护）"
+                reason = "有两个+炸弹，单张难处理，先出。"
+            # 2.3 单张特别多，几乎除了炸弹就是单
+            elif single_card_count >= 8:
+                action = "出单（单张多）"
+                reason = "单张特别多，几乎除了炸弹就是单，先出单。"
+            # 2.4 吃双贡获得牌权后出单
+            elif is_double_tribute and is_active:
+                if has_king:
+                    action = "出单（进贡大王）"
+                    reason = "进贡大王，对家可接。"
+                else:
+                    action = "出单（双贡后）"
+                    reason = "吃双贡获得牌权后出单。"
+            # 2.5 手中有一炸，外加一顺（夯），还有两单张，要先出一单
+            elif bomb_count >= 1 and has_straight_or_three_with_two and single_card_count >= 2:
+                action = "出单（一炸一顺两单）"
+                reason = "手中有一炸，外加一顺（夯），还有两单张，要先出一单。"
+            # 2.6 顺上家出单（上家是朋友）
+            elif is_upper_hand:
+                action = "顺上家出单"
+                reason = "上家的单牌，对自己有利，上家是朋友。"
+            else:
+                action = "不出单"
+                reason = "双贡不出单，暂缓走。"
 
     elif game_phase == 'mid':
-        # 1. 前期炸掉后不要立刻出小单张
-        if just_bombed:
+        # 1. 主动出牌时优先应用出单策略
+        if is_active:
+            # 1.1 有王有级牌，单张有保护、能回收
+            if has_king or has_level_card:
+                action = "出单（有王/级牌保护）"
+                reason = "有王/级牌保护，单张能回收。"
+            # 1.2 有两个以上的炸弹，其他轮次可套，单张是最难处理的轮次
+            elif bomb_count >= 2:
+                action = "出单（多炸保护）"
+                reason = "有两个+炸弹，单张难处理，先出。"
+            # 1.3 单张特别多，几乎除了炸弹就是单
+            elif single_card_count >= 8:
+                action = "出单（单张多）"
+                reason = "单张特别多，几乎除了炸弹就是单，先出单。"
+            # 1.4 吃双贡获得牌权后出单
+            elif is_double_tribute:
+                action = "出单（双贡后）"
+                reason = "吃双贡获得牌权后出单。"
+            # 1.5 手中有一炸，外加一顺（夯），还有两单张，要先出一单
+            elif bomb_count >= 1 and has_straight_or_three_with_two and single_card_count >= 2:
+                action = "出单（一炸一顺两单）"
+                reason = "手中有一炸，外加一顺（夯），还有两单张，要先出一单。"
+        
+        # 2. 被动跟牌情况
+        # 2.1 前期炸掉后不要立刻出小单张
+        elif just_bombed:
             action = "不出小单"
             reason = "前期炸后不立刻出小单，等于送对手一炸。"
-        # 2. 对手不接小单牌，打完一轮接着来
+        # 2.2 对手不接小单牌，打完一轮接着来
         elif opponent_not_accept_small_single:
             action = "继续出小单"
             reason = "对手不接小单牌，继续出小单压迫对手。"
-        # 3. 控下家单牌（卡小）
+        # 2.3 控下家单牌（卡小）
         elif opponent_needs_single:
             action = "控下家单（卡小）"
             reason = "卡下家小单，防顺/过牌。首用Q，次用JK。"
-        # 4. 让对家出单（送小单）
+        # 2.4 让对家出单（送小单）
         elif teammate_needs_single:
             if teammate_rest_cards == 1:
                 action = "送小单（队友剩一张）"
@@ -167,11 +245,11 @@ def single_card_strategy(
             else:
                 action = "让对家出单（送小单）"
                 reason = "对家需要，送小单让他出尽。"
-        # 5. 顺子出中间
+        # 2.5 顺子出中间
         elif has_straight:
             action = "顺子出中间"
             reason = "出顺中间单，减少轮次。"
-        # 6. 没有单牌拆大对，下家套牌没机会
+        # 2.6 没有单牌拆大对，下家套牌没机会
         elif not has_pair_above_q:
             action = "不出（无单拆大对）"
             reason = "无单拆大对，下家无套牌机会。"
@@ -185,13 +263,46 @@ def single_card_strategy(
         # 判断单牌优势（简化：根据牌力、炸弹数量、单张数量判断）
         has_single_advantage = (power >= 7 and bomb_count >= 2) or (is_double_tribute and power >= 6)
         
+        # 增加单张回收能力评估
+        has_king_or_level = has_king or has_level_card
+        has_recovery_ability = has_king_or_level or bomb_count >= 2
+        
         # 1. 高单出牌：双吃贡，单牌优势，挡住下家的中低单
         if has_single_advantage and is_double_tribute:
             action = "出高单（挡住下家中低单）"
             reason = "双吃贡，单牌优势，通过高单挡住下家的中低单而使对家能轻松取得优先出牌权。若出中低单让下家过中低单，相当于送给下家一个炸弹。"
-        # 2. 低单出牌：传牌给对家，下家不吃单牌时
+        # 2. 有回收能力时，出单策略调整
+        elif has_recovery_ability:
+            # 检查对方是否有任何一家只剩下一张牌
+            opponent_any_one_rest_one = any(rest == 1 for rest in opponent_rest_cards_list)
+            
+            # 特殊情况1：剩余3张牌且有王，先出小单，再用王回收冲刺
+            if my_rest_cards == 3 and has_king:
+                action = "出小单（有王回收）"
+                reason = "自己剩3张牌，有王可回收，先出小单，再用王回收冲刺。"
+            # 特殊情况2：对方任何一家只剩下一张牌，要出第二小的单
+            elif opponent_any_one_rest_one:
+                action = "出第二小的单（防止送对手出牌）"
+                reason = "对方任何一家只剩一张牌，出第二小的单，防止送对手出牌。"
+            # 其他情况：有王/级牌保护或炸弹多，单张能回收，优先出高单或中单
+            elif power >= 7:
+                action = "出高单（有回收能力）"
+                reason = "有王/级牌保护或炸弹多，单张能回收，出高单压制对手。"
+            elif power >= 5:
+                action = "出中单（有回收能力）"
+                reason = "有王/级牌保护或炸弹多，单张能回收，出中单试探。"
+            else:
+                action = "出低单（有回收能力）"
+                reason = "有王/级牌保护或炸弹多，单张能回收，出低单过渡。"
+        # 3. 低单出牌：传牌给对家，下家不吃单牌时
         elif not has_single_advantage or (opponent_not_accept_small_single and teammate_needs_single):
-            if teammate_rest_cards == 1:
+            # 检查对方是否有任何一家只剩下一张牌
+            opponent_any_one_rest_one = any(rest == 1 for rest in opponent_rest_cards_list)
+            
+            if opponent_any_one_rest_one:
+                action = "出第二小的单（防止送对手出牌）"
+                reason = "对方任何一家只剩一张牌，出第二小的单，防止送对手出牌。"
+            elif teammate_rest_cards == 1:
                 action = "出低单（队友剩一张）"
                 reason = "队友只剩一张牌，放心出小单。敌方明知守不住时，也可能放弃防守。"
             elif opponent_not_accept_small_single and teammate_needs_single:
@@ -200,13 +311,26 @@ def single_card_strategy(
             else:
                 action = "出低单（传牌）"
                 reason = "我方不具备明显单牌优势，低单传牌给对家。"
-        # 3. 中单出牌：水闸，试探性，打上家、卡下家
+        # 4. 中单出牌：水闸，试探性，打上家、卡下家
         elif power >= 5 and power < 7:
-            action = "出中单（水闸试探）"
-            reason = "牌力中等，中单相当于一道'水闸'，打上家、卡下家，既防住了下家的中低单，又给对家过单牌的机会，切忌从小顺着出。"
+            # 检查对方是否有任何一家只剩下一张牌
+            opponent_any_one_rest_one = any(rest == 1 for rest in opponent_rest_cards_list)
+            
+            if opponent_any_one_rest_one:
+                action = "出第二小的单（防止送对手出牌）"
+                reason = "对方任何一家只剩一张牌，出第二小的单，防止送对手出牌。"
+            else:
+                action = "出中单（水闸试探）"
+                reason = "牌力中等，中单相当于一道'水闸'，打上家、卡下家，既防住了下家的中低单，又给对家过单牌的机会，切忌从小顺着出。"
         # 默认：根据具体情况选择
         else:
-            if has_single_advantage:
+            # 检查对方是否有任何一家只剩下一张牌
+            opponent_any_one_rest_one = any(rest == 1 for rest in opponent_rest_cards_list)
+            
+            if opponent_any_one_rest_one:
+                action = "出第二小的单（防止送对手出牌）"
+                reason = "对方任何一家只剩一张牌，出第二小的单，防止送对手出牌。"
+            elif has_single_advantage:
                 action = "出高单（单牌优势）"
                 reason = "单牌优势，出高单挡住下家的中低单。"
             else:

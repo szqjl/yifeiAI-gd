@@ -494,7 +494,8 @@ class BatchExecutorGUI:
                 server_path=server_path,
                 client_scripts=clients,
                 diagnose_only=diagnose_only,
-                enable_signal_handler=False
+                enable_signal_handler=False,
+                visible_server=True  # Add this to make server windows visible
             )
             
             if diagnose_only:

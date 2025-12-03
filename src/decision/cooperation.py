@@ -46,7 +46,9 @@ class CooperationStrategy:
                                 teammate_passed: bool = False,
                                 my_rest_cards: int = 27,
                                 teammate_rest_cards: int = 27,
-                                opponent_rest_cards: int = 27) -> Dict[str, Any]:
+                                opponent_rest_cards: int = 27,
+                                my_power: float = 10.0,  # 添加我方牌力参数
+                                teammate_power: float = 10.0) -> Dict[str, Any]:
         """
         閼惧嘲褰囬柊宥呮値缁涙牜鏆
         
@@ -55,6 +57,8 @@ class CooperationStrategy:
         2、牌力不够，直接上大单压制。如果获得出牌权，改出其他牌型
         3、中后期，如果没有能压制对方的单了，我方的任何一方都要直接炸
         4、防守责任原则：对手下家的防守责任一般由上家负责，尤其是在开局和中期
+        5、助攻角色原则：当自身牌力弱（power < 5），是助攻角色时，必须全力配合队友，让队友主导
+        6、队友保护原则：永远不要压制队友的出牌，尤其是队友刚获得出牌权时
         
         Args:
             action_list: 閸欓柅澶婂З娴ｆ粌鍨鐞
@@ -65,6 +69,8 @@ class CooperationStrategy:
             my_rest_cards: 我方剩余牌数
             teammate_rest_cards: 队友剩余牌数
             opponent_rest_cards: 对手剩余牌数
+            my_power: 我方牌力评分（用于判断是否是助攻角色）
+            teammate_power: 队友牌力评分
         
         Returns:
             閸栧懎鎯堥柊宥呮値缁涙牜鏆愰惃鍕鐡ч崗:
@@ -84,6 +90,73 @@ class CooperationStrategy:
         
         # 检查当前玩家是否是防守责任人
         is_defender = self.state.is_responsible_defender()
+        
+        # 关键判断：自身是否是助攻角色
+        is_assist_role = my_power < 5.0
+        is_strong_teammate = teammate_power > 7.0
+        
+        # 核心规则1：助攻角色必须全力配合队友，让队友主导
+        # 如果自身是助攻角色，且队友牌力更强，应该更倾向于pass
+        if is_assist_role and is_strong_teammate:
+            # 助攻角色，队友牌力强，优先让队友处理
+            self.logger.debug(f"助攻角色策略：自身牌力弱({my_power:.1f})，队友牌力强({teammate_power:.1f})，优先pass")
+            result["should_pass"] = True
+            return result
+        
+        # 核心规则：如果当前出牌者是队友，慎重接牌（根据掼蛋原则）
+        # （通过greater_pos判断，这里简化处理：如果greater_action是队友的，且不是PASS）
+        if greater_action and greater_action[0] != "PASS":
+            # 鐠囧嫪鍙婇梼鐔峰几閸斻劋缍旈惃鍕鐜閸
+            teammate_value = self._calculate_action_value(greater_action)
+            teammate_action_type = greater_action[0]
+            
+            # 1. 助攻角色永远不要压制队友的出牌
+            if is_assist_role:
+                self.logger.debug(f"助攻角色策略：队友获得出牌权，助攻角色必须pass")
+                result["should_pass"] = True
+                return result
+            
+            # 2. 队友先发的牌，接牌要慎重，避免影响搭档回收
+            # 根据掼蛋原则：搭档出小单张、小对子，尤其是小顺子的出现，就算能套也最好不要
+            if game_stage in ["early", "mid"]:
+                # 开局和中期，队友获得控牌权，任何牌型都不要轻易接回
+                # 特别关注小顺子等牌型，避免影响队友回收
+                self.logger.debug(f"队友获得控牌权，开局/中期不轻易接回，让队友主导")
+                result["should_pass"] = True
+                return result
+            
+            # 3. 牌不好时不要接队友的牌
+            if my_power < 8:  # 牌力一般或弱时，不要接队友的牌
+                self.logger.debug(f"牌力一般/弱({my_power:.1f})，不接队友的牌")
+                result["should_pass"] = True
+                return result
+            
+            # 4. 除非过了这手牌就能争上游，否则不要接
+            # 简化判断：自己剩余牌数少，可能能争上游
+            if my_rest_cards > 10:  # 剩余牌数多，不是争上游阶段
+                self.logger.debug(f"剩余牌数多({my_rest_cards}张)，不是争上游阶段，不接队友的牌")
+                result["should_pass"] = True
+                return result
+            
+            # 5. 队友出的牌值较高时，不要压制
+            if teammate_value >= self.support_threshold:
+                self.logger.debug(f"队友牌值较高({teammate_value:.1f})，不压制队友")
+                result["should_pass"] = True
+                return result
+            
+            # 6. 队友出的牌值中等时，慎重接管
+            if teammate_value >= 8:
+                # 鐎电粯澹橀崣娴犮儲甯撮弴璺ㄦ畱閸斻劋缍
+                best_idx = self._find_best_takeover_action(action_list, greater_action)
+                if best_idx is not None:
+                    # 检查接管是否会影响队友回收
+                    if self._will_break_hand_structure(action_list[best_idx]):
+                        self.logger.debug(f"接管队友出牌会破坏牌型，选择pass")
+                        result["should_pass"] = True
+                        return result
+                    result["should_take_over"] = True
+                    result["best_action_index"] = best_idx
+                    return result
         
         # 核心逻辑：如果队友刚刚pass，我方必须积极应对
         if teammate_passed:
@@ -108,12 +181,22 @@ class CooperationStrategy:
             result["should_pass"] = True
             return result
         
-        # 防守责任判断：如果不是防守责任人，优先pass
+        # 防守责任判断：如果不是防守责任人，优先pass，但主攻角色除外
         if not is_defender and game_stage in ["early", "mid"]:
             # 不是防守责任人，且在开局或中期，应该pass让队友处理
-            self.logger.debug("不是防守责任人，优先pass让队友处理")
-            result["should_pass"] = True
-            return result
+            # 但如果是主攻角色（牌力强），可以考虑接管
+            if my_power < 7:  # 只有牌力弱时才pass
+                self.logger.debug("不是防守责任人，且牌力弱，优先pass让队友处理")
+                result["should_pass"] = True
+                return result
+            else:
+                # 即使是强牌，也要考虑是否是队友在控牌
+                if greater_action and greater_action[0] != "PASS":
+                    # 队友刚获得出牌权，不要轻易压制
+                    self.logger.debug("不是防守责任人，但牌力强，但队友刚获得出牌权，优先pass让队友控牌")
+                    result["should_pass"] = True
+                    return result
+                self.logger.debug("不是防守责任人，但牌力强（主攻角色），可以考虑接管")
         
         # 初期跟牌逻辑：如果是初期且对手出单，应该积极跟牌
         if game_stage == "early" or game_stage == "opening":
@@ -131,27 +214,6 @@ class CooperationStrategy:
                         result["should_take_over"] = True
                         result["best_action_index"] = take_over_action
                         return result
-        
-        # 閸掋倖鏌囪ぐ鎾冲犻崝銊ょ稊閺勯崥锔芥Ц闂冪喎寮搁崙铏规畱
-        # 鏉╂瑩鍣风粻閸栨牕鍕鎮婇敍灞界杽闂勫懎绨茬拠銉︾壌閹圭晣tate_manager閸掋倖鏌
-        # 閸嬪洩绶俽eater_action閺勯梼鐔峰几閻ㄥ嫬濮╂担
-        if greater_action and greater_action[0] != "PASS":
-            # 鐠囧嫪鍙婇梼鐔峰几閸斻劋缍旈惃鍕鐜閸
-            teammate_value = self._calculate_action_value(greater_action)
-            
-            # 婵″倹鐏夐梼鐔峰几閸斻劋缍旀禒宄板ジ鐝閿涘苯绨茬拠PASS闁板秴鎮
-            if teammate_value >= self.support_threshold:
-                result["should_pass"] = True
-                return result
-            
-            # 婵″倹鐏夐梼鐔峰几閸斻劋缍旀禒宄伴棿鑵戠粵澶涚礉鐠囧嫪鍙婇弰閸氾箓娓剁憰浣瑰复閺
-            if teammate_value >= 8:
-                # 鐎电粯澹橀崣娴犮儲甯撮弴璺ㄦ畱閸斻劋缍
-                best_idx = self._find_best_takeover_action(action_list, greater_action)
-                if best_idx is not None:
-                    result["should_take_over"] = True
-                    result["best_action_index"] = best_idx
-                    return result
         
         # 中后期策略：如果对手出单，我方必须压制
         if game_stage in ["late", "endgame"]:
@@ -306,6 +368,31 @@ class CooperationStrategy:
         # 婵″倹鐏夐梼鐔峰几娴犲嘲闂磋厬缁涘涚礉娑撴梹鍨滈惃鍕鐜閸婂吋娲挎傛﹫绱濋崣娴犮儲甯撮弴
         if 8 <= teammate_value < self.support_threshold:
             return my_value > teammate_value
+        return False
+    
+    def _will_break_hand_structure(self, action: List) -> bool:
+        """
+        检查接管队友出牌是否会破坏牌型
+        
+        Args:
+            action: 要执行的动作
+        
+        Returns:
+            是否会破坏牌型
+        """
+        if not action or len(action) < 3:
+            return False
+        
+        action_type = action[0]
+        action_cards = action[2] if isinstance(action[2], list) else []
+        
+        # 简单判断：如果动作导致牌型变得单一，如顺子后多出单张，就认为破坏了牌型
+        # 这里简化处理，主要针对顺子类型
+        if action_type in ["Straight", "StraightFlush"]:
+            # 顺子可能导致牌型变得单一，认为破坏了牌型
+            return True
+        
+        # 其他牌型暂不考虑
         return False
     
     def evaluate_cooperation_opportunity(self, action_list: List[List], 

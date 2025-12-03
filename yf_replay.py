@@ -245,7 +245,12 @@ class YiFeiReplayGUI:
         if 'all_players_hands' in self.current_game_data:
             for pos, cards in self.current_game_data['all_players_hands'].items():
                 pos_str = str(pos)
-                self.initial_hands[pos_str] = cards.copy()
+                # 添加类型检查，确保cards是列表类型
+                if isinstance(cards, list):
+                    self.initial_hands[pos_str] = cards.copy()
+                else:
+                    # 如果不是列表，跳过或使用空列表
+                    self.initial_hands[pos_str] = []
         
         # 3. 尝试使用服务器日志补充初始手牌
         try:
@@ -260,7 +265,7 @@ class YiFeiReplayGUI:
                         pos_str = str(pos)
                         if pos_str not in self.initial_hands or not self.initial_hands[pos_str]:
                             # 只接受合理数量的初始手牌（27张左右）
-                            if len(cards) > 10:  # 只接受10张以上的初始手牌
+                            if isinstance(cards, list) and len(cards) > 10:  # 只接受10张以上的初始手牌
                                 self.initial_hands[pos_str] = cards.copy()
         except Exception as e:
             self.status_bar.config(text=f"补充初始手牌失败: {e}")
@@ -586,14 +591,14 @@ class YiFeiReplayGUI:
             display_rank = rank_map.get(rank, rank)
             display_suit = suit_map.get(suit, suit)
             
-            # 绘制左上角的花色和数字
+            # 绘制左上角的花色和数字 - 增大字体+2px
             self.card_canvas.create_text(x+5, y+5, text=f"{display_rank}{display_suit}", 
-                                        font=('Arial', 8, 'bold'), anchor=tk.NW, 
+                                        font=('Arial', 12, 'bold'), anchor=tk.NW, 
                                         fill="black" if suit in ['S', 'C'] else "red")
             
             # 绘制中间的花色
             self.card_canvas.create_text(x+width/2, y+height/2, text=display_suit, 
-                                        font=('Arial', 16, 'bold'), anchor=tk.CENTER, 
+                                        font=('Arial', 18, 'bold'), anchor=tk.CENTER, 
                                         fill="black" if suit in ['S', 'C'] else "red")
     
     def _draw_card_vertical(self, x, y, width, height, card, is_back=False):
@@ -626,12 +631,12 @@ class YiFeiReplayGUI:
             
             # 绘制左上角的花色和数字（旋转90度）
             self.card_canvas.create_text(x+5, y+width//2, text=f"{display_rank}{display_suit}", 
-                                        font=('Arial', 8, 'bold'), anchor=tk.NW, 
+                                        font=('Arial', 10, 'bold'), anchor=tk.NW, 
                                         fill="black" if suit in ['S', 'C'] else "red")
             
             # 绘制中间的花色（旋转90度）
             self.card_canvas.create_text(x+height//2, y+width//2, text=display_suit, 
-                                        font=('Arial', 16, 'bold'), anchor=tk.CENTER, 
+                                        font=('Arial', 18, 'bold'), anchor=tk.CENTER, 
                                         fill="black" if suit in ['S', 'C'] else "red")
     
     def _draw_step_info(self):
