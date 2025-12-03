@@ -202,12 +202,35 @@ def combine_handcards(handcards, rank, card_val):
                 nowhandcards.append(handcards[i])
 
     else:
+        # 避免拆三张牌为对子：统计每张牌的数量
+        card_count = {}
+        for card in handcards:
+            rank = card[-1]
+            if rank not in card_count:
+                card_count[rank] = 0
+            card_count[rank] += 1
+        
+        # 优先使用单张和对子组成顺子，避免拆三张牌
         for i in range(0, len(handcards)):
-            if handcards[i][-1] in Straight:
-                tmp.append(handcards[i])
-                Straight.remove(handcards[i][-1])
+            card = handcards[i]
+            rank = card[-1]
+            if rank in Straight:
+                # 如果这张牌有三张，且不是最后一张需要的牌，跳过
+                if card_count[rank] >= 3 and len(Straight) > 1:
+                    nowhandcards.append(card)
+                    continue
+                # 如果这张牌有三张，且是最后一张需要的牌，检查是否会导致剩余两张
+                if card_count[rank] >= 3 and len(Straight) == 1:
+                    # 检查剩余的牌中是否还有同点数的牌
+                    remaining = card_count[rank] - 1
+                    if remaining == 2:
+                        # 拆三张牌会导致对子，跳过
+                        nowhandcards.append(card)
+                        continue
+                tmp.append(card)
+                Straight.remove(rank)
             else:
-                nowhandcards.append(handcards[i])
+                nowhandcards.append(card)
 
     newcards = {}
     newcards["Single"] = []
