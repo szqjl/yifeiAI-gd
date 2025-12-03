@@ -246,8 +246,21 @@ def single_card_strategy(
     
     # 通用：去单化、算单
     if power < 5:
-        action = "不出小单（牌力差）"
-        reason = "牌力差，留小单耗下家牌力，保对家。不要出8以下的小单张。"
+        # 区分主动出牌和被动跟牌
+        if is_active:  # 主动出牌（获得出牌权后）
+            action = "主动时不出小单（牌力差）"
+            reason = "主动出牌时，牌力差，留小单耗下家牌力，保对家。不要主动出8以下的小单张。"
+        else:  # 被动跟牌（上家出单）
+            # 被动跟牌时，应该跟进天然小单，而不是完全不出
+            if game_phase == 'opening' and is_upper_hand:
+                action = "跟出天然小单（初期顺上家）"
+                reason = "初期上家出单，跟出天然小单，保持牌局节奏。"
+            elif game_phase == 'opening' and opponent_needs_single:
+                action = "跟出小单（初期压制）"
+                reason = "初期对手需要单牌，跟出小单进行压制。"
+            else:
+                action = "跟出小单（被动跟进）"
+                reason = "被动跟牌时，牌力差也要跟进，保持对对手的压力。"
     
     return {'action': action, 'reason': reason}
 
