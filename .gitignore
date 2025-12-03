@@ -25,3 +25,11 @@ __pycache__/
 # Test files
 test_*.py
 *.md.bak
+
+# Game records and logs
+game_records/
+logs/
+
+# Temporary JSON files
+execution_state.json
+game_scores.json

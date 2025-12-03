@@ -43,6 +43,9 @@ class EnhancedGameStateManager:
         # 闂冪喎寮告担宥囩枂閿涘牊鐗撮幑缂佸嫰妲︾憴鍕鍨鐠侊紕鐣婚敍
         self.teammate_pos: Optional[int] = None
         self.opponent_positions: List[int] = []
+        
+        # 闂冪喎寮告担宥囩枂閿涘牊鐗撮幑缂佸嫰妲︾憴鍕鍨鐠侊紕鐣婚敍
+        self.action_history: List = []
     
     def update_from_message(self, message: Dict):
         """
@@ -93,10 +96,40 @@ class EnhancedGameStateManager:
                 self.card_tracker.update_from_play(
                     self.cur_pos, self.cur_action, self.my_pos
                 )
+                # 记录动作历史
+                action_record = {
+                    "cur_pos": self.cur_pos,
+                    "cur_action": self.cur_action,
+                    "greater_pos": self.greater_pos,
+                    "greater_action": self.greater_action
+                }
+                self.action_history.append(action_record)
         
         # 婵″倹鐏夐弰鐥歱isodeOver閿涘矂鍣哥純鐠佹壆澧
         if message.get("stage") == "episodeOver":
             self.card_tracker.reset_episode()
+            self.action_history.clear()
+    
+    def get_player_cards(self) -> Dict[int, int]:
+        """
+        获取所有玩家的剩余牌数
+        
+        Returns:
+            玩家剩余牌数字典 {位置: 剩余牌数}
+        """
+        player_cards = {}
+        for i in range(4):
+            player_cards[i] = self.card_tracker.get_player_remain(i)
+        return player_cards
+    
+    def get_action_history(self) -> List:
+        """
+        获取已出牌记录历史
+        
+        Returns:
+            已出牌记录列表
+        """
+        return self.action_history
     
     def _update_team_info(self):
         """閺囧瓨鏌婇梼鐔峰几閸滃苯瑙勫滄穱鈩冧紖"""
@@ -192,8 +225,34 @@ class EnhancedGameStateManager:
         """鐠侊紕鐣婚崜鈺缍戦悧灞界氨閿涘牊甯撻梽銈嗗滈悧灞芥倵閿"""
         return self.card_tracker.calculate_rest_cards(self.hand_cards, self.cur_rank)
     
+    def is_responsible_defender(self) -> bool:
+        """
+        判断当前玩家是否是防守责任人
+        
+        防守责任原则：
+        - 对手下家的防守责任一般情况下、尤其是在开局和中期，由对手的上家负责
+        - 例如：1号位出牌，其下家是2号位，所以1号位的上家（0号位）是防守责任人
+        - 2号位出牌，其下家是3号位，所以2号位的上家（1号位）是防守责任人
+        - 3号位出牌，其下家是0号位，所以3号位的上家（2号位）是防守责任人
+        - 0号位出牌，其下家是1号位，所以0号位的上家（3号位）是防守责任人
+        
+        Returns:
+            bool: 是否为防守责任人
+        """
+        if self.cur_pos is None or self.my_pos is None:
+            return False
+        
+        # 防守责任逻辑：当前出牌玩家的上家是防守责任人
+        # 当前玩家上家 = (cur_pos - 1) % 4
+        responsible_defender = (self.cur_pos - 1) % 4
+        
+        # 检查当前玩家是否是防守责任人
+        return self.my_pos == responsible_defender
+    
     def get_state_summary(self) -> Dict:
-        """閼惧嘲褰囬悩鑸典焦鎲崇憰"""
+        """
+        閼惧嘲褰囬悩鑸典焦鎲崇憰
+        """
         return {
             "my_pos": self.my_pos,
             "teammate_pos": self.teammate_pos,
@@ -206,6 +265,7 @@ class EnhancedGameStateManager:
             "is_passive": self.is_passive_play(),
             "is_active": self.is_active_play(),
             "is_teammate_action": self.is_teammate_action(),
+            "is_responsible_defender": self.is_responsible_defender(),
             "teammate_remain": self.get_teammate_remain_cards(),
             "opponent_remain": self.get_opponent_remain_cards(),
             "pass_num": self.card_tracker.pass_num,

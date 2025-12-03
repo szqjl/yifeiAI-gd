@@ -30,6 +30,10 @@ class CooperationStrategy:
         """
         self.state = state_manager
         
+        # 添加logger
+        import logging
+        self.logger = logging.getLogger("CooperationStrategy")
+        
         # 闁板秶鐤嗛崣鍌涙殶
         self.support_threshold = 15  # 闂冪喎寮搁悧灞界烽崐濂告囬崐纭风礄婢堆傜艾濮濄倕鐓庣安鐠嘝ASS闁板秴鎮庨敍
         self.danger_threshold = 4    # 鐎佃勫滈崜鈺缍戦悧灞炬殶閸楅亶娅撻梼鍫濈》绱欑亸蹇庣艾濮濄倕鐓庣安鐠囥儵鍘ら崥鍫绱
@@ -37,14 +41,30 @@ class CooperationStrategy:
     
     def get_cooperation_strategy(self, action_list: List[List], 
                                 cur_action: Optional[List],
-                                greater_action: Optional[List]) -> Dict[str, Any]:
+                                greater_action: Optional[List],
+                                game_stage: str = "early",
+                                teammate_passed: bool = False,
+                                my_rest_cards: int = 27,
+                                teammate_rest_cards: int = 27,
+                                opponent_rest_cards: int = 27) -> Dict[str, Any]:
         """
         閼惧嘲褰囬柊宥呮値缁涙牜鏆
+        
+        配合策略原则：
+        1、上家出单，我牌力足够，跟自己天然单
+        2、牌力不够，直接上大单压制。如果获得出牌权，改出其他牌型
+        3、中后期，如果没有能压制对方的单了，我方的任何一方都要直接炸
+        4、防守责任原则：对手下家的防守责任一般由上家负责，尤其是在开局和中期
         
         Args:
             action_list: 閸欓柅澶婂З娴ｆ粌鍨鐞
             cur_action: 瑜版挸澧犻崝銊ょ稊
             greater_action: 閺堟径褍濮╂担
+            game_stage: 游戏阶段 (early, mid, late, endgame)
+            teammate_passed: 队友是否刚刚pass
+            my_rest_cards: 我方剩余牌数
+            teammate_rest_cards: 队友剩余牌数
+            opponent_rest_cards: 对手剩余牌数
         
         Returns:
             閸栧懎鎯堥柊宥呮値缁涙牜鏆愰惃鍕鐡ч崗:
@@ -61,6 +81,56 @@ class CooperationStrategy:
         # 婵″倹鐏夊▽鈩冩箒瑜版挸澧犻崝銊ょ稊閿涘奔绗夐棁鐟曚線鍘ら崥
         if not cur_action or cur_action[0] == "PASS":
             return result
+        
+        # 检查当前玩家是否是防守责任人
+        is_defender = self.state.is_responsible_defender()
+        
+        # 核心逻辑：如果队友刚刚pass，我方必须积极应对
+        if teammate_passed:
+            # 队友pass意味着他没有合适的牌，我方必须承担起压制责任
+            self.logger.debug("队友刚刚pass，我方必须积极应对")
+            # 优先找能压制的牌，而不是只有炸弹
+            take_over_action = self._find_best_takeover_action(action_list, cur_action)
+            if take_over_action is not None:
+                result["should_take_over"] = True
+                result["best_action_index"] = take_over_action
+                return result
+            
+            # 找炸弹作为最后手段
+            bomb_action = self._find_bomb_action(action_list)
+            if bomb_action is not None:
+                # 任何阶段，队友pass后都可以炸
+                result["should_take_over"] = True
+                result["best_action_index"] = bomb_action
+                return result
+            
+            # 最后，如果没有任何牌能压制，只能pass
+            result["should_pass"] = True
+            return result
+        
+        # 防守责任判断：如果不是防守责任人，优先pass
+        if not is_defender and game_stage in ["early", "mid"]:
+            # 不是防守责任人，且在开局或中期，应该pass让队友处理
+            self.logger.debug("不是防守责任人，优先pass让队友处理")
+            result["should_pass"] = True
+            return result
+        
+        # 初期跟牌逻辑：如果是初期且对手出单，应该积极跟牌
+        if game_stage == "early" or game_stage == "opening":
+            # 初期对手出单，优先跟天然小单
+            if cur_action and cur_action[0] == "Single":
+                # 查找能压制的单牌动作
+                take_over_action = self._find_best_takeover_action(action_list, cur_action)
+                if take_over_action is not None:
+                    # 计算动作价值差异
+                    action_value = self._calculate_action_value(action_list[take_over_action])
+                    cur_value = self._calculate_action_value(cur_action)
+                    
+                    # 价值差异不大时，积极跟牌
+                    if action_value - cur_value < 8:
+                        result["should_take_over"] = True
+                        result["best_action_index"] = take_over_action
+                        return result
         
         # 閸掋倖鏌囪ぐ鎾冲犻崝銊ょ稊閺勯崥锔芥Ц闂冪喎寮搁崙铏规畱
         # 鏉╂瑩鍣风粻閸栨牕鍕鎮婇敍灞界杽闂勫懎绨茬拠銉︾壌閹圭晣tate_manager閸掋倖鏌
@@ -83,15 +153,44 @@ class CooperationStrategy:
                     result["best_action_index"] = best_idx
                     return result
         
+        # 中后期策略：如果对手出单，我方必须压制
+        if game_stage in ["late", "endgame"]:
+            # 中后期，对手出单必须压制
+            take_over_action = self._find_best_takeover_action(action_list, cur_action)
+            if take_over_action is not None:
+                result["should_take_over"] = True
+                result["best_action_index"] = take_over_action
+            else:
+                # 没有能压制的单，找炸弹
+                bomb_action = self._find_bomb_action(action_list)
+                if bomb_action is not None:
+                    result["should_take_over"] = True
+                    result["best_action_index"] = bomb_action
+        
         return result
+        
+    def _find_bomb_action(self, action_list: List[List]) -> Optional[int]:
+        """
+        查找炸弹动作
+        
+        Args:
+            action_list: 动作列表
+        
+        Returns:
+            炸弹动作索引，无则返回None
+        """
+        for idx, action in enumerate(action_list):
+            if action[0] == "Bomb":
+                return idx
+        return None
     
     def _calculate_action_value(self, action: List) -> float:
         """
         鐠侊紕鐣婚崝銊ょ稊閻ㄥ嫪鐜閸
-        
+
         Args:
             action: 閸斻劋缍旈敍灞剧壐瀵 [card_type, rank, cards]
-        
+
         Returns:
             閸斻劋缍旀禒宄扮》绱欓弫鏉胯壈绉烘径褌鐜閸婅壈绉烘傛﹫绱
         """
@@ -99,6 +198,7 @@ class CooperationStrategy:
             return 0.0
         
         card_type = action[0]
+        rank = action[1] if len(action) > 1 else ""
         cards = action[2] if len(action) > 2 else []
         
         # 閺嶈勫祦閻楀苯鐎风拋锛勭暬閸╄櫣娴犲嘲
@@ -111,7 +211,7 @@ class CooperationStrategy:
             "ThreeWithTwo": 8.0,
             "Trips": 6.0,
             "Pair": 4.0,
-            "Single": 2.0
+            "Single": 4.0  # 提高单牌基础价值
         }
         
         base_value = type_values.get(card_type, 1.0)
@@ -119,6 +219,29 @@ class CooperationStrategy:
         # 閺嶈勫祦閻楀瞼娈戦弫浼村櫤鐠嬪啯鏆ｉ敍鍫㈠濈搾濠傛矮鐜閸婅壈绉烘傛﹫绱
         card_count = len(cards) if isinstance(cards, list) else 1
         count_bonus = card_count * 0.5
+        
+        # 单牌额外添加点数价值
+        if card_type == "Single":
+            # 计算单牌点数价值（3-A，2，王）
+            rank_values = {
+                "3": 1.0,
+                "4": 1.5,
+                "5": 2.0,
+                "6": 2.5,
+                "7": 3.0,
+                "8": 3.5,
+                "9": 4.0,
+                "10": 4.5,
+                "J": 5.0,
+                "Q": 5.5,
+                "K": 6.0,
+                "A": 6.5,
+                "2": 7.0,
+                "B": 8.0,  # 小王
+                "R": 9.0   # 大王
+            }
+            rank_bonus = rank_values.get(rank, 1.0)
+            return base_value + count_bonus + rank_bonus
         
         return base_value + count_bonus
     

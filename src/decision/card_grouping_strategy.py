@@ -61,12 +61,19 @@ def evaluate_grouping_effect(hand_cards: List[str], action_cards: List[str],
     
     # 1. 评估轮次减少（组牌第一原则）
     # 如果动作能减少轮次（如三带对、顺子等），加分
-    if action_type in ["THREE_WITH_TWO", "Straight", "STRAIGHT", "StraightFlush"]:
-        # 三带对或顺子可以减少轮次
+    if action_type in ["THREE_WITH_TWO", "Straight", "STRAIGHT"]:
+        # 三带对或普通顺子可以减少轮次
         if len(action_cards) >= 5:
             rounds_reduced = 1
             score += 30.0
             reasons.append("减少轮次")
+    # 同花顺特殊处理：不鼓励第一轮主动打出
+    elif action_type == "StraightFlush":
+        if len(action_cards) >= 5:
+            rounds_reduced = 1
+            # 减少轮次加分，但主动出牌时大幅降低同花顺优先级
+            score += 10.0  # 普通顺子加30分，同花顺只加10分
+            reasons.append("减少轮次（同花顺）")
     
     # 2. 评估单牌减少（组牌第一原则）
     # 统计剩余单牌数（在动作执行后）
