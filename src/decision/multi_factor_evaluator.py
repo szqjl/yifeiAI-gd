@@ -17,6 +17,7 @@ if str(Path(__file__).parent.parent) not in sys.path:
 from game_logic.enhanced_state import EnhancedGameStateManager
 from game_logic.hand_combiner import HandCombiner
 from decision.cooperation import CooperationStrategy
+from decision.game_stage_analyzer import GameStageAnalyzer
 
 
 class MultiFactorEvaluator:
@@ -37,14 +38,17 @@ class MultiFactorEvaluator:
         self.combiner = combiner
         self.cooperation = cooperation
         
+        # 添加游戏阶段分析器
+        self.game_stage_analyzer = GameStageAnalyzer()
+        
         # 评估权重配置
         self.weights = {
             "remaining_cards": 0.25,
             "card_type_value": 0.20,
             "cooperation": 0.20,
             "risk": 0.15,
-            "timing": 0.10,
-            "hand_structure": 0.10
+            "timing": 0.15,  # 增加时机评估权重
+            "hand_structure": 0.05
         }
     
     def evaluate_all_actions(self, action_list: List[List], 
@@ -123,7 +127,7 @@ class MultiFactorEvaluator:
             "ThreeWithTwo": 8.0,
             "Trips": 6.0,
             "Pair": 4.0,
-            "Single": 2.0
+            "Single": 4.0  # 提高单牌基础价值，与合作策略保持一致
         }
         
         base_value = type_values.get(action[0], 1.0)
@@ -137,8 +141,9 @@ class MultiFactorEvaluator:
         cards = action[2] if len(action) > 2 else []
         card_count = len(cards) if isinstance(cards, list) else 1
         
-        # 假设初始27张牌
-        return 1.0 - (card_count / 27.0)
+        # 计算出牌数量占当前手牌的比例（假设当前手牌27张为初始值）
+        # 出牌数量越多，剩余越少，分数越高
+        return min(card_count / 27.0, 1.0)
     
     def _evaluate_cooperation(self, action: List, target_action: Optional[List]) -> float:
         """评估配合度"""
@@ -152,30 +157,96 @@ class MultiFactorEvaluator:
         # 如果动作价值大于目标价值
         if action_value > target_value:
             diff = action_value - target_value
-            if diff < 5:  # 价值差异小，配合度高
-                return 0.8
-            else:  # 价值差异大，配合度低
-                return 0.4
+            if diff < 3:  # 价值差异很小，完美配合
+                return 0.9
+            elif diff < 8:  # 价值差异适中，良好配合
+                return 0.7
+            elif diff < 15:  # 价值差异较大，一般配合
+                return 0.5
+            else:  # 价值差异很大，过度压制
+                return 0.3
         
         return 0.2  # 无法管上
     
     def _evaluate_risk(self, action: List) -> float:
         """评估风险"""
-        # 炸弹风险高，单张对子风险低
+        # 炸弹风险低（强大），高价值单张风险高，小牌风险低
         if action[0] == "Bomb":
-            return 0.9  # 高风险
+            return 0.2  # 低风险（强大的牌型）
         elif action[0] in ["Single", "Pair"]:
-            return 0.3  # 低风险
-        else:
-            return 0.6  # 中等风险
+            # 获取牌值
+            rank = action[1] if len(action) > 1 else ""
+            if rank in ["2", "A", "K", "B", "R"]:  # 高价值牌，风险高
+                return 0.7
+            elif rank in ["Q", "J", "T", "9"]:  # 中价值牌，风险中
+                return 0.5
+            else:  # 低价值牌，风险低
+                return 0.3
+        elif action[0] in ["Straight", "ThreePair", "TwoTrips"]:  # 复杂牌型，风险中
+            return 0.6
+        else:  # 其他牌型，风险中
+            return 0.5
     
     def _evaluate_timing(self, action: List, target_action: Optional[List]) -> float:
-        """评估时机"""
-        # 暂未实现复杂时机评估
-        return 0.5
+        """
+        评估时机
+        """
+        # 获取游戏阶段信息
+        player_cards = self.state.get_player_cards()
+        game_stage = self.game_stage_analyzer.get_game_stage(player_cards)
+        
+        # 获取已出牌记录
+        actions = self.state.get_action_history()
+        is_first_round = self.game_stage_analyzer.is_first_round(actions)
+        
+        # 获取动作类型
+        action_type = action[0]
+        target_action_type = target_action[0] if target_action else "PASS"
+        
+        # 强牌和弱牌类型定义
+        strong_types = ["Bomb", "StraightFlush"]
+        weak_types = ["Single", "Pair"]
+        
+        # 直接评估时机价值，不需要调用外部函数
+        timing_value = 0.6  # 默认时机价值
+        
+        # 特殊情况1：第一轮强牌炸弱牌，时机价值极低
+        if is_first_round:
+            if action_type in strong_types and target_action_type in weak_types:
+                timing_value = 0.05
+                return timing_value
+        
+        # 特殊情况2：初期强牌炸弱牌，时机价值很低
+        if game_stage == "early":
+            if action_type in strong_types and target_action_type in weak_types:
+                timing_value = 0.1
+                return timing_value
+        
+        # 特殊情况3：残局用强牌，时机价值很高
+        if game_stage == "endgame" and action_type in strong_types:
+            timing_value = 0.9
+            return timing_value
+        
+        # 特殊情况4：强牌炸强牌，时机价值中等
+        if action_type in strong_types and target_action_type in strong_types:
+            timing_value = 0.7
+            return timing_value
+        
+        # 特殊情况5：强牌炸中等牌型，时机价值较低
+        if action_type in strong_types and target_action_type not in weak_types + strong_types:
+            timing_value = 0.5
+            return timing_value
+        
+        # 特殊情况6：普通时机
+        return timing_value
     
     def _evaluate_hand_structure(self, action: List) -> float:
         """评估手牌结构影响"""
-        # 暂未实现复杂结构评估
-        return 0.5
+        # 简单的结构评估
+        if action[0] == "Bomb":
+            return 0.7  # 炸弹通常改善手牌结构
+        elif action[0] in ["Single", "Pair"]:  # 单张对子可能破坏结构
+            return 0.4
+        else:  # 其他牌型，中性影响
+            return 0.5
 
