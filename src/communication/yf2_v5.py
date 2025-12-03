@@ -459,6 +459,11 @@ class YF2_V5_Client:
             is_reported_double = game_state.get("is_reported_double", False)
             is_reported_single = game_state.get("is_reported_single", False)
             
+            # 计算天然单张数量和是否有天然单张
+            # 天然单张是指手牌中原本就是单张的牌，不是通过拆炸弹产生的
+            natural_single_count = len(single_member)
+            has_natural_single = natural_single_count > 0
+            
             single_sugg = single_card_strategy(
                 game_phase=game_phase,
                 power=power,
@@ -488,7 +493,9 @@ class YF2_V5_Client:
                 is_first_place_finished=is_first_place_finished,
                 my_rest_cards=my_rest_cards,
                 is_reported_double=is_reported_double,
-                is_reported_single=is_reported_single
+                is_reported_single=is_reported_single,
+                has_natural_single=has_natural_single,
+                natural_single_count=natural_single_count
             )
             
             # 4. 炸弹策略（基于牌力评估结果，应用完整知识体系）

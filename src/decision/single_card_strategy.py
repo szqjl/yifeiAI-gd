@@ -29,7 +29,9 @@ def single_card_strategy(
     is_first_place_finished: bool = False,  # 头游是否已跑
     my_rest_cards: int = 27,  # 自己剩余牌数
     is_reported_double: bool = False,  # 是否报双
-    is_reported_single: bool = False  # 是否报单
+    is_reported_single: bool = False,  # 是否报单
+    has_natural_single: bool = False,  # 是否有天然单张（非拆炸弹产生的单张）
+    natural_single_count: int = 0,  # 天然单张数量
 ) -> Dict[str, str]:
     """
     单张技巧决策函数
@@ -170,8 +172,13 @@ def single_card_strategy(
         else:
             # 2.1 有王有级牌，单张有保护、能回手
             if has_king or has_level_card:
-                action = "起始出单（有保护）"
-                reason = "有王/级牌保护，能回手。"
+                # 优先打天然单张，没有天然单张时才考虑其他牌型
+                if has_natural_single:
+                    action = "起始出天然单（有保护）"
+                    reason = "有王/级牌保护，能回手，优先打天然单张，避免拆炸弹。"
+                else:
+                    action = "起始出单（有保护）"
+                    reason = "有王/级牌保护，能回手，但无天然单张。"
             # 2.2 有两个以上的炸弹，其他轮次可套，单张是最难处理的轮次
             elif bomb_count >= 2:
                 action = "出单（多炸保护）"
@@ -205,8 +212,13 @@ def single_card_strategy(
         if is_active:
             # 1.1 有王有级牌，单张有保护、能回收
             if has_king or has_level_card:
-                action = "出单（有王/级牌保护）"
-                reason = "有王/级牌保护，单张能回收。"
+                # 优先打天然单张，没有天然单张时才考虑其他牌型
+                if has_natural_single:
+                    action = "出天然单（有王/级牌保护）"
+                    reason = "有王/级牌保护，单张能回收，优先打天然单张，避免拆炸弹。"
+                else:
+                    action = "出单（有王/级牌保护）"
+                    reason = "有王/级牌保护，单张能回收，但无天然单张。"
             # 1.2 有两个以上的炸弹，其他轮次可套，单张是最难处理的轮次
             elif bomb_count >= 2:
                 action = "出单（多炸保护）"
