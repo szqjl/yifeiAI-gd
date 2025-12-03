@@ -341,53 +341,10 @@ class HybridDecisionEngineV4:
             List of (action_idx, score) tuples, sorted by score descending
             Returns empty list if YF fails or returns None
         """
-        candidates = []
-        
-        try:
-            # 延迟初始化YFAdapter（首次使用时）
-            if self.yf_adapter is None:
-                from communication.lalala_adapter_v4 import YFAdapter
-                self.yf_adapter = YFAdapter(self.player_id)
-                self.logger.info("YFAdapter initialized (lazy)")
-            
-            # Task 2.1: YFAdapter.decide() 现在直接返回候选列表
-            yf_candidates = self.yf_adapter.decide(message)
-            
-            # YFAdapter.decide() 现在返回 List[tuple] 格式
-            # 如果返回空列表，表示应该触发Layer 2/3
-            if not yf_candidates:
-                self.logger.debug("YF returned empty candidates list, triggering Layer 2/3")
-                return []
-            
-            # 验证候选的有效性
-            action_list = message.get("actionList", [])
-            valid_candidates = []
-            
-            for action_idx, score in yf_candidates:
-                # 验证动作索引有效性
-                if action_list:
-                    if 0 <= action_idx < len(action_list):
-                        valid_candidates.append((action_idx, score))
-                    else:
-                        self.logger.warning(f"YF candidate {action_idx} out of range [0, {len(action_list)})")
-                else:
-                    # 空动作列表，只有0（PASS）有效
-                    if action_idx == 0:
-                        valid_candidates.append((0, score))
-                    else:
-                        self.logger.warning(f"Invalid action {action_idx} for empty actionList")
-            
-            if valid_candidates:
-                self.logger.debug(f"YF generated {len(valid_candidates)} valid candidate(s)")
-                return valid_candidates
-            else:
-                self.logger.warning("YF candidates all invalid, returning empty list")
-                return []
-                
-        except Exception as e:
-            # 错误处理：捕获异常，返回空列表
-            self.logger.error(f"YF decision error: {e}", exc_info=True)
-            return []
+        # YF策略已移除lalala依赖，直接返回空列表，触发Layer 2/3
+        # 保留该方法是为了保持API兼容性
+        self.logger.debug("YF strategy: lalala dependency removed, triggering Layer 2/3")
+        return []
     
     def _try_decision_engine(self, message: dict) -> List[tuple]:
         """

@@ -132,12 +132,45 @@ class DecisionEngine:
         greater_action = message.get("greaterAction")
         handcards = message.get("handCards", [])
         rank = message.get("curRank", "2")
+        public_info = message.get("publicInfo", [])
+        my_pos = message.get("myPos", 0)
         
         target_action = greater_action if greater_action else cur_action
         
-        # 1. 配合策略评估
+        # 计算牌力相关信息
+        from decision.card_power_evaluator import calculate_card_power
+        
+        # 1. 计算我方牌力
+        my_power = 5.0  # 默认值
+        try:
+            power_result = calculate_card_power(handcards)
+            my_power = power_result['total_power']
+        except Exception as e:
+            print(f"计算牌力失败: {e}")
+        
+        # 2. 估算队友牌力（基于剩余牌数）
+        teammate_pos = (my_pos + 2) % 4
+        teammate_rest = 27
+        if len(public_info) > teammate_pos:
+            teammate_rest = public_info[teammate_pos].get('rest', 27) if isinstance(public_info[teammate_pos], dict) else 27
+        
+        # 简单估算：剩余牌数越少，牌力可能越强
+        if teammate_rest <= 10:
+            teammate_power = 10.0  # 很强
+        elif teammate_rest <= 15:
+            teammate_power = 8.0   # 强
+        elif teammate_rest <= 20:
+            teammate_power = 6.0   # 中等
+        elif teammate_rest <= 25:
+            teammate_power = 4.0   # 弱
+        else:
+            teammate_power = 2.0   # 很弱
+        
+        # 1. 配合策略评估，添加牌力参数
         cooperation_result = self.cooperation.get_cooperation_strategy(
-            action_list, cur_action, greater_action
+            action_list, cur_action, greater_action,
+            my_power=my_power,
+            teammate_power=teammate_power
         )
         
         # 2. 如果建议PASS，则PASS

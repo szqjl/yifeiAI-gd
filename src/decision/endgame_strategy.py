@@ -102,6 +102,21 @@ def endgame_strategy(
     if len(opponent_rest_cards_list) > 1 and lower_hand_rest_cards == 27:
         lower_hand_rest_cards = opponent_rest_cards_list[1]
     
+    # 特殊情形：对方任何一家只剩下一张牌，根据角色出不同的单
+    opponent_any_one_rest_one = any(rest == 1 for rest in opponent_rest_cards_list)
+    if opponent_any_one_rest_one:
+        # 根据牌力判断角色：主攻（power >= 7）、助攻（power < 5）、中等（5 <= power < 7）
+        if power >= 7:  # 主攻
+            action = "出第二小的单（主攻角色）"
+            reason = "对方任何一家剩一张牌，主攻角色出第二小的单，防止送对手出牌。"
+        elif power < 5:  # 助攻
+            action = "出第二大的单（助攻角色）"
+            reason = "对方任何一家剩一张牌，助攻角色出第二大的单，配合队友。"
+        else:  # 中等牌力
+            action = "出第二小的单（中等牌力）"
+            reason = "对方任何一家剩一张牌，中等牌力出第二小的单，平衡攻防。"
+        return {'action': action, 'reason': reason}
+    
     # 优先判断：能否一手出完（one_hand函数逻辑）
     # 当剩余牌 <= 10 时，优先考虑能否一手出完
     if my_rest_cards <= 10 and len(action_list) > 0:
@@ -132,12 +147,28 @@ def endgame_strategy(
         reason = "报单，只能打非单牌型，自己打不完时可递送给队友接牌。"
         return {'action': action, 'reason': reason}
     
-    # 4. 出单倒着打。在"头游"已经跑了的情况下，剩下两家对手的时候，在对手也是单牌的情况下，可以"从大往小"打
+    # 4. 检查对方是否有任何一家只剩下一张牌
+    opponent_any_one_rest_one = any(rest == 1 for rest in opponent_rest_cards_list)
+    if opponent_any_one_rest_one:
+        action = "出第二小的单（防止送对手出牌）"
+        reason = "对方任何一家剩一张牌，出第二小的单，防止送对手出牌。"
+        return {'action': action, 'reason': reason}
+    
+    # 5. 自己剩3张牌，有王可回收时，先出小单，再用王回收冲刺
+    # 检查是否有王（通过手牌判断）
+    has_king = any('B' in card or 'R' in card for card in hand_cards)
+    if my_rest_cards == 3 and has_king:
+        # 剩3张牌，有王可回收，先出最小的单，再用王回收
+        action = "出小单（有王回收）"
+        reason = "自己剩3张牌，有王可回收，先出小单，再用王回收冲刺。"
+        return {'action': action, 'reason': reason}
+    
+    # 5. 出单倒着打。在"头游"已经跑了的情况下，剩下两家对手的时候，在对手也是单牌的情况下，可以"从大往小"打
     if is_first_place_finished and my_rest_cards > 1:
         # 判断对手是否也是单牌（简化：根据剩余牌数判断）
         if opponent_rest_cards <= my_rest_cards:
             action = "出单倒着打（从大往小）"
-            reason = "头游已跑，对手也是单牌，从大往小打，切不可先打最小的那张。"
+            reason = "头游已跑，对手也是单牌且自己无王回收，从大往小打。"
             return {'action': action, 'reason': reason}
     
     # 原有残局逻辑

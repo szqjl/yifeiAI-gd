@@ -129,6 +129,13 @@ class GameRecorder:
         self.current_game: Optional[Dict[str, Any]] = None
         self.game_start_time: Optional[datetime] = None
         
+        # 游戏计数，用于生成唯一文件名
+        self.game_counter = 0
+        
+        # 确保记录目录存在
+        if not self.record_dir.exists():
+            self.record_dir.mkdir(parents=True, exist_ok=True)
+        
     def start_game(self, hand_cards: List, my_pos: int, game_info: Dict = None, all_players_hands: Dict[int, List] = None):
         """
         开始记录一局游戏
@@ -140,6 +147,9 @@ class GameRecorder:
             all_players_hands: 所有玩家的手牌 {pos: hand_cards}
         """
         self.game_start_time = datetime.now()
+        
+        # 递增游戏计数器
+        self.game_counter += 1
         
         # 生成游戏ID（时间戳格式：YYYYMMDDHHMMSSffffff）
         game_id = self.game_start_time.strftime('%Y%m%d%H%M%S%f')
@@ -158,7 +168,8 @@ class GameRecorder:
             "game_info": game_info or {},
             "actions": [],  # 所有玩家的出牌动作
             "my_decisions": [],  # 我方的决策记录
-            "result": None
+            "result": None,
+            "game_round": self.game_counter  # 新增：游戏轮次计数
         }
         
     def record_action(self, cur_pos: int, cur_action: List, 
@@ -177,23 +188,9 @@ class GameRecorder:
         if not self.current_game:
             return
         
-        # 尝试从context中更新其他玩家的手牌信息
-        if context:
-            rest_cards = context.get("restCards", [])
-            if rest_cards:
-                all_hands = self.current_game.get("all_players_hands", {})
-                for rest_info in rest_cards:
-                    if isinstance(rest_info, list) and len(rest_info) >= 2:
-                        pos = rest_info[0]
-                        cards = rest_info[1]
-                        # 转换手牌格式
-                        if cards and isinstance(cards, list) and len(cards) > 0:
-                            if isinstance(cards[0], list):
-                                # 列表格式：[['S', '3'], ...] -> ['S3', ...]
-                                normalized_cards = [f"{c[0]}{c[1]}" if isinstance(c, list) and len(c) >= 2 else str(c) for c in cards]
-                                cards = normalized_cards
-                        all_hands[pos] = cards
-                self.current_game["all_players_hands"] = all_hands
+        # 注意：rest_cards包含的是剩余牌数，不是手牌列表，不要用它更新all_players_hands
+        # 只保留原始的all_players_hands，确保它只包含手牌列表，不包含剩余牌数
+        pass
         
         action_record = {
             "timestamp": datetime.now().isoformat(),
@@ -270,10 +267,11 @@ class GameRecorder:
     def _generate_filename(self, result: Dict) -> str:
         """
         生成文件名
-        格式：YYYYMMDDHHMMSSffffff [player_name]-[opponent_name].json
-        参考格式：2021122022131000098 [szqjl]-[新城老王].fp
+        格式：YYYYMMDDHHMMSSffffff [player_name]-[opponent_name]-[game_round]-[start_level].json
+        参考格式：2021122022131000098 [szqjl]-[新城老王]-[1]-[2].json
         """
         game_id = self.current_game["game_id"]
+        game_round = self.current_game["game_round"]
         
         # 从结果中推断对手信息
         victory_num = result.get("victoryNum", [0, 0, 0, 0])
@@ -295,8 +293,21 @@ class GameRecorder:
         else:
             opponent_name = "opponent"
         
-        # 生成文件名（使用.json扩展名，也可以改为.fp）
-        filename = f"{game_id} [{self.player_name}]-[{opponent_name}].json"
+        # 获取当前游戏的等级信息（从game_info或result中获取）
+        game_info = self.current_game.get("game_info", {})
+        current_level = game_info.get("curRank", "unknown")
+        
+        # 从actions中获取游戏的起始等级（如果game_info中没有）
+        if current_level == "unknown" and self.current_game.get("actions"):
+            for action in self.current_game["actions"]:
+                context = action.get("context", {})
+                if "curRank" in context:
+                    current_level = context["curRank"]
+                    break
+        
+        # 生成唯一的文件名，包含游戏轮次和起始等级信息，避免覆盖
+        # 格式：YYYYMMDDHHMMSSffffff [player_name]-[opponent_name]-[game_round]-[start_level].json
+        filename = f"{game_id} [{self.player_name}]-[{opponent_name}]-[{game_round}]-[{current_level}].json"
         return filename
     
     @staticmethod

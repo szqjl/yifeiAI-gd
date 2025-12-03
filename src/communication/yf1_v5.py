@@ -9,12 +9,13 @@ import json
 import sys
 import logging
 from pathlib import Path
+import time  # Add at top if not present
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent)) # Add project root
 
-from decision.hybrid_decision_engine_v4 import HybridDecisionEngineV4
+from decision.hybrid_decision_engine_v5 import HybridDecisionEngineV5
 from decision.rl_decision_engine import RLDecisionEngine
 from communication.game_recorder import GameRecorder
 from communication.websocket_manager import WebSocketManager
@@ -49,6 +50,9 @@ logging.basicConfig(
     ]
 )
 
+# Add after imports, around line 10-20:
+DELAY_BEFORE_CONNECT = 3  # seconds, to ensure sequential connection order
+
 
 class YF1_V5_Client:
     """
@@ -68,14 +72,13 @@ class YF1_V5_Client:
         self.ws_manager = WebSocketManager(self.user_info, use_local=use_local_websocket)
         self.websocket = None  # 保持向后兼容
         
-        # Initialize HybridDecisionEngineV4 (基础决策引擎)
+        # Initialize HybridDecisionEngineV5 (基础决策引擎)
         config = {
-            "enable_lalala": True,
             "enable_fallback": True,
             "log_level": "INFO",
             "performance_threshold": 1.0
         }
-        self.decision_engine = HybridDecisionEngineV4(player_id, config)
+        self.decision_engine = HybridDecisionEngineV5(player_id, config)
         
         # Initialize RL Engine (V5增强：更智能的RL集成)
         try:
@@ -118,6 +121,9 @@ class YF1_V5_Client:
         """Connect to game server using configured WebSocket manager"""
         try:
             # 使用 WebSocket 管理器连接
+            self.logger.info(f"[yf1_v5] 等待连接延迟 {DELAY_BEFORE_CONNECT} 秒，确保第一个位置...")
+            time.sleep(DELAY_BEFORE_CONNECT)
+            self.logger.info(f"[yf1_v5] 开始连接 ws://127.0.0.1:23456/game/yf1_v5")
             connected = await self.ws_manager.connect()
             if not connected:
                 self.logger.error("Failed to connect to server")
@@ -165,7 +171,7 @@ class YF1_V5_Client:
             if self.use_hybrid_decision:
                 act_index = self._hybrid_decision(data, action_list)
             else:
-                # 回退到V4决策
+                # 回退到默认决策
                 act_index = self.decision_engine.decide(data)
             
             # Get decision details for recording
@@ -175,7 +181,7 @@ class YF1_V5_Client:
                 "greaterPos": data.get("greaterPos", -1),
                 "actionList_size": len(action_list),
                 "version": "v5",
-                "decision_type": "hybrid" if self.use_hybrid_decision else "v4_fallback"
+                "decision_type": "hybrid" if self.use_hybrid_decision else "default_fallback"
             }
             
             # Record decision
@@ -694,8 +700,16 @@ class YF1_V5_Client:
                         action_rank_str = action_card[1] if len(action_card) >= 2 else ""
                         action_rank_val_for_active = card_val.get(action_rank_str, 0)
                     
+                    # 检查是否有王或级牌（用于单张策略优先级调整）
+                    has_king_or_level = has_king or has_level_card
+                    
+                    # 有王或级牌保护时，单张策略优先级提升
+                    if action_type == "Single" or action_type == "SINGLE" and has_king_or_level:
+                        # 有王/级牌保护，单张能回收，提升优先级至对子级别
+                        score_adjustment += 80.0
+                        strategy_reason = "主动出牌策略：有王/级牌保护，单张优先级提升至对子级别"
                     # 1. 对子优先级最高（+80分）
-                    if action_type == "Pair" or action_type == "PAIR":
+                    elif action_type == "Pair" or action_type == "PAIR":
                         score_adjustment += 80.0
                         strategy_reason = "主动出牌策略：对子优先级最高"
                     
@@ -884,18 +898,27 @@ class YF1_V5_Client:
                 if action_type == "BOMB" or "BOMB" in str(action_type).upper() or action_type == "Bomb" or action_type == "StraightFlush":
                     # 检查炸弹策略建议
                     bomb_suggestions = bomb_sugg.get("suggestions", [])
+                    should_bomb = False
                     should_not_bomb = False
+                    
+                    # 先检查是否有"不炸"的建议，优先级更高
                     for sugg in bomb_suggestions:
-                        if "炸" in sugg.get("action", "") and "不炸" not in sugg.get("action", ""):
-                            score_adjustment += 40.0
-                            strategy_reason = sugg.get("reason", "")
-                            break
-                        elif "不炸" in sugg.get("action", ""):
+                        if "不炸" in sugg.get("action", ""):
                             should_not_bomb = True
                             strategy_reason = sugg.get("reason", "")
+                            break
                     
-                    # 如果没有明确的"应该炸"建议，检查是否不应该炸
+                    # 如果没有"不炸"建议，再检查是否有"炸"的建议
                     if not should_not_bomb:
+                        for sugg in bomb_suggestions:
+                            if "炸" in sugg.get("action", "") and "不炸" not in sugg.get("action", ""):
+                                should_bomb = True
+                                score_adjustment += 40.0
+                                strategy_reason = sugg.get("reason", "")
+                                break
+                    
+                    # 如果没有明确的建议，检查当前牌型是否值得炸
+                    if not should_bomb and not should_not_bomb:
                         # 检查当前牌型：单张、对子、三张等小牌型不值得炸
                         greater_action = game_state.get("greater_action", [])
                         if greater_action and len(greater_action) > 0:
@@ -1028,7 +1051,7 @@ class YF1_V5_Client:
         
         融合多种决策源：
         1. RL决策（如果可用）
-        2. 知识库增强决策（HybridDecisionEngineV4）
+        2. 知识库增强决策（HybridDecisionEngineV5）
         3. 规则引擎决策（新增策略：牌力评估、单牌策略、炸弹策略、残局策略）
         
         Args:
@@ -1042,7 +1065,7 @@ class YF1_V5_Client:
         
         # 1. 获取基础决策引擎的候选（包含知识库增强）
         try:
-            # 使用V4引擎生成候选（已经包含知识库增强）
+            # 使用V5引擎生成候选（已经包含知识库增强）
             base_candidates = self.decision_engine._generate_candidates(data)
             if base_candidates:
                 # 增强候选（知识库已应用）
@@ -1080,9 +1103,9 @@ class YF1_V5_Client:
         except Exception as e:
             self.logger.warning(f"Strategy decision failed: {e}", exc_info=True)
         
-        # 4. 如果没有候选，使用V4引擎的decide方法
+        # 4. 如果没有候选，使用V5引擎的decide方法
         if not candidates:
-            self.logger.warning("No candidates from hybrid decision, using V4 fallback")
+            self.logger.warning("No candidates from hybrid decision, using default fallback")
             return self.decision_engine.decide(data)
         
         # 5. 选择最优动作（按加权评分排序）
@@ -1119,12 +1142,11 @@ class YF1_V5_Client:
                 # 重新初始化决策引擎（使用新的 player_id）
                 self.logger.info(f"Reinitializing decision engine with player_id={my_pos}")
                 config = {
-                    "enable_lalala": True,
                     "enable_fallback": True,
                     "log_level": "INFO",
                     "performance_threshold": 1.0
                 }
-                self.decision_engine = HybridDecisionEngineV4(my_pos, config)
+                self.decision_engine = HybridDecisionEngineV5(my_pos, config)
                 self.logger.info(f"Decision engine reinitialized for position {my_pos}")
             
             # 打印手牌信息

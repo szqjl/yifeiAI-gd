@@ -59,9 +59,19 @@ def evaluate_grouping_effect(hand_cards: List[str], action_cards: List[str],
             original_rank_count[rank] += 1
     original_singles = sum(1 for count in original_rank_count.values() if count == 1)
     
+    # 判断是否有王或级牌
+    has_king = any('B' in card or 'R' in card for card in hand_cards)
+    has_level_card = any(cur_rank in card for card in hand_cards)
+    
+    # 有王或级牌保护时，单张策略更优
+    if action_type == "Single" or action_type == "SINGLE":
+        if has_king or has_level_card:
+            # 有王/级牌保护，单张能回收，增加评分
+            score += 30.0
+            reasons.append("有王/级牌保护，单张能回收，优先出单")
     # 1. 评估轮次减少（组牌第一原则）
     # 如果动作能减少轮次（如三带对、顺子等），加分
-    if action_type in ["THREE_WITH_TWO", "Straight", "STRAIGHT"]:
+    elif action_type in ["THREE_WITH_TWO", "Straight", "STRAIGHT"]:
         # 三带对或普通顺子可以减少轮次
         if len(action_cards) >= 5:
             rounds_reduced = 1
@@ -127,10 +137,27 @@ def evaluate_grouping_effect(hand_cards: List[str], action_cards: List[str],
                 else:
                     reasons.append(f"组同花顺多余1个小单张（{','.join(remaining_small_singles)}），2是级牌，可以组")
     
+    # 检查是否拆了炸弹
+    original_bomb_ranks = [rank for rank, count in original_rank_count.items() if count >= 4]
+    remaining_bomb_ranks = [rank for rank, count in rank_count.items() if count >= 4]
+    bomb_broken = len(original_bomb_ranks) > len(remaining_bomb_ranks)
+    
     if action_type == "THREE_WITH_TWO":
         # 三带对可以消除1个单牌（三头）和1个对子
-        score += 15.0
-        reasons.append("三带对减少手数")
+        if bomb_broken:
+            # 拆了炸弹组三带二，给予大幅减分
+            score -= 80.0  # 拆炸弹的代价远大于三带二的收益
+            reasons.append("拆炸弹组三带二，代价过大，不建议")
+        else:
+            score += 15.0
+            reasons.append("三带对减少手数")
+    
+    # 检查是否使用了红桃配（百搭牌，通常是H2）
+    has_wild_card = False
+    for card in action_cards:
+        if isinstance(card, str) and card.startswith('H2'):  # 红桃2是百搭牌
+            has_wild_card = True
+            break
     
     # 3. 评估炸弹保留（炸弹越多越好）
     # 如果动作不是炸弹，且保留炸弹，加分
@@ -140,6 +167,25 @@ def evaluate_grouping_effect(hand_cards: List[str], action_cards: List[str],
         if bomb_ranks:
             score += 10.0 * len(bomb_ranks)
             reasons.append(f"保留{len(bomb_ranks)}个炸弹")
+    
+    # 4. 红桃配（百搭牌）策略：红心配炸弹留到最后再使用，初期保留
+    if has_wild_card:
+        if action_type in ["Bomb", "BOMB"]:
+            if game_phase in ["early", "mid"]:
+                # 初期/中期使用红桃配炸弹，给予减分
+                score -= 30.0
+                reasons.append("红桃配炸弹留到最后再使用，初期保留")
+        else:
+            if game_phase == "early":
+                # 初期使用红桃配组其他牌型，给予减分
+                score -= 20.0
+                reasons.append("初期保留红桃配，为后期提供更多战略变化")
+    
+    # 4. 惩罚：拆炸弹组其他牌型
+    if bomb_broken and action_type not in ["Bomb", "BOMB", "StraightFlush"]:
+        # 拆了炸弹组其他牌型，给予额外惩罚
+        score -= 50.0
+        reasons.append(f"拆炸弹组{action_type}，代价过大，不建议")
     
     # 4. 开局阶段：优先组牌
     if game_phase == "opening":
