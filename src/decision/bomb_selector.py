@@ -170,7 +170,17 @@ def should_use_bomb(
     opponent_rest_cards: int,
     game_phase: str = 'mid',
     my_rest_cards: int = 27,
-    power: float = 5.0
+    power: float = 5.0,
+    has_strong_singles: bool = False,  # 是否有强单牌（王、级牌多）
+    has_alternative: bool = False,  # 是否有替代牌型可以管住对手
+    is_active: bool = False,  # 是否主动出牌
+    opponent_action_type: str = 'none',  # 对手动作类型
+    opponent_action_rank: int = 0,  # 对手动作排名
+    my_pos: int = 0,  # 当前位置
+    cur_pos: int = -1,  # 当前出牌位置
+    greater_pos: int = -1,  # 最大出牌位置
+    teammate_pos: int = 2,  # 队友位置
+    power_level: str = "medium"  # 牌力等级：weak/medium/strong
 ) -> Tuple[bool, str]:
     """
     根据炸弹数量和对手剩余牌数决定是否使用炸弹
@@ -178,23 +188,57 @@ def should_use_bomb(
     返回：
     (should_use, reason) - 是否应该使用炸弹和原因
     """
-    # 1. 炸弹多时（>=3）更容易使用
+    # 1. 主动出牌时，绝不是自己上手出炸弹（除非必要）
+    if is_active:
+        return (False, f"主动出牌，不轻易使用炸弹")
+    
+    # 2. 王多、级牌多，单牌也比较大，考虑保留炸弹
+    if has_strong_singles and bomb_count < 3:
+        return (False, f"王多、级牌多，单牌强，且炸弹不多，保留炸弹")
+    
+    # 3. 有替代牌型可以管住对手，不使用炸弹
+    if has_alternative:
+        return (False, f"有替代牌型可以管住对手，不使用炸弹")
+    
+    # 4. 炸弹多时（>=3）更容易使用
     if bomb_count >= 3:
         return (True, f"炸弹多（{bomb_count}个），可以使用")
     
-    # 2. 对手剩余牌少时（<=18）更容易使用
+    # 5. 对手剩余牌少时（<=18）更容易使用
     if opponent_rest_cards <= 18:
         return (True, f"对手剩余牌少（{opponent_rest_cards}张），可以使用")
     
-    # 3. 残局阶段更容易使用
+    # 6. 残局阶段更容易使用
     if game_phase == 'endgame' and opponent_rest_cards <= 10:
         return (True, f"残局阶段，对手剩余{opponent_rest_cards}张，可以使用")
     
-    # 4. 自己剩余牌少且牌力强时，可以使用
+    # 7. 自己剩余牌少且牌力强时，可以使用
     if my_rest_cards <= 5 and power >= 7:
         return (True, f"自己剩余牌少（{my_rest_cards}张）且牌力强，可以使用")
     
-    # 5. 其他情况谨慎使用
+    # 8. 炸牌目标选择策略
+    # 计算上家、下家位置
+    upper_hand_pos = (my_pos - 1) % 4  # 上家位置
+    lower_hand_pos = (my_pos + 1) % 4  # 下家位置
+    
+    # 8.1 首选打上家
+    # 本家牌力差（power < 5），下游牌，尤其单贡或双贡，首选炸上家
+    if power < 5 or power_level == "weak":
+        if greater_pos == upper_hand_pos or cur_pos == upper_hand_pos:
+            return (True, f"牌力差，下游牌，首选炸上家（位置{upper_hand_pos}），让对家跟套牌")
+    
+    # 8.2 次打下家
+    # 牌力强（power >= 7），想争上游，体现强势牌
+    # 进入冲刺阶段（my_rest_cards <= 10）
+    if (power >= 7 or power_level == "strong") and my_rest_cards <= 10:
+        if greater_pos == lower_hand_pos or cur_pos == lower_hand_pos:
+            return (True, f"牌力强，冲刺阶段，次打下家（位置{lower_hand_pos}），争取上游")
+    
+    # 8.3 仅剩一手牌，减轻搭档防守压力
+    if my_rest_cards <= 5:
+        return (True, f"仅剩{my_rest_cards}张牌，炸牌减轻搭档防守压力，引对方火力")
+    
+    # 9. 其他情况谨慎使用
     return (False, f"炸弹数量（{bomb_count}个）和对手剩余牌数（{opponent_rest_cards}张）不满足使用条件")
 
 if __name__ == "__main__":
