@@ -253,6 +253,15 @@ class EnhancedGameStateManager:
         # 检查当前玩家是否是防守责任人
         return self.my_pos == responsible_defender
     
+    def get_current_rank(self) -> str:
+        """
+        获取当前级牌
+        
+        Returns:
+            当前级牌
+        """
+        return self.cur_rank
+    
     def get_state_summary(self) -> Dict:
         """
         閼惧嘲褰囬悩鑸典焦鎲崇憰

@@ -465,8 +465,20 @@ class YF1_V5_Client:
             is_reported_single = game_state.get("is_reported_single", False)
             
             # 计算天然单张数量和是否有天然单张
-            # 天然单张是指手牌中原本就是单张的牌，不是通过拆炸弹产生的
-            natural_single_count = len(single_member)
+            # 天然单张定义：
+            # 1. 整幅手牌只有唯一的一张
+            # 2. 级牌、小王、大王不要列入天然单张
+            cur_rank = game_state.get("cur_rank", "2")
+            
+            # 筛选天然单张：排除级牌、小王、大王
+            natural_singles = []
+            for card in single_member:
+                # 检查是否是级牌、小王、大王
+                if card[-1] == cur_rank or card[-1] == 'B' or card[-1] == 'R':
+                    continue
+                natural_singles.append(card)
+            
+            natural_single_count = len(natural_singles)
             has_natural_single = natural_single_count > 0
             
             single_sugg = single_card_strategy(

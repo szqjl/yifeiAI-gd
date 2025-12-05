@@ -12,6 +12,9 @@ def evaluate_grouping_effect(hand_cards: List[str], action_cards: List[str],
     """
     评估动作的组牌效果
     
+    组牌最高准则：
+    0. 胜负规则优先：掼蛋的胜负规则就是谁最先出完手牌，因此开局组牌时，应尽可能降低手数，减少出完牌的轮次，轮次越少、出牌越快，也就越容易获得头游。
+    
     组牌原则：
     1. 轮次优先：轮次越少越好
     2. 单牌越少越好
@@ -69,21 +72,21 @@ def evaluate_grouping_effect(hand_cards: List[str], action_cards: List[str],
             # 有王/级牌保护，单张能回收，增加评分
             score += 30.0
             reasons.append("有王/级牌保护，单张能回收，优先出单")
-    # 1. 评估轮次减少（组牌第一原则）
-    # 如果动作能减少轮次（如三带对、顺子等），加分
+    # 1. 评估轮次减少（组牌第一原则，体现胜负规则优先准则）
+    # 如果动作能减少轮次（如三带对、顺子等），大幅加分
     elif action_type in ["THREE_WITH_TWO", "Straight", "STRAIGHT"]:
         # 三带对或普通顺子可以减少轮次
         if len(action_cards) >= 5:
             rounds_reduced = 1
-            score += 30.0
-            reasons.append("减少轮次")
+            score += 45.0  # 增加轮次减少的权重，体现胜负规则优先
+            reasons.append("减少轮次（胜负规则优先）")
     # 同花顺特殊处理：不鼓励第一轮主动打出
     elif action_type == "StraightFlush":
         if len(action_cards) >= 5:
             rounds_reduced = 1
-            # 减少轮次加分，但主动出牌时大幅降低同花顺优先级
-            score += 10.0  # 普通顺子加30分，同花顺只加10分
-            reasons.append("减少轮次（同花顺）")
+            # 减少轮次加分，但主动出牌时降低同花顺优先级
+            score += 15.0  # 增加同花顺的轮次减少权重
+            reasons.append("减少轮次（同花顺，胜负规则优先）")
     
     # 2. 评估单牌减少（组牌第一原则）
     # 统计剩余单牌数（在动作执行后）
