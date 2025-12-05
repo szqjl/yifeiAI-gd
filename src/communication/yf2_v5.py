@@ -91,9 +91,9 @@ class YF2_V5_Client:
         
         # V5特性：智能决策融合
         self.use_hybrid_decision = True  # 使用混合决策（RL + Knowledge + Rule-based）
-        self.rl_weight = 0.2  # RL决策权重（降低）
-        self.knowledge_weight = 0.3  # 知识库权重（降低）
-        self.rule_weight = 0.5  # 规则引擎权重（大幅提高，优先策略建议）
+        self.rl_weight = 0.15  # RL决策权重（进一步降低）
+        self.knowledge_weight = 0.25  # 知识库权重（进一步降低）
+        self.rule_weight = 0.6  # 规则引擎权重（进一步提高，优先策略建议）
         
         self.hand_cards = [] # Track current hand
         
@@ -130,6 +130,10 @@ class YF2_V5_Client:
             
             # 设置 websocket 引用以保持向后兼容
             self.websocket = self.ws_manager.websocket
+            
+            # 显示连接成功和期望位置信息
+            print(f"[yf2_v5] 连接成功！期望位置：{self.player_id}号位（实际位置将在游戏开始时由服务器分配）")
+            self.logger.info(f"✓ Connected to server. Expected position: {self.player_id} (actual position will be assigned by server at game start)")
             
             # 设置消息处理回调
             self.ws_manager.set_message_handler(self.process_message)
@@ -1129,11 +1133,11 @@ class YF2_V5_Client:
                 
                 # 为所有动作生成策略评分（即使没有特殊调整）
                 # 大幅提高基础评分，让策略建议更有竞争力（不乘以权重，直接使用高分）
-                base_score = 150.0  # 提高基础规则评分到150（不乘以权重）
+                base_score = 200.0  # 大幅提高基础规则评分到200（不乘以权重）
                 
                 # 主动出牌时，进一步提高基础评分，确保主动出牌优先
                 if is_active and action_type != "PASS":
-                    base_score += 30.0  # 主动出牌额外加分
+                    base_score += 50.0  # 主动出牌额外加分（提高）
                 
                 final_score = base_score + score_adjustment + base_strategy_score
                 # 确保评分不为负数，至少保持基础评分
@@ -1198,7 +1202,7 @@ class YF2_V5_Client:
                 rl_action = self.rl_engine.decide(data_with_hand)
                 if rl_action is not None and 0 <= rl_action < len(action_list):
                     # RL决策评分（使用权重）
-                    rl_score = 100.0 * self.rl_weight  # 基础RL评分
+                    rl_score = 80.0 * self.rl_weight  # 降低基础RL评分到80
                     candidates.append((rl_action, rl_score, "RL"))
                     self.rl_decision_count += 1
                     self.logger.debug(f"RL decision: action={rl_action}, score={rl_score:.1f}")
@@ -1218,15 +1222,36 @@ class YF2_V5_Client:
             self.logger.warning("No candidates from hybrid decision, using default fallback")
             return self.decision_engine.decide(data)
         
-        # 5. 选择最优动作（按加权评分排序）
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        best_action, best_score, best_source = candidates[0]
+        # 5. 合并同一动作的多个候选（关键修复：避免策略建议被覆盖）
+        # 同一动作可能有多个候选（知识库、RL、策略），需要合并取最高分
+        merged_candidates = {}
+        for idx, score, source in candidates:
+            if idx not in merged_candidates:
+                merged_candidates[idx] = (score, source)
+            else:
+                # 如果已有该动作的候选，取评分更高的
+                existing_score, existing_source = merged_candidates[idx]
+                if score > existing_score:
+                    merged_candidates[idx] = (score, source)
+                # 如果是策略建议，优先保留（策略评分通常更高）
+                elif "Strategy" in source and "Strategy" not in existing_source:
+                    merged_candidates[idx] = (score, source)
+        
+        # 转换为列表并排序
+        merged_list = [(idx, score, source) for idx, (score, source) in merged_candidates.items()]
+        merged_list.sort(key=lambda x: x[1], reverse=True)
+        
+        if not merged_list:
+            self.logger.warning("No merged candidates, using V4 fallback")
+            return self.decision_engine.decide(data)
+        
+        best_action, best_score, best_source = merged_list[0]
         
         # 记录前3个候选，便于调试
-        top_candidates = candidates[:3] if len(candidates) >= 3 else candidates
+        top_candidates = merged_list[:3] if len(merged_list) >= 3 else merged_list
         self.logger.info(
             f"Hybrid decision: action={best_action}, score={best_score:.1f}, "
-            f"source={best_source}, total_candidates={len(candidates)}"
+            f"source={best_source}, total_candidates={len(merged_list)} (merged from {len(candidates)} raw candidates)"
         )
         if len(top_candidates) > 1:
             self.logger.info(f"Top candidates: {[(idx, f'{score:.1f}', src) for idx, score, src in top_candidates]}")
@@ -1243,10 +1268,15 @@ class YF2_V5_Client:
             self.hand_cards = hand_cards # Store for RL engine
             my_pos = data.get("myPos", self.player_id)
             
-            # 更新实际位置（服务器分配的）
+            # 更新实际位置（服务器根据连接顺序分配）
+            # 第1个连接 → 位置0，第2个连接 → 位置1，第3个连接 → 位置2，第4个连接 → 位置3
             if my_pos != self.player_id:
-                self.logger.info(f"Position updated: {self.player_id} -> {my_pos}")
+                print(f"[yf2_v5] 位置更新：期望位置{self.player_id} → 实际位置{my_pos}号位（服务器根据连接顺序分配）")
+                self.logger.info(f"Position updated: {self.player_id} -> {my_pos} (服务器根据连接顺序分配)")
                 self.player_id = my_pos
+            else:
+                # 位置与期望一致，也显示一下
+                print(f"[yf2_v5] 我在{my_pos}号位（与期望位置一致）")
             
             # 打印手牌信息
             print(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
@@ -1317,6 +1347,36 @@ class YF2_V5_Client:
             cur_action = data.get("curAction", [])
             greater_pos = data.get("greaterPos", -1)
             greater_action = data.get("greaterAction", [])
+            
+            # 如果是第一个play消息，尝试从restCards中获取所有玩家的手牌
+            if not hasattr(self, '_first_play_processed'):
+                rest_cards = data.get("restCards", [])
+                if rest_cards and self.game_recorder:
+                    # 从restCards中提取所有玩家的手牌
+                    all_hands = {}
+                    for rest_info in rest_cards:
+                        if isinstance(rest_info, list) and len(rest_info) >= 2:
+                            pos = rest_info[0]
+                            if isinstance(pos, str):
+                                try:
+                                    pos = int(pos)
+                                except:
+                                    continue
+                            cards = rest_info[1]
+                            if cards and isinstance(cards, list) and len(cards) > 0:
+                                if isinstance(cards[0], list):
+                                    normalized_cards = [f"{c[0]}{c[1]}" if isinstance(c, list) and len(c) >= 2 else str(c) for c in cards]
+                                    cards = normalized_cards
+                            all_hands[pos] = cards
+                    
+                    # 更新游戏记录中的all_players_hands
+                    if all_hands:
+                        # 加载当前游戏数据
+                        if hasattr(self.game_recorder, 'current_game') and self.game_recorder.current_game:
+                            # 更新all_players_hands
+                            self.game_recorder.current_game['all_players_hands'] = all_hands
+                            self.logger.info(f"从第一个play消息中获取所有玩家手牌: {list(all_hands.keys())}")
+                self._first_play_processed = True
             
             # 更新连续PASS计数（用于special模式）
             if cur_action and len(cur_action) > 0:
@@ -1418,7 +1478,21 @@ class YF2_V5_Client:
         """
         保存战绩到 game_scores.json（用于GUI显示）
         
-        注意：位置是服务器动态分配的，需要根据实际 myPos 判断队友
+        注意：服务器根据连接顺序来确定座位
+        - 第1个连接 → 位置0
+        - 第2个连接 → 位置1
+        - 第3个连接 → 位置2
+        - 第4个连接 → 位置3
+        
+        组队规则：
+        - 第1个连接(位置0)和第3个连接(位置2)自动为一队
+        - 第2个连接(位置1)和第4个连接(位置3)自动为一队
+        
+        标准启动顺序（确保yf1_v5和yf2_v5在同一队）：
+        1. yf1_v5.py → 位置0 (Team A)
+        2. run_lalala_client3.py → 位置1 (Team B)
+        3. yf2_v5.py → 位置2 (Team A)
+        4. run_lalala_client4.py → 位置3 (Team B)
         
         Args:
             victory_num: 胜利次数列表 [pos0_wins, pos1_wins, pos2_wins, pos3_wins]
@@ -1446,18 +1520,34 @@ class YF2_V5_Client:
             self.logger.info(f"Position info saved: my_pos={self.player_id}, teammate_pos={teammate_pos}")
         
         # 判断获胜队伍
-        # 在掼蛋中，0和2是队友，1和3是队友
-        # 但实际位置是服务器分配的，所以用 self.player_id 来判断
+        # 服务器根据连接顺序确定座位：
+        # - 如果严格按照标准启动顺序，yf1_v5在位置0，yf2_v5在位置2，它们是队友
+        # - 但如果启动顺序不一致，可能不在同一队
+        # 解决方案：根据当前client的player_name判断
+        # - 如果当前client是yf1_v5或yf2_v5，那么我的位置就是Team A的一部分
+        # - 我的队友位置（根据掼蛋规则：0和2是队友，1和3是队友）也是Team A的一部分
+        # - 其他两个位置是Team B
         if len(victory_num) >= 4:
             my_pos = self.player_id
+            # 根据掼蛋规则：0和2是队友，1和3是队友
             teammate_pos = (my_pos + 2) % 4
             opponent1_pos = (my_pos + 1) % 4
             opponent2_pos = (my_pos + 3) % 4
             
-            # Team A: yf1_v5 + yf2_v5 (我方)
-            team_a_score = victory_num[my_pos] + victory_num[teammate_pos]
-            # Team B: 对手
-            team_b_score = victory_num[opponent1_pos] + victory_num[opponent2_pos]
+            # 判断当前client是否是我们的AI（yf1_v5或yf2_v5）
+            is_yf_ai = self.user_info in ["yf1_v5", "yf2_v5"]
+            
+            if is_yf_ai:
+                # Team A: 当前AI的位置 + 队友位置
+                team_a_score = victory_num[my_pos] + victory_num[teammate_pos]
+                # Team B: 对手位置
+                team_b_score = victory_num[opponent1_pos] + victory_num[opponent2_pos]
+            else:
+                # 如果当前client不是我们的AI，则反向计算
+                # Team A: 对手位置（假设对手是yf1_v5和yf2_v5）
+                team_a_score = victory_num[opponent1_pos] + victory_num[opponent2_pos]
+                # Team B: 当前位置 + 队友位置
+                team_b_score = victory_num[my_pos] + victory_num[teammate_pos]
             
             # 更新战绩
             if team_a_score > team_b_score:
@@ -1468,7 +1558,7 @@ class YF2_V5_Client:
                 self.logger.info(f"Opponent Team wins! (pos {opponent1_pos}+{opponent2_pos}: {team_b_score} vs pos {my_pos}+{teammate_pos}: {team_a_score})")
             else:
                 # 平局，不增加胜场
-                self.logger.info(f"Draw! ({team_a_score} vs {team_b_score})")
+                self.logger.info(f"Draw! (pos {my_pos}+{teammate_pos}: {team_a_score} vs pos {opponent1_pos}+{opponent2_pos}: {team_b_score})")
             
             scores["total_games"] += 1
         

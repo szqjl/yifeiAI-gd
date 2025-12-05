@@ -331,6 +331,10 @@ class BatchExecutorGUI:
                 team_a_rate = (team_a_wins / total_games * 100) if total_games > 0 else 0
                 team_b_rate = (team_b_wins / total_games * 100) if total_games > 0 else 0
                 
+                # 计算胜负差
+                win_diff = team_a_wins - team_b_wins
+                win_diff_str = f"+{win_diff}" if win_diff > 0 else str(win_diff)
+                
                 result_str = f"""
 ═══════════════════════════════════════
            比赛结果统计
@@ -347,6 +351,8 @@ class BatchExecutorGUI:
   胜率: {team_b_rate:.2f}%
 
 平局: {draws}
+
+胜负差: {win_diff_str}
 
 ═══════════════════════════════════════
 结果文件: {score_file.absolute()}
@@ -568,11 +574,28 @@ class BatchExecutorGUI:
                 self.completed_label.config(text=f"{completed} / {total}")
                 self.restart_label.config(text=str(restarts))
                 
-                # 更新战绩
-                if self.executor.tracker:
-                    tracker = self.executor.tracker
-                    score_text = f"{tracker.team_a_wins} 胜 / {tracker.team_b_wins} 负"
-                    self.score_label.config(text=score_text)
+                # 更新战绩（优先从game_scores.json读取，如果没有则从tracker读取）
+                try:
+                    import json
+                    from pathlib import Path
+                    score_file = Path("game_scores.json")
+                    if score_file.exists():
+                        with open(score_file, 'r', encoding='utf-8') as f:
+                            scores = json.load(f)
+                        team_a_wins = scores.get("team_a_wins", 0)
+                        team_b_wins = scores.get("team_b_wins", 0)
+                        score_text = f"{team_a_wins} 胜 / {team_b_wins} 负"
+                        self.score_label.config(text=score_text)
+                    elif self.executor.tracker:
+                        tracker = self.executor.tracker
+                        score_text = f"{tracker.team_a_wins} 胜 / {tracker.team_b_wins} 负"
+                        self.score_label.config(text=score_text)
+                except Exception:
+                    # 如果读取失败，使用tracker数据
+                    if self.executor.tracker:
+                        tracker = self.executor.tracker
+                        score_text = f"{tracker.team_a_wins} 胜 / {tracker.team_b_wins} 负"
+                        self.score_label.config(text=score_text)
             else:
                 # 状态为空，可能还在初始化
                 pass
@@ -590,11 +613,28 @@ class BatchExecutorGUI:
         self.completed_label.config(text=f"{completed} / {total}")
         self.restart_label.config(text=str(restarts))
         
-        # 更新战绩
-        if self.executor and self.executor.tracker:
-            tracker = self.executor.tracker
-            score_text = f"{tracker.team_a_wins} 胜 / {tracker.team_b_wins} 负"
-            self.score_label.config(text=score_text)
+        # 更新战绩（优先从game_scores.json读取，如果没有则从tracker读取）
+        try:
+            import json
+            from pathlib import Path
+            score_file = Path("game_scores.json")
+            if score_file.exists():
+                with open(score_file, 'r', encoding='utf-8') as f:
+                    scores = json.load(f)
+                team_a_wins = scores.get("team_a_wins", 0)
+                team_b_wins = scores.get("team_b_wins", 0)
+                score_text = f"{team_a_wins} 胜 / {team_b_wins} 负"
+                self.score_label.config(text=score_text)
+            elif self.executor and self.executor.tracker:
+                tracker = self.executor.tracker
+                score_text = f"{tracker.team_a_wins} 胜 / {tracker.team_b_wins} 负"
+                self.score_label.config(text=score_text)
+        except Exception:
+            # 如果读取失败，使用tracker数据
+            if self.executor and self.executor.tracker:
+                tracker = self.executor.tracker
+                score_text = f"{tracker.team_a_wins} 胜 / {tracker.team_b_wins} 负"
+                self.score_label.config(text=score_text)
     
     def stop_execution(self):
         """停止执行"""
