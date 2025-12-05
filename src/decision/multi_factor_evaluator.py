@@ -92,9 +92,12 @@ class MultiFactorEvaluator:
         scores = {}
         
         # 1. 获取游戏状态信息
-        hand_cards = self.state.get_player_cards()
-        game_stage = self.game_stage_analyzer.get_game_stage(hand_cards)
+        player_cards = self.state.get_player_cards()
+        game_stage = self.game_stage_analyzer.get_game_stage(player_cards)
         cur_rank = self.state.get_current_rank()
+        
+        # 获取当前玩家手牌
+        hand_cards = self.state.hand_cards
         
         # 判断是否有王和级牌
         has_king = any('B' in card or 'R' in card for card in hand_cards)

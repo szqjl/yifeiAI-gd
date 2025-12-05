@@ -2,8 +2,8 @@ import sys
 from pathlib import Path
 
 # Add src to path
-if str(Path("d:/geminicard/yifeiAI-gd/src")) not in sys.path:
-    sys.path.insert(0, str(Path("d:/geminicard/yifeiAI-gd/src")))
+if str(Path("d:/YiFeiAI-GD/src")) not in sys.path:
+    sys.path.insert(0, str(Path("d:/YiFeiAI-GD/src")))
 
 try:
     from communication.modern_client import ModernGuandanClient

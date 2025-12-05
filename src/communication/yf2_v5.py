@@ -734,7 +734,12 @@ class YF2_V5_Client:
                         is_rank_card = action_rank == cur_rank
                         
                         # 3.0.1 Normal模式：优先使用天然单张
-                        if is_natural_single and not is_rank_card:
+                        # **关键修复**：先检查是否在炸弹/顺子中，如果是则大幅减分，避免拆炸弹
+                        if is_in_bomb or is_in_straight:
+                            # 在炸弹或顺子中，大幅减分（normal模式严格避免拆炸弹/顺子）
+                            score_adjustment -= 50.0  # 从-15改为-50，大幅增加拆炸弹的惩罚
+                            strategy_reason = "单牌策略：normal模式，严格避免拆炸弹/顺子（拆炸弹代价高）"
+                        elif is_natural_single and not is_rank_card:
                             score_adjustment += 40.0  # 天然单张大幅加分
                             strategy_reason = "单牌策略：normal模式，优先使用天然单张"
                         elif action_rank_val >= 15 and not is_rank_card:  # 牌值>=15（2、B、R）且不是级牌
@@ -744,20 +749,17 @@ class YF2_V5_Client:
                             # 级牌单张，根据情况判断
                             score_adjustment += 20.0  # 级牌单张中等加分
                             strategy_reason = "单牌策略：normal模式，级牌单张"
-                        elif is_in_bomb or is_in_straight:
-                            # 在炸弹或顺子中，减分（normal模式不优先）
-                            score_adjustment -= 15.0
-                            strategy_reason = "单牌策略：normal模式，避免拆炸弹/顺子"
                         
                         # 3.0.2 Special模式：连续PASS过多时触发（pass_num >= 5 or my_pass_num >= 3）
                         if pass_num >= 5 or my_pass_num >= 3:
                             # special模式：从后往前遍历，不使用炸弹中的牌，不在顺子中
-                            if not is_in_bomb and not is_in_straight and not is_rank_card:
+                            if is_in_bomb or is_in_straight:
+                                # **关键修复**：special模式中，拆炸弹/顺子的惩罚更严格
+                                score_adjustment -= 80.0  # 从-30改为-80，special模式严格禁止拆炸弹
+                                strategy_reason = f"单牌策略：special模式（连续PASS {pass_num}/{my_pass_num}次），严格禁止拆炸弹/顺子"
+                            elif not is_rank_card:
                                 score_adjustment += 50.0  # special模式大幅加分
                                 strategy_reason = f"单牌策略：special模式（连续PASS {pass_num}/{my_pass_num}次），不使用炸弹/顺子中的牌"
-                            elif is_in_bomb or is_in_straight:
-                                score_adjustment -= 30.0  # special模式中，炸弹/顺子中的牌大幅减分
-                                strategy_reason = "单牌策略：special模式，避免拆炸弹/顺子"
                         
                         # 3.0.3 残局时优先使用大单张（numofnext <= 4）
                         if numofnext <= 4:
@@ -779,6 +781,9 @@ class YF2_V5_Client:
                     active_cur = [9, 10, 9, 8, 10, 10, 2]  # 固定阈值
                     
                     # 获取动作的牌值（用于判断是否小于阈值）
+                    # 确保action_rank_val已定义，如果没有则使用默认值
+                    if 'action_rank_val' not in locals():
+                        action_rank_val = 0
                     action_rank_val_for_active = action_rank_val
                     
                     # 1. 对子优先级最高（+80分）
@@ -815,8 +820,17 @@ class YF2_V5_Client:
                         strategy_reason = "主动出牌策略：三连对/钢板优先级第五"
                     
                     # 6. 单张优先级最低（+20分，但需要满足阈值条件）
+                    # **关键修复**：如果单张在炸弹中，即使满足阈值也不加分，避免拆炸弹
                     elif action_type == "Single" or action_type == "SINGLE":
-                        if action_rank_val_for_active < active_cur[0]:  # cur[0] = 9
+                        # 检查是否在炸弹中（需要重新获取is_in_bomb，因为可能不在单牌策略的if块内）
+                        action_card_for_check = action_cards[0] if action_cards else ""
+                        is_in_bomb_for_active = action_card_for_check in bomb_member if action_card_for_check else False
+                        
+                        if is_in_bomb_for_active:
+                            # 拆炸弹的单张，即使满足阈值也不加分，反而减分
+                            score_adjustment -= 30.0
+                            strategy_reason = "主动出牌策略：单张在炸弹中，避免拆炸弹（即使满足阈值）"
+                        elif action_rank_val_for_active < active_cur[0]:  # cur[0] = 9
                             score_adjustment += 20.0
                             strategy_reason = "主动出牌策略：单张优先级最低（满足阈值）"
                         else:
@@ -1196,8 +1210,20 @@ class YF2_V5_Client:
         if self.rl_available and self.rl_engine:
             try:
                 # 注入手牌信息
+                # 优先使用服务器发送的最新handCards，如果没有则使用自己维护的
+                server_hand_cards = data.get("handCards", [])
+                if server_hand_cards:
+                    # 服务器发送了最新手牌，使用服务器的（更准确）
+                    hand_cards_for_rl = server_hand_cards
+                    if len(server_hand_cards) != len(self.hand_cards):
+                        self.logger.debug(f"Server handCards ({len(server_hand_cards)}) differs from self.hand_cards ({len(self.hand_cards)}), using server's")
+                else:
+                    # 服务器没有发送，使用自己维护的
+                    hand_cards_for_rl = self.hand_cards
+                    self.logger.debug(f"No server handCards, using self.hand_cards ({len(hand_cards_for_rl)})")
+                
                 data_with_hand = data.copy()
-                data_with_hand['handCards'] = self.hand_cards
+                data_with_hand['handCards'] = hand_cards_for_rl
                 
                 rl_action = self.rl_engine.decide(data_with_hand)
                 if rl_action is not None and 0 <= rl_action < len(action_list):
@@ -1266,6 +1292,15 @@ class YF2_V5_Client:
             # 获取初始手牌信息
             hand_cards = data.get("handCards", [])
             self.hand_cards = hand_cards # Store for RL engine
+            
+            # 调试：检查手牌中是否有重复卡牌
+            from collections import Counter
+            card_counts = Counter(hand_cards)
+            duplicates = {card: count for card, count in card_counts.items() if count > 1}
+            if duplicates:
+                self.logger.info(f"Initial hand has duplicate cards (normal in 2-deck game): {duplicates}")
+            else:
+                self.logger.debug(f"Initial hand: {len(hand_cards)} cards, no duplicates")
             my_pos = data.get("myPos", self.player_id)
             
             # 更新实际位置（服务器根据连接顺序分配）
@@ -1283,9 +1318,19 @@ class YF2_V5_Client:
             self.logger.info(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
             
             # 打印等级信息（用于调试）
-            self_rank = data.get("selfRank", "?")
-            oppo_rank = data.get("oppoRank", "?")
-            cur_rank = data.get("curRank", "?")
+            self_rank = data.get("selfRank") or data.get("self_rank") or data.get("myRank") or "?"
+            oppo_rank = data.get("oppoRank") or data.get("oppo_rank") or data.get("opponentRank") or "?"
+            cur_rank = data.get("curRank") or data.get("cur_rank") or data.get("currentRank") or "?"
+            
+            # 如果还是 "?"，打印可用的键以便调试
+            if self_rank == "?" or oppo_rank == "?" or cur_rank == "?":
+                available_keys = [k for k in data.keys() if 'rank' in k.lower() or 'level' in k.lower() or 'grade' in k.lower()]
+                if available_keys:
+                    print(f"[Debug] 等级信息未找到，但发现相关键: {available_keys}")
+                # 打印所有键的前20个（避免输出过长）
+                all_keys = list(data.keys())[:20]
+                print(f"[Debug] 数据键（前20个）: {all_keys}")
+            
             print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
             
             # 尝试获取所有玩家的手牌信息
@@ -1404,9 +1449,15 @@ class YF2_V5_Client:
                 if cur_pos == self.player_id:
                     if len(cur_action) >= 3 and isinstance(cur_action[2], list):
                         played_cards = cur_action[2]
+                        old_hand_size = len(self.hand_cards)
                         for card in played_cards:
                             if card in self.hand_cards:
                                 self.hand_cards.remove(card)
+                            else:
+                                self.logger.warning(f"Card {card} not found in hand_cards when trying to remove")
+                        new_hand_size = len(self.hand_cards)
+                        if old_hand_size != new_hand_size + len(played_cards):
+                            self.logger.warning(f"Hand size mismatch: removed {len(played_cards)} cards, hand size changed from {old_hand_size} to {new_hand_size}")
             
             # 记录到游戏记录器
             context = {

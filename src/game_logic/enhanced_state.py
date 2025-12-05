@@ -217,6 +217,10 @@ class EnhancedGameStateManager:
         """閼惧嘲褰嘝ASS濞嗏剝鏆"""
         return self.card_tracker.get_pass_count()
     
+    def get_current_rank(self) -> str:
+        """获取当前级牌"""
+        return self.cur_rank
+    
     def get_remaining_cards(self) -> Dict:
         """閼惧嘲褰囬崜鈺缍戦悧灞界氨娣団剝浼"""
         return self.card_tracker.get_remaining_cards(self.cur_rank)
