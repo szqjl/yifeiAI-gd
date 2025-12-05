@@ -30,6 +30,9 @@ test_*.py
 game_records/
 logs/
 
+# Windows special files
+nul
+
 # Temporary JSON files
 execution_state.json
 game_scores.json
