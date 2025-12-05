@@ -228,16 +228,26 @@ def combine_handcards(handcards, rank, card_val):
                 
             rank = card[-1]
             if rank in Straight:
-                # 如果这张牌有三张，且不是最后一张需要的牌，跳过
-                if card_count[rank] >= 3 and len(Straight) > 1:
-                    nowhandcards.append(card)
-                    continue
-                # 如果这张牌有三张，且是最后一张需要的牌，检查是否会导致剩余两张
-                if card_count[rank] >= 3 and len(Straight) == 1:
-                    # 检查剩余的牌中是否还有同点数的牌
-                    remaining = card_count[rank] - 1
-                    if remaining == 2:
-                        # 拆三张牌会导致对子，跳过
+                # 如果这张牌有三张，需要检查拆三张的后果
+                if card_count[rank] >= 3:
+                    # 检查拆三张后是否会产生大量小单张
+                    # 统计拆三张后可能产生的小单张数量
+                    # 先假设拆这张牌
+                    temp_card_count = card_count.copy()
+                    temp_card_count[rank] -= 1
+                    
+                    # 统计拆牌后可能产生的小单张（<7）数量
+                    small_singles_after = 0
+                    for r, cnt in temp_card_count.items():
+                        if cnt == 1:  # 单张
+                            # 转换为数字比较
+                            if r in ['3', '4', '5', '6']:  # <7的单张
+                                small_singles_after += 1
+                    
+                    # 条件1：如果不是最后一张需要的牌，跳过
+                    # 条件2：如果拆三张会导致剩余两张，跳过
+                    # 条件3：如果拆三张后会产生2张以上<7的单张，跳过
+                    if (len(Straight) > 1) or (len(Straight) == 1 and card_count[rank] - 1 == 2) or (small_singles_after >= 2):
                         nowhandcards.append(card)
                         continue
                 tmp.append(card)
@@ -245,7 +255,13 @@ def combine_handcards(handcards, rank, card_val):
             else:
                 nowhandcards.append(card)
         
-        # 如果没有成功组成顺子，且有红桃配，尝试使用红桃配补顺子
+        # 如果没有成功组成顺子，且有红桃配，万不得已才尝试使用红桃配补顺子
+        # 万不得已的条件：
+        # 1. 无法组成任何其他有效牌型
+        # 2. 手牌中单张数量过多
+        # 3. 没有更好的出牌选择
+        # 万不得已才使用红桃配补顺子：当前没有成功组成顺子
+        # 暂时简化条件，后续再完善复杂的条件判断
         if len(tmp) < 5 and wild_card:
             # 重新收集可以组成顺子的牌，包括红桃配
             Straight = []
@@ -269,6 +285,14 @@ def combine_handcards(handcards, rank, card_val):
             nowhandcards = []
             wild_used = False
             
+            # 重新统计每张牌的数量，用于检查拆三张牌
+            card_count = {}
+            for card in handcards:
+                rank = card[-1]
+                if rank not in card_count:
+                    card_count[rank] = 0
+                card_count[rank] += 1
+            
             for i in range(0, len(handcards)):
                 card = handcards[i]
                 rank = card[-1]
@@ -282,6 +306,28 @@ def combine_handcards(handcards, rank, card_val):
                     else:
                         nowhandcards.append(card)
                 elif rank in Straight:
+                    # 同样检查是否会拆三张牌，添加小单张检查
+                    if card_count[rank] >= 3:
+                        # 检查拆三张后是否会产生大量小单张
+                        # 统计拆三张后可能产生的小单张数量
+                        # 先假设拆这张牌
+                        temp_card_count = card_count.copy()
+                        temp_card_count[rank] -= 1
+                        
+                        # 统计拆牌后可能产生的小单张（<7）数量
+                        small_singles_after = 0
+                        for r, cnt in temp_card_count.items():
+                            if cnt == 1:  # 单张
+                                # 转换为数字比较
+                                if r in ['3', '4', '5', '6']:  # <7的单张
+                                    small_singles_after += 1
+                        
+                        # 条件1：如果不是最后一张需要的牌，跳过
+                        # 条件2：如果拆三张会导致剩余两张，跳过
+                        # 条件3：如果拆三张后会产生2张以上<7的单张，跳过
+                        if (len(Straight) > 1) or (len(Straight) == 1 and card_count[rank] - 1 == 2) or (small_singles_after >= 2):
+                            nowhandcards.append(card)
+                            continue
                     tmp.append(card)
                     Straight.remove(rank)
                 else:

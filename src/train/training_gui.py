@@ -14,12 +14,17 @@ from datetime import datetime
 import queue
 
 # **修复**：设置Windows控制台编码为UTF-8
+# 注意：在GUI应用中，stdout可能不可用，需要安全处理
 if sys.platform == 'win32':
     try:
         import io
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-    except:
+        # 检查stdout是否可用且未关闭
+        if hasattr(sys.stdout, 'buffer') and not getattr(sys.stdout, 'closed', False):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        if hasattr(sys.stderr, 'buffer') and not getattr(sys.stderr, 'closed', False):
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except (AttributeError, ValueError, OSError):
+        # stdout/stderr不可用，跳过重定向
         pass
 
 # Add project root to path
@@ -206,7 +211,13 @@ class TrainingGUI:
         self.log_text.see(tk.END)
         
         # 同时输出到控制台（用于调试）
-        print(log_message.strip())
+        # 安全处理：如果stdout已关闭，则跳过控制台输出
+        try:
+            if sys.stdout and not sys.stdout.closed:
+                print(log_message.strip())
+        except (ValueError, AttributeError, OSError):
+            # stdout不可用或已关闭，忽略错误
+            pass
         
     def process_log_queue(self):
         """处理日志队列（用于线程间通信）"""
