@@ -6,13 +6,18 @@ from src.rl_agent.agent import PPOAgent
 # from .base_decision_engine import BaseDecisionEngine 
 
 class RLDecisionEngine:
-    def __init__(self, model_path="models/ppo_model_v1.pth"):
-        self.agent = PPOAgent()
+    def __init__(self, model_path="models/bc_model_v1.pth"):
+        # **关键修复**：确保action_dim与训练时一致（512维）
+        # **优化**：使用优化后的预测阈值0.3
+        self.agent = PPOAgent(input_dim=512, action_dim=512, prediction_threshold=0.3)
+        self.model_loaded = False
         try:
             self.agent.load(model_path)
+            self.model_loaded = True
             print(f"RL Engine loaded model from {model_path}")
         except Exception as e:
             print(f"Failed to load RL model: {e}. Using random weights (Not recommended for production).")
+            self.model_loaded = False
             
     def decide(self, data: Dict) -> int:
         """
@@ -23,29 +28,64 @@ class RLDecisionEngine:
         action_list = data.get("actionList", [])
         if not action_list:
             return 0
+        
+        # 如果只有PASS动作，直接返回PASS，不需要调用模型
+        if len(action_list) == 1:
+            first_action = action_list[0]
+            is_pass = False
+            if first_action == 'PASS':
+                is_pass = True
+            elif isinstance(first_action, list):
+                if all(item == 'PASS' for item in first_action) or (len(first_action) > 0 and first_action[0] == 'PASS'):
+                    is_pass = True
+            if is_pass:
+                print("[RL Debug] Only PASS available, returning PASS without model call")
+                return 0
             
+        # 处理两种不同的action_list格式
+        # 格式1: ['PASS', 'PASS', 'PASS'] - 简单字符串列表
+        # 格式2: [['PASS', 'PASS', 'PASS'], ['Single', 'Q', ['SQ']], ...] - 嵌套列表，包含动作对象
+        
+        # 简化格式识别逻辑：
+        # 如果第一个元素是字符串，那么就是格式1
+        # 如果第一个元素是列表，那么就是格式2
+        if len(action_list) > 0 and isinstance(action_list[0], str):
+            # 格式1，直接使用
+            pass
+        elif len(action_list) > 0 and isinstance(action_list[0], list):
+            # 格式2，直接使用原始的action_list
+            pass
+              
         # Parse state from data
-        # Note: data keys might differ from what we assumed. 
-        # Client passes 'data' which has 'handCards' (maybe? need to check client code)
-        # In yf1_v4.py, handle_notification updates hand cards, but handle_action_request 
-        # passes 'data' which has 'actionList'. It might NOT have 'handCards' directly 
-        # if it's just the action request.
-        # We need to track hand cards in the engine or pass them in.
-        # For now, let's assume we need to track state or extract it.
-        
-        # simplified: just try to match action
-        # We need the current hand to construct state. 
-        # The client should ideally pass the full state.
-        # But for drop-in replacement, we might need to rely on what's in 'data' 
-        # or maintain internal state.
-        
-        # Let's assume 'handCards' is in data or we can't do much.
-        # If not, we might need to update client to pass it.
+        hand_cards = data.get('handCards', [])
         state_info = {
-            'hand': data.get('handCards', []), # This might be missing in 'act' msg
-            'table': [], # TODO: Extract from publicInfo
+            'hand': hand_cards,
+            'table': [],
             'history': []
         }
+        
+        # Debug: Print hand cards for troubleshooting
+        if not hand_cards:
+            print(f"[RL Debug] WARNING: handCards is empty! Available keys: {list(data.keys())}")
+        else:
+            print(f"[RL Debug] Hand cards ({len(hand_cards)}): {hand_cards[:10]}...")  # 只显示前10张
+        
+        # 检查是否只有PASS动作（在调用模型之前）
+        only_pass = True
+        for action in action_list:
+            if action == 'PASS':
+                continue
+            elif isinstance(action, list):
+                if len(action) > 0 and action[0] == 'PASS':
+                    continue
+                elif all(item == 'PASS' for item in action):
+                    continue
+            only_pass = False
+            break
+        
+        if only_pass:
+            print("[RL Debug] Only PASS actions available, skipping model call and returning PASS")
+            return 0
         
         # Get desired cards from RL
         desired_cards = self.get_action(state_info)
@@ -54,43 +94,113 @@ class RLDecisionEngine:
         # Debug: Print actionList for troubleshooting
         if desired_cards:
             print(f"[RL Debug] Desired cards: {desired_cards}")
-            print(f"[RL Debug] Available actions: {[a[2] if len(a) >= 3 else a for a in action_list[:5]]}")  # Show first 5
+            print(f"[RL Debug] Available actions: {action_list[:5]}...")  # 只显示前5个，避免输出过多
+        else:
+            print(f"[RL Debug] WARNING: get_action() returned empty list! Hand: {hand_cards[:5] if hand_cards else 'EMPTY'}...")
         
         # Find matching action in actionList
         best_idx = 0
         best_match_score = -1
         
         for i, action in enumerate(action_list):
-            # action format: ['Single', '3', ['H3']] or ['PASS', 'PASS', 'PASS']
-            if action[0] == 'PASS':
+            # Handle PASS action - check for different PASS formats
+            is_pass_action = False
+            if action == 'PASS':
+                is_pass_action = True
+            elif isinstance(action, list):
+                # Check if it's a PASS-only action like ['PASS', 'PASS', 'PASS']
+                if all(item == 'PASS' for item in action):
+                    is_pass_action = True
+                # Check if it's a structured action with PASS as type
+                elif len(action) > 0 and action[0] == 'PASS':
+                    is_pass_action = True
+            
+            if is_pass_action:
                 if not desired_cards: # RL wants to pass
                     return i
                 continue
                 
-            # Extract cards from action
-            # Action structure: [Type, Rank, [Cards]]
-            if len(action) >= 3:
-                action_cards = action[2] if isinstance(action[2], list) else []
-                
-                # Exact match
-                if set(action_cards) == desired_set:
-                    return i
-                
-                # Partial match scoring (fallback)
-                if desired_cards and action_cards:
-                    match_count = len(set(action_cards) & desired_set)
-                    match_score = match_count / max(len(action_cards), len(desired_cards))
-                    if match_score > best_match_score:
-                        best_match_score = match_score
-                        best_idx = i
+            # Extract cards from action - handle different formats
+            action_cards = []
+            
+            # Format 1: ['PASS', ['SQ', 'HQ', 'DQ', 'H5'], ['S4', 'H4', 'C4', 'C4', 'H5']]
+            if isinstance(action, list):
+                # Format 2: [Type, Rank, [Cards]]
+                if len(action) >= 3:
+                    if isinstance(action[2], list):
+                        action_cards = action[2]
+                    elif isinstance(action[2], str):
+                        action_cards = [action[2]]
+                # Format 3: [Cards]
+                elif all(isinstance(card, str) for card in action):
+                    action_cards = action
+            # Format 4: Single card string
+            elif isinstance(action, str):
+                action_cards = [action]
+            
+            # Skip if no cards
+            if not action_cards:
+                continue
+            
+            # Debug: Print action cards for troubleshooting (only for first few actions to avoid spam)
+            if i < 3:
+                print(f"[RL Debug] Action {i}: {action}, extracted cards: {action_cards}")
+            
+            # Extract ranks from desired cards and action cards
+            desired_ranks = set(card[1:] if len(card) > 1 else card for card in desired_cards)
+            action_ranks = set(card[1:] if len(card) > 1 else card for card in action_cards)
+            
+            # Debug: Print ranks for troubleshooting (only if desired_cards is not empty)
+            if desired_cards and i < 3:
+                print(f"[RL Debug] Desired ranks: {desired_ranks}, Action ranks: {action_ranks}")
+            
+            # Check if ranks match exactly (e.g., S8 and D8 both have rank '8')
+            if desired_ranks == action_ranks and len(desired_ranks) > 0:
+                # 添加索引范围检查，防止返回无效索引
+                if i >= len(action_list):
+                    print(f"[RL Debug] ERROR: Found exact rank match but index {i} >= action_list length {len(action_list)}")
+                    break
+                print(f"[RL Debug] Found exact rank match at index {i}: desired_ranks={desired_ranks}, action_ranks={action_ranks}")
+                return i
+            
+            # Calculate match scores for this action
+            rank_match_score = 0.0
+            card_match_score = 0.0
+            
+            # Check if there's any rank overlap (partial rank match)
+            # This handles cases where model wants rank '3' but only pair/triple of '3' is available
+            if desired_ranks and action_ranks:
+                rank_overlap = desired_ranks & action_ranks
+                if rank_overlap:
+                    # Calculate overlap score: how many desired ranks are in this action
+                    rank_match_score = len(rank_overlap) / len(desired_ranks)
+                    if i < 3:
+                        print(f"[RL Debug] Found rank overlap {rank_overlap} at index {i} (score: {rank_match_score:.2f})")
+            
+            # Partial match scoring (exact card match)
+            if desired_cards:
+                match_count = len(set(action_cards) & desired_set)
+                if len(action_cards) > 0 or len(desired_cards) > 0:
+                    card_match_score = match_count / max(len(action_cards), len(desired_cards))
+            
+            # Use the better of rank match or card match
+            combined_score = max(rank_match_score, card_match_score)
+            if combined_score > best_match_score:
+                best_match_score = combined_score
+                best_idx = i
                     
-        # If we found a partial match, use it
-        if best_match_score > 0.5:
-            print(f"RL desired {desired_cards} - using partial match (score: {best_match_score:.2f}) at index {best_idx}")
+        # If we found a partial match, use it (lower threshold for rank matches)
+        if best_match_score > 0.3:  # Lowered from 0.5 to allow rank-based matches
+            # 添加索引范围检查
+            if best_idx >= len(action_list):
+                print(f"[RL Debug] ERROR: best_idx {best_idx} >= action_list length {len(action_list)}, falling back to PASS")
+                return 0
+            print(f"RL desired {desired_cards} - using match (score: {best_match_score:.2f}) at index {best_idx}")
             return best_idx
             
         # If no match, fallback to PASS (index 0)
-        print(f"RL desired {desired_cards} but not found in actionList. Falling back to 0 (PASS).")
+        if desired_cards:
+            print(f"RL desired {desired_cards} but not found in actionList. Falling back to 0 (PASS).")
         return 0
 
     def get_action(self, state_info: Dict) -> List[str]:
@@ -99,9 +209,18 @@ class RLDecisionEngine:
         state_info: Dict containing 'hand', 'table', etc. from the main client.
         Returns: List of card codes (e.g. ['H2', 'S3'])
         """
+        hand = state_info.get('hand', [])
+        if not hand:
+            print(f"[RL Debug] get_action: hand is empty!")
+            return []
+        
         # 1. Preprocess State
         # We need to convert the rich state_info into the 512-dim vector expected by the model
         state_vec = self._preprocess_state(state_info)
+        
+        # Debug: Check state vector
+        active_indices = np.where(state_vec > 0)[0]
+        print(f"[RL Debug] State vector: {len(active_indices)} active indices (hand size: {len(hand)})")
         
         # 2. Query Agent
         action_binary, _ = self.agent.select_action(state_vec)
@@ -109,7 +228,43 @@ class RLDecisionEngine:
         # 3. Decode Action
         # Convert binary vector back to card indices, then to card codes
         selected_indices = [i for i, x in enumerate(action_binary) if x == 1]
-        selected_cards = self._indices_to_cards(selected_indices, state_info['hand'])
+        
+        # 过滤无效索引（超出编码范围的索引）
+        # 我们的编码范围是0-59（4 suits * 15 ranks），但模型可能输出更大的索引
+        valid_index_range = 60  # 0-59是有效范围
+        valid_indices = [idx for idx in selected_indices if idx < valid_index_range]
+        invalid_indices = [idx for idx in selected_indices if idx >= valid_index_range]
+        
+        # 只在有无效索引时输出警告（减少日志）
+        if invalid_indices and len(invalid_indices) > 0:
+            print(f"[RL Debug] Filtered out {len(invalid_indices)} invalid indices (>= {valid_index_range}): {invalid_indices[:3]}...")
+        
+        # 只在有有效索引时输出详细信息
+        if valid_indices:
+            print(f"[RL Debug] Model selected {len(selected_indices)} indices ({len(valid_indices)} valid): {valid_indices[:5]}...")
+        elif len(selected_indices) > 0:
+            # 所有索引都无效
+            print(f"[RL Debug] Model selected {len(selected_indices)} indices, all invalid (>= {valid_index_range}): {selected_indices[:3]}...")
+        else:
+            print(f"[RL Debug] Model selected 0 indices (empty action)")
+        
+        # Warn if model is using random weights and outputting empty actions frequently
+        if not self.model_loaded and len(valid_indices) == 0:
+            if len(selected_indices) > 0:
+                print(f"[RL Debug] WARNING: Model not loaded (using random weights) and output invalid indices. This is expected.")
+            else:
+                print(f"[RL Debug] WARNING: Model not loaded (using random weights) and output empty action. This is expected.")
+        
+        # 只使用有效索引进行映射
+        selected_cards = self._indices_to_cards(valid_indices, hand)
+        if len(selected_cards) == 0 and len(valid_indices) > 0:
+            # 只在有有效索引但映射失败时输出警告
+            print(f"[RL Debug] WARNING: Model selected {len(valid_indices)} valid indices but mapped to 0 cards!")
+            print(f"[RL Debug] Valid indices: {valid_indices[:5]}...")
+            print(f"[RL Debug] This usually means the model selected cards not in hand (model may not be trained or using random weights)")
+        elif len(selected_cards) > 0:
+            # 只在成功映射时输出（减少日志）
+            print(f"[RL Debug] Mapped to {len(selected_cards)} cards: {selected_cards}")
         
         # 4. Validation / Fallback
         # If the model outputs cards we don't have, or an invalid combination
@@ -117,8 +272,11 @@ class RLDecisionEngine:
         # For V5.0, let's just return what the model thinks, but filter for ownership.
         
         # Filter: Only play cards we actually have
-        my_hand_set = set(state_info['hand'])
+        my_hand_set = set(hand)
         valid_cards = [c for c in selected_cards if c in my_hand_set]
+        
+        if len(valid_cards) != len(selected_cards):
+            print(f"[RL Debug] Filtered: {len(selected_cards)} -> {len(valid_cards)} valid cards")
         
         return valid_cards
 
@@ -129,17 +287,78 @@ class RLDecisionEngine:
         # Placeholder: Needs to match the encoding used in GuandanEnv / ReplayParser
         obs = np.zeros(512, dtype=np.float32)
         
-        # Encode Hand
+        # Encode Hand - track which indices are used to detect collisions
+        # 使用字典记录每个索引对应的卡牌，处理冲突
+        index_to_cards = {}
         for card in state_info['hand']:
             idx = self._card_to_index(card)
             if idx < 512:
+                if idx not in index_to_cards:
+                    index_to_cards[idx] = []
+                index_to_cards[idx].append(card)
                 obs[idx] = 1.0
+        
+        # 统计冲突（多个卡牌映射到同一个索引）
+        # 注意：在掼蛋中，两副牌108张，每个玩家27张，可能拿到重复的卡牌（如两个D5）
+        # 这种情况下，相同的卡牌会映射到同一个索引，这是正常的，不是真正的"冲突"
+        collision_count = sum(1 for cards in index_to_cards.values() if len(cards) > 1)
+        if collision_count > 0:
+            print(f"[RL Debug] Warning: {collision_count} indices have multiple cards mapped")
+            # 打印冲突详情（仅前3个，避免输出过多）
+            collision_details = []
+            for idx, cards in index_to_cards.items():
+                if len(cards) > 1:
+                    # 检查是否是重复卡牌（相同卡牌代码）还是真正的编码冲突（不同卡牌映射到同一索引）
+                    unique_cards = set(cards)
+                    if len(unique_cards) == 1:
+                        # 相同卡牌重复，这是正常的（两副牌）
+                        collision_details.append(f"Index {idx}: {cards} (duplicate cards, normal in 2-deck game)")
+                    else:
+                        # 不同卡牌映射到同一索引，这是真正的编码冲突
+                        collision_details.append(f"Index {idx}: {cards} (ENCODING COLLISION!)")
+                    if len(collision_details) >= 3:
+                        break
+            if collision_details:
+                print(f"[RL Debug] Collision details: {collision_details}")
+            
+            # 检查手牌数量
+            total_cards_in_hand = len(state_info['hand'])
+            unique_indices = len(index_to_cards)
+            print(f"[RL Debug] Hand stats: {total_cards_in_hand} total cards, {unique_indices} unique indices")
+            if total_cards_in_hand != unique_indices:
+                print(f"[RL Debug] Note: {total_cards_in_hand - unique_indices} cards share indices (may be duplicates or collisions)")
                 
         return obs
 
     def _card_to_index(self, card_code):
-        # Simple hash used in training
-        return sum(ord(c) for c in card_code) % 54
+        """
+        Convert card code to index in state vector.
+        Improved hash to reduce collisions.
+        Card format: 'H2', 'S3', 'CT', etc.
+        """
+        # Map suit to number: S=0, H=1, C=2, D=3
+        suit_map = {'S': 0, 'H': 1, 'C': 2, 'D': 3}
+        # Map rank to number: 2-9, T, J, Q, K, A, B (小王), R (大王)
+        rank_map = {
+            '2': 0, '3': 1, '4': 2, '5': 3, '6': 4, '7': 5, '8': 6, '9': 7,
+            'T': 8, 'J': 9, 'Q': 10, 'K': 11, 'A': 12,
+            'B': 13,  # 小王
+            'R': 14   # 大王
+        }
+        
+        if len(card_code) >= 2:
+            suit = card_code[0]
+            rank = card_code[1]
+            # Use a better encoding: suit * 15 + rank
+            suit_val = suit_map.get(suit, 0)
+            rank_val = rank_map.get(rank, 0)
+            idx = suit_val * 15 + rank_val
+            # Ensure it fits in 512-dim vector (max 60 for 4 suits * 15 ranks)
+            # 但是要确保索引在有效范围内，避免冲突
+            return min(idx, 59)  # 最大60个不同的卡牌索引（4 suits * 15 ranks）
+        else:
+            # Fallback to simple hash for unexpected formats
+            return sum(ord(c) for c in card_code) % 54
 
     def _indices_to_cards(self, indices, current_hand):
         """
@@ -150,6 +369,9 @@ class RLDecisionEngine:
         result = []
         hand_copy = list(current_hand)
         
+        # 预先计算手牌中每张卡的索引，用于调试
+        hand_indices = {self._card_to_index(card): card for card in current_hand}
+        
         for idx in indices:
             # Find a card in hand that maps to this index
             found = False
@@ -159,8 +381,39 @@ class RLDecisionEngine:
                     hand_copy.remove(card) # Consume card
                     found = True
                     break
+            
             if not found:
-                # Model asked for a card we don't have (or duplicate we don't have enough of)
-                pass
+                # Model asked for a card we don't have
+                # 计算这个索引对应的卡牌（用于调试）
+                expected_card = self._index_to_card_code(idx)
+                available_indices = sorted(hand_indices.keys())
+                # 只在调试模式下输出详细信息（减少日志）
+                # 如果有很多无效索引，只输出前几个
+                if len([i for i in indices if i not in hand_indices]) <= 3:
+                    print(f"[RL Debug] Index {idx} (expected: {expected_card}) not found in hand. Available indices: {available_indices[:10]}...")
+                # 不重复输出手牌信息（已经在其他地方输出）
                 
         return result
+    
+    def _index_to_card_code(self, idx):
+        """
+        反向计算：从索引推断卡牌代码（用于调试）
+        """
+        suit_map = {0: 'S', 1: 'H', 2: 'C', 3: 'D'}
+        rank_map = {
+            0: '2', 1: '3', 2: '4', 3: '5', 4: '6', 5: '7', 6: '8', 7: '9',
+            8: 'T', 9: 'J', 10: 'Q', 11: 'K', 12: 'A', 13: 'B', 14: 'R'
+        }
+        
+        if idx <= 59:  # 使用新编码 (suit * 15 + rank)
+            suit_val = idx // 15
+            rank_val = idx % 15
+            suit = suit_map.get(suit_val, '?')
+            rank = rank_map.get(rank_val, '?')
+            return f"{suit}{rank}"
+        elif idx < 512:  # 在512维向量范围内，但超出新编码范围
+            # 可能是旧编码或其他编码方式
+            # 尝试用旧编码方式计算
+            return f"OutOfRange({idx})"
+        else:
+            return f"Invalid({idx})"

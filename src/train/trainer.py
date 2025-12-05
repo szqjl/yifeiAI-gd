@@ -16,7 +16,8 @@ def train(max_episodes=1000, batch_size=64):
     Training loop for Guandan AI.
     """
     env = GuandanEnv()
-    agent = PPOAgent()
+    # **关键修复**：确保action_dim与推理代码一致（512维）
+    agent = PPOAgent(input_dim=512, action_dim=512)
     
     # Replay Buffer (Simple list for PPO batch)
     batch = {
@@ -39,7 +40,7 @@ def train(max_episodes=1000, batch_size=64):
         
         while not done:
             # Select Action
-            action, log_prob = agent.act(state)
+            action, log_prob = agent.select_action(state)
             
             # Step
             next_state, reward, done, _, info = env.step(action)
@@ -57,9 +58,18 @@ def train(max_episodes=1000, batch_size=64):
             
             # Train if batch is full
             if len(batch['states']) >= batch_size:
-                # Convert lists to numpy arrays
-                train_batch = {k: np.array(v) for k, v in batch.items()}
-                loss = agent.learn(train_batch)
+                # Convert to memory format for PPO update
+                # PPOAgent.update expects: list of (state, action, log_prob, reward, done)
+                memory = []
+                for i in range(len(batch['states'])):
+                    memory.append((
+                        batch['states'][i],
+                        batch['actions'][i],
+                        batch['log_probs'][i],
+                        batch['rewards'][i],
+                        batch['dones'][i]
+                    ))
+                agent.update(memory)
                 
                 # Clear batch
                 for k in batch:
