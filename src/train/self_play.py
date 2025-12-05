@@ -14,7 +14,8 @@ def train_self_play():
     
     # 1. Init Env & Agent
     env = GuandanEnv()
-    agent = PPOAgent()
+    # **关键修复**：确保action_dim与推理代码一致（512维）
+    agent = PPOAgent(input_dim=512, action_dim=512)
     strategy_encoder = StrategyEncoder()
     
     # Load pretrained model if exists
