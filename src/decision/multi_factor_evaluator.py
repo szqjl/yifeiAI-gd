@@ -43,14 +43,15 @@ class MultiFactorEvaluator:
         self.game_stage_analyzer = GameStageAnalyzer()
         
         # 评估权重配置
+        # 增加grouping_strategy权重，体现胜负规则优先的最高准则
         self.weights = {
-            "remaining_cards": 0.20,
-            "card_type_value": 0.20,
-            "cooperation": 0.20,
-            "risk": 0.15,
-            "timing": 0.15,  # 增加时机评估权重
-            "grouping_strategy": 0.07,  # 增加组牌策略权重（包含单张策略）
-            "hand_structure": 0.03
+            "grouping_strategy": 0.30,  # 提高组牌策略权重，体现胜负规则优先
+            "remaining_cards": 0.15,
+            "card_type_value": 0.15,
+            "cooperation": 0.15,
+            "risk": 0.10,
+            "timing": 0.10,  # 时机评估权重
+            "hand_structure": 0.05
         }
     
     def evaluate_all_actions(self, action_list: List[List], 
@@ -92,16 +93,14 @@ class MultiFactorEvaluator:
         scores = {}
         
         # 1. 获取游戏状态信息
-        player_cards = self.state.get_player_cards()
-        game_stage = self.game_stage_analyzer.get_game_stage(player_cards)
+        player_remain_cards = self.state.get_player_cards()
+        game_stage = self.game_stage_analyzer.get_game_stage(player_remain_cards)
         cur_rank = self.state.get_current_rank()
         
-        # 获取当前玩家手牌
-        hand_cards = self.state.hand_cards
-        
         # 判断是否有王和级牌
-        has_king = any('B' in card or 'R' in card for card in hand_cards)
-        has_level_card = any(cur_rank in card for card in hand_cards)
+        my_hand_cards = self.state.hand_cards
+        has_king = any('B' in card or 'R' in card for card in my_hand_cards)
+        has_level_card = any(cur_rank in card for card in my_hand_cards)
         
         # 2. 牌型价值
         scores["card_type_value"] = self._evaluate_card_type_value(action)
