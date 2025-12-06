@@ -8,8 +8,9 @@ from src.rl_agent.agent import PPOAgent
 class RLDecisionEngine:
     def __init__(self, model_path="models/bc_model_v1.pth"):
         # **关键修复**：确保action_dim与训练时一致（512维）
-        # **优化**：使用优化后的预测阈值0.3
-        self.agent = PPOAgent(input_dim=512, action_dim=512, prediction_threshold=0.3)
+        # **优化**：使用优化后的预测阈值0.5（与model.py和评估脚本保持一致）
+        # 基于自动测试，最优参数组合为：缩放因子5.0 + 阈值0.5，准确率42.52%
+        self.agent = PPOAgent(input_dim=512, action_dim=512, prediction_threshold=0.5)
         self.model_loaded = False
         try:
             self.agent.load(model_path)
