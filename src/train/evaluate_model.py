@@ -93,13 +93,30 @@ def evaluate_model(model_path="models/bc_model_v1.pth", data_dir="game_records")
             actions = actions.to(device)
             
             # 模型预测
-            logits = model(states)
-            probs = torch.sigmoid(logits)
-            # **优化后的预测阈值**：0.3
-            # 根据分析，模型倾向于预测过少（61.2%的样本预测不足）
-            # 降低阈值到0.3可以预测更多卡牌，提升完全匹配准确率
-            prediction_threshold = 0.3  # 优化后的阈值
-            predictions = (probs > prediction_threshold).float()
+            # **优化**: 使用get_action方法，包含概率缩放优化
+            # 这样评估结果与推理时一致
+            prediction_threshold = 0.5  # 最优阈值（基于自动测试）
+            
+            # 批量处理，提高效率
+            predictions_list = []
+            for i in range(len(states)):
+                state = states[i:i+1]  # 保持batch维度
+                action = model.get_action(state, deterministic=True, threshold=prediction_threshold)
+                # get_action返回numpy数组，需要转换为tensor
+                # 确保action是一维数组
+                if action.ndim > 1:
+                    action = action.flatten()
+                predictions_list.append(torch.from_numpy(action).float())
+            predictions = torch.stack(predictions_list).to(device)
+            
+            # 确保predictions和actions维度一致
+            if predictions.shape != actions.shape:
+                print(f"[WARNING] 维度不匹配: predictions {predictions.shape} vs actions {actions.shape}")
+                # 调整维度
+                if predictions.shape[1] != actions.shape[1]:
+                    min_dim = min(predictions.shape[1], actions.shape[1])
+                    predictions = predictions[:, :min_dim]
+                    actions = actions[:, :min_dim]
             
             # 计算准确率（完全匹配）
             exact_match = (predictions == actions).all(dim=1)
@@ -113,7 +130,7 @@ def evaluate_model(model_path="models/bc_model_v1.pth", data_dir="game_records")
             predicted_cards += predictions.sum().item()
             
             # 调试信息（前几个样本）
-            if total_samples < 3:
+            if total_samples <= 3:
                 for i in range(len(states)):
                     true_count = actions[i].sum().item()
                     pred_count = predictions[i].sum().item()

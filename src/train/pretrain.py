@@ -70,7 +70,7 @@ class GuandanDataset(Dataset):
             
         return torch.FloatTensor(state_vec), torch.FloatTensor(action_vec)
 
-def train_bc(data_dir="game_records", epochs=5, batch_size=32, lr=0.001, model_path="models/bc_model_v1.pth"):
+def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0005, model_path="models/bc_model_v1.pth", dropout_rate=0.1):
     """
     行为克隆预训练
     
@@ -105,10 +105,17 @@ def train_bc(data_dir="game_records", epochs=5, batch_size=32, lr=0.001, model_p
     # **关键修复**：模型输入输出维度必须与推理代码一致
     # 输入：512维状态向量
     # 输出：512维动作向量（每个维度表示是否选择对应的卡牌索引）
-    model = GuandanPolicyNet(input_dim=512, hidden_dim=256, output_dim=512).to(device)
-    print(f"Model: input_dim=512, output_dim=512 (matching inference code)")
+    # **优化**: 使用降低的dropout_rate (0.1)，减少过拟合，提高输出概率
+    model = GuandanPolicyNet(input_dim=512, hidden_dim=256, output_dim=512, dropout_rate=dropout_rate).to(device)
+    print(f"Model: input_dim=512, output_dim=512, dropout_rate={dropout_rate} (matching inference code)")
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.BCEWithLogitsLoss() # Multi-label classification
+    
+    # **优化**: 使用加权损失函数，增加对预测过少的惩罚
+    # 权重策略：对于正样本（应该选择的卡牌），给予更高权重（2.0倍）
+    # 这样可以鼓励模型更积极地预测卡牌，减少预测过少的问题
+    # 使用pos_weight=2.0，意味着正样本的损失权重是负样本的2倍
+    pos_weight = torch.tensor(2.0).to(device)  # 正样本权重：2.0（增加对预测过少的惩罚）
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)  # 加权BCE损失
     
     # **优化**：添加学习率衰减
     # 每10轮衰减50%，帮助模型更稳定地收敛
@@ -122,6 +129,7 @@ def train_bc(data_dir="game_records", epochs=5, batch_size=32, lr=0.001, model_p
             
             optimizer.zero_grad()
             logits = model(states)
+            # **优化**: 使用加权损失函数，增加对预测过少的惩罚
             loss = criterion(logits, actions)
             loss.backward()
             optimizer.step()
