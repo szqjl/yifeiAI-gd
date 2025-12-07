@@ -24,6 +24,7 @@ from decision.bomb_strategy import bomb_strategy
 from decision.endgame_strategy import endgame_strategy
 from decision.main_decision import main_decision
 from decision.card_grouping_strategy import grouping_strategy
+from decision.dynamic_grouping_optimizer import DynamicGroupingOptimizer
 from decision.bomb_selector import select_bomb_priority, should_use_bomb
 from communication.utils import combine_handcards, is_inStraight
 
@@ -78,6 +79,9 @@ class YF2_V5_Client:
             "performance_threshold": 1.0
         }
         self.decision_engine = HybridDecisionEngineV5(player_id, config)
+        
+        # Initialize Dynamic Grouping Optimizer (动态组牌优化器)
+        self.grouping_optimizer = DynamicGroupingOptimizer()
         
         # Initialize RL Engine (V5增强：更智能的RL集成)
         try:
@@ -347,6 +351,37 @@ class YF2_V5_Client:
                 power=5.0,  # 先用默认牌力，后续会更新
                 cur_rank=game_state.get("cur_rank", "2")  # 传递级牌信息
             )
+            
+            # 1.1. 动态组牌优化（在行牌过程中动态调整组牌策略）
+            dynamic_grouping_rec = self.grouping_optimizer.get_grouping_recommendation(
+                hand_cards=hand_cards,
+                action_list=action_list,
+                game_state=game_state
+            )
+            
+            # 如果动态优化器建议调整，应用动态优化结果
+            if dynamic_grouping_rec:
+                best_idx = dynamic_grouping_rec.get('best_action_index', -1)
+                dynamic_score = dynamic_grouping_rec.get('score', 0)
+                dynamic_reason = dynamic_grouping_rec.get('reason', '')
+                grouping_analysis = dynamic_grouping_rec.get('grouping_analysis', {})
+                
+                # 更新grouping_sugg中的对应建议
+                if best_idx >= 0 and best_idx < len(grouping_sugg.get("suggestions", [])):
+                    for sugg in grouping_sugg["suggestions"]:
+                        if sugg["action_index"] == best_idx:
+                            # 应用动态优化评分调整
+                            sugg["score"] = dynamic_score
+                            if dynamic_reason:
+                                sugg["reasons"].insert(0, f"[动态优化] {dynamic_reason}")
+                            if grouping_analysis.get('adjustments'):
+                                sugg["reasons"].extend([f"[调整] {adj}" for adj in grouping_analysis['adjustments']])
+                            break
+                
+                # 记录动态优化信息
+                self.logger.info(f"[动态组牌优化] 建议动作索引: {best_idx}, 评分: {dynamic_score:.2f}, 原因: {dynamic_reason}")
+                if grouping_analysis.get('optimization_reasons'):
+                    self.logger.info(f"[动态组牌优化] 优化原因: {', '.join(grouping_analysis['optimization_reasons'])}")
             
             # 2. 计算牌力（基于组牌后的手牌评估）
             power_result = calculate_card_power(

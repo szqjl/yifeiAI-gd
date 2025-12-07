@@ -127,7 +127,7 @@ class MultiFactorEvaluator:
         
         # 调用组牌策略
         grouping_result = grouping_strategy(
-            hand_cards=hand_cards,
+            hand_cards=my_hand_cards,  # 修复：使用正确的变量名
             action_list=[action],  # 只评估当前动作
             game_phase=game_stage,
             power=5.0,  # 临时使用默认值，后续可以从state中获取实际牌力

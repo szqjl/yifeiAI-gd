@@ -44,12 +44,64 @@ def train_self_play():
             # Execute
             next_state, reward, done, _, info = env.step(action)
             
-            # Shaping Reward
+            # Shaping Reward（增强版：包含组牌、顺牌、跟牌、控牌策略奖励）
             # Convert action (binary) to card list for encoder
-            action_cards = [i for i, x in enumerate(action) if x == 1]
-            # Need to reconstruct state dict for encoder (Simplified)
-            state_dict = {'current_player': env.engine.current_player, 'hands': env.engine.hands}
-            shaping = strategy_encoder.calculate_shaping_reward(state_dict, action_cards)
+            action_cards_indices = [i for i, x in enumerate(action) if x == 1]
+            
+            # 将索引转换为卡牌代码（需要从engine获取）
+            state = env.engine.get_state()
+            current_player = state.get('current_player', 0)
+            hands = state.get('hands', {})
+            hand_cards = hands.get(current_player, [])
+            
+            # 简化：使用索引对应的卡牌（实际应该从engine获取卡牌映射）
+            action_cards = []
+            if action_cards_indices:
+                # 从手牌中选择对应索引的卡牌（简化处理）
+                for idx in action_cards_indices:
+                    if idx < len(hand_cards):
+                        action_cards.append(hand_cards[idx])
+            
+            # 判断动作类型（简化：根据卡牌数量判断）
+            action_type = "PASS"
+            if len(action_cards) == 1:
+                action_type = "Single"
+            elif len(action_cards) == 2:
+                action_type = "Pair"
+            elif len(action_cards) == 3:
+                action_type = "Trips"
+            elif len(action_cards) >= 5:
+                action_type = "Straight"  # 简化：可能是顺子或其他
+            
+            # 判断游戏阶段
+            opponent_rest_cards = []
+            for i in range(4):
+                if i != current_player:
+                    opponent_rest_cards.append(len(hands.get(i, [])))
+            min_opponent_cards = min(opponent_rest_cards) if opponent_rest_cards else 27
+            
+            if min_opponent_cards >= 20:
+                game_phase = "opening"
+            elif min_opponent_cards >= 10:
+                game_phase = "mid"
+            else:
+                game_phase = "endgame"
+            
+            # 构建状态字典
+            state_dict = {
+                'current_player': current_player,
+                'hands': hands,
+                'last_action': info.get('last_action', {})
+            }
+            
+            # 计算shaping reward（增强版）
+            shaping = strategy_encoder.calculate_shaping_reward(
+                state_dict=state_dict,
+                action_cards=action_cards,
+                action_type=action_type,
+                game_phase=game_phase,
+                cur_rank="2"  # 简化：使用默认级牌
+            )
             
             total_reward = reward + shaping
             

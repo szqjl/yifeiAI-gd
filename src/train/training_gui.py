@@ -106,6 +106,7 @@ class TrainingGUI:
         self.train_type_var = tk.StringVar(value="pretrain")
         ttk.Radiobutton(train_frame, text="预训练 (Behavior Cloning)", variable=self.train_type_var, value="pretrain").grid(row=0, column=1, sticky=tk.W, padx=5)
         ttk.Radiobutton(train_frame, text="强化学习 (Self-Play)", variable=self.train_type_var, value="self_play").grid(row=0, column=2, sticky=tk.W, padx=5)
+        ttk.Radiobutton(train_frame, text="增强版训练 (Enhanced)", variable=self.train_type_var, value="enhanced").grid(row=0, column=3, sticky=tk.W, padx=5)
         
         ttk.Label(train_frame, text="训练轮数:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
         self.epochs_var = tk.StringVar(value="50")
@@ -491,8 +492,8 @@ class TrainingGUI:
                             lr=lr,
                             model_path=model_path
                         )
-                else:
-                    # 调用强化学习训练
+                elif train_type == "self_play":
+                    # 调用基础强化学习训练
                     from src.train.self_play import train_self_play
                     
                     # 初始化进度条（不确定模式）
@@ -504,6 +505,30 @@ class TrainingGUI:
                     
                     with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
                         train_self_play()
+                else:
+                    # 调用增强版训练
+                    from src.train.enhanced_self_play import train_enhanced_self_play
+                    
+                    # 初始化进度条（不确定模式）
+                    self.progress_bar['mode'] = 'indeterminate'
+                    self.progress_bar.start()
+                    self.progress_label.config(text="训练中...")
+                    self.progress_detail_var.set("增强版训练中（包含评估、检查点、经验回放）...")
+                    self.root.update_idletasks()
+                    
+                    # 获取训练参数
+                    try:
+                        max_episodes = int(self.epochs_var.get())
+                    except:
+                        max_episodes = 1000
+                    
+                    with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+                        train_enhanced_self_play(
+                            max_episodes=max_episodes,
+                            eval_interval=100,
+                            checkpoint_interval=200,
+                            replay_buffer_size=10000
+                        )
                 
                 # 获取输出
                 stdout_output = stdout_buffer.getvalue()

@@ -62,16 +62,16 @@ def parse_action_data(action_name: str, data: str) -> tuple:
     else:
         return action_name, []
 
-def get_winner_from_rep(rep_path: str) -> int:
+def get_winners_from_rep(rep_path: str) -> List[int]:
     """
-    从.rep文件中识别获胜玩家
+    从.rep文件中识别所有获胜方玩家（第1名和第2名）
     
     规则：
-    1. 查找最后一个Rank动作，data="2"的玩家是获胜者（升到2级）
-    2. 如果没有Rank="2"，查找GameEnd动作判断
+    1. 查找所有Rank动作，data="1"或"2"的玩家是获胜者（第1名和第2名）
+    2. 如果没有Rank动作，查找GameEnd动作判断
     
     Returns:
-        获胜玩家的seat，如果无法确定则返回None
+        获胜方玩家的seat列表（优先返回第1名），如果无法确定则返回空列表
     """
     try:
         tree = ET.parse(rep_path)
@@ -79,17 +79,23 @@ def get_winner_from_rep(rep_path: str) -> int:
         actions_elem = root.find("actions")
         
         if actions_elem:
-            winner_seat = None
-            last_rank_2_seat = None
+            winners = []
+            rank_1_seat = None  # 第1名
+            rank_2_seat = None  # 第2名
+            winner_seat = None  # GameEnd判断的获胜者
             
             for action in actions_elem.findall("action"):
                 action_name = action.get("name")
                 seat = action.get("seat")
                 data = action.get("data", "")
                 
-                # 查找Rank动作，data="2"表示升到2级（获胜）
-                if action_name == "Rank" and data == "2" and seat is not None:
-                    last_rank_2_seat = int(seat)
+                # 查找Rank动作，data="1"表示第1名，data="2"表示第2名（都是获胜方）
+                if action_name == "Rank" and seat is not None:
+                    rank = int(data) if data.isdigit() else 0
+                    if rank == 1:  # 第1名
+                        rank_1_seat = int(seat)
+                    elif rank == 2:  # 第2名
+                        rank_2_seat = int(seat)
                 
                 # 查找GameEnd动作
                 if action_name == "GameEnd":
@@ -105,15 +111,39 @@ def get_winner_from_rep(rep_path: str) -> int:
                                     winner_seat = int(player.get("seat"))
                                     break
             
-            # 优先使用Rank="2"的结果
-            if last_rank_2_seat is not None:
-                return last_rank_2_seat
-            elif winner_seat is not None:
-                return winner_seat
+            # 优先使用Rank结果（第1名和第2名都是获胜方）
+            if rank_1_seat is not None:
+                winners.append(rank_1_seat)  # 优先添加第1名
+            if rank_2_seat is not None and rank_2_seat != rank_1_seat:
+                winners.append(rank_2_seat)  # 添加第2名（如果与第1名不同）
+            
+            # 如果没有Rank结果，使用GameEnd结果
+            if len(winners) == 0 and winner_seat is not None:
+                winners.append(winner_seat)
+            
+            return winners
                 
     except Exception as e:
         print(f"识别获胜玩家失败: {e}")
     
+    return []
+
+
+def get_winner_from_rep(rep_path: str) -> int:
+    """
+    从.rep文件中识别获胜玩家（兼容旧接口，返回第1名）
+    
+    规则：
+    1. 优先返回第1名（Rank data="1"）
+    2. 如果没有第1名，返回第2名（Rank data="2"）
+    3. 如果没有Rank动作，查找GameEnd动作判断
+    
+    Returns:
+        获胜玩家的seat（优先第1名），如果无法确定则返回None
+    """
+    winners = get_winners_from_rep(rep_path)
+    if len(winners) > 0:
+        return winners[0]  # 返回第1名（优先）
     return None
 
 def convert_rep_to_training_format(rep_path: str, target_player_id: int = None, prefer_winner: bool = False) -> Dict:
@@ -129,12 +159,14 @@ def convert_rep_to_training_format(rep_path: str, target_player_id: int = None, 
         训练数据格式的字典
     """
     try:
-        # 如果prefer_winner=True且target_player_id为None，尝试识别获胜玩家
+        # 如果prefer_winner=True且target_player_id为None，尝试识别所有获胜方玩家
+        # 注意：不在这里设置target_player_id，而是在后面确定target_seats时处理
+        winners = None
         if prefer_winner and target_player_id is None:
-            winner_seat = get_winner_from_rep(rep_path)
-            if winner_seat is not None:
-                target_player_id = winner_seat
-                print(f"自动识别获胜玩家: seat={winner_seat}")
+            winners = get_winners_from_rep(rep_path)
+            if len(winners) > 0:
+                print(f"自动识别获胜方玩家: seats={winners} (第1名: {winners[0] if len(winners) > 0 else 'N/A'}, 第2名: {winners[1] if len(winners) > 1 else 'N/A'})")
+        
         # 解析XML文件
         tree = ET.parse(rep_path)
         root = tree.getroot()
@@ -184,7 +216,15 @@ def convert_rep_to_training_format(rep_path: str, target_player_id: int = None, 
         training_data = []
         
         # 确定要提取的玩家
-        target_seats = [target_player_id] if target_player_id is not None else list(initial_hands.keys())
+        # 如果prefer_winner=True且target_player_id为None，学习所有获胜方玩家
+        if prefer_winner and target_player_id is None:
+            if winners is not None and len(winners) > 0:
+                target_seats = winners  # 学习所有获胜方玩家（第1名和第2名）
+                print(f"学习所有获胜方玩家策略: seats={target_seats}")
+            else:
+                target_seats = list(initial_hands.keys())  # 如果无法识别，学习所有玩家
+        else:
+            target_seats = [target_player_id] if target_player_id is not None else list(initial_hands.keys())
         
         for seat in target_seats:
             if seat not in initial_hands:

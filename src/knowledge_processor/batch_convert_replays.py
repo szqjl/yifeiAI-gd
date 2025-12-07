@@ -90,10 +90,11 @@ class BatchReplayConverter:
         """
         try:
             # 如果prefer_winner=True且未指定玩家，自动识别获胜玩家
+            # 注意：convert_rep_to_training_format内部会处理学习所有获胜玩家的逻辑
+            # 这里不需要设置target_player_id，让它为None，由convert_rep_to_training_format处理
             if self.prefer_winner and target_player_id is None:
-                winner_seat = get_winner_from_rep(str(rep_file))
-                if winner_seat is not None:
-                    target_player_id = winner_seat
+                # 不设置target_player_id，让convert_rep_to_training_format学习所有获胜玩家
+                pass
             
             # 转换文件
             training_data = convert_rep_to_training_format(
