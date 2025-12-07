@@ -15,6 +15,7 @@ import random
 from collections import deque
 import json
 from datetime import datetime
+import torch
 
 # **修复**：设置Windows控制台编码为UTF-8
 if sys.platform == 'win32':
@@ -31,6 +32,17 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 from src.rl_env.guandan_env import GuandanEnv
 from src.rl_agent.agent import PPOAgent
 from src.knowledge_processor.strategy_encoder import StrategyEncoder
+
+
+def set_seed(seed=42):
+    """固定随机种子，确保训练可复现"""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 class ExperienceReplayBuffer:
@@ -111,13 +123,24 @@ def train_enhanced_self_play(
     checkpoint_interval=200,
     replay_buffer_size=10000,
     batch_size=64,
-    pretrained_model_path="models/bc_model_v1.pth"
+    pretrained_model_path="models/bc_model_v1.pth",
+    learning_rate=0.0001,  # 最优配置：降低学习率以提高稳定性
+    seed=42,  # 最优配置：固定随机种子确保可复现
+    early_stop_patience=20  # 最优配置：早停耐心值
 ):
     """
     增强版自我对弈训练
     
+    **最优配置（基于历次训练效果汇总.md）**:
+    - max_episodes: 500-1000（充分训练，确保收敛）
+    - learning_rate: 0.0001（降低以提高稳定性）
+    - seed: 42（固定随机种子，确保可复现）
+    - 学习率衰减: StepLR(step_size=50, gamma=0.5)（每50轮衰减50%）
+    - early_stop_patience: 20（连续20轮无改进自动停止）
+    - 自动保存最佳模型（基于平均奖励）
+    
     Args:
-        max_episodes: 最大训练回合数
+        max_episodes: 最大训练回合数（推荐500-1000）
         max_timesteps: 每回合最大步数
         update_timestep: 每多少步更新一次策略
         eval_interval: 每多少回合评估一次
@@ -125,21 +148,37 @@ def train_enhanced_self_play(
         replay_buffer_size: 经验回放缓冲区大小
         batch_size: 批次大小
         pretrained_model_path: 预训练模型路径
+        learning_rate: 学习率（推荐0.0001）
+        seed: 随机种子（推荐42）
+        early_stop_patience: 早停耐心值（推荐20）
     """
     print("="*60)
-    print("增强版自我对弈训练")
+    print("增强版自我对弈训练（修复版）")
     print("="*60)
     print(f"最大回合数: {max_episodes}")
+    print(f"学习率: {learning_rate} (已优化)")
+    print(f"随机种子: {seed} (固定)")
     print(f"评估间隔: {eval_interval} 回合")
     print(f"检查点间隔: {checkpoint_interval} 回合")
+    print(f"早停耐心值: {early_stop_patience} 回合")
     print(f"经验回放缓冲区大小: {replay_buffer_size}")
     print("="*60)
+    
+    # **修复1**: 固定随机种子
+    set_seed(seed)
+    print(f"[修复] 已设置随机种子: {seed}")
     
     # 1. 初始化环境和智能体
     env = GuandanEnv()
     eval_env = GuandanEnv()  # 独立的评估环境
-    agent = PPOAgent(input_dim=512, action_dim=512)
+    # **修复2**: 降低学习率以提高稳定性
+    agent = PPOAgent(input_dim=512, action_dim=512, lr=learning_rate)
     strategy_encoder = StrategyEncoder()
+    
+    # **修复3**: 添加学习率衰减调度器
+    from torch.optim.lr_scheduler import StepLR
+    scheduler = StepLR(agent.optimizer, step_size=50, gamma=0.5)
+    print(f"[修复] 已添加学习率衰减（每50轮衰减50%）")
     
     # 加载预训练模型
     if os.path.exists(pretrained_model_path):
@@ -152,6 +191,8 @@ def train_enhanced_self_play(
     # 3. 训练统计
     best_win_rate = 0.0
     best_episode = 0
+    best_avg_reward = float('-inf')  # **修复4**: 跟踪最佳平均奖励
+    no_improve_count = 0  # **修复5**: 早停计数器
     training_stats = {
         'episodes': [],
         'rewards': [],
@@ -254,6 +295,28 @@ def train_enhanced_self_play(
         training_stats['episodes'].append(i_episode)
         training_stats['rewards'].append(current_ep_reward)
         
+        # **修复6**: 更新学习率
+        scheduler.step()
+        current_lr = agent.optimizer.param_groups[0]['lr']
+        
+        # **修复7**: 跟踪最佳平均奖励（用于早停）
+        if len(training_stats['rewards']) >= 10:
+            recent_avg_reward = np.mean(training_stats['rewards'][-10:])
+            if recent_avg_reward > best_avg_reward:
+                best_avg_reward = recent_avg_reward
+                no_improve_count = 0
+                # 保存最佳模型（基于平均奖励）
+                best_reward_model_path = "models/best_reward_model.pth"
+                agent.save(best_reward_model_path)
+            else:
+                no_improve_count += 1
+        
+        # **修复8**: 早停机制
+        if no_improve_count >= early_stop_patience:
+            print(f"\n[早停] 连续{early_stop_patience}轮无改进，停止训练")
+            print(f"最佳平均奖励: {best_avg_reward:.2f} (Episode {i_episode - early_stop_patience})")
+            break
+        
         # 定期评估
         if i_episode % eval_interval == 0:
             print(f"\n[评估] Episode {i_episode}")
@@ -282,7 +345,7 @@ def train_enhanced_self_play(
         # 定期打印训练进度
         if i_episode % 10 == 0:
             avg_reward_10 = np.mean(training_stats['rewards'][-10:])
-            print(f"Episode {i_episode}/{max_episodes} | 奖励: {current_ep_reward:.2f} | 近10回合平均: {avg_reward_10:.2f}")
+            print(f"Episode {i_episode}/{max_episodes} | 奖励: {current_ep_reward:.2f} | 近10回合平均: {avg_reward_10:.2f} | 学习率: {current_lr:.6f} | 无改进计数: {no_improve_count}/{early_stop_patience}")
         
         # 保存训练日志
         if i_episode % 50 == 0:
