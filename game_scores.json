@@ -1,7 +1,5 @@
 {
   "team_a_wins": 0,
-  "team_b_wins": 1,
-  "total_games": 1,
-  "my_pos": 2,
-  "teammate_pos": 0
+  "team_b_wins": 0,
+  "total_games": 0
 }

@@ -1,0 +1,4 @@
+# file: D:\guandanscore\YiFeiAI-GD\batch_executor\restart_manager.py
+# hypothesis_version: 6.148.2
+
+[23456, '.', '/', '/F', '/FI', '127.0.0.1', 'CREATE_NEW_CONSOLE', 'CREATE_NO_WINDOW', '\\', 'listening', 'python', 'ready', 'ready for connect', 'server started', 'taskkill', 'waiting for players', 'win32', '✓ 服务器启动成功，进程正在运行', '✓ 检测到服务器就绪消息!', '✓ 检测到服务器端口23456已监听!', '如果连接失败，请检查服务器窗口输出', '开始清理所有进程...', '无服务器输出，服务器可能未正常启动', '服务器错误输出 (最后10行):', '服务端窗口已可见，检查端口是否监听...', '清理完成', '等待5秒后重试...']

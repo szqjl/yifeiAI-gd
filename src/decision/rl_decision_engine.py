@@ -13,7 +13,7 @@ class RLDecisionEngine:
         # 基于概率分布分析，最优缩放因子为10.0（文档：最终最优方案.md）
         # 但根据实际调试，原始概率过低（0.0014），需要更低阈值（0.1）确保有输出
         self.logger = logging.getLogger("RLDecisionEngine")
-        self.agent = PPOAgent(input_dim=512, action_dim=512, prediction_threshold=0.1)
+        self.agent = PPOAgent(input_dim=512, action_dim=512, prediction_threshold=0.3)
         self.model_loaded = False
         self.model_path = model_path
         try:
@@ -244,7 +244,7 @@ class RLDecisionEngine:
                 state_tensor = torch.FloatTensor(state_vec).to(self.agent.device)
                 logits = self.agent.policy_old(state_tensor)
                 probs = torch.sigmoid(logits)
-                scaled_probs = probs * 10.0  # 与agent.py保持一致（最优缩放因子）
+                scaled_probs = probs * 5.0  # 与agent.py保持一致（进一步调整后的缩放因子，从7.0降低到5.0）
                 scaled_probs = torch.clamp(scaled_probs, 0, 1)
                 
                 # 只统计手牌对应索引的概率

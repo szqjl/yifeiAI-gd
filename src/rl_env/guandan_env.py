@@ -81,6 +81,27 @@ class GuandanEnv(gym.Env):
         hands = state.get('hands', {})
         hand_cards = hands.get(current_player, [])
         
+        # 将整数索引（0-53）转换为卡牌代码字符串
+        def int_to_card_code(card_id):
+            """将game_engine中的整数索引转换为卡牌代码字符串"""
+            if card_id == 52:
+                return 'B'  # 小王
+            elif card_id == 53:
+                return 'R'  # 大王
+            else:
+                # 0-51: 4个花色，每个花色13张牌
+                # 0-12: Spades (S), 13-25: Hearts (H), 26-38: Clubs (C), 39-51: Diamonds (D)
+                suit_idx = card_id // 13
+                rank_idx = card_id % 13
+                suit_map = {0: 'S', 1: 'H', 2: 'C', 3: 'D'}
+                rank_map = {
+                    0: '2', 1: '3', 2: '4', 3: '5', 4: '6', 5: '7', 6: '8', 7: '9',
+                    8: 'T', 9: 'J', 10: 'Q', 11: 'K', 12: 'A'
+                }
+                suit = suit_map.get(suit_idx, 'S')
+                rank = rank_map.get(rank_idx, '2')
+                return f"{suit}{rank}"
+        
         # 使用与推理代码相同的编码方式
         def card_to_index(card_code):
             """与 rl_decision_engine.py 中的编码方式完全一致"""
@@ -91,7 +112,8 @@ class GuandanEnv(gym.Env):
                 'B': 13,  # 小王
                 'R': 14   # 大王
             }
-            if len(card_code) >= 2:
+            # 处理字符串格式的卡牌代码
+            if isinstance(card_code, str) and len(card_code) >= 2:
                 suit = card_code[0]
                 rank = card_code[1]
                 suit_val = suit_map.get(suit, 0)
@@ -102,7 +124,12 @@ class GuandanEnv(gym.Env):
         
         # 1. 编码手牌（0-59维）
         for card in hand_cards:
-            idx = card_to_index(card)
+            # 如果card是整数，先转换为字符串
+            if isinstance(card, int):
+                card_code = int_to_card_code(card)
+            else:
+                card_code = card
+            idx = card_to_index(card_code)
             if idx < 60:
                 obs[idx] = 1.0
         
@@ -150,13 +177,19 @@ class GuandanEnv(gym.Env):
             # 动作牌点编码（137-151维）
             if action_cards:
                 first_card = action_cards[0]
+                # 如果first_card是整数，先转换为字符串
+                if isinstance(first_card, int):
+                    first_card_code = int_to_card_code(first_card)
+                else:
+                    first_card_code = first_card
+                
                 rank_map = {
                     '2': 0, '3': 1, '4': 2, '5': 3, '6': 4, '7': 5, '8': 6, '9': 7,
                     'T': 8, 'J': 9, 'Q': 10, 'K': 11, 'A': 12,
                     'B': 13, 'R': 14
                 }
-                if len(first_card) >= 2:
-                    rank = first_card[1] if len(first_card) == 2 else first_card[1:2]
+                if isinstance(first_card_code, str) and len(first_card_code) >= 2:
+                    rank = first_card_code[1] if len(first_card_code) == 2 else first_card_code[1:2]
                     rank_idx = rank_map.get(rank, 0)
                     if rank_idx < 15:
                         obs[137 + rank_idx] = 1.0
