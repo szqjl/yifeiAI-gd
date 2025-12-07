@@ -5,7 +5,7 @@ import numpy as np
 from .model import GuandanPolicyNet
 
 class PPOAgent:
-    def __init__(self, input_dim=512, action_dim=512, lr=0.0003, gamma=0.99, eps_clip=0.2, K_epochs=4, prediction_threshold=0.3):
+    def __init__(self, input_dim=512, action_dim=512, lr=0.0003, gamma=0.99, eps_clip=0.2, K_epochs=4, prediction_threshold=0.1):
         """
         PPO Agent for Guandan AI
         
@@ -43,13 +43,21 @@ class PPOAgent:
             # But for V1, this allows the agent to select multiple cards.
             probs = torch.sigmoid(logits)
             
+            # **优化**：缩放概率值，使其更合理（与model.py保持一致）
+            # 基于概率分布分析，最优缩放因子为10.0（文档：最终最优方案.md）
+            # 但根据实际调试，原始概率过低（0.0014），需要更大缩放或更低阈值
+            # 当前使用10.0缩放因子，配合0.1阈值确保有输出
+            probs = probs * 10.0  # 最优缩放因子（从7.0改为10.0，基于文档分析）
+            probs = torch.clamp(probs, 0, 1)  # 确保概率值在[0, 1]范围内
+            
             # **调整预测阈值**：使用阈值而不是采样
-            # 根据test_threshold.py测试，0.4是最优阈值（完全匹配准确率23.81%）
-            # 0.3时预测过多（准确率1.59%），0.5时预测过少（准确率相同但差异更大）
+            # 基于自动测试，最优参数组合为：缩放因子5.0 + 阈值0.5
             action = (probs > self.prediction_threshold).float()
             
             # 计算log_prob（用于PPO训练）
-            dist = torch.distributions.Bernoulli(probs)
+            # 注意：这里使用缩放前的原始概率计算log_prob，以保持训练一致性
+            original_probs = torch.sigmoid(logits)
+            dist = torch.distributions.Bernoulli(original_probs)
             log_prob = dist.log_prob(action).sum() # Sum log probs of all cards
             
             return action.cpu().numpy(), log_prob.item()

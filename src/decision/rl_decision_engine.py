@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from typing import List, Dict
+import logging
 from src.rl_agent.agent import PPOAgent
 # Assuming we have a base class or interface, but for now standalone
 # from .base_decision_engine import BaseDecisionEngine 
@@ -8,16 +9,22 @@ from src.rl_agent.agent import PPOAgent
 class RLDecisionEngine:
     def __init__(self, model_path="models/bc_model_v1.pth"):
         # **关键修复**：确保action_dim与训练时一致（512维）
-        # **优化**：使用优化后的预测阈值0.5（与model.py和评估脚本保持一致）
-        # 基于自动测试，最优参数组合为：缩放因子5.0 + 阈值0.5，准确率42.52%
-        self.agent = PPOAgent(input_dim=512, action_dim=512, prediction_threshold=0.5)
+        # **优化**：调整阈值到0.1，配合缩放因子10.0确保有输出
+        # 基于概率分布分析，最优缩放因子为10.0（文档：最终最优方案.md）
+        # 但根据实际调试，原始概率过低（0.0014），需要更低阈值（0.1）确保有输出
+        self.logger = logging.getLogger("RLDecisionEngine")
+        self.agent = PPOAgent(input_dim=512, action_dim=512, prediction_threshold=0.1)
         self.model_loaded = False
+        self.model_path = model_path
         try:
             self.agent.load(model_path)
             self.model_loaded = True
-            print(f"RL Engine loaded model from {model_path}")
+            self.logger.info(f"✓ RL Engine loaded model from {model_path}")
+            print(f"RL Engine loaded model from {model_path}")  # 同时输出到控制台
         except Exception as e:
-            print(f"Failed to load RL model: {e}. Using random weights (Not recommended for production).")
+            error_msg = f"Failed to load RL model: {e}. Using random weights (Not recommended for production)."
+            self.logger.warning(error_msg)
+            print(error_msg)  # 同时输出到控制台
             self.model_loaded = False
             
     def decide(self, data: Dict) -> int:
@@ -230,6 +237,36 @@ class RLDecisionEngine:
         # Convert binary vector back to card indices, then to card codes
         selected_indices = [i for i, x in enumerate(action_binary) if x == 1]
         
+        # 调试：输出概率统计信息（仅在模型加载且空动作时）
+        if self.model_loaded and len(active_indices) > 0 and len(selected_indices) == 0:
+            # 获取模型输出的原始概率（用于调试）
+            with torch.no_grad():
+                state_tensor = torch.FloatTensor(state_vec).to(self.agent.device)
+                logits = self.agent.policy_old(state_tensor)
+                probs = torch.sigmoid(logits)
+                scaled_probs = probs * 10.0  # 与agent.py保持一致（最优缩放因子）
+                scaled_probs = torch.clamp(scaled_probs, 0, 1)
+                
+                # 只统计手牌对应索引的概率
+                hand_probs = scaled_probs[active_indices].cpu().numpy()
+                max_prob = float(hand_probs.max()) if len(hand_probs) > 0 else 0.0
+                mean_prob = float(hand_probs.mean()) if len(hand_probs) > 0 else 0.0
+                above_threshold = int((hand_probs > self.agent.prediction_threshold).sum())
+                
+                # 也检查原始概率（未缩放）
+                original_hand_probs = probs[active_indices].cpu().numpy()
+                original_max = float(original_hand_probs.max()) if len(original_hand_probs) > 0 else 0.0
+                original_mean = float(original_hand_probs.mean()) if len(original_hand_probs) > 0 else 0.0
+                
+                print(f"[RL Debug] Probability stats: max={max_prob:.4f}, mean={mean_prob:.4f}, "
+                      f"above_threshold({self.agent.prediction_threshold})={above_threshold}/{len(active_indices)}")
+                print(f"[RL Debug] Original probs (before scaling): max={original_max:.4f}, mean={original_mean:.4f}")
+                
+                # 如果缩放后仍然没有超过阈值的，建议进一步降低阈值或增加缩放因子
+                if above_threshold == 0:
+                    print(f"[RL Debug] WARNING: No probabilities above threshold {self.agent.prediction_threshold}!")
+                    print(f"[RL Debug] Suggestion: Try lowering threshold to 0.05 or 0.01, or increase scale factor to 15.0 or 20.0")
+        
         # 过滤无效索引（超出编码范围的索引）
         # 我们的编码范围是0-59（4 suits * 15 ranks），但模型可能输出更大的索引
         valid_index_range = 60  # 0-59是有效范围
@@ -283,17 +320,17 @@ class RLDecisionEngine:
 
     def _preprocess_state(self, state_info):
         """
-        Convert client state to RL state vector.
+        Convert client state to RL state vector (增强版：包含策略特征)
+        必须与 GuandanEnv._encode_state 保持一致！
         """
-        # Placeholder: Needs to match the encoding used in GuandanEnv / ReplayParser
         obs = np.zeros(512, dtype=np.float32)
         
-        # Encode Hand - track which indices are used to detect collisions
+        # 1. Encode Hand (0-59维) - track which indices are used to detect collisions
         # 使用字典记录每个索引对应的卡牌，处理冲突
         index_to_cards = {}
         for card in state_info['hand']:
             idx = self._card_to_index(card)
-            if idx < 512:
+            if idx < 60:
                 if idx not in index_to_cards:
                     index_to_cards[idx] = []
                 index_to_cards[idx].append(card)
@@ -322,7 +359,92 @@ class RLDecisionEngine:
             if collision_details:
                 print(f"[RL Debug] Collision details: {collision_details}")
             
-            # 检查手牌数量
+        # 2. 编码游戏阶段（120-122维）
+        # 根据剩余牌数判断阶段
+        hand_count = len(state_info['hand'])
+        opponent_rest_cards_list = state_info.get('opponent_rest_cards_list', [27, 27, 27])
+        min_opponent_cards = min(opponent_rest_cards_list) if opponent_rest_cards_list else 27
+        
+        # 判断游戏阶段
+        if min_opponent_cards >= 20:
+            game_phase = 0  # 开局
+        elif min_opponent_cards >= 10:
+            game_phase = 1  # 中期
+        else:
+            game_phase = 2  # 残局
+        
+        obs[120 + game_phase] = 1.0
+        
+        # 3. 编码玩家剩余牌数（123-126维，归一化到0-1）
+        my_rest_cards = hand_count
+        teammate_rest_cards = state_info.get('teammate_rest_cards', 27)
+        opponent_rest_cards = opponent_rest_cards_list[1] if len(opponent_rest_cards_list) > 1 else 27
+        opponent2_rest_cards = opponent_rest_cards_list[2] if len(opponent_rest_cards_list) > 2 else 27
+        
+        obs[123] = my_rest_cards / 27.0
+        obs[124] = teammate_rest_cards / 27.0
+        obs[125] = opponent_rest_cards / 27.0
+        obs[126] = opponent2_rest_cards / 27.0
+        
+        # 4. 编码上一步动作（127-151维）
+        greater_action = state_info.get('greater_action', [])
+        if greater_action and len(greater_action) > 0:
+            action_type = greater_action[0] if isinstance(greater_action, list) else str(greater_action)
+            action_cards = greater_action[2] if len(greater_action) > 2 and isinstance(greater_action[2], list) else []
+            
+            # 动作类型编码（127-136维）
+            action_type_map = {
+                'PASS': 0, 'Single': 1, 'SINGLE': 1, 'Pair': 2, 'PAIR': 2,
+                'Trips': 3, 'TRIPS': 3, 'Straight': 4, 'STRAIGHT': 4,
+                'THREE_WITH_TWO': 5, 'ThreeWithTwo': 5,
+                'Bomb': 6, 'BOMB': 6, 'StraightFlush': 7,
+                'ThreePair': 8, 'TwoTrips': 9
+            }
+            action_type_idx = action_type_map.get(action_type, 0)
+            if action_type_idx < 10:
+                obs[127 + action_type_idx] = 1.0
+            
+            # 动作牌点编码（137-151维）
+            if action_cards:
+                first_card = action_cards[0]
+                rank_map = {
+                    '2': 0, '3': 1, '4': 2, '5': 3, '6': 4, '7': 5, '8': 6, '9': 7,
+                    'T': 8, 'J': 9, 'Q': 10, 'K': 11, 'A': 12,
+                    'B': 13, 'R': 14
+                }
+                if len(first_card) >= 2:
+                    rank = first_card[1] if len(first_card) == 2 else first_card[1:2]
+                    rank_idx = rank_map.get(rank, 0)
+                    if rank_idx < 15:
+                        obs[137 + rank_idx] = 1.0
+        
+        # 5. 编码策略特征（152-154维）
+        # 是否能顺牌（上家出单，自己能跟）
+        can_follow = 0.0
+        greater_pos = state_info.get('greater_pos', -1)
+        my_pos = state_info.get('my_pos', -1)
+        if greater_pos != -1 and my_pos != -1:
+            # 判断是否是上家
+            upper_hand_pos = (my_pos - 1) % 4
+            if greater_pos == upper_hand_pos and greater_action:
+                action_type = greater_action[0] if isinstance(greater_action, list) else str(greater_action)
+                if action_type in ['Single', 'SINGLE']:
+                    can_follow = 1.0 if hand_count > 0 else 0.0
+        obs[152] = can_follow
+        
+        # 是否能跟牌（对手出牌，自己能跟）
+        can_followup = 0.0
+        if greater_action and len(greater_action) > 0:
+            action_type = greater_action[0] if isinstance(greater_action, list) else str(greater_action)
+            if action_type not in ['PASS', 'pass']:
+                can_followup = 1.0 if hand_count > 0 else 0.0
+        obs[153] = can_followup
+        
+        # 是否需要控牌（对手快走完）
+        need_control = 1.0 if min_opponent_cards <= 5 else 0.0
+        obs[154] = need_control
+        
+        # 检查手牌数量
             total_cards_in_hand = len(state_info['hand'])
             unique_indices = len(index_to_cards)
             print(f"[RL Debug] Hand stats: {total_cards_in_hand} total cards, {unique_indices} unique indices")
