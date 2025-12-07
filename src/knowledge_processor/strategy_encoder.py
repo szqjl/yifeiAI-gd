@@ -19,6 +19,26 @@ class StrategyEncoder:
     def __init__(self):
         self.last_hand_count = 27
         self.last_action_type = None
+    
+    def _int_to_card_code(self, card_id):
+        """将game_engine中的整数索引转换为卡牌代码字符串"""
+        if card_id == 52:
+            return 'B'  # 小王
+        elif card_id == 53:
+            return 'R'  # 大王
+        else:
+            # 0-51: 4个花色，每个花色13张牌
+            # 0-12: Spades (S), 13-25: Hearts (H), 26-38: Clubs (C), 39-51: Diamonds (D)
+            suit_idx = card_id // 13
+            rank_idx = card_id % 13
+            suit_map = {0: 'S', 1: 'H', 2: 'C', 3: 'D'}
+            rank_map = {
+                0: '2', 1: '3', 2: '4', 3: '5', 4: '6', 5: '7', 6: '8', 7: '9',
+                8: 'T', 9: 'J', 10: 'Q', 11: 'K', 12: 'A'
+            }
+            suit = suit_map.get(suit_idx, 'S')
+            rank = rank_map.get(rank_idx, '2')
+            return f"{suit}{rank}"
         
     def calculate_shaping_reward(self, state_dict: dict, action_cards: List, 
                                  action_type: str = None, game_phase: str = "mid",
@@ -132,26 +152,36 @@ class StrategyEncoder:
         
         return reward
     
-    def _get_card_rank(self, card_code: str) -> int:
-        """获取卡牌点数（用于比较大小）"""
+    def _get_card_rank(self, card_code) -> int:
+        """获取卡牌点数（用于比较大小），支持整数和字符串格式"""
+        # 如果是整数，先转换为字符串
+        if isinstance(card_code, int):
+            card_code = self._int_to_card_code(card_code)
+        
         rank_map = {
             '2': 0, '3': 1, '4': 2, '5': 3, '6': 4, '7': 5, '8': 6, '9': 7,
             'T': 8, 'J': 9, 'Q': 10, 'K': 11, 'A': 12,
             'B': 13, 'R': 14
         }
-        if len(card_code) >= 2:
+        if isinstance(card_code, str) and len(card_code) >= 2:
             rank = card_code[1] if len(card_code) == 2 else card_code[1:2]
             return rank_map.get(rank, 0)
         return 0
 
-    def analyze_hand_structure(self, hand: List[str]):
+    def analyze_hand_structure(self, hand: List):
         """
-        分析手牌结构（用于检测炸弹等）
+        分析手牌结构（用于检测炸弹等），支持整数和字符串格式
         """
         rank_count = Counter()
         for card in hand:
-            if len(card) >= 2:
-                rank = card[1] if len(card) == 2 else card[1:2]
+            # 如果是整数，先转换为字符串
+            if isinstance(card, int):
+                card_code = self._int_to_card_code(card)
+            else:
+                card_code = card
+            
+            if isinstance(card_code, str) and len(card_code) >= 2:
+                rank = card_code[1] if len(card_code) == 2 else card_code[1:2]
                 rank_count[rank] += 1
         
         # 检测炸弹（4张或以上相同点数）

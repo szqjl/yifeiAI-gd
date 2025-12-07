@@ -2,11 +2,43 @@
 组牌策略模块
 根据组牌技巧文档，评估动作的组牌效果
 """
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 from collections import Counter
 
 
-def evaluate_grouping_effect(hand_cards: List[str], action_cards: List[str], 
+def _int_to_card_code(card_id: int) -> str:
+    """将game_engine中的整数索引转换为卡牌代码字符串"""
+    if card_id == 52:
+        return 'B'  # 小王
+    elif card_id == 53:
+        return 'R'  # 大王
+    else:
+        # 0-51: 4个花色，每个花色13张牌
+        # 0-12: Spades (S), 13-25: Hearts (H), 26-38: Clubs (C), 39-51: Diamonds (D)
+        suit_idx = card_id // 13
+        rank_idx = card_id % 13
+        suit_map = {0: 'S', 1: 'H', 2: 'C', 3: 'D'}
+        rank_map = {
+            0: '2', 1: '3', 2: '4', 3: '5', 4: '6', 5: '7', 6: '8', 7: '9',
+            8: 'T', 9: 'J', 10: 'Q', 11: 'K', 12: 'A'
+        }
+        suit = suit_map.get(suit_idx, 'S')
+        rank = rank_map.get(rank_idx, '2')
+        return f"{suit}{rank}"
+
+
+def _normalize_cards(cards: List[Union[str, int]]) -> List[str]:
+    """将卡牌列表标准化为字符串格式"""
+    normalized = []
+    for card in cards:
+        if isinstance(card, int):
+            normalized.append(_int_to_card_code(card))
+        else:
+            normalized.append(str(card))
+    return normalized
+
+
+def evaluate_grouping_effect(hand_cards: List[Union[str, int]], action_cards: List[Union[str, int]], 
                              action_type: str, game_phase: str, power: float, 
                              cur_rank: str = "2") -> Dict:
     """
@@ -35,6 +67,10 @@ def evaluate_grouping_effect(hand_cards: List[str], action_cards: List[str],
     """
     if not hand_cards or not action_cards:
         return {'score': 0, 'reasons': [], 'rounds_reduced': 0, 'singles_reduced': 0}
+    
+    # 标准化卡牌格式（将整数转换为字符串）
+    hand_cards = _normalize_cards(hand_cards)
+    action_cards = _normalize_cards(action_cards)
     
     score = 0.0
     reasons = []
