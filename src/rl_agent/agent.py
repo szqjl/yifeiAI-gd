@@ -9,12 +9,17 @@ class PPOAgent:
         """
         PPO Agent for Guandan AI
         
+        **最优配置（基于历次训练效果汇总.md）**:
+        - prediction_threshold: 0.1（配合缩放因子10.0，效果最佳）
+        - 概率缩放因子: 10.0（在select_action中应用）
+        - 完全匹配准确率: 59.67%（使用最优配置）
+        
         Args:
             input_dim: 状态空间维度（512维，对应512个卡牌索引位置）
             action_dim: 动作空间维度（512维，与状态空间一致，每个维度表示是否选择对应的卡牌）
-            prediction_threshold: 预测阈值（默认0.3，优化后用于解决预测过少问题）
+            prediction_threshold: 预测阈值（默认0.1，最优配置）
         """
-        self.prediction_threshold = prediction_threshold  # 默认0.3，优化后用于解决预测过少问题
+        self.prediction_threshold = prediction_threshold  # 最优配置：0.1
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
@@ -43,11 +48,9 @@ class PPOAgent:
             # But for V1, this allows the agent to select multiple cards.
             probs = torch.sigmoid(logits)
             
-            # **优化**：缩放概率值，使其更合理（与model.py保持一致）
-            # 基于概率分布分析，最优缩放因子为10.0（文档：最终最优方案.md）
-            # 但根据实际调试，原始概率过低（0.0014），需要更大缩放或更低阈值
-            # 当前使用10.0缩放因子，配合0.1阈值确保有输出
-            probs = probs * 10.0  # 最优缩放因子（从7.0改为10.0，基于文档分析）
+            # **最优配置**：概率缩放×10.0（基于历次训练效果汇总.md）
+            # 缩放因子10.0是最优选择，准确率59.67%，比50.0的1.57%好19倍
+            probs = probs * 10.0  # 最优缩放因子
             probs = torch.clamp(probs, 0, 1)  # 确保概率值在[0, 1]范围内
             
             # **调整预测阈值**：使用阈值而不是采样
