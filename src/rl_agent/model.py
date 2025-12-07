@@ -32,14 +32,14 @@ class GuandanPolicyNet(nn.Module):
         # Or we can use it to sample actions
         return logits
 
-    def get_action(self, state, deterministic=False, threshold=0.1):
+    def get_action(self, state, deterministic=False, threshold=0.3):
         """
         Select action given state.
         
-        **最优配置（基于历次训练效果汇总.md）**:
-        - 概率缩放因子: 10.0（最优缩放因子，基于概率分布分析）
-        - 预测阈值: 0.1（配合缩放因子10.0，效果最佳）
-        - 完全匹配准确率: 59.67%（使用最优配置）
+        **当前配置（根据2025-12-07评估结果进一步优化）**:
+        - 概率缩放因子: 5.0（从7.0进一步降低，继续减少预测过多问题）
+        - 预测阈值: 0.3（从0.2进一步提高，进一步减少预测过多）
+        - 调整原因: 当前数据796样本，预测过多仍占66.3%，需要继续降低缩放和提高阈值
         
         Args:
             state: 状态向量
@@ -50,9 +50,10 @@ class GuandanPolicyNet(nn.Module):
             logits = self.forward(state)
             probs = torch.sigmoid(logits)
             
-            # **最优配置**：概率缩放×10.0（基于历次训练效果汇总.md）
-            # 缩放因子10.0是最优选择，准确率59.67%，比50.0的1.57%好19倍
-            probs = probs * 10.0  # 最优缩放因子
+            # **参数调整**：根据2025-12-07评估结果，预测过多仍占66.3%
+            # 进一步降低概率缩放因子从7.0到5.0，继续减少预测过多问题
+            # 调整历史：10.0(13,409样本) → 7.0(796样本) → 5.0(进一步优化)
+            probs = probs * 5.0  # 进一步调整后的缩放因子（从7.0降低到5.0）
             probs = torch.clamp(probs, 0, 1)  # 确保概率值在[0, 1]范围内
             
             if deterministic:

@@ -1,0 +1,61 @@
+{
+  "timestamp": "2025-12-07T23:40:37.264568",
+  "data_info": {
+    "total_games": 34,
+    "total_samples": 796,
+    "avg_samples_per_game": 23.41176470588235
+  },
+  "model_info": {
+    "model_path": "models/bc_model_v1.pth",
+    "model_size_mb": 1.256840705871582,
+    "last_modified": "2025-12-06 08:22:57"
+  },
+  "evaluation_results": {
+    "prediction_threshold": 0.1,
+    "scale_factor": 7.0,
+    "total_samples": 796,
+    "exact_match_samples": 106,
+    "exact_accuracy": 0.13316582914572864,
+    "card_accuracy": 0.8661618640075377,
+    "avg_predicted_cards": 67.95854271356784,
+    "probability_stats": {
+      "raw_min": 1.1692663504092593e-10,
+      "raw_max": 0.3001059889793396,
+      "raw_mean": 0.007163166534155607,
+      "raw_median": 0.00019932181749027222,
+      "scaled_min": 8.18484890974247e-10,
+      "scaled_max": 1.0,
+      "scaled_mean": 0.049355875700712204,
+      "scaled_median": 0.0013952540466561913
+    },
+    "prediction_distribution": {
+      "exact_match": 130,
+      "exact_match_pct": 16.331658291457288,
+      "over_predict": 528,
+      "over_predict_pct": 66.33165829145729,
+      "under_predict": 138,
+      "under_predict_pct": 17.33668341708543,
+      "avg_card_count_diff": 67.12814070351759
+    }
+  },
+  "historical_comparison": {
+    "initial": {
+      "samples": 10,
+      "games": 1,
+      "exact_accuracy": 0.5941,
+      "card_accuracy": 0.9978
+    },
+    "mid": {
+      "samples": 252,
+      "games": 23,
+      "exact_accuracy": 0.2381,
+      "card_accuracy": 0.9952
+    },
+    "current": {
+      "samples": 796,
+      "games": 34,
+      "exact_accuracy": 0.13316582914572864,
+      "card_accuracy": 0.8661618640075377
+    }
+  }
+}

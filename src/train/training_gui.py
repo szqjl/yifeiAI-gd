@@ -132,7 +132,11 @@ class TrainingGUI:
         ttk.Checkbutton(train_frame, text="训练完成后自动评估模型效果", 
                         variable=self.auto_evaluate_var).grid(row=4, column=0, columnspan=4, sticky=tk.W, padx=5, pady=5)
         
-        ttk.Button(train_frame, text="开始训练", command=self.start_training).grid(row=5, column=0, columnspan=4, pady=10)
+        # 训练和评估按钮
+        button_frame = ttk.Frame(train_frame)
+        button_frame.grid(row=5, column=0, columnspan=4, pady=10)
+        ttk.Button(button_frame, text="开始训练", command=self.start_training).grid(row=0, column=0, padx=5)
+        ttk.Button(button_frame, text="评估模型", command=self.manual_evaluate_model).grid(row=0, column=1, padx=5)
         
         # 3. 训练进度区域
         progress_frame = ttk.LabelFrame(main_frame, text="3. 训练进度", padding="10")
@@ -154,8 +158,32 @@ class TrainingGUI:
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
         
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=20, width=80, wrap=tk.WORD)
+        # 创建带滚动条的文本区域
+        # 使用 ScrolledText 确保滚动条始终可见
+        self.log_text = scrolledtext.ScrolledText(
+            log_frame, 
+            height=20, 
+            width=80, 
+            wrap=tk.WORD,
+            font=("Consolas", 9),  # 使用等宽字体，便于阅读
+            bg="#f5f5f5",  # 浅灰色背景
+            fg="#000000",  # 黑色文字
+            insertbackground="#000000",  # 光标颜色
+            selectbackground="#316AC5",  # 选中背景色
+            selectforeground="#FFFFFF",  # 选中文字颜色
+            relief=tk.SUNKEN,  # 凹陷边框
+            borderwidth=2
+        )
         self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # ScrolledText 已经自动处理滚动条，无需手动配置
+        # 确保文本区域可以正确滚动
+        
+        # 添加右键菜单（可选功能）
+        self.log_menu = tk.Menu(self.root, tearoff=0)
+        self.log_menu.add_command(label="清空日志", command=self.clear_log)
+        self.log_menu.add_command(label="复制选中", command=self.copy_selected)
+        self.log_text.bind("<Button-3>", self.show_log_menu)  # 右键菜单
         
         # 5. 状态栏
         status_frame = ttk.Frame(main_frame)
@@ -208,8 +236,32 @@ class TrainingGUI:
         """添加日志消息"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_message = f"[{timestamp}] [{level}] {message}\n"
+        
+        # 记录插入位置
+        start_pos = self.log_text.index(tk.END)
+        
+        # 插入日志消息
         self.log_text.insert(tk.END, log_message)
+        
+        # 记录结束位置
+        end_pos = self.log_text.index(tk.END + "-1c")
+        
+        # 根据级别设置颜色标签
+        if level == "ERROR":
+            self.log_text.tag_add("error", start_pos, end_pos)
+            self.log_text.tag_config("error", foreground="#FF0000", font=("Consolas", 9, "bold"))
+        elif level == "WARNING":
+            self.log_text.tag_add("warning", start_pos, end_pos)
+            self.log_text.tag_config("warning", foreground="#FF8800", font=("Consolas", 9))
+        elif level == "INFO":
+            self.log_text.tag_add("info", start_pos, end_pos)
+            self.log_text.tag_config("info", foreground="#000000", font=("Consolas", 9))
+        
+        # 自动滚动到底部（确保新日志可见）
         self.log_text.see(tk.END)
+        
+        # 更新滚动条（确保滚动条正确显示）
+        self.log_text.update_idletasks()
         
         # 同时输出到控制台（用于调试）
         # 安全处理：如果stdout已关闭，则跳过控制台输出
@@ -219,6 +271,28 @@ class TrainingGUI:
         except (ValueError, AttributeError, OSError):
             # stdout不可用或已关闭，忽略错误
             pass
+    
+    def clear_log(self):
+        """清空日志"""
+        self.log_text.delete(1.0, tk.END)
+        self.log("日志已清空")
+    
+    def copy_selected(self):
+        """复制选中的文本"""
+        try:
+            selected = self.log_text.selection_get()
+            self.root.clipboard_clear()
+            self.root.clipboard_append(selected)
+        except tk.TclError:
+            # 没有选中文本
+            pass
+    
+    def show_log_menu(self, event):
+        """显示右键菜单"""
+        try:
+            self.log_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.log_menu.grab_release()
         
     def process_log_queue(self):
         """处理日志队列（用于线程间通信）"""
@@ -735,6 +809,65 @@ class TrainingGUI:
                 self.log_queue.put({"text": f"评估过程出错: {str(e)}", "level": "ERROR"})
                 import traceback
                 self.log_queue.put({"text": traceback.format_exc(), "level": "ERROR"})
+        
+        threading.Thread(target=evaluate_thread, daemon=True).start()
+    
+    def manual_evaluate_model(self):
+        """手动评估模型效果（独立按钮）"""
+        model_path = self.model_path_var.get()
+        if not model_path:
+            messagebox.showwarning("警告", "请先设置模型路径")
+            return
+        
+        if not os.path.exists(model_path):
+            messagebox.showerror("错误", f"模型文件不存在: {model_path}")
+            return
+        
+        # 在后台线程中运行评估
+        def evaluate_thread():
+            try:
+                self.log_queue.put({"text": "="*60, "level": "INFO"})
+                self.log_queue.put({"text": "开始手动评估模型效果...", "level": "INFO"})
+                self.log_queue.put({"text": f"模型路径: {model_path}", "level": "INFO"})
+                self.log_queue.put({"text": "="*60, "level": "INFO"})
+                self.status_var.set("评估中...")
+                
+                # 运行评估脚本
+                import subprocess
+                result = subprocess.run(
+                    [sys.executable, "src/train/analyze_training_effectiveness.py"],
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    timeout=300  # 5分钟超时
+                )
+                
+                # 输出评估结果
+                if result.stdout:
+                    for line in result.stdout.split('\n'):
+                        if line.strip():
+                            self.log_queue.put({"text": line, "level": "INFO"})
+                
+                if result.stderr:
+                    for line in result.stderr.split('\n'):
+                        if line.strip():
+                            self.log_queue.put({"text": line, "level": "ERROR"})
+                
+                if result.returncode == 0:
+                    self.log_queue.put({"text": "="*60, "level": "INFO"})
+                    self.log_queue.put({"text": "模型评估完成！", "level": "INFO"})
+                    self.status_var.set("评估完成")
+                else:
+                    self.log_queue.put({"text": f"评估失败，返回码: {result.returncode}", "level": "ERROR"})
+                    self.status_var.set("评估失败")
+                    
+            except subprocess.TimeoutExpired:
+                self.log_queue.put({"text": "[警告] 评估超时", "level": "WARNING"})
+                self.status_var.set("评估超时")
+            except Exception as e:
+                self.log_queue.put({"text": f"评估过程出错: {str(e)}", "level": "ERROR"})
+                self.status_var.set("评估出错")
         
         threading.Thread(target=evaluate_thread, daemon=True).start()
 

@@ -8,6 +8,8 @@ import sys
 import os
 import torch
 import numpy as np
+import json
+from datetime import datetime
 
 # **修复**：设置Windows控制台编码为UTF-8
 if sys.platform == 'win32':
@@ -94,22 +96,46 @@ def analyze_training_effectiveness():
         "card_count_diff": []
     }
     
-    # **优化后的预测阈值**：0.3（解决预测过少问题）
+    # **修复**：使用与推理代码相同的设置
+    # 使用 model.get_action() 方法，它会自动应用缩放因子和阈值
+    # 当前配置：阈值0.3，缩放因子5.0（根据2025-12-07评估结果进一步优化）
     prediction_threshold = 0.3
     
-    # 收集所有概率值用于分析
+    # 收集所有概率值用于分析（原始概率，用于分析）
     all_probs_list = []
+    all_scaled_probs_list = []
     
     with torch.no_grad():
         for states, actions in dataloader:
             states = states.to(device)
             actions = actions.to(device)
             
+            # 获取原始概率（用于分析）
             logits = model(states)
             probs = torch.sigmoid(logits)
-            # 收集概率值
             all_probs_list.append(probs.cpu())
-            predictions = (probs > prediction_threshold).float()
+            
+            # 使用 get_action 方法（自动应用缩放和阈值，与推理代码一致）
+            predictions_list = []
+            scaled_probs_list = []
+            for i in range(len(states)):
+                state = states[i:i+1]  # 保持batch维度
+                # 获取缩放后的概率（用于分析）
+                with torch.no_grad():
+                    logits_single = model(state)
+                    probs_single = torch.sigmoid(logits_single)
+                    scaled_probs = probs_single * 5.0  # 与推理代码一致的缩放因子（已进一步调整为5.0）
+                    scaled_probs = torch.clamp(scaled_probs, 0, 1)
+                    scaled_probs_list.append(scaled_probs.cpu())
+                
+                # 使用 get_action 方法（与推理代码一致）
+                action = model.get_action(state, deterministic=True, threshold=prediction_threshold)
+                if action.ndim > 1:
+                    action = action.flatten()
+                predictions_list.append(torch.from_numpy(action).float())
+            
+            predictions = torch.stack(predictions_list).to(device)
+            all_scaled_probs_list.append(torch.cat(scaled_probs_list, dim=0))
             
             # 完全匹配
             exact_match = (predictions == actions).all(dim=1)
@@ -142,7 +168,7 @@ def analyze_training_effectiveness():
     avg_pred_count = predicted_cards / total_samples if total_samples > 0 else 0
     avg_true_count = sum(prediction_stats["card_count_diff"]) / len(prediction_stats["card_count_diff"]) if prediction_stats["card_count_diff"] else 0
     
-    # 计算概率统计
+    # 计算概率统计（原始概率和缩放后概率）
     if all_probs_list:
         all_probs = torch.cat(all_probs_list, dim=0)
         prob_mean = all_probs.mean().item()
@@ -152,8 +178,17 @@ def analyze_training_effectiveness():
     else:
         prob_mean = prob_median = prob_min = prob_max = 0
     
+    if all_scaled_probs_list:
+        all_scaled_probs = torch.cat(all_scaled_probs_list, dim=0)
+        scaled_prob_mean = all_scaled_probs.mean().item()
+        scaled_prob_median = all_scaled_probs.median().item()
+        scaled_prob_min = all_scaled_probs.min().item()
+        scaled_prob_max = all_scaled_probs.max().item()
+    else:
+        scaled_prob_mean = scaled_prob_median = scaled_prob_min = scaled_prob_max = 0
+    
     print(f"\n" + "="*60)
-    print("模型评估结果（阈值0.3）")
+    print(f"模型评估结果（阈值{prediction_threshold}，缩放因子5.0）")
     print("="*60)
     print(f"总样本数: {total_samples}")
     print(f"完全匹配样本数: {correct_predictions}")
@@ -161,9 +196,12 @@ def analyze_training_effectiveness():
     print(f"卡牌级别准确率: {card_accuracy:.2%}")
     print(f"平均预测卡牌数: {avg_pred_count:.2f}")
     print(f"\n模型输出概率分析:")
-    print(f"  概率范围: [{prob_min:.4f}, {prob_max:.4f}]")
-    print(f"  概率平均: {prob_mean:.4f}")
-    print(f"  概率中位数: {prob_median:.4f}")
+    print(f"  原始概率范围: [{prob_min:.4f}, {prob_max:.4f}]")
+    print(f"  原始概率平均: {prob_mean:.4f}")
+    print(f"  原始概率中位数: {prob_median:.4f}")
+    print(f"  缩放后概率范围: [{scaled_prob_min:.4f}, {scaled_prob_max:.4f}]")
+    print(f"  缩放后概率平均: {scaled_prob_mean:.4f}")
+    print(f"  缩放后概率中位数: {scaled_prob_median:.4f}")
     
     print(f"\n预测分布分析:")
     print(f"  完全匹配: {prediction_stats['exact_match']} ({prediction_stats['exact_match']/total_samples*100:.1f}%)")
@@ -216,9 +254,10 @@ def analyze_training_effectiveness():
     
     if prediction_stats["under_predict"] > prediction_stats["over_predict"] * 2:
         print(f"\n[WARNING] 模型严重倾向于预测过少（{prediction_stats['under_predict']/total_samples*100:.1f}%）")
+        print(f"  当前设置: 缩放因子5.0，阈值{prediction_threshold}")
         print(f"  建议:")
-        print(f"  1. 调整模型输出（概率缩放，放大2-3倍）")
-        print(f"  2. 进一步降低预测阈值（当前0.3，尝试0.1或0.05）")
+        print(f"  1. 进一步降低预测阈值（当前{prediction_threshold}，尝试0.05或0.01）")
+        print(f"  2. 增加概率缩放因子（当前10.0，尝试15.0或20.0）")
         print(f"  3. 重新训练，调整训练参数（减少Dropout比率，调整损失函数）")
     
     # 8. 建议
@@ -226,15 +265,17 @@ def analyze_training_effectiveness():
     print("改进建议")
     print("="*60)
     
-    print(f"\n1. 调整模型输出（优先级最高）")
-    print(f"   - 在推理时对输出概率进行缩放（放大2-3倍）")
-    print(f"   - 修改 src/rl_agent/model.py 中的 get_action 方法")
-    print(f"   - 预期效果: 完全匹配准确率提升到20-35%")
+    print(f"\n1. 进一步降低预测阈值（如果预测过少）")
+    print(f"   - 当前: {prediction_threshold}（已优化）")
+    print(f"   - 如果预测过少，尝试: 0.05 或 0.01")
+    print(f"   - 预期效果: 完全匹配准确率可能提升5-10%")
     
-    print(f"\n2. 进一步降低预测阈值")
-    print(f"   - 当前: 0.3")
-    print(f"   - 如果预测过少，尝试: 0.1 或 0.05")
-    print(f"   - 预期效果: 完全匹配准确率提升到5-10%")
+    print(f"\n2. 调整概率缩放因子（如果预测过少或过多）")
+    print(f"   - 当前: 7.0（已调整，从10.0降低）")
+    print(f"   - 如果预测过少，尝试: 10.0 或 15.0")
+    print(f"   - 如果预测过多，尝试: 5.0 或 6.0")
+    print(f"   - 修改 src/rl_agent/model.py 中的 get_action 方法")
+    print(f"   - 预期效果: 完全匹配准确率可能提升10-20%")
     
     print(f"\n3. 重新训练模型（长期方案）")
     print(f"   - 数据量: {len(raw_data)}个样本（充足）")
@@ -249,6 +290,63 @@ def analyze_training_effectiveness():
     print(f"   - 确保选择获胜玩家的数据")
     
     print(f"\n" + "="*60)
+    
+    # 9. 保存评估结果到文件
+    os.makedirs("training_logs", exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    eval_log_path = f"training_logs/evaluation_log_{timestamp}.json"
+    
+    eval_result = {
+        "timestamp": datetime.now().isoformat(),
+        "data_info": {
+            "total_games": len(replays),
+            "total_samples": len(raw_data),
+            "avg_samples_per_game": len(raw_data) / len(replays) if len(replays) > 0 else 0
+        },
+        "model_info": {
+            "model_path": model_path,
+            "model_size_mb": model_size,
+            "last_modified": model_time_str
+        },
+        "evaluation_results": {
+            "prediction_threshold": prediction_threshold,
+            "scale_factor": 5.0,
+            "total_samples": total_samples,
+            "exact_match_samples": correct_predictions,
+            "exact_accuracy": exact_accuracy,
+            "card_accuracy": card_accuracy,
+            "avg_predicted_cards": avg_pred_count,
+            "probability_stats": {
+                "raw_min": prob_min,
+                "raw_max": prob_max,
+                "raw_mean": prob_mean,
+                "raw_median": prob_median,
+                "scaled_min": scaled_prob_min,
+                "scaled_max": scaled_prob_max,
+                "scaled_mean": scaled_prob_mean,
+                "scaled_median": scaled_prob_median
+            },
+            "prediction_distribution": {
+                "exact_match": prediction_stats['exact_match'],
+                "exact_match_pct": prediction_stats['exact_match']/total_samples*100,
+                "over_predict": prediction_stats['over_predict'],
+                "over_predict_pct": prediction_stats['over_predict']/total_samples*100,
+                "under_predict": prediction_stats['under_predict'],
+                "under_predict_pct": prediction_stats['under_predict']/total_samples*100,
+                "avg_card_count_diff": sum(prediction_stats["card_count_diff"]) / len(prediction_stats["card_count_diff"]) if prediction_stats["card_count_diff"] else 0
+            }
+        },
+        "historical_comparison": {
+            "initial": {"samples": 10, "games": 1, "exact_accuracy": 0.5941, "card_accuracy": 0.9978},
+            "mid": {"samples": 252, "games": 23, "exact_accuracy": 0.2381, "card_accuracy": 0.9952},
+            "current": {"samples": len(raw_data), "games": len(replays), "exact_accuracy": exact_accuracy, "card_accuracy": card_accuracy}
+        }
+    }
+    
+    with open(eval_log_path, 'w', encoding='utf-8') as f:
+        json.dump(eval_result, f, indent=2, ensure_ascii=False)
+    
+    print(f"\n[INFO] 评估结果已保存到: {eval_log_path}")
 
 
 if __name__ == "__main__":
