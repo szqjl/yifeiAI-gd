@@ -120,20 +120,30 @@ class GuandanDataset(Dataset):
             
         return torch.FloatTensor(state_vec), torch.FloatTensor(action_vec)
 
-def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0005, model_path="models/bc_model_v1.pth", dropout_rate=0.1):
+def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model_path="models/bc_model_v1.pth", dropout_rate=0.1):
     """
     行为克隆预训练
     
+    **最优配置（基于历次训练效果汇总.md）**:
+    - epochs: 30-50（根据数据量选择，大数据量用50）
+    - batch_size: 64（最优批次大小）
+    - lr: 0.0003（稳定学习率，配合学习率衰减）
+    - dropout_rate: 0.1（平衡过拟合和输出概率）
+    - 学习率衰减: StepLR(step_size=10, gamma=0.5)（每10轮衰减50%）
+    - 损失函数: 加权BCE(pos_weight=2.0)（惩罚预测过少）
+    
     Args:
         data_dir: 训练数据目录
-        epochs: 训练轮数
-        batch_size: 批次大小
-        lr: 学习率
+        epochs: 训练轮数（推荐30-50）
+        batch_size: 批次大小（推荐64）
+        lr: 学习率（推荐0.0003）
         model_path: 模型保存路径
+        dropout_rate: Dropout比率（推荐0.1）
     """
     print("Starting Behavior Cloning Pre-training...")
     print(f"Data directory: {data_dir}")
     print(f"Epochs: {epochs}, Batch size: {batch_size}, Learning rate: {lr}")
+    print(f"[最优配置] 学习率衰减: StepLR(step_size=10, gamma=0.5), 损失函数: 加权BCE(pos_weight=2.0)")
     
     # 1. Load Data
     parser = ReplayParser(data_dir)
