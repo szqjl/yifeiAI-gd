@@ -59,9 +59,21 @@ def evaluate_model(model_path="models/bc_model_v1.pth", data_dir="game_records")
     # 加载模型时，需要检查是否有策略分类头
     try:
         checkpoint = torch.load(model_path, map_location=device)
-        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-            model_state_dict = checkpoint['model_state_dict']
+        
+        # 处理不同的模型保存格式
+        if isinstance(checkpoint, dict):
+            # 新格式：包含 model_state_dict 键的字典
+            if 'model_state_dict' in checkpoint:
+                model_state_dict = checkpoint['model_state_dict']
+            # 旧格式：直接是 state_dict
+            elif any(key.startswith('fc') or key.startswith('strategy') for key in checkpoint.keys()):
+                model_state_dict = checkpoint
+            else:
+                # 如果字典中没有模型相关的键，尝试使用整个字典
+                print("[WARNING] 无法识别模型格式，尝试直接加载...")
+                model_state_dict = checkpoint
         else:
+            # 直接是 state_dict
             model_state_dict = checkpoint
         
         # 检查是否有策略分类头
@@ -74,10 +86,19 @@ def evaluate_model(model_path="models/bc_model_v1.pth", data_dir="game_records")
             enable_strategy_head=has_strategy_head
         ).to(device)
         
-        model.load_state_dict(model_state_dict)
+        # 加载模型状态，允许部分匹配（strict=False）以兼容不同格式
+        try:
+            model.load_state_dict(model_state_dict, strict=True)
+        except RuntimeError as e:
+            # 如果严格加载失败，尝试非严格加载
+            print(f"[WARNING] 严格加载失败，尝试非严格加载: {e}")
+            model.load_state_dict(model_state_dict, strict=False)
+        
         print("[OK] 模型加载成功")
     except Exception as e:
         print(f"[ERROR] 模型加载失败: {e}")
+        import traceback
+        print(traceback.format_exc())
         return
     
     model.eval()

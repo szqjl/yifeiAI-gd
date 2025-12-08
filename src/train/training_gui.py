@@ -44,7 +44,7 @@ class TrainingGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("掼蛋AI训练工具")
-        self.root.geometry("1000x700")
+        self.root.geometry("1200x900")  # 增大窗口尺寸：宽度1200，高度900
         
         # 训练日志队列（用于线程间通信）
         self.log_queue = queue.Queue()
@@ -65,7 +65,7 @@ class TrainingGUI:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(4, weight=1)
+        main_frame.rowconfigure(3, weight=1)  # 让日志区域（row=3）可以扩展
         
         # 1. 数据导入区域
         data_frame = ttk.LabelFrame(main_frame, text="1. 数据导入", padding="10")
@@ -162,8 +162,8 @@ class TrainingGUI:
         # 使用 ScrolledText 确保滚动条始终可见
         self.log_text = scrolledtext.ScrolledText(
             log_frame, 
-            height=20, 
-            width=80, 
+            height=30,  # 增加高度：从20行增加到30行
+            width=100,   # 增加宽度：从80列增加到100列
             wrap=tk.WORD,
             font=("Consolas", 9),  # 使用等宽字体，便于阅读
             bg="#f5f5f5",  # 浅灰色背景
@@ -176,8 +176,8 @@ class TrainingGUI:
         )
         self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # ScrolledText 已经自动处理滚动条，无需手动配置
-        # 确保文本区域可以正确滚动
+        # ScrolledText 已经自动处理滚动条，无需手动配置 yscrollcommand
+        # 但需要确保文本区域可以正确扩展和滚动
         
         # 添加右键菜单（可选功能）
         self.log_menu = tk.Menu(self.root, tearoff=0)
@@ -260,8 +260,11 @@ class TrainingGUI:
         # 自动滚动到底部（确保新日志可见）
         self.log_text.see(tk.END)
         
-        # 更新滚动条（确保滚动条正确显示）
+        # 强制更新显示，确保滚动条正确显示
         self.log_text.update_idletasks()
+        
+        # 确保滚动条可见（如果内容超出可视区域）
+        # ScrolledText 会自动显示滚动条，但需要确保配置正确
         
         # 同时输出到控制台（用于调试）
         # 安全处理：如果stdout已关闭，则跳过控制台输出

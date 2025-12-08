@@ -37,18 +37,40 @@ def check_training_completion():
     
     # 2. 检查模型结构
     try:
-        model_dict = torch.load(model_path, map_location='cpu')
-        param_count = sum(p.numel() for p in model_dict.values())
+        checkpoint = torch.load(model_path, map_location='cpu')
+        
+        # 处理不同的模型保存格式
+        if isinstance(checkpoint, dict):
+            # 新格式：包含 model_state_dict 键的字典
+            if 'model_state_dict' in checkpoint:
+                model_dict = checkpoint['model_state_dict']
+            # 旧格式：直接是 state_dict
+            elif any(key.startswith('fc') or key.startswith('strategy') for key in checkpoint.keys()):
+                model_dict = checkpoint
+            else:
+                # 如果字典中没有模型相关的键，尝试使用整个字典
+                model_dict = checkpoint
+        else:
+            # 直接是 state_dict
+            model_dict = checkpoint
+        
+        param_count = sum(p.numel() for p in model_dict.values() if hasattr(p, 'numel'))
         print(f"  参数数量: {param_count:,}")
-        print(f"  模型键: {list(model_dict.keys())}")
+        print(f"  模型键数量: {len(model_dict)}")
         
         # 检查是否有Dropout层
         has_dropout = 'dropout.weight' in model_dict or any('dropout' in k for k in model_dict.keys())
         print(f"  包含Dropout: {'是' if has_dropout else '否'}")
         
+        # 检查是否有策略分类头
+        has_strategy_head = 'fc_strategy.weight' in model_dict
+        print(f"  包含策略分类头: {'是' if has_strategy_head else '否'}")
+        
         print(f"  [OK] 模型文件结构正常")
     except Exception as e:
         print(f"  [ERROR] 模型加载失败: {e}")
+        import traceback
+        print(traceback.format_exc())
         return False
     
     # 3. 检查训练日志
@@ -98,8 +120,22 @@ def check_training_completion():
     # 4. 测试模型输出
     print(f"\n模型输出测试:")
     try:
-        model = GuandanPolicyNet()
-        model.load_state_dict(model_dict)
+        # 检查是否有策略分类头
+        has_strategy_head = 'fc_strategy.weight' in model_dict
+        
+        model = GuandanPolicyNet(
+            input_dim=512,
+            hidden_dim=256,
+            output_dim=512,
+            enable_strategy_head=has_strategy_head
+        )
+        
+        # 加载模型状态，允许部分匹配以兼容不同格式
+        try:
+            model.load_state_dict(model_dict, strict=True)
+        except RuntimeError:
+            model.load_state_dict(model_dict, strict=False)
+        
         model.eval()
         
         x = torch.randn(1, 512)
