@@ -1,0 +1,294 @@
+============================================================
+掼蛋AI训练日志
+生成时间: 2025-12-08 19:59:57
+模型路径: models/bc_model_v1.pth
+============================================================
+
+[2025-12-08 19:59:11] [INFO] 训练工具已启动
+[2025-12-08 19:59:11] [INFO] PyTorch版本: 2.9.1+cpu
+[2025-12-08 19:59:11] [INFO] CUDA可用: False
+[2025-12-08 19:59:45] [INFO] ============================================================
+[2025-12-08 19:59:45] [INFO] 开始预训练...
+[2025-12-08 19:59:45] [INFO] 训练数据目录: game_records
+[2025-12-08 19:59:45] [INFO] 模型保存路径: models/bc_model_v1.pth
+[2025-12-08 19:59:45] [INFO] ============================================================
+[2025-12-08 19:59:54] [INFO] Starting Behavior Cloning Pre-training...
+[2025-12-08 19:59:54] [INFO] Data directory: game_records
+[2025-12-08 19:59:54] [INFO] Epochs: 50, Batch size: 64, Learning rate: 0.0003
+[2025-12-08 19:59:54] [INFO] [最优配置] 学习率衰减: StepLR(step_size=10, gamma=0.5), 损失函数: 加权BCE(pos_weight=2.0)
+[2025-12-08 19:59:54] [INFO] [阶段2多任务学习] 策略分类头: 启用, 损失权重: α=1.5, β=0.3
+[2025-12-08 19:59:54] [INFO] [2025-12-08 19:59:45] [INFO] ============================================================
+[2025-12-08 19:59:54] [INFO] [2025-12-08 19:59:45] [INFO] 开始预训练...
+[2025-12-08 19:59:54] [INFO] [2025-12-08 19:59:45] [INFO] 训练数据目录: game_records
+[2025-12-08 19:59:54] [INFO] [2025-12-08 19:59:45] [INFO] 模型保存路径: models/bc_model_v1.pth
+[2025-12-08 19:59:54] [INFO] [2025-12-08 19:59:45] [INFO] ============================================================
+[2025-12-08 19:59:54] [INFO] Loaded 796 samples.
+[2025-12-08 19:59:54] [INFO] Using device: cpu
+[2025-12-08 19:59:54] [INFO] Model: input_dim=512, output_dim=512, dropout_rate=0.1, strategy_head=True (matching inference code)
+[2025-12-08 19:59:54] [INFO] Epoch 1/50:
+[2025-12-08 19:59:54] [INFO]   Loss - Total: 1.5962, Action: 0.6869, Strategy: 0.0764, LR: 0.000300
+[2025-12-08 19:59:54] [INFO]   Action Accuracy - Exact: 0.00%, Card: 0.22%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy - Overall: 40.50%, Understanding Rate: 0.00%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy by Class - bomb: 3.03%, suppress: 95.56%, group: 0.00%, follow: 0.00%, discard: 0.00%
+[2025-12-08 19:59:54] [INFO] Epoch 2/50:
+[2025-12-08 19:59:54] [INFO]   Loss - Total: 1.4848, Action: 0.6471, Strategy: 0.0694, LR: 0.000300
+[2025-12-08 19:59:54] [INFO]   Action Accuracy - Exact: 0.00%, Card: 0.22%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy - Overall: 42.06%, Understanding Rate: 0.00%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 0.00%, follow: 0.00%, discard: 0.00%
+[2025-12-08 19:59:54] [INFO] Epoch 3/50:
+[2025-12-08 19:59:54] [INFO]   Loss - Total: 1.1814, Action: 0.4988, Strategy: 0.0585, LR: 0.000300
+[2025-12-08 19:59:54] [INFO]   Action Accuracy - Exact: 0.00%, Card: 0.22%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy - Overall: 42.06%, Understanding Rate: 0.00%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 0.00%, follow: 0.00%, discard: 0.00%
+[2025-12-08 19:59:54] [INFO] Epoch 4/50:
+[2025-12-08 19:59:54] [INFO]   Loss - Total: 0.7627, Action: 0.2302, Strategy: 0.0564, LR: 0.000300
+[2025-12-08 19:59:54] [INFO]   Action Accuracy - Exact: 0.00%, Card: 6.81%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy - Overall: 42.99%, Understanding Rate: 0.00%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 4.23%, follow: 0.00%, discard: 0.00%
+[2025-12-08 19:59:54] [INFO] Epoch 5/50:
+[2025-12-08 19:59:54] [INFO]   Loss - Total: 0.4891, Action: 0.0753, Strategy: 0.0508, LR: 0.000300
+[2025-12-08 19:59:54] [INFO]   Action Accuracy - Exact: 5.65%, Card: 63.44%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy - Overall: 57.63%, Understanding Rate: 1.56%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy by Class - bomb: 0.00%, suppress: 98.52%, group: 61.97%, follow: 0.00%, discard: 12.12%
+[2025-12-08 19:59:54] [INFO] Epoch 6/50:
+[2025-12-08 19:59:54] [INFO]   Loss - Total: 0.4022, Action: 0.0393, Strategy: 0.0463, LR: 0.000300
+[2025-12-08 19:59:54] [INFO]   Action Accuracy - Exact: 27.89%, Card: 91.84%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy - Overall: 61.68%, Understanding Rate: 8.72%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 36.62%, follow: 0.00%, discard: 56.06%
+[2025-12-08 19:59:54] [INFO] Epoch 7/50:
+[2025-12-08 19:59:54] [INFO]   Loss - Total: 0.3457, Action: 0.0310, Strategy: 0.0404, LR: 0.000300
+[2025-12-08 19:59:54] [INFO]   Action Accuracy - Exact: 30.40%, Card: 97.62%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy - Overall: 67.91%, Understanding Rate: 14.33%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 80.28%, follow: 0.00%, discard: 39.39%
+[2025-12-08 19:59:54] [INFO] Epoch 8/50:
+[2025-12-08 19:59:54] [INFO]   Loss - Total: 0.3056, Action: 0.0275, Strategy: 0.0357, LR: 0.000300
+[2025-12-08 19:59:54] [INFO]   Action Accuracy - Exact: 25.63%, Card: 97.95%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy - Overall: 76.95%, Understanding Rate: 13.40%
+[2025-12-08 19:59:54] [INFO]   Strategy Accuracy by Class - bomb: 0.00%, suppress: 99.26%, group: 81.69%, follow: 0.00%, discard: 83.33%
+[2025-12-08 19:59:54] [INFO] Epoch 9/50:
+[2025-12-08 19:59:54] [INFO]   Loss - Total: 0.2595, Action: 0.0253, Strategy: 0.0299, LR: 0.000300
+[2025-12-08 19:59:54] [INFO]   Action Accuracy - Exact: 18.72%, Card: 97.44%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 79.75%, Understanding Rate: 13.40%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 3.03%, suppress: 100.00%, group: 97.18%, follow: 0.00%, discard: 77.27%
+[2025-12-08 19:59:55] [INFO] Epoch 10/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.2224, Action: 0.0243, Strategy: 0.0251, LR: 0.000300
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 14.32%, Card: 96.81%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 82.55%, Understanding Rate: 11.53%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 15.15%, suppress: 100.00%, group: 91.55%, follow: 0.00%, discard: 90.91%
+[2025-12-08 19:59:55] [INFO]   [Checkpoint] Model saved to models/bc_model_v1_epoch_10.pth
+[2025-12-08 19:59:55] [INFO] Epoch 11/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1974, Action: 0.0232, Strategy: 0.0219, LR: 0.000150
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 13.94%, Card: 96.63%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 82.87%, Understanding Rate: 10.28%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 3.03%, suppress: 100.00%, group: 97.18%, follow: 0.00%, discard: 92.42%
+[2025-12-08 19:59:55] [INFO] Epoch 12/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1880, Action: 0.0229, Strategy: 0.0207, LR: 0.000150
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 14.45%, Card: 96.57%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 84.42%, Understanding Rate: 11.53%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 24.24%, suppress: 100.00%, group: 97.18%, follow: 0.00%, discard: 89.39%
+[2025-12-08 19:59:55] [INFO] Epoch 13/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1755, Action: 0.0227, Strategy: 0.0191, LR: 0.000150
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 15.20%, Card: 96.61%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 85.36%, Understanding Rate: 13.71%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 24.24%, suppress: 100.00%, group: 95.77%, follow: 0.00%, discard: 95.45%
+[2025-12-08 19:59:55] [INFO] Epoch 14/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1683, Action: 0.0223, Strategy: 0.0182, LR: 0.000150
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 15.33%, Card: 96.72%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 85.98%, Understanding Rate: 10.28%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 30.30%, suppress: 100.00%, group: 95.77%, follow: 0.00%, discard: 95.45%
+[2025-12-08 19:59:55] [INFO] Epoch 15/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1500, Action: 0.0224, Strategy: 0.0157, LR: 0.000150
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 15.45%, Card: 96.71%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 86.92%, Understanding Rate: 12.46%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 48.48%, suppress: 100.00%, group: 92.96%, follow: 0.00%, discard: 93.94%
+[2025-12-08 19:59:55] [INFO] Epoch 16/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1493, Action: 0.0218, Strategy: 0.0157, LR: 0.000150
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 16.46%, Card: 96.70%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 87.85%, Understanding Rate: 12.77%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 48.48%, suppress: 100.00%, group: 94.37%, follow: 12.50%, discard: 93.94%
+[2025-12-08 19:59:55] [INFO] Epoch 17/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1325, Action: 0.0214, Strategy: 0.0135, LR: 0.000150
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 16.58%, Card: 96.70%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 90.65%, Understanding Rate: 13.71%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 66.67%, suppress: 100.00%, group: 95.77%, follow: 12.50%, discard: 96.97%
+[2025-12-08 19:59:55] [INFO] Epoch 18/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1303, Action: 0.0213, Strategy: 0.0133, LR: 0.000150
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 16.21%, Card: 96.70%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 91.90%, Understanding Rate: 12.46%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 66.67%, suppress: 100.00%, group: 97.18%, follow: 31.25%, discard: 96.97%
+[2025-12-08 19:59:55] [INFO] Epoch 19/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1160, Action: 0.0209, Strategy: 0.0114, LR: 0.000150
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 15.70%, Card: 96.65%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 95.64%, Understanding Rate: 11.21%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 84.85%, suppress: 100.00%, group: 100.00%, follow: 56.25%, discard: 96.97%
+[2025-12-08 19:59:55] [INFO] Epoch 20/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1093, Action: 0.0212, Strategy: 0.0105, LR: 0.000150
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 17.09%, Card: 96.74%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 93.77%, Understanding Rate: 14.95%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 72.73%, suppress: 100.00%, group: 97.18%, follow: 43.75%, discard: 100.00%
+[2025-12-08 19:59:55] [INFO]   [Checkpoint] Model saved to models/bc_model_v1_epoch_20.pth
+[2025-12-08 19:59:55] [INFO] Epoch 21/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1075, Action: 0.0204, Strategy: 0.0104, LR: 0.000075
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 16.33%, Card: 96.79%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 95.64%, Understanding Rate: 13.40%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 75.76%, suppress: 100.00%, group: 98.59%, follow: 81.25%, discard: 96.97%
+[2025-12-08 19:59:55] [INFO] Epoch 22/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.1046, Action: 0.0205, Strategy: 0.0100, LR: 0.000075
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 16.08%, Card: 96.79%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 96.57%, Understanding Rate: 12.46%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 81.82%, suppress: 100.00%, group: 100.00%, follow: 75.00%, discard: 98.48%
+[2025-12-08 19:59:55] [INFO] Epoch 23/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.0999, Action: 0.0207, Strategy: 0.0093, LR: 0.000075
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 16.83%, Card: 96.88%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 97.51%, Understanding Rate: 14.02%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 87.88%, suppress: 100.00%, group: 97.18%, follow: 93.75%, discard: 98.48%
+[2025-12-08 19:59:55] [INFO] Epoch 24/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.0947, Action: 0.0207, Strategy: 0.0086, LR: 0.000075
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 16.46%, Card: 96.85%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 98.13%, Understanding Rate: 13.08%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 96.97%, suppress: 100.00%, group: 97.18%, follow: 87.50%, discard: 98.48%
+[2025-12-08 19:59:55] [INFO] Epoch 25/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.0972, Action: 0.0203, Strategy: 0.0090, LR: 0.000075
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 15.83%, Card: 96.80%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 97.51%, Understanding Rate: 10.90%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 90.91%, suppress: 100.00%, group: 98.59%, follow: 87.50%, discard: 96.97%
+[2025-12-08 19:59:55] [INFO] Epoch 26/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.0902, Action: 0.0203, Strategy: 0.0081, LR: 0.000075
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 15.70%, Card: 96.83%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 98.75%, Understanding Rate: 12.46%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 90.91%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 100.00%
+[2025-12-08 19:59:55] [INFO] Epoch 27/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.0870, Action: 0.0202, Strategy: 0.0077, LR: 0.000075
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 17.71%, Card: 96.92%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 97.51%, Understanding Rate: 13.08%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 84.85%, suppress: 100.00%, group: 100.00%, follow: 87.50%, discard: 98.48%
+[2025-12-08 19:59:55] [INFO] Epoch 28/50:
+[2025-12-08 19:59:55] [INFO]   Loss - Total: 0.0849, Action: 0.0201, Strategy: 0.0074, LR: 0.000075
+[2025-12-08 19:59:55] [INFO]   Action Accuracy - Exact: 16.58%, Card: 96.91%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy - Overall: 99.07%, Understanding Rate: 11.84%
+[2025-12-08 19:59:55] [INFO]   Strategy Accuracy by Class - bomb: 100.00%, suppress: 100.00%, group: 100.00%, follow: 87.50%, discard: 98.48%
+[2025-12-08 19:59:56] [INFO] Epoch 29/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0848, Action: 0.0201, Strategy: 0.0074, LR: 0.000075
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 16.96%, Card: 96.91%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 98.13%, Understanding Rate: 12.46%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 87.88%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 98.48%
+[2025-12-08 19:59:56] [INFO] Epoch 30/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0804, Action: 0.0199, Strategy: 0.0068, LR: 0.000075
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 18.22%, Card: 96.93%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.07%, Understanding Rate: 14.64%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 93.94%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 100.00%
+[2025-12-08 19:59:56] [INFO]   [Checkpoint] Model saved to models/bc_model_v1_epoch_30.pth
+[2025-12-08 19:59:56] [INFO] Epoch 31/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0797, Action: 0.0198, Strategy: 0.0067, LR: 0.000037
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 16.08%, Card: 96.88%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.69%, Understanding Rate: 11.21%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 100.00%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 100.00%
+[2025-12-08 19:59:56] [INFO] Epoch 32/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0783, Action: 0.0196, Strategy: 0.0066, LR: 0.000037
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 17.46%, Card: 96.89%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.38%, Understanding Rate: 13.40%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 100.00%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 98.48%
+[2025-12-08 19:59:56] [INFO] Epoch 33/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0733, Action: 0.0200, Strategy: 0.0059, LR: 0.000037
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 16.83%, Card: 97.02%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.07%, Understanding Rate: 12.46%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 96.97%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 98.48%
+[2025-12-08 19:59:56] [INFO] Epoch 34/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0774, Action: 0.0198, Strategy: 0.0064, LR: 0.000037
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 17.09%, Card: 96.96%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 98.75%, Understanding Rate: 13.40%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 93.94%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 98.48%
+[2025-12-08 19:59:56] [INFO] Epoch 35/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0760, Action: 0.0196, Strategy: 0.0063, LR: 0.000037
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 17.21%, Card: 97.01%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.07%, Understanding Rate: 13.71%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 93.94%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 100.00%
+[2025-12-08 19:59:56] [INFO] Epoch 36/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0724, Action: 0.0198, Strategy: 0.0058, LR: 0.000037
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 16.71%, Card: 97.01%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.38%, Understanding Rate: 12.77%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 100.00%, suppress: 100.00%, group: 98.59%, follow: 93.75%, discard: 100.00%
+[2025-12-08 19:59:56] [INFO] Epoch 37/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0744, Action: 0.0199, Strategy: 0.0060, LR: 0.000037
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 17.84%, Card: 97.00%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.38%, Understanding Rate: 15.26%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 93.94%, suppress: 100.00%, group: 100.00%, follow: 100.00%, discard: 100.00%
+[2025-12-08 19:59:56] [INFO] Epoch 38/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0728, Action: 0.0195, Strategy: 0.0059, LR: 0.000037
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 17.34%, Card: 97.01%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.69%, Understanding Rate: 14.95%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 96.97%, suppress: 100.00%, group: 100.00%, follow: 100.00%, discard: 100.00%
+[2025-12-08 19:59:56] [INFO] Epoch 39/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0702, Action: 0.0197, Strategy: 0.0055, LR: 0.000037
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 17.09%, Card: 97.00%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.38%, Understanding Rate: 13.40%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 96.97%, suppress: 100.00%, group: 100.00%, follow: 100.00%, discard: 98.48%
+[2025-12-08 19:59:56] [INFO] Epoch 40/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0682, Action: 0.0195, Strategy: 0.0052, LR: 0.000037
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 16.96%, Card: 96.95%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.69%, Understanding Rate: 11.84%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 100.00%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 100.00%
+[2025-12-08 19:59:56] [INFO]   [Checkpoint] Model saved to models/bc_model_v1_epoch_40.pth
+[2025-12-08 19:59:56] [INFO] Epoch 41/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0710, Action: 0.0194, Strategy: 0.0057, LR: 0.000019
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 17.09%, Card: 97.01%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.07%, Understanding Rate: 12.77%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 96.97%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 98.48%
+[2025-12-08 19:59:56] [INFO] Epoch 42/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0680, Action: 0.0194, Strategy: 0.0053, LR: 0.000019
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 16.33%, Card: 96.96%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.38%, Understanding Rate: 12.15%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 100.00%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 98.48%
+[2025-12-08 19:59:56] [INFO] Epoch 43/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0678, Action: 0.0192, Strategy: 0.0053, LR: 0.000019
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 18.09%, Card: 96.99%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.07%, Understanding Rate: 14.64%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 96.97%, suppress: 100.00%, group: 100.00%, follow: 87.50%, discard: 100.00%
+[2025-12-08 19:59:56] [INFO] Epoch 44/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0684, Action: 0.0193, Strategy: 0.0053, LR: 0.000019
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 17.46%, Card: 97.02%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.07%, Understanding Rate: 13.08%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 96.97%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 98.48%
+[2025-12-08 19:59:56] [INFO] Epoch 45/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0667, Action: 0.0193, Strategy: 0.0051, LR: 0.000019
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 18.22%, Card: 97.07%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.38%, Understanding Rate: 13.40%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 96.97%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 100.00%
+[2025-12-08 19:59:56] [INFO] Epoch 46/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0662, Action: 0.0192, Strategy: 0.0051, LR: 0.000019
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 16.58%, Card: 97.04%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.38%, Understanding Rate: 12.15%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 96.97%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 100.00%
+[2025-12-08 19:59:56] [INFO] Epoch 47/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0646, Action: 0.0194, Strategy: 0.0048, LR: 0.000019
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 18.34%, Card: 97.09%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.07%, Understanding Rate: 13.40%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy by Class - bomb: 96.97%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 98.48%
+[2025-12-08 19:59:56] [INFO] Epoch 48/50:
+[2025-12-08 19:59:56] [INFO]   Loss - Total: 0.0648, Action: 0.0193, Strategy: 0.0048, LR: 0.000019
+[2025-12-08 19:59:56] [INFO]   Action Accuracy - Exact: 19.10%, Card: 97.11%
+[2025-12-08 19:59:56] [INFO]   Strategy Accuracy - Overall: 99.69%, Understanding Rate: 15.89%
+[2025-12-08 19:59:57] [INFO]   Strategy Accuracy by Class - bomb: 100.00%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 100.00%
+[2025-12-08 19:59:57] [INFO] Epoch 49/50:
+[2025-12-08 19:59:57] [INFO]   Loss - Total: 0.0634, Action: 0.0191, Strategy: 0.0047, LR: 0.000019
+[2025-12-08 19:59:57] [INFO]   Action Accuracy - Exact: 17.59%, Card: 97.09%
+[2025-12-08 19:59:57] [INFO]   Strategy Accuracy - Overall: 99.38%, Understanding Rate: 13.08%
+[2025-12-08 19:59:57] [INFO]   Strategy Accuracy by Class - bomb: 96.97%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 100.00%
+[2025-12-08 19:59:57] [INFO] Epoch 50/50:
+[2025-12-08 19:59:57] [INFO]   Loss - Total: 0.0623, Action: 0.0192, Strategy: 0.0045, LR: 0.000019
+[2025-12-08 19:59:57] [INFO]   Action Accuracy - Exact: 19.35%, Card: 97.11%
+[2025-12-08 19:59:57] [INFO]   Strategy Accuracy - Overall: 99.38%, Understanding Rate: 14.64%
+[2025-12-08 19:59:57] [INFO]   Strategy Accuracy by Class - bomb: 100.00%, suppress: 100.00%, group: 100.00%, follow: 93.75%, discard: 98.48%
+[2025-12-08 19:59:57] [INFO]   [Checkpoint] Model saved to models/bc_model_v1_epoch_50.pth
+[2025-12-08 19:59:57] [INFO] Model saved to models/bc_model_v1.pth
+[2025-12-08 19:59:57] [INFO] Training history saved to models/bc_model_v1_training_history.json
+[2025-12-08 19:59:57] [INFO] ============================================================
+[2025-12-08 19:59:57] [INFO] 训练完成摘要
+[2025-12-08 19:59:57] [INFO] ============================================================
+[2025-12-08 19:59:57] [INFO] 最终动作预测准确率 - 完全匹配: 19.35%, 卡牌级别: 97.11%
+[2025-12-08 19:59:57] [INFO] 最终策略分类准确率: 99.38%
+[2025-12-08 19:59:57] [INFO] 最终策略理解率: 14.64%
+[2025-12-08 19:59:57] [INFO] ============================================================
+[2025-12-08 19:59:57] [INFO] ============================================================
+[2025-12-08 19:59:57] [INFO] 训练完成！
+

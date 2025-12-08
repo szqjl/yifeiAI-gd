@@ -174,7 +174,7 @@ class GuandanDataset(Dataset):
         return torch.FloatTensor(state_vec), torch.FloatTensor(action_vec), strategy_type_idx
 
 def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model_path="models/bc_model_v1.pth", 
-             dropout_rate=0.1, enable_strategy_head=True, action_loss_weight=1.0, strategy_loss_weight=0.5):
+             dropout_rate=0.1, enable_strategy_head=True, action_loss_weight=1.5, strategy_loss_weight=0.3):
     """
     行为克隆预训练（支持多任务学习）
     
@@ -188,8 +188,8 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     
     **阶段2新增（多任务学习）**:
     - enable_strategy_head: 是否启用策略分类头（默认True）
-    - action_loss_weight: 动作预测损失权重（默认1.0）
-    - strategy_loss_weight: 策略分类损失权重（默认0.5）
+    - action_loss_weight: 动作预测损失权重（阶段3调整为1.5，原1.0）
+    - strategy_loss_weight: 策略分类损失权重（阶段3调整为0.3，原0.5）
     
     Args:
         data_dir: 训练数据目录
