@@ -96,10 +96,10 @@ def analyze_training_effectiveness():
         "card_count_diff": []
     }
     
-    # **修复**：使用与推理代码相同的设置
-    # 使用 model.get_action() 方法，它会自动应用缩放因子和阈值
-    # 当前配置：阈值0.3，缩放因子5.0（根据2025-12-07评估结果进一步优化）
-    prediction_threshold = 0.3
+    # **基线评估参数**：使用阶段0验证的标准参数作为统一标尺
+    # 所有阶段的模型评估必须使用此基线参数，不能为了提升准确率而调整
+    prediction_threshold = 0.3  # 基线阈值（阶段0基线参数）
+    scaling_factor = 5.0  # 基线缩放因子（阶段0基线参数）
     
     # 收集所有概率值用于分析（原始概率，用于分析）
     all_probs_list = []
@@ -124,12 +124,12 @@ def analyze_training_effectiveness():
                 with torch.no_grad():
                     logits_single = model(state)
                     probs_single = torch.sigmoid(logits_single)
-                    scaled_probs = probs_single * 5.0  # 与推理代码一致的缩放因子（已进一步调整为5.0）
+                    scaled_probs = probs_single * scaling_factor  # 基线缩放因子（阶段0基线参数）
                     scaled_probs = torch.clamp(scaled_probs, 0, 1)
                     scaled_probs_list.append(scaled_probs.cpu())
                 
-                # 使用 get_action 方法（与推理代码一致）
-                action = model.get_action(state, deterministic=True, threshold=prediction_threshold)
+                # 使用 get_action 方法（与推理代码一致，使用基线评估参数）
+                action = model.get_action(state, deterministic=True, threshold=prediction_threshold, scaling_factor=scaling_factor)
                 if action.ndim > 1:
                     action = action.flatten()
                 predictions_list.append(torch.from_numpy(action).float())
@@ -188,7 +188,7 @@ def analyze_training_effectiveness():
         scaled_prob_mean = scaled_prob_median = scaled_prob_min = scaled_prob_max = 0
     
     print(f"\n" + "="*60)
-    print(f"模型评估结果（阈值{prediction_threshold}，缩放因子5.0）")
+    print(f"模型评估结果（基线参数：阈值{prediction_threshold}，缩放因子{scaling_factor}）")
     print("="*60)
     print(f"总样本数: {total_samples}")
     print(f"完全匹配样本数: {correct_predictions}")
@@ -254,7 +254,7 @@ def analyze_training_effectiveness():
     
     if prediction_stats["under_predict"] > prediction_stats["over_predict"] * 2:
         print(f"\n[WARNING] 模型严重倾向于预测过少（{prediction_stats['under_predict']/total_samples*100:.1f}%）")
-        print(f"  当前设置: 缩放因子5.0，阈值{prediction_threshold}")
+        print(f"  当前设置: 缩放因子{scaling_factor}（基线），阈值{prediction_threshold}（基线）")
         print(f"  建议:")
         print(f"  1. 进一步降低预测阈值（当前{prediction_threshold}，尝试0.05或0.01）")
         print(f"  2. 增加概率缩放因子（当前10.0，尝试15.0或20.0）")
