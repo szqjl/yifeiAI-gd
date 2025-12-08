@@ -1,0 +1,105 @@
+============================================================
+掼蛋AI训练日志
+生成时间: 2025-12-08 15:26:24
+模型路径: models/bc_model_v1.pth
+============================================================
+
+[2025-12-08 15:19:06] [INFO] 训练工具已启动
+[2025-12-08 15:19:06] [INFO] PyTorch版本: 2.9.1+cpu
+[2025-12-08 15:19:06] [INFO] CUDA可用: False
+[2025-12-08 15:19:19] [INFO] ============================================================
+[2025-12-08 15:19:19] [INFO] 开始批量转换数据...
+[2025-12-08 15:19:19] [INFO] 源目录: C:\Program Files (x86)\gdgame\MobileGD\replay
+[2025-12-08 15:19:19] [INFO] 输出目录: game_records
+[2025-12-08 15:19:19] [INFO] 最大文件数: 1000
+[2025-12-08 15:19:19] [INFO] 优先选择获胜玩家: True
+[2025-12-08 15:19:19] [INFO] ============================================================
+[2025-12-08 15:19:38] [INFO] ============================================================
+[2025-12-08 15:19:38] [INFO] 批量转换完成！
+[2025-12-08 15:19:38] [INFO] 总文件数: 10119
+[2025-12-08 15:19:38] [INFO] 成功转换: 1000
+[2025-12-08 15:19:38] [INFO] 跳过文件: 1302
+[2025-12-08 15:19:38] [INFO] 失败文件: 0
+[2025-12-08 15:19:38] [INFO] 总训练样本: 19614 个
+[2025-12-08 15:19:38] [INFO] 总耗时: 0.3 分钟
+[2025-12-08 15:19:38] [INFO] ============================================================
+[2025-12-08 15:19:43] [INFO] ============================================================
+[2025-12-08 15:19:43] [INFO] 开始预训练...
+[2025-12-08 15:19:43] [INFO] 训练数据目录: game_records
+[2025-12-08 15:19:43] [INFO] 模型保存路径: models/bc_model_v1.pth
+[2025-12-08 15:19:43] [INFO] ============================================================
+[2025-12-08 15:22:30] [INFO] ============================================================
+[2025-12-08 15:22:30] [INFO] 开始预训练...
+[2025-12-08 15:22:30] [INFO] 训练数据目录: game_records
+[2025-12-08 15:22:30] [INFO] 模型保存路径: models/bc_model_v1.pth
+[2025-12-08 15:22:30] [INFO] ============================================================
+[2025-12-08 15:22:51] [INFO] ============================================================
+[2025-12-08 15:22:51] [INFO] 开始预训练...
+[2025-12-08 15:22:51] [INFO] 训练数据目录: game_records
+[2025-12-08 15:22:51] [INFO] 模型保存路径: models/bc_model_v1.pth
+[2025-12-08 15:22:51] [INFO] ============================================================
+[2025-12-08 15:23:39] [INFO] ============================================================
+[2025-12-08 15:23:39] [INFO] 开始预训练...
+[2025-12-08 15:23:39] [INFO] 训练数据目录: game_records
+[2025-12-08 15:23:39] [INFO] 模型保存路径: models/bc_model_v1.pth
+[2025-12-08 15:23:39] [INFO] ============================================================
+[2025-12-08 15:23:44] [INFO] ============================================================
+[2025-12-08 15:23:44] [INFO] 开始强化学习训练...
+[2025-12-08 15:23:44] [INFO] 训练数据目录: game_records
+[2025-12-08 15:23:44] [INFO] 模型保存路径: models/bc_model_v1.pth
+[2025-12-08 15:23:44] [INFO] ============================================================
+[2025-12-08 15:23:45] [ERROR] 训练失败: Error(s) in loading state_dict for GuandanPolicyNet:
+	Missing key(s) in state_dict: "fc_strategy.weight", "fc_strategy.bias". 
+[2025-12-08 15:23:45] [ERROR] Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\train\training_gui.py", line 581, in training_thread
+    train_self_play()
+  File "D:\YiFeiAI-GD\src\train\self_play.py", line 24, in train_self_play
+    agent.load("models/bc_model_v1.pth")
+  File "D:\YiFeiAI-GD\src\rl_agent\agent.py", line 124, in load
+    self.policy.load_state_dict(torch.load(path, map_location=self.device))
+  File "C:\Users\admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\torch\nn\modules\module.py", line 2629, in load_state_dict
+    raise RuntimeError(
+RuntimeError: Error(s) in loading state_dict for GuandanPolicyNet:
+	Missing key(s) in state_dict: "fc_strategy.weight", "fc_strategy.bias". 
+
+[2025-12-08 15:23:57] [INFO] ============================================================
+[2025-12-08 15:23:57] [INFO] 开始强化学习训练...
+[2025-12-08 15:23:57] [INFO] 训练数据目录: game_records
+[2025-12-08 15:23:57] [INFO] 模型保存路径: models/bc_model_v1.pth
+[2025-12-08 15:23:57] [INFO] ============================================================
+[2025-12-08 15:23:57] [ERROR] 训练失败: Error(s) in loading state_dict for GuandanPolicyNet:
+	Missing key(s) in state_dict: "fc_strategy.weight", "fc_strategy.bias". 
+[2025-12-08 15:23:57] [ERROR] Traceback (most recent call last):
+  File "D:\YiFeiAI-GD\src\train\training_gui.py", line 600, in training_thread
+    train_enhanced_self_play(
+  File "D:\YiFeiAI-GD\src\train\enhanced_self_play.py", line 186, in train_enhanced_self_play
+    agent.load(pretrained_model_path)
+  File "D:\YiFeiAI-GD\src\rl_agent\agent.py", line 124, in load
+    self.policy.load_state_dict(torch.load(path, map_location=self.device))
+  File "C:\Users\admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\torch\nn\modules\module.py", line 2629, in load_state_dict
+    raise RuntimeError(
+RuntimeError: Error(s) in loading state_dict for GuandanPolicyNet:
+	Missing key(s) in state_dict: "fc_strategy.weight", "fc_strategy.bias". 
+
+[2025-12-08 15:24:07] [INFO] ============================================================
+[2025-12-08 15:24:07] [INFO] 开始预训练...
+[2025-12-08 15:24:07] [INFO] 训练数据目录: game_records
+[2025-12-08 15:24:07] [INFO] 模型保存路径: models/bc_model_v1.pth
+[2025-12-08 15:24:07] [INFO] ============================================================
+[2025-12-08 15:24:11] [INFO] ============================================================
+[2025-12-08 15:24:11] [INFO] 开始预训练...
+[2025-12-08 15:24:11] [INFO] 训练数据目录: game_records
+[2025-12-08 15:24:11] [INFO] 模型保存路径: models/bc_model_v1.pth
+[2025-12-08 15:24:11] [INFO] ============================================================
+[2025-12-08 15:24:11] [INFO] ============================================================
+[2025-12-08 15:24:11] [INFO] 开始预训练...
+[2025-12-08 15:24:11] [INFO] 训练数据目录: game_records
+[2025-12-08 15:24:11] [INFO] 模型保存路径: models/bc_model_v1.pth
+[2025-12-08 15:24:11] [INFO] ============================================================
+[2025-12-08 15:26:24] [INFO] Starting Behavior Cloning Pre-training...
+[2025-12-08 15:26:24] [INFO] Data directory: game_records
+[2025-12-08 15:26:24] [INFO] Epochs: 50, Batch size: 64, Learning rate: 0.0003
+[2025-12-08 15:26:24] [INFO] [最优配置] 学习率衰减: StepLR(step_size=10, gamma=0.5), 损失函数: 加权BCE(pos_weight=2.0)
+[2025-12-08 15:26:24] [INFO] [阶段2多任务学习] 策略分类头: 启用, 损失权重: α=1.0, β=0.5
+[2025-12-08 15:26:24] [INFO] [2025-12-08 15:19:43] [INFO] ============================================================
+

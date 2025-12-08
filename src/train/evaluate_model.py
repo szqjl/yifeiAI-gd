@@ -56,9 +56,25 @@ def evaluate_model(model_path="models/bc_model_v1.pth", data_dir="game_records")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[OK] 使用设备: {device}")
     
-    model = GuandanPolicyNet(input_dim=512, hidden_dim=256, output_dim=512).to(device)
+    # 加载模型时，需要检查是否有策略分类头
     try:
-        model.load_state_dict(torch.load(model_path, map_location=device))
+        checkpoint = torch.load(model_path, map_location=device)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            model_state_dict = checkpoint['model_state_dict']
+        else:
+            model_state_dict = checkpoint
+        
+        # 检查是否有策略分类头
+        has_strategy_head = 'fc_strategy.weight' in model_state_dict
+        
+        model = GuandanPolicyNet(
+            input_dim=512, 
+            hidden_dim=256, 
+            output_dim=512,
+            enable_strategy_head=has_strategy_head
+        ).to(device)
+        
+        model.load_state_dict(model_state_dict)
         print("[OK] 模型加载成功")
     except Exception as e:
         print(f"[ERROR] 模型加载失败: {e}")
@@ -88,20 +104,26 @@ def evaluate_model(model_path="models/bc_model_v1.pth", data_dir="game_records")
     card_match = 0
     
     with torch.no_grad():
-        for states, actions in dataloader:
+        for batch in dataloader:
+            # 处理新的数据格式（可能包含策略标签）
+            if len(batch) == 3:
+                states, actions, _ = batch
+            else:
+                states, actions = batch[0], batch[1]
             states = states.to(device)
             actions = actions.to(device)
             
             # 模型预测
-            # **优化**: 使用get_action方法，包含概率缩放优化
-            # 这样评估结果与推理时一致
-            prediction_threshold = 0.5  # 最优阈值（基于自动测试）
+            # **基线评估参数**：使用阶段0验证的标准参数作为统一标尺
+            # 所有阶段的模型评估必须使用此基线参数，不能为了提升准确率而调整
+            prediction_threshold = 0.3  # 基线阈值（阶段0基线参数）
+            scaling_factor = 5.0  # 基线缩放因子（阶段0基线参数）
             
             # 批量处理，提高效率
             predictions_list = []
             for i in range(len(states)):
                 state = states[i:i+1]  # 保持batch维度
-                action = model.get_action(state, deterministic=True, threshold=prediction_threshold)
+                action = model.get_action(state, deterministic=True, threshold=prediction_threshold, scaling_factor=scaling_factor)
                 # get_action返回numpy数组，需要转换为tensor
                 # 确保action是一维数组
                 if action.ndim > 1:
