@@ -12,33 +12,49 @@ except ImportError:
 
 class GuandanPolicyNet(nn.Module):
     def __init__(self, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate=0.1, 
-                 strategy_num_classes=7, enable_strategy_head=True):
+                 strategy_num_classes=7, enable_strategy_head=True, use_separated_features=False):
         """
         Policy Network for Guandan AI with Multi-Task Learning
         
         Args:
             input_dim: 状态空间维度（512维，对应512个卡牌索引位置）
-            hidden_dim: 隐藏层维度
+            hidden_dim: 隐藏层维度（阶段3任务2测试后回退：从512回退到256，512在796样本上效果差）
             output_dim: 动作空间维度（512维，与状态空间一致，每个维度表示是否选择对应的卡牌）
             dropout_rate: Dropout比率（用于正则化，防止过拟合）
                           **优化**: 从0.2降到0.1，减少过拟合，提高模型输出概率
             strategy_num_classes: 策略分类类别数（7类：bomb、suppress、protect、control、group、follow、discard）
             enable_strategy_head: 是否启用策略分类头（用于多任务学习）
+            use_separated_features: 是否使用分离的特征提取层（阶段3任务2.5方案C）
         """
         super(GuandanPolicyNet, self).__init__()
         
-        # 共享特征提取层（fc1和fc2）
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.use_separated_features = use_separated_features
+        self.enable_strategy_head = enable_strategy_head
         self.dropout = nn.Dropout(dropout_rate)
         
-        # 动作预测头（原有）
-        self.fc3 = nn.Linear(hidden_dim, output_dim)
-        
-        # 策略分类头（新增，阶段2任务1）
-        self.enable_strategy_head = enable_strategy_head
-        if enable_strategy_head:
-            self.fc_strategy = nn.Linear(hidden_dim, strategy_num_classes)
+        if use_separated_features:
+            # **阶段3任务2.5方案C**: 分离的特征提取层
+            # 架构：共享底层特征 + 分离高层特征
+            # fc1: 共享底层特征提取（通用特征）
+            # fc2_action: 动作预测专用特征提取层
+            # fc2_strategy: 策略分类专用特征提取层
+            self.fc1 = nn.Linear(input_dim, hidden_dim)  # 共享底层特征
+            
+            # 分离的高层特征提取层
+            self.fc2_action = nn.Linear(hidden_dim, hidden_dim)  # 动作预测专用
+            self.fc2_strategy = nn.Linear(hidden_dim, hidden_dim)  # 策略分类专用
+            
+            # 任务特定输出头
+            self.fc3 = nn.Linear(hidden_dim, output_dim)  # 动作预测头
+            if enable_strategy_head:
+                self.fc_strategy = nn.Linear(hidden_dim, strategy_num_classes)  # 策略分类头
+        else:
+            # 原有架构：完全共享特征提取层
+            self.fc1 = nn.Linear(input_dim, hidden_dim)
+            self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+            self.fc3 = nn.Linear(hidden_dim, output_dim)
+            if enable_strategy_head:
+                self.fc_strategy = nn.Linear(hidden_dim, strategy_num_classes)
         
     def forward(self, x, return_strategy=False):
         """
@@ -52,21 +68,41 @@ class GuandanPolicyNet(nn.Module):
             - 如果return_strategy=False: 返回动作预测logits (batch_size, output_dim)
             - 如果return_strategy=True: 返回(action_logits, strategy_logits)元组
         """
-        # 共享特征提取
-        x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = F.relu(self.fc2(x))
-        x = self.dropout(x)
-        
-        # 动作预测头
-        action_logits = self.fc3(x)
-        
-        # 策略分类头（如果启用）
-        if return_strategy and self.enable_strategy_head:
-            strategy_logits = self.fc_strategy(x)
-            return action_logits, strategy_logits
+        if self.use_separated_features:
+            # **阶段3任务2.5方案C**: 分离的特征提取层
+            # 共享底层特征提取
+            shared_features = F.relu(self.fc1(x))
+            shared_features = self.dropout(shared_features)
+            
+            # 分离的高层特征提取
+            action_features = F.relu(self.fc2_action(shared_features))
+            action_features = self.dropout(action_features)
+            action_logits = self.fc3(action_features)
+            
+            # 策略分类头（如果启用）
+            if return_strategy and self.enable_strategy_head:
+                strategy_features = F.relu(self.fc2_strategy(shared_features))
+                strategy_features = self.dropout(strategy_features)
+                strategy_logits = self.fc_strategy(strategy_features)
+                return action_logits, strategy_logits
+            else:
+                return action_logits
         else:
-            return action_logits
+            # 原有架构：完全共享特征提取
+            x = F.relu(self.fc1(x))
+            x = self.dropout(x)
+            x = F.relu(self.fc2(x))
+            x = self.dropout(x)
+            
+            # 动作预测头
+            action_logits = self.fc3(x)
+            
+            # 策略分类头（如果启用）
+            if return_strategy and self.enable_strategy_head:
+                strategy_logits = self.fc_strategy(x)
+                return action_logits, strategy_logits
+            else:
+                return action_logits
     
     def get_strategy_probs(self, x):
         """
@@ -82,16 +118,22 @@ class GuandanPolicyNet(nn.Module):
             raise ValueError("策略分类头未启用，请设置enable_strategy_head=True")
         
         with torch.no_grad():
-            # 共享特征提取
-            x = F.relu(self.fc1(x))
-            x = self.dropout(x)
-            x = F.relu(self.fc2(x))
-            x = self.dropout(x)
+            if self.use_separated_features:
+                # **阶段3任务2.5方案C**: 分离的特征提取层
+                shared_features = F.relu(self.fc1(x))
+                shared_features = self.dropout(shared_features)
+                strategy_features = F.relu(self.fc2_strategy(shared_features))
+                strategy_features = self.dropout(strategy_features)
+                strategy_logits = self.fc_strategy(strategy_features)
+            else:
+                # 原有架构：完全共享特征提取
+                x = F.relu(self.fc1(x))
+                x = self.dropout(x)
+                x = F.relu(self.fc2(x))
+                x = self.dropout(x)
+                strategy_logits = self.fc_strategy(x)
             
-            # 策略分类头
-            strategy_logits = self.fc_strategy(x)
             strategy_probs = F.softmax(strategy_logits, dim=1)
-            
             return strategy_probs.cpu().numpy()
 
     def get_action(self, state, deterministic=False, threshold=0.3, scaling_factor=5.0):
