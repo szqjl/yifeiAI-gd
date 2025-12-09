@@ -1408,7 +1408,13 @@ if __name__ == "__main__":
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
     
-    # 阶段3任务2.7：提高卡牌识别率到99%+
-    # 改进：降低dropout到0.05，增加pos_weight到4.0，增加训练轮数到100
-    train_bc(epochs=100, max_samples=796, use_dynamic_weight=False, use_separated_features=False,
-             use_curriculum_learning=False, dropout_rate=0.05)  # 暂时禁用课程学习，专注于提高输出概率
+    # 阶段0任务2：使用课程学习训练基础模型（4个阶段）
+    # 训练参数（针对20,545样本优化）：
+    # - Epochs: 100（每个阶段约25个epoch，大数据量用更多轮数）
+    # - 课程学习: 启用，4个阶段（简单、中等、复杂、混合）
+    # - Dropout: 0.05（提高输出概率，大数据量不容易过拟合）
+    # - 数据量: 20,545样本（大数据量）
+    # - 学习率: 0.0003（保持稳定）
+    # - 批次大小: 64（保持）
+    train_bc(epochs=100, max_samples=None, use_dynamic_weight=False, use_separated_features=False,
+             use_curriculum_learning=True, curriculum_stages=4, dropout_rate=0.05)
