@@ -1,0 +1,200 @@
+Starting Behavior Cloning Pre-training...
+Data directory: game_records
+Epochs: 150, Batch size: 64, Learning rate: 0.0003
+[最优配置] 学习率衰减: StepLR(step_size=10, gamma=0.5), 损失函数: 加权BCE(pos_weight=2.0)
+[阶段2多任务学习] 策略分类头: 禁用（单任务学习）
+Loaded 33023 samples.
+[阶段3任务2.6方案D改进版] 渐进式课程学习：启用，阶段数=4
+课程设计思路（按牌型从简单到复杂）：
+  阶段1：简单牌型（单张、对子、三张）- 约25个epoch
+  阶段2：中等牌型（三带二、顺子）- 约25个epoch
+  阶段3：复杂牌型（炸弹、复杂组合）- 约25个epoch
+  阶段4：所有牌型混合训练 - 约25个epoch
+评估样本课程阶段...
+  已评估 1000/33023 个样本
+  已评估 2000/33023 个样本
+  已评估 3000/33023 个样本
+  已评估 4000/33023 个样本
+  已评估 5000/33023 个样本
+  已评估 6000/33023 个样本
+  已评估 7000/33023 个样本
+  已评估 8000/33023 个样本
+  已评估 9000/33023 个样本
+  已评估 10000/33023 个样本
+  已评估 11000/33023 个样本
+  已评估 12000/33023 个样本
+  已评估 13000/33023 个样本
+  已评估 14000/33023 个样本
+  已评估 15000/33023 个样本
+  已评估 16000/33023 个样本
+  已评估 17000/33023 个样本
+  已评估 18000/33023 个样本
+  已评估 19000/33023 个样本
+  已评估 20000/33023 个样本
+  已评估 21000/33023 个样本
+  已评估 22000/33023 个样本
+  已评估 23000/33023 个样本
+  已评估 24000/33023 个样本
+  已评估 25000/33023 个样本
+  已评估 26000/33023 个样本
+  已评估 27000/33023 个样本
+  已评估 28000/33023 个样本
+  已评估 29000/33023 个样本
+  已评估 30000/33023 个样本
+  已评估 31000/33023 个样本
+  已评估 32000/33023 个样本
+  已评估 33000/33023 个样本
+
+牌型分布：{'Sequence': 797, 'Complex': 21668, 'Pass': 60, 'Single': 1054, 'Pair': 3214, 'Bomb': 2909, 'Triple': 1934, 'ThreeWithTwo': 381, 'Unknown': 1006}
+策略类型分布：{'group': 11, 'unknown': 60, 'suppress': 15, 'bomb': 3, 'discard': 3309, 'follow': 29625}
+
+阶段样本分布：
+  阶段1: 7268个样本
+  阶段2: 1178个样本
+  阶段3: 24577个样本
+  阶段4: 0个样本
+  警告：阶段2样本太少(1178个)，合并到阶段1
+  警告：阶段4样本太少(0个)，合并到阶段3
+  阶段1: 8446个样本
+    牌型分布: {'Pass': 60, 'Single': 1054, 'Pair': 3214, 'Triple': 1934, 'Unknown': 1006, 'Sequence': 797, 'ThreeWithTwo': 381}
+    策略类型分布: {'unknown': 60, 'suppress': 15, 'group': 7, 'discard': 805, 'follow': 7559}
+  阶段3: 24577个样本
+    牌型分布: {'Complex': 21668, 'Bomb': 2909}
+    策略类型分布: {'group': 4, 'bomb': 3, 'discard': 2504, 'follow': 22066}
+  阶段4（混合训练）: 33023个样本（所有牌型混合）
+    牌型分布: {'Sequence': 797, 'Complex': 21668, 'Pass': 60, 'Single': 1054, 'Pair': 3214, 'Bomb': 2909, 'Triple': 1934, 'ThreeWithTwo': 381, 'Unknown': 1006}
+    策略类型分布: {'group': 11, 'unknown': 60, 'suppress': 15, 'bomb': 3, 'discard': 3309, 'follow': 29625}
+Using device: cpu
+Model: input_dim=512, hidden_dim=256, output_dim=512, dropout_rate=0.2, strategy_head=False (阶段3任务2回退：恢复任务1配置)
+[阶段0方案C] 使用加权BCE Loss (pos_weight=1.5, dropout_rate=0.2)，基于历史经验解决预测过多问题
+[阶段0方案D] 使用改进的损失函数（Top-K损失 + 预测数量惩罚 + 加权BCE）
+[阶段3任务2.6方案D改进版] 渐进式课程学习：共3个阶段，每个阶段训练约 50 个epoch
+Epoch 1/150, Loss: 0.7962, Action Exact Accuracy: 1.07%, Action Card Accuracy: 64.24%, LR: 0.000300
+Epoch 2/150, Loss: 0.2238, Action Exact Accuracy: 0.33%, Action Card Accuracy: 96.75%, LR: 0.000300
+Epoch 3/150, Loss: 0.2228, Action Exact Accuracy: 0.06%, Action Card Accuracy: 97.26%, LR: 0.000300
+Epoch 4/150, Loss: 0.2224, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.66%, LR: 0.000300
+Epoch 5/150, Loss: 0.2223, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.70%, LR: 0.000300
+Epoch 6/150, Loss: 0.2222, Action Exact Accuracy: 0.00%, Action Card Accuracy: 97.69%, LR: 0.000300
+Epoch 7/150, Loss: 0.2220, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.76%, LR: 0.000300
+Epoch 8/150, Loss: 0.2220, Action Exact Accuracy: 0.05%, Action Card Accuracy: 97.71%, LR: 0.000300
+Epoch 9/150, Loss: 0.2220, Action Exact Accuracy: 0.06%, Action Card Accuracy: 97.73%, LR: 0.000300
+Epoch 10/150, Loss: 0.2219, Action Exact Accuracy: 0.02%, Action Card Accuracy: 97.69%, LR: 0.000300
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_10.pth
+Epoch 11/150, Loss: 0.2218, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.76%, LR: 0.000150
+Epoch 12/150, Loss: 0.2218, Action Exact Accuracy: 0.02%, Action Card Accuracy: 97.75%, LR: 0.000150
+Epoch 13/150, Loss: 0.2218, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.73%, LR: 0.000150
+Epoch 14/150, Loss: 0.2218, Action Exact Accuracy: 0.02%, Action Card Accuracy: 97.73%, LR: 0.000150
+Epoch 15/150, Loss: 0.2217, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.69%, LR: 0.000150
+Epoch 16/150, Loss: 0.2217, Action Exact Accuracy: 0.00%, Action Card Accuracy: 97.76%, LR: 0.000150
+Epoch 17/150, Loss: 0.2217, Action Exact Accuracy: 0.00%, Action Card Accuracy: 97.72%, LR: 0.000150
+Epoch 18/150, Loss: 0.2217, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.71%, LR: 0.000150
+Epoch 19/150, Loss: 0.2217, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.69%, LR: 0.000150
+Epoch 20/150, Loss: 0.2216, Action Exact Accuracy: 0.00%, Action Card Accuracy: 97.74%, LR: 0.000150
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_20.pth
+Epoch 21/150, Loss: 0.2215, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.75%, LR: 0.000075
+Epoch 22/150, Loss: 0.2216, Action Exact Accuracy: 0.04%, Action Card Accuracy: 97.73%, LR: 0.000075
+Epoch 23/150, Loss: 0.2215, Action Exact Accuracy: 0.02%, Action Card Accuracy: 97.72%, LR: 0.000075
+Epoch 24/150, Loss: 0.2215, Action Exact Accuracy: 0.00%, Action Card Accuracy: 97.74%, LR: 0.000075
+Epoch 25/150, Loss: 0.2215, Action Exact Accuracy: 0.00%, Action Card Accuracy: 97.74%, LR: 0.000075
+Epoch 26/150, Loss: 0.2215, Action Exact Accuracy: 0.04%, Action Card Accuracy: 97.74%, LR: 0.000075
+Epoch 27/150, Loss: 0.2215, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.70%, LR: 0.000075
+Epoch 28/150, Loss: 0.2214, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.72%, LR: 0.000075
+Epoch 29/150, Loss: 0.2214, Action Exact Accuracy: 0.02%, Action Card Accuracy: 97.75%, LR: 0.000075
+Epoch 30/150, Loss: 0.2214, Action Exact Accuracy: 0.04%, Action Card Accuracy: 97.72%, LR: 0.000075
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_30.pth
+Epoch 31/150, Loss: 0.2214, Action Exact Accuracy: 0.00%, Action Card Accuracy: 97.73%, LR: 0.000037
+Epoch 32/150, Loss: 0.2214, Action Exact Accuracy: 0.02%, Action Card Accuracy: 97.75%, LR: 0.000037
+Epoch 33/150, Loss: 0.2213, Action Exact Accuracy: 0.04%, Action Card Accuracy: 97.72%, LR: 0.000037
+Epoch 34/150, Loss: 0.2213, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.72%, LR: 0.000037
+Epoch 35/150, Loss: 0.2213, Action Exact Accuracy: 0.02%, Action Card Accuracy: 97.75%, LR: 0.000037
+Epoch 36/150, Loss: 0.2213, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.73%, LR: 0.000037
+Epoch 37/150, Loss: 0.2213, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.75%, LR: 0.000037
+Epoch 38/150, Loss: 0.2213, Action Exact Accuracy: 0.02%, Action Card Accuracy: 97.74%, LR: 0.000037
+Epoch 39/150, Loss: 0.2212, Action Exact Accuracy: 0.00%, Action Card Accuracy: 97.71%, LR: 0.000037
+Epoch 40/150, Loss: 0.2212, Action Exact Accuracy: 0.02%, Action Card Accuracy: 97.74%, LR: 0.000037
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_40.pth
+Epoch 41/150, Loss: 0.2212, Action Exact Accuracy: 0.04%, Action Card Accuracy: 97.72%, LR: 0.000019
+Epoch 42/150, Loss: 0.2212, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.75%, LR: 0.000019
+Epoch 43/150, Loss: 0.2212, Action Exact Accuracy: 0.00%, Action Card Accuracy: 97.68%, LR: 0.000019
+Epoch 44/150, Loss: 0.2212, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.76%, LR: 0.000019
+Epoch 45/150, Loss: 0.2212, Action Exact Accuracy: 0.04%, Action Card Accuracy: 97.73%, LR: 0.000019
+Epoch 46/150, Loss: 0.2212, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.72%, LR: 0.000019
+Epoch 47/150, Loss: 0.2212, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.75%, LR: 0.000019
+Epoch 48/150, Loss: 0.2212, Action Exact Accuracy: 0.01%, Action Card Accuracy: 97.71%, LR: 0.000019
+Epoch 49/150, Loss: 0.2212, Action Exact Accuracy: 0.02%, Action Card Accuracy: 97.74%, LR: 0.000019
+Epoch 50/150, Loss: 0.2212, Action Exact Accuracy: 0.02%, Action Card Accuracy: 97.70%, LR: 0.000019
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_50.pth
+[阶段3任务2.6方案D改进版] 渐进式课程学习：切换到阶段2/3 (样本数=24577)
+    牌型分布: {'Complex': 21668, 'Bomb': 2909}
+    策略类型分布: {'group': 4, 'bomb': 3, 'discard': 2504, 'follow': 22066}
+Epoch 51/150, Loss: 0.2330, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.78%, LR: 0.000009
+Epoch 52/150, Loss: 0.2323, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.30%, LR: 0.000009
+Epoch 53/150, Loss: 0.2322, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.27%, LR: 0.000009
+Epoch 54/150, Loss: 0.2321, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.25%, LR: 0.000009
+Epoch 55/150, Loss: 0.2321, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.28%, LR: 0.000009
+Epoch 56/150, Loss: 0.2321, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.28%, LR: 0.000009
+Epoch 57/150, Loss: 0.2320, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.32%, LR: 0.000009
+Epoch 58/150, Loss: 0.2320, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.34%, LR: 0.000009
+Epoch 59/150, Loss: 0.2320, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.37%, LR: 0.000009
+Epoch 60/150, Loss: 0.2319, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.40%, LR: 0.000009
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_60.pth
+Epoch 61/150, Loss: 0.2319, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.45%, LR: 0.000005
+Epoch 62/150, Loss: 0.2319, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.45%, LR: 0.000005
+Epoch 63/150, Loss: 0.2319, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.46%, LR: 0.000005
+Epoch 64/150, Loss: 0.2319, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.47%, LR: 0.000005
+Epoch 65/150, Loss: 0.2319, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.48%, LR: 0.000005
+Epoch 66/150, Loss: 0.2319, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.52%, LR: 0.000005
+Epoch 67/150, Loss: 0.2318, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.53%, LR: 0.000005
+Epoch 68/150, Loss: 0.2318, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.55%, LR: 0.000005
+Epoch 69/150, Loss: 0.2318, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.57%, LR: 0.000005
+Epoch 70/150, Loss: 0.2318, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.57%, LR: 0.000005
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_70.pth
+Epoch 71/150, Loss: 0.2318, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.62%, LR: 0.000002
+Epoch 72/150, Loss: 0.2318, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.62%, LR: 0.000002
+Epoch 73/150, Loss: 0.2318, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.61%, LR: 0.000002
+Epoch 74/150, Loss: 0.2318, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.64%, LR: 0.000002
+Epoch 75/150, Loss: 0.2318, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.62%, LR: 0.000002
+Epoch 76/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.64%, LR: 0.000002
+Epoch 77/150, Loss: 0.2318, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.65%, LR: 0.000002
+Epoch 78/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.67%, LR: 0.000002
+Epoch 79/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.67%, LR: 0.000002
+Epoch 80/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.68%, LR: 0.000002
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_80.pth
+Epoch 81/150, Loss: 0.2318, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.68%, LR: 0.000001
+Epoch 82/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.71%, LR: 0.000001
+Epoch 83/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.70%, LR: 0.000001
+Epoch 84/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.70%, LR: 0.000001
+Epoch 85/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.72%, LR: 0.000001
+Epoch 86/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.71%, LR: 0.000001
+Epoch 87/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.73%, LR: 0.000001
+Epoch 88/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.73%, LR: 0.000001
+Epoch 89/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.73%, LR: 0.000001
+Epoch 90/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.73%, LR: 0.000001
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_90.pth
+Epoch 91/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.75%, LR: 0.000001
+Epoch 92/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.74%, LR: 0.000001
+Epoch 93/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.74%, LR: 0.000001
+Epoch 94/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.74%, LR: 0.000001
+Epoch 95/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.75%, LR: 0.000001
+Epoch 96/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.75%, LR: 0.000001
+Epoch 97/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.75%, LR: 0.000001
+Epoch 98/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.76%, LR: 0.000001
+Epoch 99/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.75%, LR: 0.000001
+Epoch 100/150, Loss: 0.2317, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.76%, LR: 0.000001
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_100.pth
+[阶段3任务2.6方案D改进版] 渐进式课程学习：切换到阶段3/3 (样本数=33023)
+    牌型分布: {'Sequence': 797, 'Complex': 21668, 'Pass': 60, 'Single': 1054, 'Pair': 3214, 'Bomb': 2909, 'Triple': 1934, 'ThreeWithTwo': 381, 'Unknown': 1006}
+    策略类型分布: {'group': 11, 'unknown': 60, 'suppress': 15, 'bomb': 3, 'discard': 3309, 'follow': 29625}
+Epoch 101/150, Loss: 0.2300, Action Exact Accuracy: 0.00%, Action Card Accuracy: 94.91%, LR: 0.000000
+Epoch 102/150, Loss: 0.2299, Action Exact Accuracy: 0.00%, Action Card Accuracy: 95.09%, LR: 0.000000
+Epoch 103/150, Loss: 0.2299, Action Exact Accuracy: 0.00%, Action Card Accuracy: 95.20%, LR: 0.000000
+Epoch 104/150, Loss: 0.2298, Action Exact Accuracy: 0.00%, Action Card Accuracy: 95.28%, LR: 0.000000
+Epoch 105/150, Loss: 0.2298, Action Exact Accuracy: 0.00%, Action Card Accuracy: 95.32%, LR: 0.000000
+Epoch 106/150, Loss: 0.2298, Action Exact Accuracy: 0.00%, Action Card Accuracy: 95.36%, LR: 0.000000
+Epoch 107/150, Loss: 0.2298, Action Exact Accuracy: 0.00%, Action Card Accuracy: 95.40%, LR: 0.000000
+Epoch 108/150, Loss: 0.2298, Action Exact Accuracy: 0.00%, Action Card Accuracy: 95.40%, LR: 0.000000
+Epoch 109/150, Loss: 0.2298, Action Exact Accuracy: 0.00%, Action Card Accuracy: 95.42%, LR: 0.000000
+Epoch 110/150, Loss: 0.2298, Action Exact Accuracy: 0.00%, Action Card Accuracy: 95.43%, LR: 0.000000
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_110.pth
+Epoch 111/150, Loss: 0.2298, Action Exact Accuracy: 0.00%, Action Card Accuracy: 95.42%, LR: 0.000000
+Epoch 112/150, Loss: 0.2298, Action Exact Accuracy: 0.00%, Action Card Accuracy: 95.43%, LR: 0.000000

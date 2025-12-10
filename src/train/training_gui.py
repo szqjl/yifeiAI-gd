@@ -392,12 +392,20 @@ class TrainingGUI:
         if rep_dir and os.path.isfile(rep_dir):
             rep_dir = os.path.dirname(rep_dir)
         
-        # 如果未指定目录，使用默认目录
+        # 如果未指定目录，让用户选择目录
         if not rep_dir or not os.path.isdir(rep_dir):
-            rep_dir = r"C:\Program Files (x86)\gdgame\MobileGD\replay"
-            if not os.path.exists(rep_dir):
-                messagebox.showerror("错误", f"请选择.rep文件目录\n默认目录不存在: {rep_dir}")
+            rep_dir = filedialog.askdirectory(
+                title="选择.rep文件目录",
+                initialdir=rep_dir if rep_dir else os.path.expanduser("~")
+            )
+            if not rep_dir:
+                # 用户取消了选择
                 return
+            if not os.path.exists(rep_dir):
+                messagebox.showerror("错误", f"选择的目录不存在: {rep_dir}")
+                return
+            # 更新界面上的路径显示
+            self.rep_path_var.set(rep_dir)
         
         if not output_dir:
             messagebox.showerror("错误", "请选择输出目录")

@@ -964,7 +964,14 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     else:
         pos_weight = torch.tensor(2.0).to(device)  # 正样本权重：2.0（增加对预测过少的惩罚）
         print(f"[阶段3任务2.5回退] 使用加权BCE Loss (pos_weight=2.0)，恢复任务1配置")
-    action_criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)  # 动作预测损失（加权BCE）
+    # **阶段0方案D（改进损失函数）**: 使用改进的损失函数解决预测过多问题
+    # 包含：预测数量惩罚 + 加权BCE（Top-K损失暂时禁用以避免卡住）
+    use_improved_loss = True  # 是否使用改进的损失函数
+    if use_improved_loss:
+        print(f"[阶段0方案D] 使用改进的损失函数（预测数量惩罚 + 加权BCE，Top-K损失暂时禁用）")
+        action_criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)  # 基础BCE损失
+    else:
+        action_criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)  # 动作预测损失（加权BCE）
     
     # **阶段2新增**: 策略分类损失（交叉熵损失）
     # 注意：CrossEntropyLoss内部会应用Softmax，所以不需要在模型输出上应用Softmax
@@ -1086,6 +1093,25 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     # 计算单个样本的损失
                     sample_loss = action_criterion(sample_logits, sample_actions)
                     
+                    # **阶段0方案D（改进损失函数）**: 添加预测数量惩罚（Top-K损失暂时禁用以避免卡住）
+                    if use_improved_loss:
+                        # 预测数量惩罚：惩罚预测过多或过少
+                        sample_probs = torch.sigmoid(sample_logits)
+                        pred_card_count = (sample_probs > 0.3).sum().item()  # 使用阈值0.3计算预测卡牌数
+                        true_card_count = sample_actions.sum().item()
+                        
+                        if pred_card_count > true_card_count:
+                            # 预测过多：惩罚（权重增加以更有效约束）
+                            over_predict_penalty = (pred_card_count - true_card_count) / 27.0 * 0.2  # 归一化并加权（从0.1增加到0.2）
+                            sample_loss = sample_loss + over_predict_penalty
+                        elif pred_card_count < true_card_count:
+                            # 预测过少：轻微惩罚
+                            under_predict_penalty = (true_card_count - pred_card_count) / 27.0 * 0.05
+                            sample_loss = sample_loss + under_predict_penalty
+                        
+                        # 注意：Top-K损失暂时禁用，因为可能导致训练卡住
+                        # 如果未来需要，可以优化Top-K损失的计算方式
+                    
                     # 应用牌型权重
                     if pattern_types is not None:
                         pattern_idx = pattern_types[i].item()
@@ -1149,6 +1175,25 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     
                     # 计算单个样本的损失
                     sample_loss = action_criterion(sample_logits, sample_actions)
+                    
+                    # **阶段0方案D（改进损失函数）**: 添加预测数量惩罚（Top-K损失暂时禁用以避免卡住）
+                    if use_improved_loss:
+                        # 预测数量惩罚：惩罚预测过多或过少
+                        sample_probs = torch.sigmoid(sample_logits)
+                        pred_card_count = (sample_probs > 0.3).sum().item()  # 使用阈值0.3计算预测卡牌数
+                        true_card_count = sample_actions.sum().item()
+                        
+                        if pred_card_count > true_card_count:
+                            # 预测过多：惩罚（权重增加以更有效约束）
+                            over_predict_penalty = (pred_card_count - true_card_count) / 27.0 * 0.2  # 归一化并加权（从0.1增加到0.2）
+                            sample_loss = sample_loss + over_predict_penalty
+                        elif pred_card_count < true_card_count:
+                            # 预测过少：轻微惩罚
+                            under_predict_penalty = (true_card_count - pred_card_count) / 27.0 * 0.05
+                            sample_loss = sample_loss + under_predict_penalty
+                        
+                        # 注意：Top-K损失暂时禁用，因为可能导致训练卡住
+                        # 如果未来需要，可以优化Top-K损失的计算方式
                     
                     # 应用牌型权重
                     if pattern_types is not None:
