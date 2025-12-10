@@ -317,13 +317,13 @@ def identify_card_pattern_type(action_cards, state_dict=None):
 
 def evaluate_sample_curriculum_stage(state_dict, action_cards):
     """
-    评估样本应该属于哪个课程学习阶段（阶段3任务2.6方案D改进版：渐进式课程学习）
+    评估样本应该属于哪个课程学习阶段（阶段0：基础验证与数据验证）
     
-    按照人类学习语言的思路，分为4个阶段：
-    阶段1（基础元素）：学习单牌、对子、三张、三带二、顺子、炸弹等基础牌型
-    阶段2（组合策略）：学习组牌、拆牌等组合策略
-    阶段3（基本规则）：学习按规则出牌、简单组牌等基本规则
-    阶段4（实战）：完整对局，所有复杂情况
+    按照阶段0文档要求，分为4个阶段（按牌型划分）：
+    阶段1：简单牌型（单张、对子、三张）
+    阶段2：中等牌型（三带二、顺子）
+    阶段3：复杂牌型（炸弹、复杂组合）
+    阶段4：所有牌型混合训练
     
     Args:
         state_dict: 状态字典
@@ -333,49 +333,24 @@ def evaluate_sample_curriculum_stage(state_dict, action_cards):
         stage: 课程阶段（1-4）
     """
     if not action_cards:
-        return 1  # 空动作归为阶段1
+        return 1  # Pass动作归为阶段1
     
     # 识别卡牌模式类型（传入state_dict以支持级牌和PASS识别）
     pattern_type = identify_card_pattern_type(action_cards, state_dict)
     
-    # 获取策略类型
-    strategy_type = state_dict.get('strategy_type', 'unknown')
+    # 阶段1：简单牌型（单张、对子、三张、Pass）
+    if pattern_type in ["Pass", "Single", "Pair", "Triple"]:
+        return 1
     
-    # 阶段划分逻辑（改进版：更合理的划分，考虑卡牌数量和复杂度）
-    num_cards = len(action_cards) if action_cards else 0
-    
-    # 阶段1：基础元素（单牌、对子、三张、三带二、顺子、炸弹、Pass）- 简单出牌和跟牌
-    if pattern_type in ["Pass", "Single", "Pair", "Triple", "ThreeWithTwo", "Sequence", "Bomb"]:
-        # 如果策略类型是discard（顺牌/出牌）或follow（跟牌），说明是基础操作，归为阶段1
-        if strategy_type in ['discard', 'follow', 'unknown']:
-            return 1
-        # 其他策略类型（组牌、控牌等）归为阶段2
-        else:
-            return 2
-    
-    # 阶段2：组合策略（组牌、拆牌等）- 需要组合操作的策略
-    elif strategy_type in ['group', 'control']:
+    # 阶段2：中等牌型（三带二、顺子）
+    elif pattern_type in ["ThreeWithTwo", "Sequence"]:
         return 2
     
-    # 阶段3：基本规则（按规则出牌、简单组牌）- 需要策略判断的操作
-    elif strategy_type in ['suppress', 'protect']:
+    # 阶段3：复杂牌型（炸弹、复杂组合）
+    elif pattern_type in ["Bomb", "Complex", "SteelPlate", "WoodPlate"]:
         return 3
     
-    # 阶段划分：Complex类型按卡牌数量和策略类型划分
-    elif pattern_type == "Complex":
-        # 如果卡牌数量少（<=3张），且策略类型是follow或discard，归为阶段2（简单组合）
-        if num_cards <= 3 and strategy_type in ['follow', 'discard']:
-            return 2
-        # 如果卡牌数量中等（4-5张），且策略类型是follow或discard，归为阶段3（中等复杂度）
-        elif num_cards <= 5 and strategy_type in ['follow', 'discard']:
-            return 3
-        # 如果卡牌数量多（>=6张），或策略类型复杂，归为阶段4（高复杂度）
-        elif num_cards >= 6 or strategy_type not in ['follow', 'discard']:
-            return 4
-        # 其他情况归为阶段3
-        else:
-            return 3
-    
+    # 阶段4：所有牌型混合（在训练时使用，这里不会返回4）
     # 默认归为阶段1
     return 1
 
@@ -809,11 +784,11 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     # **阶段3任务2.6方案D改进版**: 渐进式课程学习（类似人类学习语言）
     if use_curriculum_learning:
         print(f"[阶段3任务2.6方案D改进版] 渐进式课程学习：启用，阶段数={curriculum_stages}")
-        print("课程设计思路（类似人类学习语言）：")
-        print("  阶段1：学习基础元素（单牌、对子、三张、三带二、顺子、炸弹等基础牌型）")
-        print("  阶段2：学习组合策略（组牌、拆牌等组合策略）")
-        print("  阶段3：学习基本规则（按规则出牌、简单组牌等基本规则）")
-        print("  阶段4：实战（完整对局，所有复杂情况）")
+        print("课程设计思路（按牌型从简单到复杂）：")
+        print("  阶段1：简单牌型（单张、对子、三张）- 约25个epoch")
+        print("  阶段2：中等牌型（三带二、顺子）- 约25个epoch")
+        print("  阶段3：复杂牌型（炸弹、复杂组合）- 约25个epoch")
+        print("  阶段4：所有牌型混合训练 - 约25个epoch")
         
         # 评估每个样本应该属于哪个阶段
         print("评估样本课程阶段...")
@@ -888,7 +863,7 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     merged_stage_groups[stage] = []
                 merged_stage_groups[stage].extend(stage_indices)
         
-        # 第二步：按阶段顺序构建课程数据
+        # 第二步：按阶段顺序构建课程数据（阶段1-3）
         for stage in sorted(merged_stage_groups.keys()):
             stage_indices = merged_stage_groups[stage]
             
@@ -917,6 +892,22 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
             print(f"  阶段{stage}: {len(stage_data)}个样本")
             print(f"    牌型分布: {stage_pattern_types}")
             print(f"    策略类型分布: {stage_strategy_types}")
+        
+        # 第三步：添加阶段4（所有牌型混合训练）
+        if curriculum_stage_data:
+            all_stage_data = raw_data  # 使用全部数据
+            all_pattern_types = pattern_type_counts.copy()
+            all_strategy_types = strategy_type_counts.copy()
+            
+            curriculum_stage_data.append({
+                'data': all_stage_data,
+                'stage': 4,
+                'pattern_types': all_pattern_types,
+                'strategy_types': all_strategy_types
+            })
+            print(f"  阶段4（混合训练）: {len(all_stage_data)}个样本（所有牌型混合）")
+            print(f"    牌型分布: {all_pattern_types}")
+            print(f"    策略类型分布: {all_strategy_types}")
     else:
         curriculum_stage_data = None
         print(f"[阶段3任务2.6方案D] 课程学习：禁用")
@@ -960,7 +951,11 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     # 使用加权BCE Loss，增加对预测过少的惩罚
     # 权重策略：对于正样本（应该选择的卡牌），给予更高权重（2.0倍）
     # **阶段3任务2.7改进**: 根据dropout_rate调整pos_weight以提高输出概率
-    if dropout_rate == 0.01:
+    # **阶段0方案C（基于历史经验）**: 针对预测过多问题，降低pos_weight并增加Dropout
+    if dropout_rate == 0.2:
+        pos_weight = torch.tensor(1.5).to(device)  # 正样本权重：1.5（降低以解决预测过多问题，基于历史经验）
+        print(f"[阶段0方案C] 使用加权BCE Loss (pos_weight=1.5, dropout_rate=0.2)，基于历史经验解决预测过多问题")
+    elif dropout_rate == 0.01:
         pos_weight = torch.tensor(8.0).to(device)  # 正样本权重：8.0（极大增加对预测过少的惩罚，提高正样本概率）
         print(f"[阶段3任务2.7版本2] 使用加权BCE Loss (pos_weight=8.0, dropout_rate=0.01)，进一步提高卡牌识别率")
     elif dropout_rate == 0.05:
@@ -1408,7 +1403,17 @@ if __name__ == "__main__":
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
     
-    # 阶段3任务2.7：提高卡牌识别率到99%+
-    # 改进：降低dropout到0.05，增加pos_weight到4.0，增加训练轮数到100
-    train_bc(epochs=100, max_samples=796, use_dynamic_weight=False, use_separated_features=False,
-             use_curriculum_learning=False, dropout_rate=0.05)  # 暂时禁用课程学习，专注于提高输出概率
+    # 阶段0任务2：使用课程学习训练基础模型（方案C：基于历史经验解决预测过多问题）
+    # 训练参数按照阶段0文档要求（方案C：基于历史经验）：
+    # - 数据量：全部数据（33,023个样本）
+    # - Epochs：150（保持与方案B一致）
+    # - 使用样本权重：三带二3.0倍，顺子2.0倍，炸弹1.5倍
+    # - Dropout：0.2（从0.01增加，基于历史经验：0.1 → 0.2，降低输出概率以减少预测过多）
+    # - pos_weight：1.5（从8.0降低，基于历史经验：2.0 → 1.5，减少对预测过少的惩罚）
+    # - 学习率：0.0003
+    # - 批次大小：64
+    # - 课程学习：启用，4个阶段（简单牌型、中等牌型、复杂牌型、混合训练）
+    # 目标：解决预测过多问题，完全匹配准确率从0%提升到20%+
+    train_bc(epochs=150, max_samples=None, use_dynamic_weight=False, use_separated_features=False,
+             use_curriculum_learning=True, curriculum_stages=4, dropout_rate=0.2,
+             enable_strategy_head=False)  # 阶段0只训练动作预测，不启用策略分类头
