@@ -1,0 +1,76 @@
+============================================================
+测试级牌、红桃级牌和pass动作的识别
+============================================================
+
+分析 100 个样本
+
+  样本3: PASS动作
+    action_type: PASS
+    action_cards: []
+    state_dict keys: ['hand', 'history', 'current_player', 'hands', 'last_action', 'action_type', 'game_phase', 'cur_rank', 'player_rest_cards', 'strategy_type']
+  样本4: PASS动作
+    action_type: PASS
+    action_cards: []
+    state_dict keys: ['hand', 'history', 'current_player', 'hands', 'last_action', 'action_type', 'game_phase', 'cur_rank', 'player_rest_cards', 'strategy_type']
+  样本6: PASS动作
+    action_type: PASS
+    action_cards: []
+    state_dict keys: ['hand', 'history', 'current_player', 'hands', 'last_action', 'action_type', 'game_phase', 'cur_rank', 'player_rest_cards', 'strategy_type']
+  样本7: PASS动作
+    action_type: PASS
+    action_cards: []
+    state_dict keys: ['hand', 'history', 'current_player', 'hands', 'last_action', 'action_type', 'game_phase', 'cur_rank', 'player_rest_cards', 'strategy_type']
+  样本9: PASS动作
+    action_type: PASS
+    action_cards: []
+    state_dict keys: ['hand', 'history', 'current_player', 'hands', 'last_action', 'action_type', 'game_phase', 'cur_rank', 'player_rest_cards', 'strategy_type']
+
+状态字典中的键：['action_type', 'cur_rank', 'current_player', 'game_phase', 'hand', 'hands', 'history', 'last_action', 'player_rest_cards', 'strategy_effectiveness', 'strategy_reason', 'strategy_type']
+
+动作类型分布：{'Straight': 8, 'PASS': 60, 'Single': 14, 'Pair': 6, 'Bomb': 3, 'Discard': 9}
+
+PASS动作数量：60 (60.0%)
+空动作数量：60 (60.0%)
+级牌信息数量：100
+红桃级牌使用数量：2
+
+前10个包含级牌信息的样本：
+  样本1: 级牌=2, 动作类型=Straight
+    动作卡牌: ['S4', 'S5', 'S6', 'H7', 'S8']
+  样本2: 级牌=2, 动作类型=Straight
+    动作卡牌: ['HT', 'SJ', 'SQ', 'HA', 'DA']
+  样本3: 级牌=2, 动作类型=PASS
+    动作卡牌: []
+  样本4: 级牌=2, 动作类型=PASS
+    动作卡牌: []
+  样本5: 级牌=2, 动作类型=Single
+    动作卡牌: ['H9']
+  样本6: 级牌=2, 动作类型=PASS
+    动作卡牌: []
+  样本7: 级牌=2, 动作类型=PASS
+    动作卡牌: []
+  样本8: 级牌=2, 动作类型=Pair
+    动作卡牌: ['H9', 'D9']
+  样本9: 级牌=2, 动作类型=PASS
+    动作卡牌: []
+  样本10: 级牌=2, 动作类型=Pair
+    动作卡牌: ['CQ', 'DQ']
+
+前10个使用红桃级牌的样本：
+  样本46: 级牌=2, 红桃级牌=H2
+    动作卡牌: ['DA', 'H2', 'H3', 'D4', 'S5']
+  样本74: 级牌=2, 红桃级牌=H2
+    动作卡牌: ['H2', 'D2']
+
+级牌分布：{'2': 100}
+
+检查卡牌编码格式：
+  样本1: 卡牌=S4, 花色=S, 点数=4
+  样本1: 卡牌=S5, 花色=S, 点数=5
+  样本1: 卡牌=S6, 花色=S, 点数=6
+  样本2: 卡牌=HT, 花色=H, 点数=T
+  样本2: 卡牌=SJ, 花色=S, 点数=J
+  样本2: 卡牌=SQ, 花色=S, 点数=Q
+  样本5: 卡牌=H9, 花色=H, 点数=9
+
+卡牌格式示例：{'S4': 1, 'S5': 1, 'S6': 1, 'HT': 1, 'SJ': 1, 'SQ': 1, 'H9': 2, 'D9': 1, 'CQ': 1, 'DQ': 1, 'SB': 1, 'C4': 1, 'H5': 1, 'C5': 1}

@@ -52,9 +52,9 @@ class GuandanPolicyNet(nn.Module):
             # 原有架构：完全共享特征提取层
             self.fc1 = nn.Linear(input_dim, hidden_dim)
             self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-            self.fc3 = nn.Linear(hidden_dim, output_dim)
-            if enable_strategy_head:
-                self.fc_strategy = nn.Linear(hidden_dim, strategy_num_classes)
+        self.fc3 = nn.Linear(hidden_dim, output_dim)
+        if enable_strategy_head:
+            self.fc_strategy = nn.Linear(hidden_dim, strategy_num_classes)
         
     def forward(self, x, return_strategy=False):
         """
