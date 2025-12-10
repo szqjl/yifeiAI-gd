@@ -1,0 +1,275 @@
+Starting Behavior Cloning Pre-training...
+Data directory: game_records
+Epochs: 50, Batch size: 64, Learning rate: 0.0003
+[最优配置] 学习率衰减: StepLR(step_size=10, gamma=0.5), 损失函数: 加权BCE(pos_weight=2.0)
+[阶段2多任务学习] 策略分类头: 启用, 损失权重: α=1.5, β=0.3
+Loaded 33023 samples.
+Limited to 796 samples for testing.
+Using device: cpu
+Model: input_dim=512, hidden_dim=256, output_dim=512, dropout_rate=0.1, strategy_head=True (阶段3任务2回退：恢复任务1配置)
+[阶段3任务2.5方案A] 使用Focal Loss (alpha=0.25, gamma=2.0)
+Epoch 1/50:
+  Loss - Total: 0.7417, Action: 0.1257, Strategy: 0.0326, LR: 0.000300
+  Action Accuracy - Exact: 0.00%, Card: 0.61%
+  Strategy Accuracy - Overall: 63.04%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 71.02%, discard: 18.06%
+Epoch 2/50:
+  Loss - Total: 0.5709, Action: 0.1039, Strategy: 0.0244, LR: 0.000300
+  Action Accuracy - Exact: 0.00%, Card: 0.61%
+  Strategy Accuracy - Overall: 86.28%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 0.00%
+Epoch 3/50:
+  Loss - Total: 0.3060, Action: 0.0496, Strategy: 0.0136, LR: 0.000300
+  Action Accuracy - Exact: 0.00%, Card: 0.61%
+  Strategy Accuracy - Overall: 86.28%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 0.00%
+Epoch 4/50:
+  Loss - Total: 0.2023, Action: 0.0126, Strategy: 0.0108, LR: 0.000300
+  Action Accuracy - Exact: 0.00%, Card: 1.23%
+  Strategy Accuracy - Overall: 86.28%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 0.00%
+Epoch 5/50:
+  Loss - Total: 0.1647, Action: 0.0056, Strategy: 0.0092, LR: 0.000300
+  Action Accuracy - Exact: 0.00%, Card: 5.80%
+  Strategy Accuracy - Overall: 86.28%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 0.00%
+Epoch 6/50:
+  Loss - Total: 0.1324, Action: 0.0039, Strategy: 0.0075, LR: 0.000300
+  Action Accuracy - Exact: 0.00%, Card: 13.78%
+  Strategy Accuracy - Overall: 86.28%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 0.00%
+Epoch 7/50:
+  Loss - Total: 0.1072, Action: 0.0034, Strategy: 0.0060, LR: 0.000300
+  Action Accuracy - Exact: 0.00%, Card: 19.92%
+  Strategy Accuracy - Overall: 86.28%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 0.00%
+Epoch 8/50:
+  Loss - Total: 0.0817, Action: 0.0032, Strategy: 0.0045, LR: 0.000300
+  Action Accuracy - Exact: 0.00%, Card: 25.76%
+  Strategy Accuracy - Overall: 91.03%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 48.61%
+Epoch 9/50:
+  Loss - Total: 0.0641, Action: 0.0031, Strategy: 0.0035, LR: 0.000300
+  Action Accuracy - Exact: 0.00%, Card: 36.59%
+  Strategy Accuracy - Overall: 94.97%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 88.89%
+Epoch 10/50:
+  Loss - Total: 0.0490, Action: 0.0030, Strategy: 0.0026, LR: 0.000300
+  Action Accuracy - Exact: 0.00%, Card: 50.20%
+  Strategy Accuracy - Overall: 95.79%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 97.22%
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_10.pth
+Epoch 11/50:
+  Loss - Total: 0.0440, Action: 0.0029, Strategy: 0.0023, LR: 0.000150
+  Action Accuracy - Exact: 0.00%, Card: 59.12%
+  Strategy Accuracy - Overall: 95.65%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 95.83%
+Epoch 12/50:
+  Loss - Total: 0.0398, Action: 0.0028, Strategy: 0.0021, LR: 0.000150
+  Action Accuracy - Exact: 0.00%, Card: 63.59%
+  Strategy Accuracy - Overall: 95.79%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 97.22%
+Epoch 13/50:
+  Loss - Total: 0.0372, Action: 0.0027, Strategy: 0.0020, LR: 0.000150
+  Action Accuracy - Exact: 0.00%, Card: 66.90%
+  Strategy Accuracy - Overall: 95.65%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 95.83%
+Epoch 14/50:
+  Loss - Total: 0.0366, Action: 0.0027, Strategy: 0.0019, LR: 0.000150
+  Action Accuracy - Exact: 0.00%, Card: 70.15%
+  Strategy Accuracy - Overall: 95.92%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 98.61%
+Epoch 15/50:
+  Loss - Total: 0.0335, Action: 0.0026, Strategy: 0.0017, LR: 0.000150
+  Action Accuracy - Exact: 0.00%, Card: 72.24%
+  Strategy Accuracy - Overall: 96.06%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 0.00%, group: 0.00%, follow: 100.00%, discard: 100.00%
+Epoch 16/50:
+  Loss - Total: 0.0349, Action: 0.0026, Strategy: 0.0018, LR: 0.000150
+  Action Accuracy - Exact: 0.00%, Card: 75.07%
+  Strategy Accuracy - Overall: 96.33%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 13.33%, group: 0.00%, follow: 100.00%, discard: 100.00%
+Epoch 17/50:
+  Loss - Total: 0.0304, Action: 0.0025, Strategy: 0.0016, LR: 0.000150
+  Action Accuracy - Exact: 0.00%, Card: 76.30%
+  Strategy Accuracy - Overall: 96.88%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 40.00%, group: 0.00%, follow: 100.00%, discard: 100.00%
+Epoch 18/50:
+  Loss - Total: 0.0287, Action: 0.0024, Strategy: 0.0015, LR: 0.000150
+  Action Accuracy - Exact: 0.00%, Card: 77.98%
+  Strategy Accuracy - Overall: 97.69%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 80.00%, group: 0.00%, follow: 100.00%, discard: 100.00%
+Epoch 19/50:
+  Loss - Total: 0.0280, Action: 0.0024, Strategy: 0.0014, LR: 0.000150
+  Action Accuracy - Exact: 0.00%, Card: 79.44%
+  Strategy Accuracy - Overall: 97.42%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 66.67%, group: 0.00%, follow: 100.00%, discard: 100.00%
+Epoch 20/50:
+  Loss - Total: 0.0266, Action: 0.0024, Strategy: 0.0014, LR: 0.000150
+  Action Accuracy - Exact: 0.00%, Card: 80.55%
+  Strategy Accuracy - Overall: 97.83%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 86.67%, group: 0.00%, follow: 100.00%, discard: 100.00%
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_20.pth
+Epoch 21/50:
+  Loss - Total: 0.0256, Action: 0.0023, Strategy: 0.0013, LR: 0.000075
+  Action Accuracy - Exact: 0.00%, Card: 81.38%
+  Strategy Accuracy - Overall: 97.69%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 80.00%, group: 0.00%, follow: 100.00%, discard: 100.00%
+Epoch 22/50:
+  Loss - Total: 0.0253, Action: 0.0023, Strategy: 0.0013, LR: 0.000075
+  Action Accuracy - Exact: 0.00%, Card: 81.88%
+  Strategy Accuracy - Overall: 97.96%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 93.33%, group: 0.00%, follow: 100.00%, discard: 100.00%
+Epoch 23/50:
+  Loss - Total: 0.0242, Action: 0.0022, Strategy: 0.0012, LR: 0.000075
+  Action Accuracy - Exact: 0.00%, Card: 82.29%
+  Strategy Accuracy - Overall: 98.10%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 0.00%, follow: 100.00%, discard: 100.00%
+Epoch 24/50:
+  Loss - Total: 0.0236, Action: 0.0022, Strategy: 0.0012, LR: 0.000075
+  Action Accuracy - Exact: 0.00%, Card: 82.69%
+  Strategy Accuracy - Overall: 98.10%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 0.00%, follow: 100.00%, discard: 100.00%
+Epoch 25/50:
+  Loss - Total: 0.0234, Action: 0.0022, Strategy: 0.0012, LR: 0.000075
+  Action Accuracy - Exact: 0.00%, Card: 82.81%
+  Strategy Accuracy - Overall: 98.10%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 93.33%, group: 9.09%, follow: 100.00%, discard: 100.00%
+Epoch 26/50:
+  Loss - Total: 0.0224, Action: 0.0022, Strategy: 0.0011, LR: 0.000075
+  Action Accuracy - Exact: 0.00%, Card: 83.25%
+  Strategy Accuracy - Overall: 98.64%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 36.36%, follow: 100.00%, discard: 100.00%
+Epoch 27/50:
+  Loss - Total: 0.0217, Action: 0.0022, Strategy: 0.0011, LR: 0.000075
+  Action Accuracy - Exact: 0.00%, Card: 83.40%
+  Strategy Accuracy - Overall: 98.37%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 18.18%, follow: 100.00%, discard: 100.00%
+Epoch 28/50:
+  Loss - Total: 0.0226, Action: 0.0022, Strategy: 0.0011, LR: 0.000075
+  Action Accuracy - Exact: 0.00%, Card: 83.77%
+  Strategy Accuracy - Overall: 98.51%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 27.27%, follow: 100.00%, discard: 100.00%
+Epoch 29/50:
+  Loss - Total: 0.0217, Action: 0.0021, Strategy: 0.0011, LR: 0.000075
+  Action Accuracy - Exact: 0.00%, Card: 84.47%
+  Strategy Accuracy - Overall: 98.51%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 27.27%, follow: 100.00%, discard: 100.00%
+Epoch 30/50:
+  Loss - Total: 0.0226, Action: 0.0022, Strategy: 0.0011, LR: 0.000075
+  Action Accuracy - Exact: 0.00%, Card: 84.40%
+  Strategy Accuracy - Overall: 98.78%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 45.45%, follow: 100.00%, discard: 100.00%
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_30.pth
+Epoch 31/50:
+  Loss - Total: 0.0204, Action: 0.0021, Strategy: 0.0010, LR: 0.000037
+  Action Accuracy - Exact: 0.00%, Card: 84.61%
+  Strategy Accuracy - Overall: 98.78%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 45.45%, follow: 100.00%, discard: 100.00%
+Epoch 32/50:
+  Loss - Total: 0.0210, Action: 0.0021, Strategy: 0.0011, LR: 0.000037
+  Action Accuracy - Exact: 0.00%, Card: 84.57%
+  Strategy Accuracy - Overall: 98.78%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 45.45%, follow: 100.00%, discard: 100.00%
+Epoch 33/50:
+  Loss - Total: 0.0198, Action: 0.0021, Strategy: 0.0010, LR: 0.000037
+  Action Accuracy - Exact: 0.00%, Card: 84.77%
+  Strategy Accuracy - Overall: 98.91%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 54.55%, follow: 100.00%, discard: 100.00%
+Epoch 34/50:
+  Loss - Total: 0.0203, Action: 0.0021, Strategy: 0.0010, LR: 0.000037
+  Action Accuracy - Exact: 0.00%, Card: 84.88%
+  Strategy Accuracy - Overall: 99.05%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 63.64%, follow: 100.00%, discard: 100.00%
+Epoch 35/50:
+  Loss - Total: 0.0202, Action: 0.0021, Strategy: 0.0010, LR: 0.000037
+  Action Accuracy - Exact: 0.00%, Card: 85.07%
+  Strategy Accuracy - Overall: 98.91%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 54.55%, follow: 100.00%, discard: 100.00%
+Epoch 36/50:
+  Loss - Total: 0.0194, Action: 0.0021, Strategy: 0.0010, LR: 0.000037
+  Action Accuracy - Exact: 0.00%, Card: 85.37%
+  Strategy Accuracy - Overall: 98.91%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 54.55%, follow: 100.00%, discard: 100.00%
+Epoch 37/50:
+  Loss - Total: 0.0188, Action: 0.0021, Strategy: 0.0009, LR: 0.000037
+  Action Accuracy - Exact: 0.00%, Card: 85.34%
+  Strategy Accuracy - Overall: 98.91%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 54.55%, follow: 100.00%, discard: 100.00%
+Epoch 38/50:
+  Loss - Total: 0.0190, Action: 0.0021, Strategy: 0.0009, LR: 0.000037
+  Action Accuracy - Exact: 0.00%, Card: 85.50%
+  Strategy Accuracy - Overall: 99.05%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 63.64%, follow: 100.00%, discard: 100.00%
+Epoch 39/50:
+  Loss - Total: 0.0179, Action: 0.0021, Strategy: 0.0009, LR: 0.000037
+  Action Accuracy - Exact: 0.00%, Card: 85.40%
+  Strategy Accuracy - Overall: 99.05%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 63.64%, follow: 100.00%, discard: 100.00%
+Epoch 40/50:
+  Loss - Total: 0.0188, Action: 0.0021, Strategy: 0.0009, LR: 0.000037
+  Action Accuracy - Exact: 0.00%, Card: 85.72%
+  Strategy Accuracy - Overall: 99.05%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 63.64%, follow: 100.00%, discard: 100.00%
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_40.pth
+Epoch 41/50:
+  Loss - Total: 0.0179, Action: 0.0021, Strategy: 0.0009, LR: 0.000019
+  Action Accuracy - Exact: 0.00%, Card: 85.68%
+  Strategy Accuracy - Overall: 98.78%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 45.45%, follow: 100.00%, discard: 100.00%
+Epoch 42/50:
+  Loss - Total: 0.0195, Action: 0.0021, Strategy: 0.0010, LR: 0.000019
+  Action Accuracy - Exact: 0.00%, Card: 86.03%
+  Strategy Accuracy - Overall: 99.18%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 72.73%, follow: 100.00%, discard: 100.00%
+Epoch 43/50:
+  Loss - Total: 0.0181, Action: 0.0021, Strategy: 0.0009, LR: 0.000019
+  Action Accuracy - Exact: 0.00%, Card: 85.83%
+  Strategy Accuracy - Overall: 98.91%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 54.55%, follow: 100.00%, discard: 100.00%
+Epoch 44/50:
+  Loss - Total: 0.0168, Action: 0.0021, Strategy: 0.0008, LR: 0.000019
+  Action Accuracy - Exact: 0.00%, Card: 85.90%
+  Strategy Accuracy - Overall: 99.05%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 63.64%, follow: 100.00%, discard: 100.00%
+Epoch 45/50:
+  Loss - Total: 0.0165, Action: 0.0020, Strategy: 0.0008, LR: 0.000019
+  Action Accuracy - Exact: 0.00%, Card: 86.11%
+  Strategy Accuracy - Overall: 99.18%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 72.73%, follow: 100.00%, discard: 100.00%
+Epoch 46/50:
+  Loss - Total: 0.0171, Action: 0.0021, Strategy: 0.0008, LR: 0.000019
+  Action Accuracy - Exact: 0.00%, Card: 85.85%
+  Strategy Accuracy - Overall: 99.05%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 63.64%, follow: 100.00%, discard: 100.00%
+Epoch 47/50:
+  Loss - Total: 0.0168, Action: 0.0021, Strategy: 0.0008, LR: 0.000019
+  Action Accuracy - Exact: 0.00%, Card: 86.20%
+  Strategy Accuracy - Overall: 99.05%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 63.64%, follow: 100.00%, discard: 100.00%
+Epoch 48/50:
+  Loss - Total: 0.0174, Action: 0.0021, Strategy: 0.0008, LR: 0.000019
+  Action Accuracy - Exact: 0.00%, Card: 86.22%
+  Strategy Accuracy - Overall: 99.05%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 63.64%, follow: 100.00%, discard: 100.00%
+Epoch 49/50:
+  Loss - Total: 0.0177, Action: 0.0021, Strategy: 0.0009, LR: 0.000019
+  Action Accuracy - Exact: 0.00%, Card: 86.29%
+  Strategy Accuracy - Overall: 99.05%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 63.64%, follow: 100.00%, discard: 100.00%
+Epoch 50/50:
+  Loss - Total: 0.0180, Action: 0.0020, Strategy: 0.0009, LR: 0.000019
+  Action Accuracy - Exact: 0.00%, Card: 86.29%
+  Strategy Accuracy - Overall: 99.18%, Understanding Rate: 0.00%
+  Strategy Accuracy by Class - bomb: 0.00%, suppress: 100.00%, group: 72.73%, follow: 100.00%, discard: 100.00%
+  [Checkpoint] Model saved to models/bc_model_v1_epoch_50.pth
+Model saved to models/bc_model_v1.pth
+Training history saved to models/bc_model_v1_training_history.json
+
+============================================================
+训练完成摘要
+============================================================
+最终动作预测准确率 - 完全匹配: 0.00%, 卡牌级别: 86.29%
+最终策略分类准确率: 99.18%
+最终策略理解率: 0.00%
+============================================================
