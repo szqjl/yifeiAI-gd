@@ -27,7 +27,10 @@ except ImportError:
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from src.knowledge_processor.replay_parser import ReplayParser
-from src.rl_agent.model import GuandanPolicyNet
+from src.rl_agent.model import GuandanPolicyNet, ImprovedGuandanPolicyNet
+from src.rl_agent.strategy_pattern_recognizer import StrategyPatternRecognizer
+from src.rl_agent.opponent_model import OpponentModel
+from src.rl_agent.dynamic_strategy_adjuster import DynamicStrategyAdjuster
 
 
 def identify_card_pattern_type(action_cards, state_dict=None):
@@ -497,9 +500,9 @@ def evaluate_sample_difficulty(state_dict, action_cards):
 class FocalLoss(nn.Module):
     """
     Focal Loss for addressing class imbalance in action prediction.
-    
+
     Focal Loss公式: FL(p_t) = -α(1-p_t)^γ log(p_t)
-    
+
     Args:
         alpha: 平衡因子，用于平衡正负样本（默认0.25）
         gamma: 聚焦参数，用于关注难分类样本（默认2.0）
@@ -510,38 +513,38 @@ class FocalLoss(nn.Module):
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
-    
+
     def forward(self, inputs, targets):
         """
         计算Focal Loss
-        
+
         Args:
             inputs: 模型输出的logits (batch_size, num_classes)
             targets: 真实标签 (batch_size, num_classes)
-        
+
         Returns:
             Focal Loss值
         """
         # 将logits转换为概率
         probs = torch.sigmoid(inputs)
-        
+
         # 计算BCE损失
         bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none')
-        
+
         # 计算p_t（预测概率）
         # 对于正样本，p_t = probs
         # 对于负样本，p_t = 1 - probs
         p_t = probs * targets + (1 - probs) * (1 - targets)
-        
+
         # 计算(1-p_t)^γ
         focal_weight = (1 - p_t) ** self.gamma
-        
+
         # 应用alpha权重（正样本用alpha，负样本用1-alpha）
         alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
-        
+
         # 计算Focal Loss
         focal_loss = alpha_t * focal_weight * bce_loss
-        
+
         # 归约
         if self.reduction == 'mean':
             return focal_loss.mean()
@@ -549,6 +552,75 @@ class FocalLoss(nn.Module):
             return focal_loss.sum()
         else:
             return focal_loss
+
+
+def compute_top_k_loss(logits, targets, k_values, reduction='mean'):
+    """
+    计算Top-K损失：只允许模型预测前K个高概率卡牌
+
+    Args:
+        logits: 模型输出的logits (batch_size, num_classes)
+        targets: 真实标签 (batch_size, num_classes)
+        k_values: 每个样本的K值 (batch_size,) - 基于真实卡牌数
+        reduction: 损失归约方式 ('mean' 或 'sum')
+
+    Returns:
+        Top-K损失值
+    """
+    batch_size = logits.shape[0]
+
+    # 计算概率
+    probs = torch.sigmoid(logits)
+
+    total_loss = 0.0
+    valid_samples = 0
+
+    for i in range(batch_size):
+        sample_logits = logits[i:i+1]  # (1, num_classes)
+        sample_targets = targets[i:i+1]  # (1, num_classes)
+        sample_probs = probs[i:i+1]  # (1, num_classes)
+        k = int(k_values[i].item()) if hasattr(k_values[i], 'item') else int(k_values[i])
+
+        if k <= 0:
+            continue
+
+        # 确保k不超过总类别数
+        k = min(k, sample_logits.shape[1])
+
+        # 获取Top-K概率最高的索引
+        topk_values, topk_indices = torch.topk(sample_probs, k, dim=1)
+
+        # 创建Top-K掩码：只有Top-K位置允许预测
+        topk_mask = torch.zeros_like(sample_targets)
+        topk_mask.scatter_(1, topk_indices, 1.0)
+
+        # 计算Top-K约束损失
+        # 对于Top-K之外的位置，如果模型预测概率过高，给予惩罚
+        non_topk_mask = 1.0 - topk_mask
+
+        # 计算非Top-K位置的预测概率（应该接近0）
+        non_topk_probs = sample_probs * non_topk_mask
+        non_topk_loss = torch.mean(non_topk_probs ** 2)  # MSE损失，鼓励非Top-K概率为0
+
+        # 计算Top-K位置的BCE损失
+        topk_logits = sample_logits * topk_mask
+        topk_targets = sample_targets * topk_mask
+        topk_bce_loss = F.binary_cross_entropy_with_logits(
+            topk_logits, topk_targets, reduction='mean'
+        )
+
+        # 组合损失：Top-K BCE损失 + 非Top-K惩罚
+        sample_loss = topk_bce_loss + 0.1 * non_topk_loss
+        total_loss += sample_loss
+        valid_samples += 1
+
+    if valid_samples == 0:
+        return torch.tensor(0.0, device=logits.device)
+
+    if reduction == 'mean':
+        return total_loss / valid_samples
+    else:
+        return total_loss
 
 class GuandanDataset(Dataset):
     def __init__(self, data):
@@ -653,10 +725,41 @@ class GuandanDataset(Dataset):
                         state_vec[137 + rank_idx] = 1.0
         
         # 5. 编码策略特征（152-154维）
-        # 从历史数据中可能没有这些信息，使用默认值
-        state_vec[152] = state_dict.get('can_follow', 0.0)  # 是否能顺牌
-        state_vec[153] = state_dict.get('can_followup', 0.0)  # 是否能跟牌
-        state_vec[154] = state_dict.get('need_control', 0.0)  # 是否需要控牌
+        # 从游戏状态中计算这些标志，而不是依赖state_dict
+        hand = state_dict.get('hand', [])
+        hand_count = len(hand) if hand else 0
+        last_action = state_dict.get('last_action', {})
+        player_rest_cards = state_dict.get('player_rest_cards', [27, 27, 27, 27])
+        current_player = state_dict.get('current_player', 0)
+        
+        # can_follow: 是否能顺牌（上家出单，自己能跟）
+        can_follow = 0.0
+        if last_action:
+            last_action_type = last_action.get('type', '')
+            # 简化判断：如果上一步是单牌，且自己有手牌，可能能跟
+            if last_action_type == 'Single' and hand_count > 0:
+                can_follow = 1.0
+        state_vec[152] = can_follow
+        
+        # can_followup: 是否能跟牌（对手出牌，自己能跟）
+        can_followup = 0.0
+        if last_action:
+            last_action_type = last_action.get('type', '')
+            # 如果上一步不是PASS，且自己有手牌，可能能跟
+            if last_action_type not in ['PASS', 'pass', ''] and hand_count > 0:
+                can_followup = 1.0
+        state_vec[153] = can_followup
+        
+        # need_control: 是否需要控牌（对手快走完，剩余牌数<=5）
+        need_control = 0.0
+        if len(player_rest_cards) >= 4:
+            # 计算对手（非当前玩家）的最小剩余牌数
+            opponent_cards = [player_rest_cards[i] for i in range(4) if i != current_player]
+            if opponent_cards:
+                min_opponent_cards = min(opponent_cards)
+                if min_opponent_cards <= 5:
+                    need_control = 1.0
+        state_vec[154] = need_control
         
         # 6. 编码策略类型（155-162维）- 新增：支持策略信息
         # 策略类型：bomb, suppress, protect, control, group, follow, discard, unknown
@@ -671,9 +774,69 @@ class GuandanDataset(Dataset):
         
         # 7. 编码策略效果（163维）- 新增：支持策略效果信息
         # 策略效果分数归一化（假设最大值为30，归一化到0-1）
+        # 注意：如果strategy_effectiveness不存在或为0，保持为0.0（这是正常的，因为只有部分动作有策略效果）
         strategy_effectiveness = state_dict.get('strategy_effectiveness', 0.0)
         if 163 < 512:
-            state_vec[163] = min(strategy_effectiveness / 30.0, 1.0)  # 归一化到[0, 1]
+            # 归一化到[0, 1]，最大值30
+            normalized_effectiveness = min(strategy_effectiveness / 30.0, 1.0) if strategy_effectiveness > 0 else 0.0
+            state_vec[163] = normalized_effectiveness
+        
+        # 8. 编码历史动作（164-511维，348个维度）- 新增：实现历史动作编码
+        # 每个历史动作编码为17维：动作类型（10维）+ 动作牌点（15维）+ 动作玩家（2维）
+        # 最多编码20个历史动作（20 * 17 = 340维），剩余8维保留
+        history = state_dict.get('history', [])
+        if history:
+            # 动作类型映射（与last_action编码保持一致）
+            action_type_map = {
+                'PASS': 0, 'Single': 1, 'Pair': 2, 'Trips': 3,
+                'Straight': 4, 'ThreeWithTwo': 5, 'Bomb': 6,
+                'StraightFlush': 7, 'ThreePair': 8, 'TwoTrips': 9
+            }
+            # 牌点映射（与last_action编码保持一致）
+            rank_map = {
+                '2': 0, '3': 1, '4': 2, '5': 3, '6': 4, '7': 5, '8': 6, '9': 7,
+                'T': 8, 'J': 9, 'Q': 10, 'K': 11, 'A': 12,
+                'B': 13, 'R': 14
+            }
+            
+            # 取最近20个历史动作（从新到旧）
+            max_history = min(20, len(history))
+            for hist_idx in range(max_history):
+                hist_action = history[-(hist_idx + 1)]  # 从最新到最旧
+                
+                # 计算起始维度：164 + hist_idx * 17
+                base_dim = 164 + hist_idx * 17
+                if base_dim + 17 > 512:
+                    break  # 超出范围，停止编码
+                
+                # 编码动作类型（10维，base_dim到base_dim+9）
+                action_type = hist_action.get('action_type', 'PASS')
+                if isinstance(action_type, str):
+                    action_type_idx = action_type_map.get(action_type, 0)
+                else:
+                    action_type_idx = 0
+                if action_type_idx < 10:
+                    state_vec[base_dim + action_type_idx] = 1.0
+                
+                # 编码动作牌点（15维，base_dim+10到base_dim+24）
+                action_cards = hist_action.get('action', [])
+                if action_cards and len(action_cards) > 0:
+                    # 取第一张卡牌的点数
+                    first_card = action_cards[0]
+                    if isinstance(first_card, str) and len(first_card) >= 2:
+                        rank = first_card[1] if len(first_card) == 2 else first_card[1:2]
+                        rank_idx = rank_map.get(rank, 0)
+                        if rank_idx < 15:
+                            state_vec[base_dim + 10 + rank_idx] = 1.0
+                
+                # 编码动作玩家（2维，base_dim+25到base_dim+26，使用二进制编码）
+                # 玩家0: 00, 玩家1: 01, 玩家2: 10, 玩家3: 11
+                player = hist_action.get('player', 0)
+                if isinstance(player, int) and 0 <= player <= 3:
+                    player_binary = player
+                    state_vec[base_dim + 25] = float((player_binary >> 1) & 1)  # 高位
+                    state_vec[base_dim + 26] = float(player_binary & 1)  # 低位
+                # 注意：base_dim+27到base_dim+33（7维）保留未使用
             
         # Convert action_cards to vector (Target)
         # 注意：动作空间是512维（与状态空间一致），不是108维
@@ -715,12 +878,84 @@ class GuandanDataset(Dataset):
         }
         pattern_type_idx = pattern_type_map.get(pattern_type, 11)
         
-        return torch.FloatTensor(state_vec), torch.FloatTensor(action_vec), strategy_type_idx, pattern_type_idx
+        # **阶段5新增**：生成策略模式标签
+        # 基于策略类型和游戏状态推断策略模式
+        strategy_pattern_idx = self._infer_strategy_pattern(state_dict, strategy_type)
+
+        return torch.FloatTensor(state_vec), torch.FloatTensor(action_vec), strategy_type_idx, pattern_type_idx, strategy_pattern_idx
+
+    def _infer_strategy_pattern(self, state_dict, strategy_type):
+        """
+        基于策略类型和游戏状态推断策略模式
+
+        Args:
+            state_dict: 状态字典
+            strategy_type: 策略类型字符串
+
+        Returns:
+            strategy_pattern_idx: 策略模式索引 (0-7)
+        """
+        # 简化的策略模式推断逻辑
+        # 基于策略类型映射到策略模式
+
+        strategy_pattern_map = {
+            'bomb': 0,      # bomb_strategy
+            'suppress': 4,  # suppress_strategy
+            'protect': 4,   # protect_strategy (暂时映射到suppress)
+            'control': 1,   # control_strategy
+            'group': 5,     # group_strategy
+            'follow': 2,    # follow_strategy
+            'discard': 6,   # discard_strategy
+        }
+
+        # 基于策略类型确定策略模式
+        if strategy_type in strategy_pattern_map:
+            return strategy_pattern_map[strategy_type]
+        else:
+            # 基于游戏状态进行更复杂的推断
+            game_phase = state_dict.get('game_phase', 1)
+            player_rest_cards = state_dict.get('player_rest_cards', [27, 27, 27, 27])
+
+            # 开局阶段，倾向于follow_strategy
+            if game_phase == 0:
+                return 2  # follow_strategy
+            # 残局阶段，倾向于control_strategy
+            elif game_phase == 2:
+                return 1  # control_strategy
+            # 中局阶段，基于剩余牌数判断
+            else:
+                current_player_idx = state_dict.get('current_player', 0)
+                if current_player_idx < len(player_rest_cards):
+                    current_cards = player_rest_cards[current_player_idx]
+                    if current_cards < 10:
+                        return 6  # discard_strategy (残牌阶段)
+                    elif current_cards > 20:
+                        return 2  # follow_strategy (多牌阶段)
+                    else:
+                        return 1  # control_strategy (中等牌数)
+
+        return 7  # unknown_strategy
+
 
 def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model_path="models/bc_model_v1.pth", 
              dropout_rate=0.1, enable_strategy_head=True, action_loss_weight=1.5, strategy_loss_weight=0.3,
              max_samples=None, use_dynamic_weight=False, weight_adjust_interval=5, use_separated_features=False,
-             use_curriculum_learning=False, curriculum_stages=3):
+             use_curriculum_learning=False, curriculum_stages=3, use_improved_model=False, attention_heads=8,
+             enable_strategy_pattern=True, strategy_pattern_weight=0.2,
+             enable_opponent_modeling=True, opponent_model_weight=0.15,
+             enable_dynamic_strategy=True, dynamic_strategy_weight=0.1):
+    """
+    行为克隆预训练（支持多任务学习）
+
+    **数据平衡权重**: 降低高频动作权重，提高低频动作权重
+    """
+    # 定义数据平衡权重（函数级别变量）
+    action_frequency_weights = {
+        0: 0.3,   # 索引0过于频繁，降低权重
+        45: 0.2,  # 索引45过于频繁，降低权重
+        46: 0.5,  # 索引46较频繁，降低权重
+        57: 0.2,  # 索引57过于频繁，降低权重
+    }
     """
     行为克隆预训练（支持多任务学习）
     
@@ -752,6 +987,14 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         use_separated_features: 是否使用分离的特征提取层（阶段3任务2.5方案C）
         use_curriculum_learning: 是否使用课程学习（阶段3任务2.6方案D）
         curriculum_stages: 课程学习阶段数（默认3：简单、中等、困难）
+        use_improved_model: 是否使用改进的模型架构（阶段4：包含注意力机制）
+        attention_heads: 注意力头数（仅在改进模型中有效，默认8）
+        enable_strategy_pattern: 是否启用策略模式识别（阶段5：高级策略学习）
+        strategy_pattern_weight: 策略模式识别损失权重（阶段5，默认0.2）
+        enable_opponent_modeling: 是否启用对手建模（阶段5，默认True）
+        opponent_model_weight: 对手建模损失权重（阶段5，默认0.15）
+        enable_dynamic_strategy: 是否启用动态策略调整（阶段5，默认True）
+        dynamic_strategy_weight: 动态策略调整损失权重（阶段5，默认0.1）
     """
     print("Starting Behavior Cloning Pre-training...")
     print(f"Data directory: {data_dir}")
@@ -932,6 +1175,19 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     # **阶段2新增**: 启用策略分类头（多任务学习）
     # **阶段3任务2回退**: 隐藏层维度回退到256（512在796样本上效果差，完全匹配准确率0.00%）
     # **阶段3任务2.5方案C**: 分离的特征提取层（共享底层特征，分离高层特征）
+    # **阶段4新增**: 改进模型架构（注意力机制 + 残差连接）
+    if use_improved_model:
+        model = ImprovedGuandanPolicyNet(
+            input_dim=512,
+            hidden_dim=256,
+            output_dim=512,
+            dropout_rate=dropout_rate,
+            strategy_num_classes=7,
+            enable_strategy_head=enable_strategy_head,
+            attention_heads=attention_heads
+        ).to(device)
+        print(f"Model: ImprovedGuandanPolicyNet, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate={dropout_rate}, strategy_head={enable_strategy_head}, attention_heads={attention_heads} (阶段4：注意力机制 + 残差连接)")
+    else:
     model = GuandanPolicyNet(
         input_dim=512, 
         hidden_dim=256,  # 阶段3任务2回退：从512回退到256，任务1配置（24.62%准确率）
@@ -942,10 +1198,51 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         use_separated_features=use_separated_features  # 阶段3任务2.5方案C
     ).to(device)
     if use_separated_features:
-        print(f"Model: input_dim=512, hidden_dim=256, output_dim=512, dropout_rate={dropout_rate}, strategy_head={enable_strategy_head} (阶段3任务2.5方案C：分离特征提取层)")
+            print(f"Model: GuandanPolicyNet, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate={dropout_rate}, strategy_head={enable_strategy_head} (阶段3任务2.5方案C：分离特征提取层)")
     else:
-        print(f"Model: input_dim=512, hidden_dim=256, output_dim=512, dropout_rate={dropout_rate}, strategy_head={enable_strategy_head} (阶段3任务2回退：恢复任务1配置)")
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+            print(f"Model: GuandanPolicyNet, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate={dropout_rate}, strategy_head={enable_strategy_head} (阶段3任务2回退：恢复任务1配置)")
+
+    # **阶段5新增**: 高级策略学习组件
+    strategy_pattern_recognizer = None
+    opponent_model = None
+    dynamic_strategy_adjuster = None
+
+    if enable_strategy_pattern:
+        strategy_pattern_recognizer = StrategyPatternRecognizer(
+            input_dim=512,
+            pattern_types=8,  # 8种策略模式
+            hidden_dim=256
+        ).to(device)
+        print(f"Strategy Pattern Recognizer: enabled, pattern_types=8, hidden_dim=256 (阶段5：策略模式识别)")
+
+    if enable_opponent_modeling:
+        opponent_model = OpponentModel(
+            state_dim=512,
+            action_dim=512,
+            opponent_types=5  # 5种对手类型
+        ).to(device)
+        print(f"Opponent Model: enabled, opponent_types=5, feature_dim=128 (阶段5：对手建模)")
+
+    if enable_dynamic_strategy:
+        dynamic_strategy_adjuster = DynamicStrategyAdjuster(
+            state_dim=512,
+            strategy_count=7  # 7种策略
+        ).to(device)
+        print(f"Dynamic Strategy Adjuster: enabled, strategy_count=7, feature_dim=128 (阶段5：动态策略调整)")
+
+    # 收集所有需要训练的参数
+    all_params = list(model.parameters())
+
+    if enable_strategy_pattern and strategy_pattern_recognizer is not None:
+        all_params.extend(strategy_pattern_recognizer.parameters())
+
+    if enable_opponent_modeling and opponent_model is not None:
+        all_params.extend(opponent_model.parameters())
+
+    if enable_dynamic_strategy and dynamic_strategy_adjuster is not None:
+        all_params.extend(dynamic_strategy_adjuster.parameters())
+
+    optimizer = optim.Adam(all_params, lr=lr)
     
     # **阶段3任务2.5回退**: 回退到BCE Loss（Focal Loss效果不理想）
     # 使用加权BCE Loss，增加对预测过少的惩罚
@@ -965,10 +1262,14 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         pos_weight = torch.tensor(2.0).to(device)  # 正样本权重：2.0（增加对预测过少的惩罚）
         print(f"[阶段3任务2.5回退] 使用加权BCE Loss (pos_weight=2.0)，恢复任务1配置")
     # **阶段0方案D（改进损失函数）**: 使用改进的损失函数解决预测过多问题
-    # 包含：预测数量惩罚 + 加权BCE（Top-K损失暂时禁用以避免卡住）
+    # 包含：预测数量惩罚 + 加权BCE + Top-K损失
     use_improved_loss = True  # 是否使用改进的损失函数
+    use_top_k_loss = True  # 重新启用Top-K损失（阶段1紧急修复）
     if use_improved_loss:
-        print(f"[阶段0方案D] 使用改进的损失函数（预测数量惩罚 + 加权BCE，Top-K损失暂时禁用）")
+        if use_top_k_loss:
+            print(f"[阶段0方案D] 使用改进的损失函数（预测数量惩罚 + 加权BCE + Top-K损失）")
+        else:
+            print(f"[阶段0方案D] 使用改进的损失函数（预测数量惩罚 + 加权BCE，Top-K损失禁用）")
         action_criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)  # 基础BCE损失
     else:
         action_criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)  # 动作预测损失（加权BCE）
@@ -977,9 +1278,9 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     # 注意：CrossEntropyLoss内部会应用Softmax，所以不需要在模型输出上应用Softmax
     strategy_criterion = nn.CrossEntropyLoss(ignore_index=7) if enable_strategy_head else None  # 忽略unknown类别（索引7）
     
-    # **优化**：添加学习率衰减
-    # 每10轮衰减50%，帮助模型更稳定地收敛
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    # **阶段0方案I-1**：修复学习率调度，避免学习停止
+    # 使用Cosine Annealing避免学习率过早降到0
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
     
     # 3. Training Loop
     # **阶段2任务3新增**: 评估指标记录
@@ -1029,6 +1330,9 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         total_action_loss = 0
         total_strategy_loss = 0
         strategy_loss_count = 0  # 统计有效策略损失样本数
+        total_strategy_pattern_loss = 0  # 阶段5新增：策略模式识别损失
+        total_opponent_model_loss = 0    # 阶段5新增：对手建模损失
+        total_dynamic_strategy_loss = 0  # 阶段5新增：动态策略调整损失
         
         # **阶段2任务3新增**: 评估指标统计
         total_samples = 0
@@ -1045,22 +1349,31 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         model.train()  # 确保模型处于训练模式
         
         for batch in dataloader:
-            # 处理数据：支持多任务学习（返回策略标签和牌型信息）
-            if enable_strategy_head and len(batch) == 4:
+            # 处理数据：支持多任务学习和策略模式识别
+            if len(batch) == 5:
+                # 阶段5：返回5个值（state, action, strategy, pattern, strategy_pattern）
+                states, actions, strategy_labels, pattern_types, strategy_pattern_labels = batch
+                strategy_labels = strategy_labels.to(device)
+                pattern_types = pattern_types.to(device)
+                strategy_pattern_labels = strategy_pattern_labels.to(device)
+            elif enable_strategy_head and len(batch) == 4:
                 # 新版本：返回4个值（state, action, strategy, pattern）
                 states, actions, strategy_labels, pattern_types = batch
                 strategy_labels = strategy_labels.to(device)
                 pattern_types = pattern_types.to(device)
+                strategy_pattern_labels = None
             elif enable_strategy_head and len(batch) == 3:
                 # 旧版本：返回3个值（state, action, strategy）
                 states, actions, strategy_labels = batch
                 strategy_labels = strategy_labels.to(device)
                 pattern_types = None
+                strategy_pattern_labels = None
             else:
                 # 向后兼容：如果数据集不返回策略标签，只使用动作预测
                 states, actions = batch[0], batch[1]
                 strategy_labels = None
                 pattern_types = None
+                strategy_pattern_labels = None
             
             states, actions = states.to(device), actions.to(device)
             
@@ -1070,11 +1383,11 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
             if enable_strategy_head and strategy_labels is not None:
                 # 多任务学习：同时返回动作预测和策略分类
                 action_logits, strategy_logits = model(states, return_strategy=True)
-                
+
                 # 计算动作预测损失（逐样本计算，支持样本权重）
                 batch_size = actions.size(0)
                 sample_losses = []
-                
+
                 # **阶段3改进**: 根据牌型给予不同权重
                 # 三带二权重最高（3.0），其他复杂牌型次之（1.5），简单牌型正常（1.0）
                 pattern_weights = {
@@ -1085,43 +1398,78 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     7: 2.0,   # WoodPlate: 2.0
                     8: 1.2,   # Complex: 1.2
                 }
-                
+
+                # 数据平衡权重已在函数开头定义
+
                 for i in range(batch_size):
                     sample_logits = action_logits[i:i+1]
                     sample_actions = actions[i:i+1]
-                    
+
                     # 计算单个样本的损失
                     sample_loss = action_criterion(sample_logits, sample_actions)
-                    
-                    # **阶段0方案D（改进损失函数）**: 添加预测数量惩罚（Top-K损失暂时禁用以避免卡住）
+
+                    # **阶段0方案D（改进损失函数）**: 添加预测数量惩罚
                     if use_improved_loss:
                         # 预测数量惩罚：惩罚预测过多或过少
                         sample_probs = torch.sigmoid(sample_logits)
                         pred_card_count = (sample_probs > 0.3).sum().item()  # 使用阈值0.3计算预测卡牌数
                         true_card_count = sample_actions.sum().item()
-                        
+
                         if pred_card_count > true_card_count:
-                            # 预测过多：惩罚（权重增加以更有效约束）
-                            over_predict_penalty = (pred_card_count - true_card_count) / 27.0 * 0.2  # 归一化并加权（从0.1增加到0.2）
+                            # 预测过多：惩罚（权重大幅增加以更有效约束）
+                            over_predict_penalty = (pred_card_count - true_card_count) / 27.0 * 1.0  # 归一化并加权（从0.2增加到1.0）
                             sample_loss = sample_loss + over_predict_penalty
                         elif pred_card_count < true_card_count:
                             # 预测过少：轻微惩罚
                             under_predict_penalty = (true_card_count - pred_card_count) / 27.0 * 0.05
                             sample_loss = sample_loss + under_predict_penalty
-                        
-                        # 注意：Top-K损失暂时禁用，因为可能导致训练卡住
-                        # 如果未来需要，可以优化Top-K损失的计算方式
-                    
-                    # 应用牌型权重
+
+                        # **阶段1紧急修复：重新启用Top-K损失**
+                        if use_top_k_loss:
+                            # 基于真实卡牌数动态设置K值，进一步放宽约束以提升准确率
+                            true_card_counts = sample_actions.sum(dim=1)  # (batch_size,)
+                            # 放宽预测空间：K = max(真实卡牌数 + 3, 真实卡牌数 * 2.0)
+                            k_values = torch.max(true_card_counts + 3, torch.ceil(true_card_counts * 2.0).long())
+                            top_k_loss = compute_top_k_loss(sample_logits, sample_actions, k_values)
+                            sample_loss = sample_loss + 0.3 * top_k_loss  # Top-K损失权重0.3（进一步降低）
+
+                    # 应用牌型权重 + 数据平衡权重
+                    weight = 1.0
                     if pattern_types is not None:
                         pattern_idx = pattern_types[i].item()
-                        weight = pattern_weights.get(pattern_idx, 1.0)
+                        weight *= pattern_weights.get(pattern_idx, 1.0)
+
+                    # 应用数据平衡权重（基于动作频率）
+                    if sample_actions is not None:
+                        # 找到样本中激活的动作索引
+                        active_indices = (sample_actions.squeeze(0) > 0.5).nonzero(as_tuple=True)[0]
+                        if len(active_indices) > 0:
+                            # 对每个激活的索引应用频率权重
+                            freq_weights = [action_frequency_weights.get(idx.item(), 1.0) for idx in active_indices]
+                            avg_freq_weight = sum(freq_weights) / len(freq_weights)
+                            weight *= avg_freq_weight
+
                         sample_loss = sample_loss * weight
-                    
+
                     sample_losses.append(sample_loss)
                 
                 # 平均所有样本的损失
                 action_loss = torch.stack(sample_losses).mean()
+
+                # **方案G-1：增强预测数量惩罚**
+                # 计算每个样本的预测卡牌数和真实卡牌数
+                action_probs = torch.sigmoid(action_logits)
+                predicted_counts = (action_probs > 0.3).sum(dim=1).float()  # 使用0.3作为基准阈值
+                true_counts = actions.sum(dim=1)
+
+                # L1损失：惩罚预测数量偏差
+                # 适度约束预测数量，提升准确率
+                prediction_count_loss = torch.nn.functional.l1_loss(
+                    predicted_counts, true_counts, reduction='mean'
+                ) * 0.1  # 适度权重，平衡约束与准确率
+
+                # 将预测数量惩罚添加到动作损失
+                action_loss = action_loss + prediction_count_loss
                 
                 # **阶段3任务2.7改进**: 添加额外的正样本概率提升损失
                 # 鼓励模型为正样本输出更高的概率
@@ -1146,11 +1494,50 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 else:
                     strategy_loss = torch.tensor(0.0, device=device)
                 
-                # 组合损失（使用当前动态权重）
-                total_batch_loss = current_action_weight * action_loss + current_strategy_weight * strategy_loss
+                # **阶段5新增**: 计算高级策略学习损失
+                strategy_pattern_loss = torch.tensor(0.0, device=device)
+                opponent_model_loss = torch.tensor(0.0, device=device)
+                dynamic_strategy_loss = torch.tensor(0.0, device=device)
+
+                # 策略模式识别损失
+                if enable_strategy_pattern and strategy_pattern_recognizer is not None and strategy_pattern_labels is not None:
+                    pattern_logits, pattern_confidence = strategy_pattern_recognizer(states)
+                    strategy_pattern_criterion = nn.CrossEntropyLoss(ignore_index=7)
+                    strategy_pattern_loss = strategy_pattern_criterion(pattern_logits, strategy_pattern_labels)
+
+                # 对手建模损失（简化版：预测对手类型）
+                if enable_opponent_modeling and opponent_model is not None:
+                    # 这里需要对手的历史动作数据，暂时使用简化实现
+                    # 在实际应用中，需要从游戏历史中提取对手动作序列
+                    opponent_actions = actions  # 简化：使用当前动作作为对手动作的代理
+                    opponent_results = opponent_model(states, opponent_actions.unsqueeze(1))
+
+                    # 对手类型分类损失（假设我们知道对手类型，这里使用随机标签作为示例）
+                    # 在实际应用中，需要真实的对手类型标签
+                    dummy_opponent_labels = torch.randint(0, 5, (batch_size,), device=device)
+                    opponent_criterion = nn.CrossEntropyLoss()
+                    opponent_model_loss = opponent_criterion(opponent_results['opponent_type_logits'], dummy_opponent_labels)
+
+                # 动态策略调整损失
+                if enable_dynamic_strategy and dynamic_strategy_adjuster is not None:
+                    strategy_results = dynamic_strategy_adjuster(states)
+                    # 使用当前策略标签作为目标（简化实现）
+                    if strategy_labels is not None:
+                        strategy_criterion = nn.CrossEntropyLoss()
+                        dynamic_strategy_loss = strategy_criterion(strategy_results['switch_logits'], strategy_labels)
+                
+                # **阶段5更新**: 组合损失（包含所有高级策略学习组件）
+                total_batch_loss = (current_action_weight * action_loss +
+                                  current_strategy_weight * strategy_loss +
+                                  strategy_pattern_weight * strategy_pattern_loss +
+                                  opponent_model_weight * opponent_model_loss +
+                                  dynamic_strategy_weight * dynamic_strategy_loss)
                 
                 total_action_loss += action_loss.item()
                 total_strategy_loss += strategy_loss.item()
+                total_strategy_pattern_loss += strategy_pattern_loss.item()
+                total_opponent_model_loss += opponent_model_loss.item()
+                total_dynamic_strategy_loss += dynamic_strategy_loss.item()
             else:
                 # 单任务学习：只使用动作预测（也支持样本权重）
                 action_logits = model(states, return_strategy=False)
@@ -1176,29 +1563,47 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     # 计算单个样本的损失
                     sample_loss = action_criterion(sample_logits, sample_actions)
                     
-                    # **阶段0方案D（改进损失函数）**: 添加预测数量惩罚（Top-K损失暂时禁用以避免卡住）
+                    # **阶段0方案D（改进损失函数）**: 添加预测数量惩罚
                     if use_improved_loss:
                         # 预测数量惩罚：惩罚预测过多或过少
                         sample_probs = torch.sigmoid(sample_logits)
                         pred_card_count = (sample_probs > 0.3).sum().item()  # 使用阈值0.3计算预测卡牌数
                         true_card_count = sample_actions.sum().item()
-                        
+
                         if pred_card_count > true_card_count:
-                            # 预测过多：惩罚（权重增加以更有效约束）
-                            over_predict_penalty = (pred_card_count - true_card_count) / 27.0 * 0.2  # 归一化并加权（从0.1增加到0.2）
+                            # 预测过多：惩罚（权重大幅增加以更有效约束）
+                            over_predict_penalty = (pred_card_count - true_card_count) / 27.0 * 1.0  # 归一化并加权（从0.2增加到1.0）
                             sample_loss = sample_loss + over_predict_penalty
                         elif pred_card_count < true_card_count:
                             # 预测过少：轻微惩罚
                             under_predict_penalty = (true_card_count - pred_card_count) / 27.0 * 0.05
                             sample_loss = sample_loss + under_predict_penalty
-                        
-                        # 注意：Top-K损失暂时禁用，因为可能导致训练卡住
-                        # 如果未来需要，可以优化Top-K损失的计算方式
+
+                        # **阶段1紧急修复：重新启用Top-K损失**
+                        if use_top_k_loss:
+                            # 基于真实卡牌数动态设置K值，进一步放宽约束以提升准确率
+                            true_card_counts = sample_actions.sum(dim=1)  # (batch_size,)
+                            # 放宽预测空间：K = max(真实卡牌数 + 3, 真实卡牌数 * 2.0)
+                            k_values = torch.max(true_card_counts + 3, torch.ceil(true_card_counts * 2.0).long())
+                            top_k_loss = compute_top_k_loss(sample_logits, sample_actions, k_values)
+                            sample_loss = sample_loss + 0.3 * top_k_loss  # Top-K损失权重0.3（进一步降低）
                     
-                    # 应用牌型权重
+                    # 应用牌型权重 + 数据平衡权重
+                    weight = 1.0
                     if pattern_types is not None:
                         pattern_idx = pattern_types[i].item()
-                        weight = pattern_weights.get(pattern_idx, 1.0)
+                        weight *= pattern_weights.get(pattern_idx, 1.0)
+
+                    # 应用数据平衡权重（基于动作频率）
+                    if sample_actions is not None:
+                        # 找到样本中激活的动作索引
+                        active_indices = (sample_actions.squeeze(0) > 0.5).nonzero(as_tuple=True)[0]
+                        if len(active_indices) > 0:
+                            # 对每个激活的索引应用频率权重
+                            freq_weights = [action_frequency_weights.get(idx.item(), 1.0) for idx in active_indices]
+                            avg_freq_weight = sum(freq_weights) / len(freq_weights)
+                            weight *= avg_freq_weight
+
                         sample_loss = sample_loss * weight
                     
                     sample_losses.append(sample_loss)
@@ -1308,7 +1713,22 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         # **阶段2任务3新增**: 详细日志输出
         if enable_strategy_head and strategy_loss_count > 0:
             print(f"Epoch {epoch+1}/{epochs}:")
-            print(f"  Loss - Total: {avg_loss:.4f}, Action: {avg_action_loss:.4f}, Strategy: {avg_strategy_loss:.4f}, LR: {current_lr:.6f}")
+            loss_parts = [f"Total: {avg_loss:.4f}", f"Action: {avg_action_loss:.4f}", f"Strategy: {avg_strategy_loss:.4f}"]
+
+            if enable_strategy_pattern:
+                avg_pattern_loss = total_strategy_pattern_loss / len(dataloader)
+                loss_parts.append(f"Pattern: {avg_pattern_loss:.4f}")
+
+            if enable_opponent_modeling:
+                avg_opponent_loss = total_opponent_model_loss / len(dataloader)
+                loss_parts.append(f"Opponent: {avg_opponent_loss:.4f}")
+
+            if enable_dynamic_strategy:
+                avg_dynamic_loss = total_dynamic_strategy_loss / len(dataloader)
+                loss_parts.append(f"Dynamic: {avg_dynamic_loss:.4f}")
+
+            loss_str = ", ".join(loss_parts)
+            print(f"  Loss - {loss_str}, LR: {current_lr:.6f}")
             print(f"  Action Accuracy - Exact: {action_exact_accuracy:.2%}, Card: {action_card_accuracy:.2%}")
             print(f"  Strategy Accuracy - Overall: {strategy_accuracy:.2%}, Understanding Rate: {strategy_understanding_rate:.2%}")
             
@@ -1435,8 +1855,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
 if __name__ == "__main__":
     # 阶段3任务2.6方案D：测试课程学习效果（796样本，50 epochs，3个阶段）
     import random
-    import numpy as np
-    import torch
     
     # 固定随机种子，确保训练可复现
     seed = 42
@@ -1448,17 +1866,20 @@ if __name__ == "__main__":
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
     
-    # 阶段0任务2：使用课程学习训练基础模型（方案C：基于历史经验解决预测过多问题）
-    # 训练参数按照阶段0文档要求（方案C：基于历史经验）：
+    # 阶段1紧急修复：完整实施阶段1方案（方案G-1 + 方案G-2 + 方案I-1）
+    # 训练参数：
     # - 数据量：全部数据（33,023个样本）
-    # - Epochs：150（保持与方案B一致）
-    # - 使用样本权重：三带二3.0倍，顺子2.0倍，炸弹1.5倍
-    # - Dropout：0.2（从0.01增加，基于历史经验：0.1 → 0.2，降低输出概率以减少预测过多）
-    # - pos_weight：1.5（从8.0降低，基于历史经验：2.0 → 1.5，减少对预测过少的惩罚）
+    # - Epochs：50（快速测试修复效果）
+    # - Dropout：0.2（保持与方案C一致）
+    # - pos_weight：1.5（保持与方案C一致）
     # - 学习率：0.0003
     # - 批次大小：64
-    # - 课程学习：启用，4个阶段（简单牌型、中等牌型、复杂牌型、混合训练）
-    # 目标：解决预测过多问题，完全匹配准确率从0%提升到20%+
-    train_bc(epochs=150, max_samples=None, use_dynamic_weight=False, use_separated_features=False,
+    # - 课程学习：启用，4个阶段
+    # - 紧急修复（阶段1完整实施）：
+    #   - ✅ 方案G-1：预测数量惩罚权重：从0.2增加到1.0
+    #   - ✅ 方案G-2：重新启用Top-K损失（权重0.5）
+    #   - ✅ 方案I-1：学习率调度：从StepLR改为CosineAnnealingLR
+    # 目标：验证紧急修复是否能快速提升完全匹配准确率，从0%提升到5-10%
+    train_bc(epochs=200, max_samples=None, use_dynamic_weight=False, use_separated_features=True, lr=0.0005,
              use_curriculum_learning=True, curriculum_stages=4, dropout_rate=0.2,
              enable_strategy_head=False)  # 阶段0只训练动作预测，不启用策略分类头
