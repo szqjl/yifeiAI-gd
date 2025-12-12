@@ -16,4 +16,7 @@ pyyaml>=6.0
 # RL Dependencies
 gymnasium>=0.29.0
 torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+numpy>=1.21.0
 websockets>=10.0

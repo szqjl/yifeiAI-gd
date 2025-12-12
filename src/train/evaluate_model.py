@@ -78,12 +78,16 @@ def evaluate_model(model_path="models/bc_model_v1.pth", data_dir="game_records")
         
         # 检查是否有策略分类头
         has_strategy_head = 'fc_strategy.weight' in model_state_dict
+
+        # 检查是否使用了分离特征提取层
+        use_separated_features = 'fc2_action.weight' in model_state_dict
         
         model = GuandanPolicyNet(
             input_dim=512, 
             hidden_dim=256, 
             output_dim=512,
-            enable_strategy_head=has_strategy_head
+            enable_strategy_head=has_strategy_head,
+            use_separated_features=use_separated_features
         ).to(device)
         
         # 加载模型状态，允许部分匹配（strict=False）以兼容不同格式

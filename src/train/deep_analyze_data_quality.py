@@ -348,10 +348,21 @@ def main():
     result_file = f"training_logs/deep_data_quality_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     results = {
         'analysis_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'total_samples': len(dataset),
+        'total_samples': int(len(dataset)),
         'state_vec_dimensions': {
-            'always_zero_count': len([d for d in dim_info if d['non_zero_ratio'] == 0]),
-            'dim_info_summary': dim_info[:50]  # 只保存前50个维度的详细信息
+            'always_zero_count': int(len([d for d in dim_info if d['non_zero_ratio'] == 0])),
+            'dim_info_summary': [
+                {
+                    'dim': int(d['dim']),
+                    'non_zero_count': int(d['non_zero_count']),
+                    'non_zero_ratio': float(d['non_zero_ratio']),
+                    'mean': float(d['mean']),
+                    'std': float(d['std']),
+                    'max': float(d['max']),
+                    'min': float(d['min'])
+                }
+                for d in dim_info[:50]
+            ]
         },
         'action_vec_distribution': {
             'top_indices': [int(idx) for idx in np.argsort(index_counts)[::-1][:20]],
@@ -365,7 +376,14 @@ def main():
                 'max': int(np.max(card_counts))
             }
         },
-        'anomalies': anomalies[:100]  # 只保存前100个异常
+        'anomalies': [
+            {
+                'idx': int(a['idx']),
+                'type': str(a['type']),
+                'card_count': int(a['card_count'])
+            }
+            for a in anomalies[:100]
+        ]
     }
     
     with open(result_file, 'w', encoding='utf-8') as f:
