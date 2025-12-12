@@ -1,26 +1,26 @@
 {
-  "analysis_time": "2025-12-10 13:08:15",
+  "analysis_time": "2025-12-12 12:45:12",
   "model": "bc_model_v1_epoch_120.pth (方案B)",
   "key_metrics": {
-    "avg_true_cards": 3.431,
-    "avg_pred_cards": 41.933,
-    "avg_prob": 0.024420615285634995,
-    "median_prob": 1.0129897987098957e-07,
+    "avg_true_cards": 3.267,
+    "avg_pred_cards": 21.911,
+    "avg_prob": 0.008131030946969986,
+    "median_prob": 8.612865087798127e-08,
     "zero_prob_ratio": 0.0,
-    "max_prob_ratio": 0.03773046875,
-    "exact_match_rate": 0.0
+    "max_prob_ratio": 0.004078125,
+    "exact_match_rate": 0.003
   },
   "issues": [
     {
       "type": "over_prediction",
       "severity": "high",
-      "description": "预测卡牌数过多：平均预测41.93张，真实3.43张",
+      "description": "预测卡牌数过多：平均预测21.91张，真实3.27张",
       "suggestion": "降低缩放因子或提高阈值"
     },
     {
       "type": "exact_match_failure",
       "severity": "critical",
-      "description": "完全匹配率极低：0.00%",
+      "description": "完全匹配率极低：0.30%",
       "suggestion": "需要根本性改进：检查数据质量、损失函数、模型架构"
     }
   ]

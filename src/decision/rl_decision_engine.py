@@ -7,26 +7,99 @@ from src.rl_agent.agent import PPOAgent
 # from .base_decision_engine import BaseDecisionEngine 
 
 class RLDecisionEngine:
-    def __init__(self, model_path="models/bc_model_v1.pth"):
-        # **关键修复**：确保action_dim与训练时一致（512维）
-        # **优化**：调整阈值到0.1，配合缩放因子10.0确保有输出
-        # 基于概率分布分析，最优缩放因子为10.0（文档：最终最优方案.md）
-        # 但根据实际调试，原始概率过低（0.0014），需要更低阈值（0.1）确保有输出
+    def __init__(self, model_path="models/bc_model_stage5_final.pth", use_stage5_model=True):
+        """
+        RL决策引擎 - 支持阶段5增强模型
+
+        Args:
+            model_path: 模型路径
+            use_stage5_model: 是否使用阶段5增强模型 (ImprovedGuandanPolicyNet)
+        """
         self.logger = logging.getLogger("RLDecisionEngine")
-        self.agent = PPOAgent(input_dim=512, action_dim=512, prediction_threshold=0.3)
+        self.use_stage5_model = use_stage5_model
         self.model_loaded = False
         self.model_path = model_path
+
+        if use_stage5_model:
+            # 使用阶段5增强模型 (ImprovedGuandanPolicyNet)
+            try:
+                from src.rl_agent.model import ImprovedGuandanPolicyNet
+                self.policy_net = ImprovedGuandanPolicyNet(
+                    input_dim=512, hidden_dim=256, output_dim=512,
+                    dropout_rate=0.1, enable_strategy_head=True, attention_heads=8
+                ).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+
+                # 尝试加载阶段5模型
+                try:
+                    checkpoint = torch.load(model_path, map_location='cpu')
+                    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+                        self.policy_net.load_state_dict(checkpoint['model_state_dict'], strict=False)
+                    else:
+                        self.policy_net.load_state_dict(checkpoint, strict=False)
+
+                    self.model_loaded = True
+                    self.logger.info(f"✓ RL Engine loaded Stage5 model from {model_path}")
+                    print(f"RL Engine loaded Stage5 enhanced model from {model_path}")
+
+                except Exception as e:
+                    # 如果阶段5模型加载失败，回退到PPOAgent
+                    self.logger.warning(f"Failed to load Stage5 model: {e}. Falling back to PPOAgent.")
+                    print(f"Failed to load Stage5 model: {e}. Falling back to PPOAgent.")
+                    self._init_ppo_fallback()
+
+            except ImportError as e:
+                self.logger.warning(f"Stage5 model not available: {e}. Using PPOAgent fallback.")
+                print(f"Stage5 model not available: {e}. Using PPOAgent fallback.")
+                self._init_ppo_fallback()
+
+        else:
+            # 使用传统PPOAgent
+            self._init_ppo_fallback()
+
+    def _init_ppo_fallback(self):
+        """初始化PPOAgent作为回退方案"""
+        from src.rl_agent.agent import PPOAgent
+        self.agent = PPOAgent(input_dim=512, action_dim=512, prediction_threshold=0.3)
+        self.use_stage5_model = False
+
         try:
-            self.agent.load(model_path)
+            self.agent.load(self.model_path)
             self.model_loaded = True
-            self.logger.info(f"✓ RL Engine loaded model from {model_path}")
-            print(f"RL Engine loaded model from {model_path}")  # 同时输出到控制台
+            self.logger.info(f"✓ RL Engine loaded PPO model from {self.model_path}")
+            print(f"RL Engine loaded PPO model from {self.model_path}")
         except Exception as e:
             error_msg = f"Failed to load RL model: {e}. Using random weights (Not recommended for production)."
             self.logger.warning(error_msg)
-            print(error_msg)  # 同时输出到控制台
+            print(error_msg)
             self.model_loaded = False
-            
+
+    def _stage5_model_inference(self, state_vec: np.ndarray) -> np.ndarray:
+        """
+        阶段5增强模型推理
+
+        Args:
+            state_vec: 预处理的状态向量 (512维)
+
+        Returns:
+            二进制动作向量
+        """
+        try:
+            with torch.no_grad():
+                state_tensor = torch.FloatTensor(state_vec).unsqueeze(0).to(self.policy_net.device)
+                action_logits = self.policy_net(state_tensor)
+
+                # 对于行为克隆模型，我们使用sigmoid + 阈值来获取二进制动作
+                probs = torch.sigmoid(action_logits)
+                # 使用0.3作为阈值（与阶段5训练一致）
+                action_binary = (probs > 0.3).float().squeeze(0).cpu().numpy()
+
+                return action_binary
+
+        except Exception as e:
+            self.logger.error(f"Stage5 model inference failed: {e}")
+            # 回退到随机动作
+            return np.zeros(512, dtype=int)
+
     def decide(self, data: Dict) -> int:
         """
         Main interface for the client.
@@ -230,8 +303,13 @@ class RLDecisionEngine:
         active_indices = np.where(state_vec > 0)[0]
         print(f"[RL Debug] State vector: {len(active_indices)} active indices (hand size: {len(hand)})")
         
-        # 2. Query Agent
-        action_binary, _ = self.agent.select_action(state_vec)
+        # 2. Query Agent/Model
+        if self.use_stage5_model and self.model_loaded:
+            # 使用阶段5增强模型推理
+            action_binary = self._stage5_model_inference(state_vec)
+        else:
+            # 使用传统PPOAgent推理
+            action_binary, _ = self.agent.select_action(state_vec)
         
         # 3. Decode Action
         # Convert binary vector back to card indices, then to card codes
@@ -239,28 +317,44 @@ class RLDecisionEngine:
         
         # 调试：输出概率统计信息（仅在模型加载且空动作时）
         if self.model_loaded and len(active_indices) > 0 and len(selected_indices) == 0:
-            # 获取模型输出的原始概率（用于调试）
-            with torch.no_grad():
-                state_tensor = torch.FloatTensor(state_vec).to(self.agent.device)
-                logits = self.agent.policy_old(state_tensor)
-                probs = torch.sigmoid(logits)
-                scaled_probs = probs * 5.0  # 与agent.py保持一致（进一步调整后的缩放因子，从7.0降低到5.0）
-                scaled_probs = torch.clamp(scaled_probs, 0, 1)
-                
-                # 只统计手牌对应索引的概率
-                hand_probs = scaled_probs[active_indices].cpu().numpy()
-                max_prob = float(hand_probs.max()) if len(hand_probs) > 0 else 0.0
-                mean_prob = float(hand_probs.mean()) if len(hand_probs) > 0 else 0.0
-                above_threshold = int((hand_probs > self.agent.prediction_threshold).sum())
-                
-                # 也检查原始概率（未缩放）
-                original_hand_probs = probs[active_indices].cpu().numpy()
-                original_max = float(original_hand_probs.max()) if len(original_hand_probs) > 0 else 0.0
-                original_mean = float(original_hand_probs.mean()) if len(original_hand_probs) > 0 else 0.0
-                
-                print(f"[RL Debug] Probability stats: max={max_prob:.4f}, mean={mean_prob:.4f}, "
-                      f"above_threshold({self.agent.prediction_threshold})={above_threshold}/{len(active_indices)}")
-                print(f"[RL Debug] Original probs (before scaling): max={original_max:.4f}, mean={original_mean:.4f}")
+            if self.use_stage5_model:
+                # 阶段5模型调试信息
+                with torch.no_grad():
+                    state_tensor = torch.FloatTensor(state_vec).unsqueeze(0).to(self.policy_net.device)
+                    logits = self.policy_net(state_tensor)
+                    probs = torch.sigmoid(logits)
+
+                    # 只统计手牌对应索引的概率
+                    hand_probs = probs[0, active_indices].cpu().numpy()
+                    max_prob = float(hand_probs.max()) if len(hand_probs) > 0 else 0.0
+                    mean_prob = float(hand_probs.mean()) if len(hand_probs) > 0 else 0.0
+                    above_threshold = int((hand_probs > 0.3).sum())  # 阶段5使用0.3阈值
+
+                    print(f"[RL Debug] Stage5 model - Probability stats: max={max_prob:.4f}, mean={mean_prob:.4f}, "
+                          f"above_threshold(0.3)={above_threshold}/{len(active_indices)}")
+            else:
+                # PPOAgent调试信息
+                with torch.no_grad():
+                    state_tensor = torch.FloatTensor(state_vec).to(self.agent.device)
+                    logits = self.agent.policy_old(state_tensor)
+                    probs = torch.sigmoid(logits)
+                    scaled_probs = probs * 5.0  # 与agent.py保持一致
+                    scaled_probs = torch.clamp(scaled_probs, 0, 1)
+
+                    # 只统计手牌对应索引的概率
+                    hand_probs = scaled_probs[active_indices].cpu().numpy()
+                    max_prob = float(hand_probs.max()) if len(hand_probs) > 0 else 0.0
+                    mean_prob = float(hand_probs.mean()) if len(hand_probs) > 0 else 0.0
+                    above_threshold = int((hand_probs > self.agent.prediction_threshold).sum())
+
+                    # 也检查原始概率（未缩放）
+                    original_hand_probs = probs[active_indices].cpu().numpy()
+                    original_max = float(original_hand_probs.max()) if len(original_hand_probs) > 0 else 0.0
+                    original_mean = float(original_hand_probs.mean()) if len(original_hand_probs) > 0 else 0.0
+
+                    print(f"[RL Debug] PPO model - Probability stats: max={max_prob:.4f}, mean={mean_prob:.4f}, "
+                          f"above_threshold({self.agent.prediction_threshold})={above_threshold}/{len(active_indices)}")
+                    print(f"[RL Debug] Original probs (before scaling): max={original_max:.4f}, mean={original_mean:.4f}")
                 
                 # 如果缩放后仍然没有超过阈值的，建议进一步降低阈值或增加缩放因子
                 if above_threshold == 0:
@@ -445,12 +539,11 @@ class RLDecisionEngine:
         obs[154] = need_control
         
         # 检查手牌数量
-            total_cards_in_hand = len(state_info['hand'])
-            unique_indices = len(index_to_cards)
-            print(f"[RL Debug] Hand stats: {total_cards_in_hand} total cards, {unique_indices} unique indices")
-            if total_cards_in_hand != unique_indices:
-                print(f"[RL Debug] Note: {total_cards_in_hand - unique_indices} cards share indices (may be duplicates or collisions)")
-                
+        total_cards_in_hand = len(state_info['hand'])
+        unique_indices = len(index_to_cards)
+        print(f"[RL Debug] Hand stats: {total_cards_in_hand} total cards, {unique_indices} unique indices")
+        if total_cards_in_hand != unique_indices:
+            print(f"[RL Debug] Note: {total_cards_in_hand - unique_indices} cards share indices (may be duplicates or collisions)")
         return obs
 
     def _card_to_index(self, card_code):
