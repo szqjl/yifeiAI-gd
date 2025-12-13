@@ -881,6 +881,8 @@ class GuandanDataset(Dataset):
         # **阶段5新增**：生成策略模式标签
         # 基于策略类型和游戏状态推断策略模式
         strategy_pattern_idx = self._infer_strategy_pattern(state_dict, strategy_type)
+        # 确保索引在有效范围内（0-7）
+        strategy_pattern_idx = self._clamp_strategy_pattern_idx(strategy_pattern_idx)
 
         return torch.FloatTensor(state_vec), torch.FloatTensor(action_vec), strategy_type_idx, pattern_type_idx, strategy_pattern_idx
 
@@ -935,6 +937,18 @@ class GuandanDataset(Dataset):
                         return 1  # control_strategy (中等牌数)
 
         return 7  # unknown_strategy
+    
+    def _clamp_strategy_pattern_idx(self, idx):
+        """
+        确保策略模式索引在有效范围内（0-7）
+        
+        Args:
+            idx: 策略模式索引
+            
+        Returns:
+            clamped_idx: 限制在0-7范围内的索引
+        """
+        return max(0, min(7, int(idx)))
 
 
 def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model_path="models/bc_model_v1.pth", 
@@ -1165,7 +1179,14 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     
     # 2. Setup Model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # **修复**: 支持强制使用CPU训练（解决旧GPU兼容性问题）
+    # 如果环境变量FORCE_CPU=1，强制使用CPU
+    force_cpu = os.environ.get('FORCE_CPU', '0') == '1'
+    if force_cpu:
+        device = torch.device("cpu")
+        print(f"[警告] 强制使用CPU训练（FORCE_CPU=1）")
+    else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
     # **关键修复**：模型输入输出维度必须与推理代码一致
@@ -1188,18 +1209,18 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         ).to(device)
         print(f"Model: ImprovedGuandanPolicyNet, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate={dropout_rate}, strategy_head={enable_strategy_head}, attention_heads={attention_heads} (阶段4：注意力机制 + 残差连接)")
     else:
-    model = GuandanPolicyNet(
-        input_dim=512, 
-        hidden_dim=256,  # 阶段3任务2回退：从512回退到256，任务1配置（24.62%准确率）
-        output_dim=512, 
-        dropout_rate=dropout_rate,
-        strategy_num_classes=7,
-        enable_strategy_head=enable_strategy_head,
-        use_separated_features=use_separated_features  # 阶段3任务2.5方案C
-    ).to(device)
-    if use_separated_features:
+        model = GuandanPolicyNet(
+            input_dim=512, 
+            hidden_dim=256,  # 阶段3任务2回退：从512回退到256，任务1配置（24.62%准确率）
+            output_dim=512, 
+            dropout_rate=dropout_rate,
+            strategy_num_classes=7,
+            enable_strategy_head=enable_strategy_head,
+            use_separated_features=use_separated_features  # 阶段3任务2.5方案C
+        ).to(device)
+        if use_separated_features:
             print(f"Model: GuandanPolicyNet, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate={dropout_rate}, strategy_head={enable_strategy_head} (阶段3任务2.5方案C：分离特征提取层)")
-    else:
+        else:
             print(f"Model: GuandanPolicyNet, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate={dropout_rate}, strategy_head={enable_strategy_head} (阶段3任务2回退：恢复任务1配置)")
 
     # **阶段5新增**: 高级策略学习组件
@@ -1502,8 +1523,13 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 # 策略模式识别损失
                 if enable_strategy_pattern and strategy_pattern_recognizer is not None and strategy_pattern_labels is not None:
                     pattern_logits, pattern_confidence = strategy_pattern_recognizer(states)
+                    # 确保标签在有效范围内（0-7），策略模式有8种（0-7），unknown_strategy是7
+                    # 使用ignore_index=7来忽略unknown_strategy，但需要确保标签值不超过7
+                    # **修复**: 确保标签是long类型，并严格限制在0-7范围内
+                    strategy_pattern_labels_long = strategy_pattern_labels.long()
+                    strategy_pattern_labels_clamped = torch.clamp(strategy_pattern_labels_long, 0, 7)
                     strategy_pattern_criterion = nn.CrossEntropyLoss(ignore_index=7)
-                    strategy_pattern_loss = strategy_pattern_criterion(pattern_logits, strategy_pattern_labels)
+                    strategy_pattern_loss = strategy_pattern_criterion(pattern_logits, strategy_pattern_labels_clamped)
 
                 # 对手建模损失（简化版：预测对手类型）
                 if enable_opponent_modeling and opponent_model is not None:
@@ -1522,9 +1548,23 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 if enable_dynamic_strategy and dynamic_strategy_adjuster is not None:
                     strategy_results = dynamic_strategy_adjuster(states)
                     # 使用当前策略标签作为目标（简化实现）
+                    # 动态策略调整器输出7种策略（0-6），需要排除unknown（索引7）
                     if strategy_labels is not None:
-                        strategy_criterion = nn.CrossEntropyLoss()
-                        dynamic_strategy_loss = strategy_criterion(strategy_results['switch_logits'], strategy_labels)
+                        # 只计算非unknown样本的损失
+                        # **修复**: 确保标签是long类型，并严格限制在0-6范围内
+                        strategy_labels_long = strategy_labels.long()
+                        valid_mask = (strategy_labels_long >= 0) & (strategy_labels_long < 7)  # 只接受0-6
+                        if valid_mask.sum() > 0:
+                            valid_strategy_labels = strategy_labels_long[valid_mask]
+                            # **修复**: 再次确保标签值在有效范围内（0-6）
+                            valid_strategy_labels = torch.clamp(valid_strategy_labels, 0, 6)
+                            valid_switch_logits = strategy_results['switch_logits'][valid_mask]
+                            dynamic_strategy_criterion = nn.CrossEntropyLoss()
+                            dynamic_strategy_loss = dynamic_strategy_criterion(valid_switch_logits, valid_strategy_labels)
+                        else:
+                            dynamic_strategy_loss = torch.tensor(0.0, device=device)
+                    else:
+                        dynamic_strategy_loss = torch.tensor(0.0, device=device)
                 
                 # **阶段5更新**: 组合损失（包含所有高级策略学习组件）
                 total_batch_loss = (current_action_weight * action_loss +

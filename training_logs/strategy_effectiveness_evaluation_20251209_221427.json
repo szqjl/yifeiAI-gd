@@ -1,0 +1,14 @@
+{
+  "evaluation_time": "2025-12-09T22:14:27.811172",
+  "total_samples": 796,
+  "valid_samples": 796,
+  "skipped_empty_prediction": 0,
+  "expert_avg_score": 5.96896984924623,
+  "predicted_avg_score": 10.30967336683417,
+  "avg_score_difference": -4.340703517587939,
+  "expert_better_count": 231,
+  "predicted_better_count": 475,
+  "equal_count": 90,
+  "match_rate": 16.331658291457288,
+  "note": "如果predicted_avg_score为None，说明所有样本的模型预测都为空"
+}
