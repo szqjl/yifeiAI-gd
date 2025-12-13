@@ -1,0 +1,49 @@
+C:\Users\Jennifer\AppData\Local\Programs\Python\Python313\Lib\site-packages\torch\cuda\__init__.py:262: UserWarning: 
+    Found GPU1 GeForce GTX 660 which is of cuda capability 3.0.
+    PyTorch no longer supports this GPU because it is too old.
+    The minimum cuda capability supported by this library is 3.7.
+    
+  warnings.warn(
+C:\actions-runner\_work\pytorch\pytorch\pytorch\aten\src\ATen\native\cuda\Loss.cu:242: block: [0,0,0], thread: [30,0,0] Assertion `t >= 0 && t < n_classes` failed.
+================================================================================
+阶段5模型训练 - 完整训练
+================================================================================
+训练时间: 2025-12-12T15:38:10
+随机种子: 42
+CUDA可用: True
+CUDA设备: GeForce GTX 1650
+================================================================================
+
+Starting Behavior Cloning Pre-training...
+Data directory: game_records
+Epochs: 50, Batch size: 64, Learning rate: 0.0003
+[最优配置] 学习率衰减: StepLR(step_size=10, gamma=0.5), 损失函数: 加权BCE(pos_weight=2.0)
+[阶段2多任务学习] 策略分类头: 启用, 损失权重: α=1.5, β=0.3
+Loaded 20545 samples.
+[阶段3任务2.6方案D] 课程学习：禁用
+Using device: cuda
+Model: ImprovedGuandanPolicyNet, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate=0.1, strategy_head=True, attention_heads=8 (阶段4：注意力机制 + 残差连接)
+Strategy Pattern Recognizer: enabled, pattern_types=8, hidden_dim=256 (阶段5：策略模式识别)
+Opponent Model: enabled, opponent_types=5, feature_dim=128 (阶段5：对手建模)
+Dynamic Strategy Adjuster: enabled, strategy_count=7, feature_dim=128 (阶段5：动态策略调整)
+[阶段3任务2.5回退] 使用加权BCE Loss (pos_weight=2.0)，恢复任务1配置
+[阶段0方案D] 使用改进的损失函数（预测数量惩罚 + 加权BCE + Top-K损失）
+Traceback (most recent call last):
+  File "D:\guandanscore\YiFeiAI-GD\train_stage5.py", line 42, in <module>
+    train_bc(
+    ~~~~~~~~^
+        data_dir="game_records",
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<15 lines>...
+        dynamic_strategy_weight=0.1
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "D:\guandanscore\YiFeiAI-GD\src\train\pretrain.py", line 1536, in train_bc
+    total_action_loss += action_loss.item()
+                         ~~~~~~~~~~~~~~~~^^
+RuntimeError: CUDA error: device-side assert triggered
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
