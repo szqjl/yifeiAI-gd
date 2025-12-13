@@ -1,0 +1,33 @@
+{
+  "evaluation_time": "2025-12-09T22:13:41.161921",
+  "total_samples": 796,
+  "total_matches": 288,
+  "overall_match_rate": 36.18090452261307,
+  "strategy_stats": {
+    "group": {
+      "expert": 115,
+      "predicted": 115,
+      "match": 115
+    },
+    "follow": {
+      "expert": 0,
+      "predicted": 0,
+      "match": 0
+    },
+    "control": {
+      "expert": 0,
+      "predicted": 0,
+      "match": 0
+    },
+    "discard": {
+      "expert": 173,
+      "predicted": 648,
+      "match": 173
+    },
+    "unknown": {
+      "expert": 475,
+      "predicted": 0,
+      "match": 0
+    }
+  }
+}

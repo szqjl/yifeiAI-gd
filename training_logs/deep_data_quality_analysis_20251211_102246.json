@@ -1,9 +1,0 @@
-{
-  "analysis_time": "2025-12-11 10:22:46",
-  "total_samples": 33023,
-  "state_vec_dimensions": {
-    "always_zero_count": 430,
-    "dim_info_summary": [
-      {
-        "dim": 123,
-        "non_zero_count": 

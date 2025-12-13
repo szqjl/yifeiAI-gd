@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "D:\guandanscore\YiFeiAI-GD\train_stage5.py", line 17, in <module>
+    from src.train.pretrain import train_bc
+  File "D:\guandanscore\YiFeiAI-GD\src\train\pretrain.py", line 1191
+    model = GuandanPolicyNet(
+    ^^^^^
+IndentationError: expected an indented block after 'else' statement on line 1190
