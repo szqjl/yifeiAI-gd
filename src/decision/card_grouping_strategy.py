@@ -251,6 +251,87 @@ def evaluate_grouping_effect(hand_cards: List[Union[str, int]], action_cards: Li
         score -= 10.0
         reasons.append("产生过多单牌")
     
+    # 8. 核心规则：检测拆对是否会破坏钢板或顺子组合
+    if action_type == "Single" or action_type == "SINGLE":
+        if len(action_cards) == 1 and action_cards:
+            # 获取被拆的牌点数
+            broken_card = action_cards[0]
+            if len(broken_card) >= 2:
+                broken_rank = broken_card[1] if len(broken_card) == 2 else broken_card[1:2]
+                
+                # 检查原始手牌中这个点数是否有对子（说明是拆对）
+                if original_rank_count.get(broken_rank, 0) >= 2:
+                    # 这是拆对，检查是否会破坏钢板或顺子组合
+                    rank_val_map = {'2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, 'T':10, 'J':11, 'Q':12, 'K':13, 'A':14}
+                    broken_val = rank_val_map.get(broken_rank, 0)
+                    
+                    if broken_val > 0:  # 有效点数
+                        # 检测钢板组合：检查broken_rank是否在连续3个对子中
+                        # 例如：223344、334455、445566、556677、778899、88991010等
+                        for start_val in range(max(2, broken_val - 2), min(12, broken_val + 3)):
+                            if start_val + 2 > 14:  # 超出范围
+                                continue
+                            
+                            # 检查连续3个对子
+                            three_pair_ranks = []
+                            can_form_three_pair = True
+                            for offset in range(3):
+                                check_val = start_val + offset
+                                check_rank = None
+                                for r, v in rank_val_map.items():
+                                    if v == check_val:
+                                        check_rank = r
+                                        break
+                                if check_rank and original_rank_count.get(check_rank, 0) >= 2:
+                                    three_pair_ranks.append(check_rank)
+                                else:
+                                    can_form_three_pair = False
+                                    break
+                            
+                            if can_form_three_pair and broken_rank in three_pair_ranks:
+                                # 拆对会破坏钢板组合，但不是绝对禁止，而是强烈建议保留
+                                # 模型可以在特殊情况下（如残局、关键压制等）覆盖此建议
+                                score -= 60.0  # 强烈建议减分（从100降到60，允许模型覆盖）
+                                reasons.append(f"组牌建议：拆对{broken_rank}会破坏钢板组合（{''.join(three_pair_ranks)}），建议保留对子（特殊情况可拆）")
+                                break
+                        
+                        # 检测顺子组合：检查broken_rank是否在连续5个点数的顺子中
+                        # 例如：2-6、3-7、4-8、5-9、6-10、7-J、8-Q、9-K、10-A等
+                        for start_val in range(max(2, broken_val - 4), min(11, broken_val + 1)):
+                            if start_val + 4 > 14:  # 超出范围
+                                continue
+                            
+                            # 检查连续5个点数是否都有牌
+                            straight_ranks = []
+                            can_form_straight = True
+                            for offset in range(5):
+                                check_val = start_val + offset
+                                check_rank = None
+                                for r, v in rank_val_map.items():
+                                    if v == check_val:
+                                        check_rank = r
+                                        break
+                                if check_rank and original_rank_count.get(check_rank, 0) >= 1:
+                                    straight_ranks.append(check_rank)
+                                else:
+                                    can_form_straight = False
+                                    break
+                            
+                            if can_form_straight and broken_rank in straight_ranks:
+                                # 检查拆对后是否还能组成顺子
+                                # 如果broken_rank只有2张，拆了1张后只剩1张，可能还能组成顺子
+                                # 但如果其他点数也只有1-2张，拆对可能破坏顺子组合的稳定性
+                                # 更严格的判断：如果broken_rank在顺子中，且是唯一对子，拆对会破坏
+                                broken_count_after = original_rank_count.get(broken_rank, 0) - 1
+                                other_ranks_weak = sum(1 for r in straight_ranks if r != broken_rank and original_rank_count.get(r, 0) <= 2)
+                                
+                                # 如果拆对后broken_rank只剩1张，且其他点数也较弱，拆对会破坏顺子
+                                # 但不是绝对禁止，模型可以在特殊情况下覆盖
+                                if broken_count_after == 1 and other_ranks_weak >= 2:
+                                    score -= 50.0  # 强烈建议减分（从90降到50，允许模型覆盖）
+                                    reasons.append(f"组牌建议：拆对{broken_rank}会破坏顺子组合（{'-'.join(straight_ranks)}），建议保留对子（特殊情况可拆）")
+                                    break
+    
     return {
         'score': score,
         'reasons': reasons,

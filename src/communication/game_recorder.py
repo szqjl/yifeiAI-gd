@@ -146,6 +146,9 @@ class GameRecorder:
             game_info: 游戏信息（等级、对手等）
             all_players_hands: 所有玩家的手牌 {pos: hand_cards}
         """
+        import logging
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        
         self.game_start_time = datetime.now()
         
         # 递增游戏计数器
@@ -172,6 +175,8 @@ class GameRecorder:
             "game_round": self.game_counter  # 新增：游戏轮次计数
         }
         
+        logger.info(f"✓ 开始记录游戏 #{self.game_counter}: game_id={game_id}, my_pos={my_pos}, hand_cards={len(hand_cards)}")
+        
     def record_action(self, cur_pos: int, cur_action: List, 
                      greater_pos: int = -1, greater_action: List = None,
                      context: Dict = None):
@@ -192,6 +197,9 @@ class GameRecorder:
         # 只保留原始的all_players_hands，确保它只包含手牌列表，不包含剩余牌数
         pass
         
+        # 验证卡牌合法性（检测服务器发牌错误）
+        self._validate_action_cards(cur_pos, cur_action)
+        
         action_record = {
             "timestamp": datetime.now().isoformat(),
             "cur_pos": cur_pos,
@@ -202,6 +210,70 @@ class GameRecorder:
         }
         
         self.current_game["actions"].append(action_record)
+    
+    def _validate_action_cards(self, cur_pos: int, cur_action: List):
+        """
+        验证动作中的卡牌是否合法（检测服务器发牌错误）
+        
+        Args:
+            cur_pos: 出牌玩家位置
+            cur_action: 当前动作
+        """
+        import logging
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        
+        try:
+            # 提取动作中的卡牌
+            action_cards = []
+            if isinstance(cur_action, list):
+                if len(cur_action) >= 3 and isinstance(cur_action[2], list):
+                    action_cards = cur_action[2]
+                elif all(isinstance(card, str) for card in cur_action):
+                    action_cards = cur_action
+            
+            if not action_cards:
+                return
+            
+            # 检查初始手牌（如果可用）
+            all_hands = self.current_game.get("all_players_hands", {})
+            initial_hand = all_hands.get(str(cur_pos), [])
+            
+            if not initial_hand:
+                # 如果没有初始手牌信息，无法验证
+                return
+            
+            # 统计卡牌出现次数
+            from collections import Counter
+            action_card_counts = Counter(action_cards)
+            initial_card_counts = Counter(initial_hand)
+            
+            # 检查是否有卡牌在动作中出现次数超过初始手牌
+            for card, count in action_card_counts.items():
+                initial_count = initial_card_counts.get(card, 0)
+                if count > initial_count:
+                    logger.warning(
+                        f"⚠ 卡牌验证失败：位置{cur_pos}的动作中，卡牌{card}出现{count}次，"
+                        f"但初始手牌中只有{initial_count}次！这可能是服务器发牌错误。"
+                    )
+                    print(
+                        f"[GameRecorder] ⚠ 警告：位置{cur_pos}的动作中，卡牌{card}出现{count}次，"
+                        f"但初始手牌中只有{initial_count}次！"
+                    )
+            
+            # 检查特殊卡牌（大王、小王）的数量
+            joker_cards = [card for card in action_cards if card.endswith('R') or card.endswith('B')]
+            if len(joker_cards) > 2:
+                logger.warning(
+                    f"⚠ 检测到异常：位置{cur_pos}的动作中包含{len(joker_cards)}张王牌（R或B），"
+                    f"这超过了正常数量（最多2张）！"
+                )
+                print(
+                    f"[GameRecorder] ⚠ 警告：位置{cur_pos}的动作中包含{len(joker_cards)}张王牌，"
+                    f"这可能是服务器发牌错误！"
+                )
+                
+        except Exception as e:
+            logger.debug(f"卡牌验证时出错（非关键）：{e}")
     
     def record_decision(self, action_index: int, action: List, 
                        score: float = None, layer: str = None,
@@ -239,30 +311,44 @@ class GameRecorder:
         Args:
             result: 游戏结果（victoryNum, draws等）
         """
+        import logging
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        
         if not self.current_game:
-            return
+            logger.warning(f"⚠ end_game() called but current_game is None! Player: {self.player_name}, Result: {result}")
+            logger.warning("可能的原因：start_game()没有被调用，或者current_game被意外重置")
+            return None
         
-        end_time = datetime.now()
-        self.current_game["end_time"] = end_time.isoformat()
-        self.current_game["duration"] = (end_time - self.game_start_time).total_seconds()
-        self.current_game["result"] = result
-        
-        # 生成文件名
-        # 格式：YYYYMMDDHHMMSSffffff [player_name]-[opponent_name].json
-        filename = self._generate_filename(result)
-        filepath = self.record_dir / filename
-        
-        # 保存为JSON文件
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(self.current_game, f, ensure_ascii=False, indent=2)
-        
-        print(f"游戏记录已保存: {filepath}")
-        
-        # 重置
-        self.current_game = None
-        self.game_start_time = None
-        
-        return filepath
+        try:
+            end_time = datetime.now()
+            self.current_game["end_time"] = end_time.isoformat()
+            self.current_game["duration"] = (end_time - self.game_start_time).total_seconds()
+            self.current_game["result"] = result
+            
+            # 生成文件名
+            # 格式：YYYYMMDDHHMMSSffffff [player_name]-[opponent_name].json
+            filename = self._generate_filename(result)
+            filepath = self.record_dir / filename
+            
+            # 确保目录存在
+            self.record_dir.mkdir(exist_ok=True)
+            
+            # 保存为JSON文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(self.current_game, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"✓ 游戏记录已保存: {filepath}")
+            print(f"游戏记录已保存: {filepath}")
+            
+            # 重置
+            self.current_game = None
+            self.game_start_time = None
+            
+            return filepath
+        except Exception as e:
+            logger.error(f"✗ 保存游戏记录失败: {e}", exc_info=True)
+            print(f"✗ 保存游戏记录失败: {e}")
+            return None
     
     def _generate_filename(self, result: Dict) -> str:
         """

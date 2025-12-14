@@ -277,9 +277,9 @@ class YF_V5_Stage5_DecisionEngine:
         self.player_id = player_id
         self.logger = logging.getLogger(f"YF_V5_Stage5_Player{player_id}")
 
-        # 初始化RL决策引擎（使用阶段5模型）
+        # 初始化RL决策引擎（使用超优化版模型）
         self.rl_engine = RLDecisionEngine(
-            model_path="models/bc_model_stage5_final.pth",
+            model_path="models/bc_model_stage5_ultra_optimized.pth",
             use_stage5_model=True
         )
 
@@ -317,7 +317,7 @@ class YF_V5_Stage5_DecisionEngine:
         total_time = self.decision_stats['avg_decision_time'] * (self.decision_stats['total_decisions'] - 1)
         self.decision_stats['avg_decision_time'] = (total_time + duration) / self.decision_stats['total_decisions']
 
-    def decide(self, message: Dict) -> Dict:
+    def decide(self, message: Dict) -> int:
         """
         阶段5增强决策流程
 
@@ -325,7 +325,7 @@ class YF_V5_Stage5_DecisionEngine:
             message: 服务器消息
 
         Returns:
-            决策结果
+            动作索引（int）
         """
         start_time = time.time()
 
@@ -333,44 +333,34 @@ class YF_V5_Stage5_DecisionEngine:
             # 1. 使用RL引擎进行基础决策
             action_index = self.rl_engine.decide(message)
 
-            # 2. 获取对应的动作
+            # 2. 验证动作索引有效性
             action_list = message.get("actionList", [])
-            if action_index < len(action_list):
-                selected_action = action_list[action_index]
-            else:
-                # 回退到PASS
-                selected_action = "PASS"
+            if action_index >= len(action_list) or action_index < 0:
+                self.logger.warning(f"Invalid action_index {action_index}, falling back to PASS")
+                action_index = 0
 
             # 3. 高级AI分析（异步进行，不影响决策速度）
-            game_state = self._extract_game_state(message)
-            ai_analysis = self.advanced_ai.analyze_game_state(game_state)
+            try:
+                game_state = self._extract_game_state(message)
+                ai_analysis = self.advanced_ai.analyze_game_state(game_state)
+                confidence = ai_analysis.get('confidence_scores', {}).get('overall_confidence', 0)
+            except Exception as e:
+                self.logger.debug(f"AI analysis failed (non-critical): {e}")
+                confidence = 0.5
 
             # 4. 记录决策统计
             duration = time.time() - start_time
             self.record_success("rl_decisions", duration)
 
-            # 5. 返回决策结果
-            result = {
-                'action': selected_action,
-                'action_index': action_index,
-                'ai_analysis': ai_analysis,
-                'decision_time': duration,
-                'stage5_enhanced': True
-            }
-
-            self.logger.info(f"Stage5 decision completed in {duration:.3f}s, AI confidence: {ai_analysis.get('confidence_scores', {}).get('overall_confidence', 0):.3f}")
-            return result
+            self.logger.debug(f"Stage5 decision: action_index={action_index}, time={duration:.3f}s, confidence={confidence:.3f}")
+            return action_index
 
         except Exception as e:
             self.logger.error(f"Stage5 decision failed: {e}")
-            # 回退到简单PASS决策
-            return {
-                'action': 'PASS',
-                'action_index': 0,
-                'error': str(e),
-                'decision_time': time.time() - start_time,
-                'stage5_enhanced': False
-            }
+            import traceback
+            self.logger.error(traceback.format_exc())
+            # 回退到PASS
+            return 0
 
     def _extract_game_state(self, message: Dict) -> Dict:
         """从消息中提取游戏状态"""
@@ -385,3 +375,132 @@ class YF_V5_Stage5_DecisionEngine:
     def get_stats(self) -> Dict:
         """获取决策统计信息"""
         return self.decision_stats.copy()
+    
+    def get_statistics(self) -> Dict:
+        """
+        获取统计信息（兼容客户端接口）
+        
+        Returns:
+            统计信息字典，包含layer_usage等
+        """
+        # 构建兼容的统计格式
+        stats = {
+            'layer_usage': {
+                'RL': {
+                    'success': self.decision_stats.get('rl_decisions', 0),
+                    'failure': max(0, self.decision_stats.get('total_decisions', 0) - self.decision_stats.get('rl_decisions', 0))
+                },
+                'Knowledge': {
+                    'success': self.decision_stats.get('knowledge_decisions', 0),
+                    'failure': 0
+                },
+                'Rule': {
+                    'success': self.decision_stats.get('rule_decisions', 0),
+                    'failure': 0
+                },
+                'AdvancedAI': {
+                    'success': self.decision_stats.get('advanced_ai_decisions', 0),
+                    'failure': 0
+                }
+            },
+            'total_decisions': self.decision_stats.get('total_decisions', 0),
+            'avg_decision_time': self.decision_stats.get('avg_decision_time', 0.0)
+        }
+        return stats
+    
+    def reset_statistics(self):
+        """重置统计信息（新游戏开始时调用）"""
+        self.decision_stats = {
+            'total_decisions': 0,
+            'rl_decisions': 0,
+            'knowledge_decisions': 0,
+            'rule_decisions': 0,
+            'advanced_ai_decisions': 0,
+            'avg_decision_time': 0.0
+        }
+        self.logger.info("Statistics reset for new game")
+    
+    def _generate_candidates(self, message: Dict) -> List[Tuple[int, float, str]]:
+        """
+        生成候选动作（兼容客户端接口）
+        
+        Args:
+            message: 游戏状态消息
+            
+        Returns:
+            候选动作列表: [(action_idx, score, layer), ...]
+        """
+        candidates = []
+        action_list = message.get("actionList", [])
+        
+        if not action_list:
+            return candidates
+        
+        try:
+            # 使用RL引擎生成基础候选
+            action_index = self.rl_engine.decide(message)
+            
+            # 验证动作索引
+            if 0 <= action_index < len(action_list):
+                # RL决策作为主要候选
+                candidates.append((action_index, 100.0, "RL"))
+                
+                # 添加其他动作作为备选（分数较低）
+                for idx in range(len(action_list)):
+                    if idx != action_index:
+                        # 根据索引距离给予不同分数
+                        distance = abs(idx - action_index)
+                        score = max(10.0, 50.0 - distance * 5.0)
+                        candidates.append((idx, score, "Fallback"))
+            else:
+                # 如果RL决策无效，添加所有动作作为候选
+                for idx in range(len(action_list)):
+                    candidates.append((idx, 50.0, "Fallback"))
+                    
+        except Exception as e:
+            self.logger.warning(f"Failed to generate candidates: {e}")
+            # 回退：添加所有动作
+            for idx in range(len(action_list)):
+                candidates.append((idx, 30.0, "Fallback"))
+        
+        return candidates
+    
+    def _enhance_candidates(self, candidates: List[Tuple[int, float, str]], message: Dict) -> List[Tuple[int, float, str]]:
+        """
+        增强候选动作（兼容客户端接口）
+        
+        Args:
+            candidates: 基础候选列表
+            message: 游戏状态消息
+            
+        Returns:
+            增强后的候选列表
+        """
+        if not candidates:
+            return candidates
+        
+        try:
+            # 使用高级AI分析增强候选分数
+            game_state = self._extract_game_state(message)
+            ai_analysis = self.advanced_ai.analyze_game_state(game_state)
+            
+            # 获取AI置信度
+            confidence = ai_analysis.get('confidence_scores', {}).get('overall_confidence', 0.5)
+            
+            # 根据AI分析调整候选分数
+            enhanced_candidates = []
+            for idx, score, layer in candidates:
+                # 如果AI置信度高，提升RL候选的分数
+                if layer == "RL" and confidence > 0.7:
+                    enhanced_score = score * (1.0 + confidence * 0.2)
+                else:
+                    enhanced_score = score
+                
+                enhanced_candidates.append((idx, enhanced_score, layer))
+            
+            return enhanced_candidates
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to enhance candidates: {e}")
+            # 返回原始候选
+            return candidates
