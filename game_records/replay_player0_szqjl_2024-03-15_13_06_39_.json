@@ -1,0 +1,63 @@
+{
+  "player_id": 0,
+  "initial_hand": [
+    "D9",
+    "D3",
+    "C3",
+    "D7",
+    "H3",
+    "R",
+    "S6",
+    "S9",
+    "H7",
+    "S8",
+    "H5",
+    "S5",
+    "HJ",
+    "H8",
+    "C7",
+    "S3",
+    "D2",
+    "HQ",
+    "S4",
+    "S7",
+    "H2",
+    "C4",
+    "DT",
+    "HA"
+  ],
+  "actions": [
+    {
+      "cur_pos": 0,
+      "cur_action": "['Discard', 'Discard', ['HA', 'DA']]"
+    },
+    {
+      "cur_pos": 0,
+      "cur_action": "['Discard', 'Discard', ['S3', 'H3', 'C3', 'D3', 'DA']]"
+    },
+    {
+      "cur_pos": 0,
+      "cur_action": "['Discard', 'Discard', ['HQ', 'HJ', 'DT', 'S9', 'H8', 'DA']]"
+    },
+    {
+      "cur_pos": 0,
+      "cur_action": "['Discard', 'Discard', ['B', 'DA']]"
+    },
+    {
+      "cur_pos": 0,
+      "cur_action": "['Discard', 'Discard', ['R', 'DA']]"
+    },
+    {
+      "cur_pos": 0,
+      "cur_action": "['Discard', 'Discard', ['S9', 'D9', 'D9', 'H2', 'D2', 'DA']]"
+    },
+    {
+      "cur_pos": 0,
+      "cur_action": "['Discard', 'Discard', ['H5', 'H7', 'C7', 'C7', 'D7', 'DA']]"
+    },
+    {
+      "cur_pos": 0,
+      "cur_action": "['Discard', 'Discard', ['S8', 'S7', 'S6', 'S5', 'S4', 'D0']]"
+    }
+  ]
+}
