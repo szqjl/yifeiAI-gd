@@ -304,6 +304,17 @@ class ReplayParser:
                         # 如果导入失败或计算出错，使用默认值
                         state['strategy_effectiveness'] = 0.0
                     
+                    # **新增**：标注6个策略学习任务
+                    strategy_labels = self._annotate_strategy_tasks(
+                        state_dict=state,
+                        action_cards=cards_played,
+                        action_type=action_type,
+                        game_phase=game_phase,
+                        hand_cards=hero_hand,
+                        last_action=last_action
+                    )
+                    state['strategy_tasks'] = strategy_labels
+                    
                     # Target Action
                     target = cards_played
                     
@@ -335,6 +346,147 @@ class ReplayParser:
                             all_hands[actor_pos].remove(card)
                 
         return dataset
+    
+    def _annotate_strategy_tasks(self, state_dict: Dict, action_cards: List[str], 
+                                 action_type: str, game_phase: int, 
+                                 hand_cards: List[str], last_action: Dict = None) -> Dict:
+        """
+        标注6个策略学习任务
+        
+        返回:
+            {
+                'grouping': int,          # 0-6: 不组牌/组对子/组三张/组三带二/组顺子/组钢板/组木板
+                'role': int,              # 0-2: 主攻/助攻/平衡
+                'power': float,           # 0-10: 牌力分数
+                'protect_suppress': int,  # 0-2: 保护队友/压制对手/无
+                'bomb_timing': int,       # 0-4: 开局/中期/残局/关键压制/不出
+                'red_heart': int          # 0-3: 组牌/炸弹/保留/不使用
+            }
+        """
+        try:
+            from src.decision.card_power_evaluator import calculate_card_power
+            
+            # 任务1: 组牌策略分类
+            grouping_label = self._annotate_grouping_strategy(action_cards, action_type, hand_cards)
+            
+            # 任务2: 角色判断（基于牌力）
+            game_phase_str = ['opening', 'mid', 'endgame'][game_phase] if game_phase in [0, 1, 2] else 'mid'
+            power_result = calculate_card_power(hand_cards, game_phase=game_phase_str)
+            power_score = power_result.get('total_power', 5.0)
+            role_label = 0 if power_score >= 7 else (1 if power_score < 5 else 2)  # 主攻/助攻/平衡
+            
+            # 任务3: 牌力评估（归一化到0-10）
+            normalized_power = min(max(power_score / 2.0, 0.0), 10.0)  # 假设最大牌力约20
+            
+            # 任务4: 保护/压制判断
+            protect_suppress_label = self._annotate_protect_suppress(
+                state_dict, action_cards, action_type, last_action
+            )
+            
+            # 任务5: 炸弹出炸时机
+            bomb_timing_label = self._annotate_bomb_timing(
+                action_type, game_phase, state_dict, action_cards
+            )
+            
+            # 任务6: 红心配策略
+            red_heart_label = self._annotate_red_heart_strategy(
+                action_cards, action_type, hand_cards
+            )
+            
+            return {
+                'grouping': grouping_label,
+                'role': role_label,
+                'power': normalized_power,
+                'protect_suppress': protect_suppress_label,
+                'bomb_timing': bomb_timing_label,
+                'red_heart': red_heart_label
+            }
+        except Exception as e:
+            # 如果标注失败，返回默认值
+            return {
+                'grouping': 0,  # 不组牌
+                'role': 2,      # 平衡
+                'power': 5.0,   # 中等牌力
+                'protect_suppress': 2,  # 无
+                'bomb_timing': 4,  # 不出
+                'red_heart': 3  # 不使用
+            }
+    
+    def _annotate_grouping_strategy(self, action_cards: List[str], action_type: str, hand_cards: List[str]) -> int:
+        """标注组牌策略：0=不组牌, 1=组对子, 2=组三张, 3=组三带二, 4=组顺子, 5=组钢板, 6=组木板"""
+        if action_type == 'PASS':
+            return 0  # 不组牌
+        
+        # 根据action_type判断
+        type_map = {
+            'Pair': 1,              # 组对子
+            'Trips': 2,             # 组三张
+            'ThreeWithTwo': 3,      # 组三带二
+            'Straight': 4,          # 组顺子
+            'TwoTrips': 5,          # 组钢板
+            'ThreePair': 6,         # 组木板
+            'Single': 0,            # 不组牌（单张）
+            'Bomb': 0               # 不组牌（炸弹）
+        }
+        return type_map.get(action_type, 0)
+    
+    def _annotate_protect_suppress(self, state_dict: Dict, action_cards: List[str], 
+                                   action_type: str, last_action: Dict) -> int:
+        """标注保护/压制：0=保护队友, 1=压制对手, 2=无"""
+        if action_type == 'PASS':
+            return 2  # 无
+        
+        # 检查是否是保护队友（队友刚出牌，自己PASS或跟牌）
+        strategy_type = state_dict.get('strategy_type', 'unknown')
+        if strategy_type == 'protect':
+            return 0  # 保护队友
+        elif strategy_type == 'suppress':
+            return 1  # 压制对手
+        
+        # 默认：无特殊意图
+        return 2
+    
+    def _annotate_bomb_timing(self, action_type: str, game_phase: int, 
+                             state_dict: Dict, action_cards: List[str]) -> int:
+        """标注炸弹出炸时机：0=开局, 1=中期, 2=残局, 3=关键压制, 4=不出"""
+        if action_type != 'Bomb':
+            return 4  # 不出
+        
+        # 根据游戏阶段判断
+        if game_phase == 0:  # 开局
+            return 0
+        elif game_phase == 1:  # 中期
+            return 1
+        elif game_phase == 2:  # 残局
+            return 2
+        
+        # 检查是否是关键压制
+        strategy_type = state_dict.get('strategy_type', 'unknown')
+        if strategy_type == 'suppress' and len(action_cards) >= 4:
+            return 3  # 关键压制
+        
+        return 1  # 默认：中期
+    
+    def _annotate_red_heart_strategy(self, action_cards: List[str], action_type: str, hand_cards: List[str]) -> int:
+        """标注红心配策略：0=组牌, 1=炸弹, 2=保留, 3=不使用"""
+        # 检查action_cards中是否包含红心配（HR）
+        has_red_heart_in_action = any('HR' in card or card == 'HR' for card in action_cards)
+        
+        if not has_red_heart_in_action:
+            # 检查手牌中是否有红心配但未使用
+            has_red_heart_in_hand = any('HR' in card or card == 'HR' for card in hand_cards)
+            if has_red_heart_in_hand:
+                return 2  # 保留
+            else:
+                return 3  # 不使用
+        
+        # 如果使用了红心配，判断用途
+        if action_type == 'Bomb':
+            return 1  # 炸弹
+        elif action_type in ['Pair', 'Trips', 'ThreeWithTwo', 'Straight', 'TwoTrips', 'ThreePair']:
+            return 0  # 组牌
+        else:
+            return 0  # 默认：组牌
 
 if __name__ == "__main__":
     # 测试脚本

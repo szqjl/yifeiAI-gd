@@ -180,10 +180,24 @@ class GuandanPolicyNet(nn.Module):
 class ImprovedGuandanPolicyNet(nn.Module):
 
     def __init__(self, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate=0.1,
-                 strategy_num_classes=7, enable_strategy_head=True, attention_heads=8):
+                 strategy_num_classes=7, enable_strategy_head=True, attention_heads=8,
+                 enable_strategy_tasks=True):
+        """
+        改进的策略网络 - 支持6个策略学习任务
+        
+        Args:
+            enable_strategy_tasks: 是否启用6个策略学习任务头
+                - 任务1: 组牌策略分类（是否组牌、组什么牌型）
+                - 任务2: 角色判断（主攻/助攻/平衡）
+                - 任务3: 牌力评估（0-10分，回归任务）
+                - 任务4: 保护/压制判断（保护队友/压制对手/无）
+                - 任务5: 炸弹出炸时机（开局/中期/残局/关键压制/不出）
+                - 任务6: 红心配策略（组牌/炸弹/保留/不使用）
+        """
         super(ImprovedGuandanPolicyNet, self).__init__()
 
         self.enable_strategy_head = enable_strategy_head
+        self.enable_strategy_tasks = enable_strategy_tasks
         self.attention_heads = attention_heads
 
         # 改进的特征提取层
@@ -224,6 +238,63 @@ class ImprovedGuandanPolicyNet(nn.Module):
         self.action_head = nn.Linear(hidden_dim, output_dim)
         if enable_strategy_head:
             self.strategy_head = nn.Linear(hidden_dim, strategy_num_classes)
+        
+        # 6个策略学习任务头（新增）
+        if enable_strategy_tasks:
+            # 任务1: 组牌策略分类（是否组牌、组什么牌型）
+            # 类别：不组牌(0)、组对子(1)、组三张(2)、组三带二(3)、组顺子(4)、组钢板(5)、组木板(6)
+            self.grouping_processor = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.LayerNorm(hidden_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(dropout_rate)
+            )
+            self.grouping_head = nn.Linear(hidden_dim // 2, 7)  # 7类组牌策略
+            
+            # 任务2: 角色判断（主攻/助攻/平衡）
+            self.role_processor = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.LayerNorm(hidden_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(dropout_rate)
+            )
+            self.role_head = nn.Linear(hidden_dim // 2, 3)  # 3类角色
+            
+            # 任务3: 牌力评估（0-10分，回归任务）
+            self.power_processor = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.LayerNorm(hidden_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(dropout_rate)
+            )
+            self.power_head = nn.Linear(hidden_dim // 2, 1)  # 回归任务，输出1个分数
+            
+            # 任务4: 保护/压制判断（保护队友/压制对手/无）
+            self.protect_suppress_processor = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.LayerNorm(hidden_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(dropout_rate)
+            )
+            self.protect_suppress_head = nn.Linear(hidden_dim // 2, 3)  # 3类：保护/压制/无
+            
+            # 任务5: 炸弹出炸时机（开局/中期/残局/关键压制/不出）
+            self.bomb_timing_processor = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.LayerNorm(hidden_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(dropout_rate)
+            )
+            self.bomb_timing_head = nn.Linear(hidden_dim // 2, 5)  # 5类时机
+            
+            # 任务6: 红心配策略（组牌/炸弹/保留/不使用）
+            self.red_heart_processor = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.LayerNorm(hidden_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(dropout_rate)
+            )
+            self.red_heart_head = nn.Linear(hidden_dim // 2, 4)  # 4类策略
 
         # 初始化权重
         self._initialize_weights()
@@ -236,9 +307,13 @@ class ImprovedGuandanPolicyNet(nn.Module):
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
 
-    def forward(self, x, return_strategy=False):
+    def forward(self, x, return_strategy=False, return_strategy_tasks=False):
         """
         前向传播 with attention and residual connections
+        
+        Args:
+            return_strategy: 是否返回策略分类（7类）
+            return_strategy_tasks: 是否返回6个策略学习任务输出
         """
         batch_size = x.size(0)
 
@@ -260,12 +335,55 @@ class ImprovedGuandanPolicyNet(nn.Module):
         action_features = self.action_processor(features)
         action_logits = self.action_head(action_features)
 
+        result = [action_logits]
+        
         if return_strategy and self.enable_strategy_head:
             strategy_features = self.strategy_processor(features)
             strategy_logits = self.strategy_head(strategy_features)
-            return action_logits, strategy_logits
+            result.append(strategy_logits)
+        
+        # 6个策略学习任务输出（新增）
+        if return_strategy_tasks and self.enable_strategy_tasks:
+            # 任务1: 组牌策略
+            grouping_features = self.grouping_processor(features)
+            grouping_logits = self.grouping_head(grouping_features)
+            
+            # 任务2: 角色判断
+            role_features = self.role_processor(features)
+            role_logits = self.role_head(role_features)
+            
+            # 任务3: 牌力评估（回归）
+            power_features = self.power_processor(features)
+            power_score = self.power_head(power_features)  # 回归任务，输出分数
+            
+            # 任务4: 保护/压制判断
+            protect_suppress_features = self.protect_suppress_processor(features)
+            protect_suppress_logits = self.protect_suppress_head(protect_suppress_features)
+            
+            # 任务5: 炸弹出炸时机
+            bomb_timing_features = self.bomb_timing_processor(features)
+            bomb_timing_logits = self.bomb_timing_head(bomb_timing_features)
+            
+            # 任务6: 红心配策略
+            red_heart_features = self.red_heart_processor(features)
+            red_heart_logits = self.red_heart_head(red_heart_features)
+            
+            strategy_tasks = {
+                'grouping': grouping_logits,           # (batch, 7)
+                'role': role_logits,                    # (batch, 3)
+                'power': power_score,                   # (batch, 1) 回归
+                'protect_suppress': protect_suppress_logits,  # (batch, 3)
+                'bomb_timing': bomb_timing_logits,      # (batch, 5)
+                'red_heart': red_heart_logits           # (batch, 4)
+            }
+            result.append(strategy_tasks)
+        
+        if len(result) == 1:
+            return result[0]
+        elif len(result) == 2:
+            return tuple(result)
         else:
-            return action_logits
+            return tuple(result)
 
     def get_strategy_probs(self, x):
         """获取策略分类概率分布"""
