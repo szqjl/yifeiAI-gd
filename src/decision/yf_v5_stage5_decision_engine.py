@@ -341,8 +341,8 @@ class YF_V5_Stage5_DecisionEngine:
 
             # 3. 高级AI分析（异步进行，不影响决策速度）
             try:
-                game_state = self._extract_game_state(message)
-                ai_analysis = self.advanced_ai.analyze_game_state(game_state)
+            game_state = self._extract_game_state(message)
+            ai_analysis = self.advanced_ai.analyze_game_state(game_state)
                 confidence = ai_analysis.get('confidence_scores', {}).get('overall_confidence', 0)
             except Exception as e:
                 self.logger.debug(f"AI analysis failed (non-critical): {e}")

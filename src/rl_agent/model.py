@@ -336,7 +336,7 @@ class ImprovedGuandanPolicyNet(nn.Module):
         action_logits = self.action_head(action_features)
 
         result = [action_logits]
-        
+
         if return_strategy and self.enable_strategy_head:
             strategy_features = self.strategy_processor(features)
             strategy_logits = self.strategy_head(strategy_features)

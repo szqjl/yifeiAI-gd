@@ -40,7 +40,8 @@ def _normalize_cards(cards: List[Union[str, int]]) -> List[str]:
 
 def evaluate_grouping_effect(hand_cards: List[Union[str, int]], action_cards: List[Union[str, int]], 
                              action_type: str, game_phase: str, power: float, 
-                             cur_rank: str = "2") -> Dict:
+                             cur_rank: str = "2", my_rest_cards: int = 27, 
+                             opponent_rest_cards: int = 27, is_teammate_action: bool = False) -> Dict:
     """
     评估动作的组牌效果
     
@@ -191,10 +192,11 @@ def evaluate_grouping_effect(hand_cards: List[Union[str, int]], action_cards: Li
             score += 15.0
             reasons.append("三带对减少手数")
     
-    # 检查是否使用了红桃配（百搭牌，通常是H2）
+    # 检查是否使用了红桃配（百搭牌，红心级牌 = H + cur_rank）
     has_wild_card = False
+    red_heart_wildcard = f"H{cur_rank}"  # 红心级牌（逢人配、百搭）
     for card in action_cards:
-        if isinstance(card, str) and card.startswith('H2'):  # 红桃2是百搭牌
+        if isinstance(card, str) and card.startswith(red_heart_wildcard):
             has_wild_card = True
             break
     
@@ -208,16 +210,135 @@ def evaluate_grouping_effect(hand_cards: List[Union[str, int]], action_cards: Li
             reasons.append(f"保留{len(bomb_ranks)}个炸弹")
     
     # 4. 红桃配（百搭牌）策略：红心配炸弹留到最后再使用，初期保留
+    # 核心原则：首配4头和同花，可配6头，忌配5头。实战中逢人配成炸比例为85%。
+    # 禁止用红心配组小顺子（浪费百搭牌价值）
     if has_wild_card:
         if action_type in ["Bomb", "BOMB"]:
             if game_phase in ["early", "mid"]:
                 # 初期/中期使用红桃配炸弹，给予减分
                 score -= 30.0
                 reasons.append("红桃配炸弹留到最后再使用，初期保留")
+        elif action_type in ["Straight", "STRAIGHT"]:
+            # **关键修复**：用红心配组顺子，特别是小顺子，大幅减分
+            # 检查顺子大小（通过action_cards数量判断，5张顺子通常较小）
+            if len(action_cards) == 5:
+                # 小顺子（5张），用红心配组小顺子浪费百搭牌价值
+                score -= 80.0  # 大幅减分（从-20提升到-80）
+                reasons.append(f"核心规则：禁止用红心配组小顺子，浪费百搭牌价值（应保留用于炸弹或关键组合）")
+            else:
+                # 长顺子，也减分但力度稍小
+                score -= 50.0
+                reasons.append("红心配组顺子，应优先用于炸弹或同花顺")
+        elif action_type == "StraightFlush":
+            # 同花顺可以接受，但初期仍减分
+            if game_phase == "early":
+                score -= 30.0
+                reasons.append("初期用红心配组同花顺，建议保留到关键时机")
+        elif action_type in ["ThreePair", "THREE_PAIR"]:
+            # **配木板（三连对）策略**：根据牌力和阶段判断
+            # 知识库：1. 主攻减少手数（33、4、55补成木板，减少2手赘牌）
+            #         2. 助攻尽量组成木板不要出，保留多种牌型
+            if power >= 7:  # 主攻（牌力强）
+                if game_phase == "endgame" or my_rest_cards <= 10:
+                    # 残局阶段，主攻配木板减少手数，可以接受
+                    score -= 20.0  # 轻微减分，允许但非最优
+                    reasons.append("残局主攻用红心配组木板减少手数，可接受但非最优（应优先配炸）")
+                else:
+                    # 非残局阶段，主攻配木板，减分但力度较小
+                    score -= 50.0
+                    reasons.append("主攻用红心配组木板减少手数，但应优先保留用于配炸")
+            else:  # 助攻（牌力弱）
+                # 助攻尽量组成木板不要出，保留多种牌型，所以配木板可以接受
+                if game_phase == "endgame":
+                    # 残局助攻配木板，可以接受
+                    score -= 15.0
+                    reasons.append("残局助攻用红心配组木板保留牌型，可接受")
+                else:
+                    # 非残局助攻配木板，保留牌型，减分较小
+                    score -= 30.0
+                    reasons.append("助攻用红心配组木板保留牌型，可接受但应优先配炸")
+        elif action_type in ["TwoTrips", "TWO_TRIPS"]:
+            # **配钢板策略**：主要是主攻减少手数，或者避免对手压制，或者逼对手炸弹
+            if power >= 7:  # 主攻（牌力强）
+                if game_phase == "endgame" or my_rest_cards <= 10:
+                    # 残局阶段，主攻配钢板减少手数或逼炸，可以接受
+                    score -= 25.0
+                    reasons.append("残局主攻用红心配组钢板减少手数/逼炸，可接受但非最优")
+                else:
+                    # 非残局阶段，主攻配钢板，减分
+                    score -= 60.0
+                    reasons.append("主攻用红心配组钢板，应优先保留用于配炸")
+            else:  # 助攻（牌力弱）
+                # 助攻配钢板，减分较大
+                if game_phase == "endgame":
+                    score -= 40.0
+                    reasons.append("残局助攻用红心配组钢板，不推荐（应优先配炸）")
+                else:
+                    score -= 70.0
+                    reasons.append("助攻用红心配组钢板，不推荐（应优先配炸或保留）")
+        elif action_type in ["ThreeWithTwo", "THREE_WITH_TWO"]:
+            # **配三带二策略**：根据牌力和阶段判断
+            # 知识库：1. 减少手数，便于争上游（小对子多，一下出两手）
+            #         2. 手中就剩5张牌，恰好三带二直接走牌
+            #         3. 管压对手三带二
+            #         4. 送队友
+            if my_rest_cards == 5:
+                # 手中就剩5张牌，恰好三带二直接走牌，可以接受
+                score -= 15.0  # 轻微减分，允许
+                reasons.append("残局剩5张用红心配组三带二直接走牌，可接受")
+            elif game_phase == "endgame" or my_rest_cards <= 10:
+                # 残局阶段，配三带二减少手数
+                if power >= 7:  # 主攻
+                    score -= 20.0
+                    reasons.append("残局主攻用红心配组三带二减少手数，可接受但非最优")
+                else:  # 助攻
+                    score -= 30.0
+                    reasons.append("残局助攻用红心配组三带二，不推荐（应优先配炸）")
+            else:
+                # 非残局阶段，配三带二不推荐
+                if power >= 7:  # 主攻
+                    score -= 60.0
+                    reasons.append("主攻用红心配组三带二，应优先保留用于配炸")
+                else:  # 助攻
+                    score -= 70.0
+                    reasons.append("助攻用红心配组三带二，不推荐（应优先配炸或保留）")
+        elif action_type in ["Pair", "PAIR"]:
+            # **核心规则**：禁止用红心配组对子（特别是小对子），这是最浪费的用法
+            # 根据知识库：残局时配小对子有两种情况：1. 防对手（对手剩1张或5张） 2. 送队友
+            # 非残局阶段，用红心配配对子是严重浪费
+            if len(action_cards) == 2:
+                # 检查是否是小对子（3-9）
+                action_rank = ""
+                for card in action_cards:
+                    if len(card) >= 2:
+                        rank = card[1] if len(card) == 2 else card[1:2]
+                        if rank != cur_rank:  # 不是级牌本身
+                            action_rank = rank
+                            break
+                
+                rank_map = {'3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, 'T':10, 'J':11, 'Q':12, 'K':13, 'A':14, '2':15}
+                rank_val = rank_map.get(action_rank, 0)
+                
+                # 非残局阶段，禁止用红心配配对子
+                if game_phase != "endgame":
+                    if rank_val <= 7:  # 3-7是小对子
+                        score -= 120.0  # 大幅减分，强制禁止用红心配组小对子
+                        reasons.append(f"核心规则：禁止用红心配组小对子（{action_rank}），这是最浪费的用法，应保留用于炸弹或关键组合")
+                    else:  # 8以上
+                        score -= 80.0  # 大幅减分，不鼓励用红心配组对子
+                        reasons.append(f"核心规则：禁止用红心配组对子（{action_rank}），应保留用于炸弹或关键组合")
+                else:
+                    # 残局阶段，配小对子可以接受（防对手或送队友），但仍有减分
+                    if rank_val <= 7:  # 小对子
+                        score -= 30.0  # 残局配小对子，轻微减分
+                        reasons.append(f"残局用红心配组小对子（{action_rank}），可接受但非最优")
+                    else:
+                        score -= 20.0
+                        reasons.append(f"残局用红心配组对子（{action_rank}），可接受")
         else:
             if game_phase == "early":
                 # 初期使用红桃配组其他牌型，给予减分
-                score -= 20.0
+                score -= 40.0  # 从-20提升到-40
                 reasons.append("初期保留红桃配，为后期提供更多战略变化")
     
     # 4. 惩罚：拆炸弹组其他牌型
@@ -341,7 +462,9 @@ def evaluate_grouping_effect(hand_cards: List[Union[str, int]], action_cards: Li
 
 
 def grouping_strategy(hand_cards: List[str], action_list: List, 
-                     game_phase: str, power: float, cur_rank: str = "2") -> Dict:
+                     game_phase: str, power: float, cur_rank: str = "2",
+                     my_rest_cards: int = 27, opponent_rest_cards: int = 27,
+                     is_teammate_action: bool = False) -> Dict:
     """
     组牌策略主函数
     
@@ -349,6 +472,8 @@ def grouping_strategy(hand_cards: List[str], action_list: List,
     
     Args:
         cur_rank: 当前级牌（如"2"），用于判断是否可以组同花顺
+        my_rest_cards: 自己剩余牌数
+        opponent_rest_cards: 对手剩余牌数
     
     Returns:
         {
@@ -366,7 +491,8 @@ def grouping_strategy(hand_cards: List[str], action_list: List,
         
         # 评估组牌效果
         grouping_result = evaluate_grouping_effect(
-            hand_cards, action_cards, action_type, game_phase, power, cur_rank
+            hand_cards, action_cards, action_type, game_phase, power, cur_rank,
+            my_rest_cards, opponent_rest_cards, is_teammate_action
         )
         
         # 即使评分为负，也记录建议（用于警告）
