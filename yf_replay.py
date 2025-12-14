@@ -140,11 +140,16 @@ class YiFeiReplayGUI:
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
     
     def _load_game_records(self):
-        """加载游戏记录列表"""
+        """加载游戏记录列表（支持 JSON 和 Pickle 格式）"""
         self.status_bar.config(text="正在加载游戏记录...")
         
-        # 查找所有JSON文件
-        game_files = list(Path("game_records").glob("*.json"))
+        # 查找所有JSON和.data文件
+        json_files = list(Path("game_records").glob("*.json"))
+        data_files = list(Path("game_records").glob("*.data"))
+        
+        # 合并文件列表
+        game_files = json_files + data_files
+        
         # 过滤掉增强版文件，只显示原始记录
         self.game_records = [f for f in game_files if not f.name.startswith("enhanced_")]
         
@@ -157,13 +162,20 @@ class YiFeiReplayGUI:
             self.game_combobox.current(0)
             self._on_game_selected(None)
         
-        self.status_bar.config(text=f"加载完成，共找到 {len(self.game_records)} 个游戏记录")
+        json_count = len([f for f in self.game_records if f.suffix == '.json'])
+        data_count = len([f for f in self.game_records if f.suffix == '.data'])
+        self.status_bar.config(text=f"加载完成，共找到 {len(self.game_records)} 个游戏记录（JSON: {json_count}, Pickle: {data_count}）")
     
     def _load_file(self):
-        """加载指定的游戏文件"""
+        """加载指定的游戏文件（支持 JSON 和 Pickle 格式）"""
         file_path = filedialog.askopenfilename(
             title="选择游戏记录文件",
-            filetypes=[("JSON文件", "*.json"), ("所有文件", "*.*")],
+            filetypes=[
+                ("所有支持格式", "*.json;*.data"),
+                ("JSON文件", "*.json"),
+                ("Pickle文件", "*.data"),
+                ("所有文件", "*.*")
+            ],
             initialdir="game_records"
         )
         if file_path:
@@ -237,11 +249,47 @@ class YiFeiReplayGUI:
         # 保存初始手牌（所有玩家）
         self.initial_hands = {}
         
-        # 1. 从initial_hand获取当前玩家的初始手牌
+        # **关键修复**：先处理贡牌和还牌，调整初始手牌
+        # 贡牌和还牌发生在游戏开始之前，需要从my_decisions中获取并调整初始手牌
+        tribute_info = {}  # {from_pos: {to_pos: [cards]}}
+        back_info = {}     # {from_pos: {to_pos: [cards]}}
+        
+        # 从my_decisions中提取贡牌和还牌信息
+        if self.my_decisions:
+            for decision in self.my_decisions:
+                action = decision.get('action', [])
+                if not action or not isinstance(action, list):
+                    continue
+                
+                action_type = action[0] if len(action) > 0 else ""
+                action_type_upper = action_type.upper() if action_type else ""
+                
+                # 处理贡牌（tribute）
+                if action_type_upper == "TRIBUTE" or action_type == "tribute":
+                    # 贡牌格式：[tribute, tribute, [cards]]
+                    if len(action) >= 3 and isinstance(action[2], list):
+                        tribute_cards = action[2]
+                        from_pos = self.player_id
+                        # 贡牌通常是给上局输家，这里需要从游戏信息中获取
+                        # 暂时记录，后续可以通过其他信息补充
+                        if from_pos not in tribute_info:
+                            tribute_info[from_pos] = {}
+                        # 由于不知道接收者，先记录cards，后续处理
+                        tribute_info[from_pos]['cards'] = tribute_cards
+                
+                # 处理还牌（back）
+                elif action_type_upper == "BACK" or action_type == "back":
+                    # 还牌格式：[back, back, [cards]]
+                    if len(action) >= 3 and isinstance(action[2], list):
+                        back_cards = action[2]
+                        # 还牌是接收者给贡牌者的
+                        # 由于还牌信息可能不在my_decisions中，这里先记录
+        
+        # 1. 从initial_hand获取当前玩家的初始手牌（这是服务器分发后的手牌，已包含贡牌还牌）
         if 'initial_hand' in self.current_game_data:
             self.initial_hands[str(self.player_id)] = self.current_game_data['initial_hand'].copy()
         
-        # 2. 从all_players_hands获取所有玩家的初始手牌
+        # 2. 从all_players_hands获取所有玩家的初始手牌（这是服务器分发后的手牌）
         if 'all_players_hands' in self.current_game_data:
             for pos, cards in self.current_game_data['all_players_hands'].items():
                 pos_str = str(pos)
@@ -251,6 +299,48 @@ class YiFeiReplayGUI:
                 else:
                     # 如果不是列表，跳过或使用空列表
                     self.initial_hands[pos_str] = []
+        
+        # **关键修复**：根据贡牌还牌信息调整初始手牌
+        # initial_hand是服务器分发后的手牌（已包含贡牌还牌），这是正确的显示手牌
+        # 但我们需要知道贡牌还牌的过程，以便在_calculate_current_hands中正确处理
+        
+        # 保存贡牌还牌信息，用于后续处理
+        self.tribute_info = {}  # {from_pos: {cards: [cards], to_pos: None}}  # to_pos需要从游戏规则推断
+        self.back_info = {}     # {from_pos: {cards: [cards], to_pos: None}}
+        
+        # 从my_decisions中提取贡牌信息
+        if self.my_decisions:
+            for decision in self.my_decisions:
+                action = decision.get('action', [])
+                if not action or not isinstance(action, list):
+                    continue
+                
+                action_type = action[0] if len(action) > 0 else ""
+                action_type_upper = action_type.upper() if action_type else ""
+                
+                # 处理贡牌（tribute）
+                if action_type_upper == "TRIBUTE" or action_type == "tribute":
+                    # 贡牌格式：[tribute, tribute, [cards]]
+                    if len(action) >= 3 and isinstance(action[2], list):
+                        tribute_cards = action[2]
+                        from_pos = self.player_id
+                        self.tribute_info[from_pos] = {
+                            'cards': tribute_cards,
+                            'to_pos': None  # 需要从游戏规则推断（通常是上局输家）
+                        }
+                
+                # 处理还牌（back）
+                elif action_type_upper == "BACK" or action_type == "back":
+                    # 还牌格式：[back, back, [cards]]
+                    if len(action) >= 3 and isinstance(action[2], list):
+                        back_cards = action[2]
+                        # 还牌是接收者给贡牌者的
+                        # 由于还牌信息可能不在my_decisions中，这里先记录
+                        from_pos = self.player_id
+                        self.back_info[from_pos] = {
+                            'cards': back_cards,
+                            'to_pos': None  # 需要从游戏规则推断（通常是上局赢家）
+                        }
         
         # 3. 尝试使用服务器日志补充初始手牌
         try:
@@ -294,6 +384,12 @@ class YiFeiReplayGUI:
             else:
                 # 如果没有初始手牌，初始化一个空列表
                 current_hands[pos_str] = []
+        
+        # **关键修复**：处理贡牌和还牌
+        # 注意：initial_hand已经是服务器分发后的手牌（已包含贡牌还牌），所以不需要调整
+        # 但我们需要在显示时知道贡牌还牌的过程
+        # 由于initial_hand已经是正确的，这里不需要做任何调整
+        # 贡牌还牌信息已经保存在self.tribute_info和self.back_info中，用于显示
         
         # 处理当前步骤之前的所有动作
         for i in range(min(self.current_step, self.total_steps)):

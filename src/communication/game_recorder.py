@@ -320,31 +320,31 @@ class GameRecorder:
             return None
         
         try:
-            end_time = datetime.now()
-            self.current_game["end_time"] = end_time.isoformat()
-            self.current_game["duration"] = (end_time - self.game_start_time).total_seconds()
-            self.current_game["result"] = result
-            
-            # 生成文件名
-            # 格式：YYYYMMDDHHMMSSffffff [player_name]-[opponent_name].json
-            filename = self._generate_filename(result)
-            filepath = self.record_dir / filename
+        end_time = datetime.now()
+        self.current_game["end_time"] = end_time.isoformat()
+        self.current_game["duration"] = (end_time - self.game_start_time).total_seconds()
+        self.current_game["result"] = result
+        
+        # 生成文件名
+        # 格式：YYYYMMDDHHMMSSffffff [player_name]-[opponent_name].json
+        filename = self._generate_filename(result)
+        filepath = self.record_dir / filename
             
             # 确保目录存在
             self.record_dir.mkdir(exist_ok=True)
-            
-            # 保存为JSON文件
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(self.current_game, f, ensure_ascii=False, indent=2)
-            
+        
+        # 保存为JSON文件
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(self.current_game, f, ensure_ascii=False, indent=2)
+        
             logger.info(f"✓ 游戏记录已保存: {filepath}")
-            print(f"游戏记录已保存: {filepath}")
-            
-            # 重置
-            self.current_game = None
-            self.game_start_time = None
-            
-            return filepath
+        print(f"游戏记录已保存: {filepath}")
+        
+        # 重置
+        self.current_game = None
+        self.game_start_time = None
+        
+        return filepath
         except Exception as e:
             logger.error(f"✗ 保存游戏记录失败: {e}", exc_info=True)
             print(f"✗ 保存游戏记录失败: {e}")
@@ -400,6 +400,7 @@ class GameRecorder:
     def load_game(filepath: Union[str, Path]) -> Dict[str, Any]:
         """
         加载游戏记录文件，并自动合并同一局游戏的其他客户端记录
+        支持 JSON 和 Pickle (.data) 格式
         
         Args:
             filepath: 游戏记录文件路径
@@ -411,6 +412,12 @@ class GameRecorder:
         if not filepath.exists():
             raise FileNotFoundError(f"游戏记录文件不存在: {filepath}")
         
+        # 根据文件扩展名选择加载方式
+        if filepath.suffix.lower() == '.data':
+            # Pickle 格式
+            game_data = GameRecorder._load_pickle_game(filepath)
+        else:
+            # JSON 格式（默认）
         with open(filepath, 'r', encoding='utf-8') as f:
             game_data = json.load(f)
         
@@ -418,6 +425,224 @@ class GameRecorder:
         game_data = GameRecorder._merge_same_game_records(game_data, filepath)
         
         return game_data
+    
+    @staticmethod
+    def _load_pickle_game(filepath: Path) -> Dict[str, Any]:
+        """
+        加载 Pickle 格式的游戏记录文件（.data 格式）
+        将 Pickle 数据转换为与 JSON 格式兼容的字典结构
+        
+        Args:
+            filepath: .data 文件路径
+            
+        Returns:
+            转换后的游戏数据字典
+        """
+        import pickle
+        from datetime import datetime
+        
+        game_data = {
+            "game_id": filepath.stem,  # 使用文件名作为游戏ID
+            "start_time": datetime.now().isoformat(),  # 如果没有时间信息，使用当前时间
+            "player_id": 0,
+            "player_name": "unknown",
+            "initial_hand": [],
+            "all_players_hands": {},
+            "game_info": {},
+            "actions": [],
+            "my_decisions": [],
+            "result": None,
+            "game_round": 0
+        }
+        
+        actions = []
+        all_pickle_data = []
+        
+        try:
+            # 读取 Pickle 文件中的所有数据（可能包含多个数据块）
+            with open(filepath, 'rb') as f:
+                while True:
+                    try:
+                        data = pickle.load(f)
+                        all_pickle_data.append(data)
+                    except EOFError:
+                        break
+                    except Exception as e:
+                        # 如果某个数据块解析失败，记录但继续处理
+                        continue
+            
+            # 如果只有一个数据块，可能是完整的游戏数据
+            if len(all_pickle_data) == 1:
+                data = all_pickle_data[0]
+                # 尝试直接解析为游戏数据字典
+                if isinstance(data, dict):
+                    # 如果数据已经是字典格式，尝试直接使用
+                    if "actions" in data or "cur_action" in data:
+                        game_data.update(data)
+                        if "actions" in data:
+                            actions = data["actions"]
+                    else:
+                        # 可能是单个动作
+                        action = GameRecorder._convert_pickle_data_to_action(data)
+                        if action:
+                            actions.append(action)
+                else:
+                    # 尝试转换为动作
+                    action = GameRecorder._convert_pickle_data_to_action(data)
+                    if action:
+                        actions.append(action)
+            else:
+                # 多个数据块，每个可能是一个动作
+                for data in all_pickle_data:
+                    action = GameRecorder._convert_pickle_data_to_action(data)
+                    if action:
+                        actions.append(action)
+            
+            # 如果从字典中获取了actions，使用它；否则使用转换后的actions
+            if not game_data.get("actions") and actions:
+                game_data["actions"] = actions
+            
+            # 确保actions是列表
+            if not isinstance(game_data.get("actions"), list):
+                game_data["actions"] = actions if actions else []
+            
+            game_data["total_steps"] = len(game_data["actions"])
+            
+            # 尝试从动作中提取初始手牌信息
+            # Pickle 格式可能不包含初始手牌，需要从动作中推断
+            if game_data["actions"]:
+                GameRecorder._infer_initial_hands_from_pickle(game_data, game_data["actions"])
+            
+        except Exception as e:
+            raise ValueError(f"无法解析 Pickle 文件 {filepath}: {e}")
+        
+        return game_data
+    
+    @staticmethod
+    def _convert_pickle_data_to_action(data: Any) -> Optional[Dict[str, Any]]:
+        """
+        将 Pickle 数据转换为标准动作格式
+        
+        Args:
+            data: Pickle 加载的数据
+            
+        Returns:
+            标准化的动作字典，如果无法转换则返回 None
+        """
+        from datetime import datetime
+        
+        # Pickle 数据可能是各种格式，需要灵活处理
+        action = {
+            "timestamp": datetime.now().isoformat(),
+            "cur_pos": -1,
+            "cur_action": [],
+            "greater_pos": -1,
+            "greater_action": [],
+            "context": {}
+        }
+        
+        # 尝试从数据中提取信息
+        if isinstance(data, dict):
+            # 如果数据已经是字典格式，直接使用
+            # 检查是否包含标准字段
+            if "cur_pos" in data or "cur_action" in data:
+                action.update(data)
+            elif "action" in data:
+                # 可能是简化的格式
+                action["cur_action"] = data.get("action", [])
+                action["cur_pos"] = data.get("pos", data.get("player_id", -1))
+        elif isinstance(data, (list, tuple)):
+            # 如果数据是列表或元组，尝试解析为动作
+            if len(data) >= 2:
+                # 格式可能是 [pos, action] 或 [action_type, rank, cards]
+                if isinstance(data[0], int):
+                    # [pos, action] 格式
+                    action["cur_pos"] = data[0]
+                    action["cur_action"] = data[1] if isinstance(data[1], (list, str)) else []
+                elif isinstance(data[0], str):
+                    # [action_type, rank, cards] 格式
+                    action["cur_action"] = list(data)
+                    # 尝试从上下文推断位置（如果无法推断，使用-1）
+                    action["cur_pos"] = -1
+        elif isinstance(data, str):
+            # 如果是字符串，尝试解析
+            try:
+                import ast
+                parsed = ast.literal_eval(data)
+                if isinstance(parsed, dict):
+                    action.update(parsed)
+                elif isinstance(parsed, (list, tuple)):
+                    # 递归处理
+                    return GameRecorder._convert_pickle_data_to_action(parsed)
+            except:
+                # 如果解析失败，将字符串作为动作内容
+                action["cur_action"] = data
+        
+        # 确保 cur_action 是列表格式
+        if isinstance(action["cur_action"], str):
+            try:
+                import ast
+                action["cur_action"] = ast.literal_eval(action["cur_action"])
+            except:
+                # 如果解析失败，尝试简单的字符串分割
+                if action["cur_action"].startswith('[') and action["cur_action"].endswith(']'):
+                    # 可能是字符串形式的列表
+                    try:
+                        action["cur_action"] = eval(action["cur_action"])
+                    except:
+                        action["cur_action"] = [action["cur_action"]]
+                else:
+                    action["cur_action"] = [action["cur_action"]]
+        
+        # 如果无法提取有效信息，返回 None
+        if action["cur_pos"] == -1 and not action["cur_action"]:
+            return None
+        
+        return action
+    
+    @staticmethod
+    def _infer_initial_hands_from_pickle(game_data: Dict[str, Any], actions: List[Dict[str, Any]]):
+        """
+        从 Pickle 格式的动作中推断初始手牌
+        由于 Pickle 格式可能不包含初始手牌信息，需要从动作中反向推断
+        
+        Args:
+            game_data: 游戏数据字典（会被修改）
+            actions: 动作列表
+        """
+        # 统计每个玩家打出的牌
+        played_cards_by_player = {str(i): [] for i in range(4)}
+        
+        for action in actions:
+            cur_pos = action.get("cur_pos", -1)
+            if cur_pos < 0 or cur_pos > 3:
+                continue
+            
+            cur_action = action.get("cur_action", [])
+            if not cur_action:
+                continue
+            
+            # 解析动作，提取打出的牌
+            if isinstance(cur_action, (list, tuple)) and len(cur_action) >= 3:
+                cards = cur_action[2] if isinstance(cur_action[2], list) else []
+                if cards:
+                    played_cards_by_player[str(cur_pos)].extend(cards)
+            elif isinstance(cur_action, str):
+                # 尝试从字符串中提取卡牌信息
+                try:
+                    import ast
+                    parsed = ast.literal_eval(cur_action)
+                    if isinstance(parsed, (list, tuple)) and len(parsed) >= 3:
+                        cards = parsed[2] if isinstance(parsed[2], list) else []
+                        if played_cards_by_player[str(cur_pos)]:
+                            played_cards_by_player[str(cur_pos)].extend(cards)
+                except:
+                    pass
+        
+        # 由于无法准确推断初始手牌（不知道哪些牌没被打出），
+        # 这里只设置已打出的牌作为参考
+        # 实际使用时，初始手牌可能不完整
+        game_data["all_players_hands"] = played_cards_by_player
     
     @staticmethod
     def _merge_same_game_records(game_data: Dict[str, Any], current_filepath: Path) -> Dict[str, Any]:
