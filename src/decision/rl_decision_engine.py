@@ -7,7 +7,7 @@ from src.rl_agent.agent import PPOAgent
 # from .base_decision_engine import BaseDecisionEngine 
 
 class RLDecisionEngine:
-    def __init__(self, model_path="models/bc_model_stage5_final.pth", use_stage5_model=True):
+    def __init__(self, model_path="models/bc_model_stage5_ultra_optimized.pth", use_stage5_model=True):
         """
         RL决策引擎 - 支持阶段5增强模型
 
@@ -24,10 +24,11 @@ class RLDecisionEngine:
             # 使用阶段5增强模型 (ImprovedGuandanPolicyNet)
             try:
                 from src.rl_agent.model import ImprovedGuandanPolicyNet
+                self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
                 self.policy_net = ImprovedGuandanPolicyNet(
                     input_dim=512, hidden_dim=256, output_dim=512,
                     dropout_rate=0.1, enable_strategy_head=True, attention_heads=8
-                ).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+                ).to(self.device)
 
                 # 尝试加载阶段5模型
                 try:
@@ -38,8 +39,15 @@ class RLDecisionEngine:
                         self.policy_net.load_state_dict(checkpoint, strict=False)
 
                     self.model_loaded = True
-                    self.logger.info(f"✓ RL Engine loaded Stage5 model from {model_path}")
-                    print(f"RL Engine loaded Stage5 enhanced model from {model_path}")
+                    self.logger.info(f"✓ RL Engine loaded Ultra Optimized model from {model_path}")
+                    print(f"RL Engine loaded Ultra Optimized model from {model_path}")
+                    
+                    # 输出模型信息（如果有）
+                    if isinstance(checkpoint, dict):
+                        if 'final_action_exact_accuracy' in checkpoint:
+                            print(f"  Model performance - Exact match: {checkpoint['final_action_exact_accuracy']:.2%}")
+                        if 'final_strategy_understanding_rate' in checkpoint:
+                            print(f"  Model performance - Strategy understanding: {checkpoint['final_strategy_understanding_rate']:.2%}")
 
                 except Exception as e:
                     # 如果阶段5模型加载失败，回退到PPOAgent
@@ -75,7 +83,7 @@ class RLDecisionEngine:
 
     def _stage5_model_inference(self, state_vec: np.ndarray) -> np.ndarray:
         """
-        阶段5增强模型推理
+        超优化版模型推理（使用基线评估参数）
 
         Args:
             state_vec: 预处理的状态向量 (512维)
@@ -85,18 +93,25 @@ class RLDecisionEngine:
         """
         try:
             with torch.no_grad():
-                state_tensor = torch.FloatTensor(state_vec).unsqueeze(0).to(self.policy_net.device)
+                state_tensor = torch.FloatTensor(state_vec).unsqueeze(0).to(self.device)
                 action_logits = self.policy_net(state_tensor)
 
-                # 对于行为克隆模型，我们使用sigmoid + 阈值来获取二进制动作
+                # **基线评估参数**：使用阶段0验证的标准参数作为统一标尺
+                # 与训练时评估参数保持一致：阈值0.3，缩放因子5.0
+                prediction_threshold = 0.3  # 基线阈值（阶段0基线参数）
+                scaling_factor = 5.0  # 基线缩放因子（阶段0基线参数）
+                
+                # 对于行为克隆模型，我们使用sigmoid + 缩放 + 阈值来获取二进制动作
                 probs = torch.sigmoid(action_logits)
-                # 使用0.3作为阈值（与阶段5训练一致）
-                action_binary = (probs > 0.3).float().squeeze(0).cpu().numpy()
+                probs = probs * scaling_factor  # 应用缩放因子
+                probs = torch.clamp(probs, 0, 1)  # 限制在[0,1]范围内
+                # 使用0.3作为阈值（与训练时评估一致）
+                action_binary = (probs > prediction_threshold).float().squeeze(0).cpu().numpy()
 
                 return action_binary
 
         except Exception as e:
-            self.logger.error(f"Stage5 model inference failed: {e}")
+            self.logger.error(f"Ultra optimized model inference failed: {e}")
             # 回退到随机动作
             return np.zeros(512, dtype=int)
 
@@ -320,7 +335,7 @@ class RLDecisionEngine:
             if self.use_stage5_model:
                 # 阶段5模型调试信息
                 with torch.no_grad():
-                    state_tensor = torch.FloatTensor(state_vec).unsqueeze(0).to(self.policy_net.device)
+                    state_tensor = torch.FloatTensor(state_vec).unsqueeze(0).to(self.device)
                     logits = self.policy_net(state_tensor)
                     probs = torch.sigmoid(logits)
 
@@ -393,7 +408,16 @@ class RLDecisionEngine:
             # 只在有有效索引但映射失败时输出警告
             print(f"[RL Debug] WARNING: Model selected {len(valid_indices)} valid indices but mapped to 0 cards!")
             print(f"[RL Debug] Valid indices: {valid_indices[:5]}...")
+            
+            # 计算手牌中实际可用的索引
+            hand_indices = {self._card_to_index(card) for card in hand}
+            missing_indices = [idx for idx in valid_indices if idx not in hand_indices]
+            if missing_indices:
+                print(f"[RL Debug] Missing indices in hand: {missing_indices[:5]}...")
+                print(f"[RL Debug] Available indices in hand: {sorted(hand_indices)[:10]}...")
+            
             print(f"[RL Debug] This usually means the model selected cards not in hand (model may not be trained or using random weights)")
+            print(f"[RL Debug] FALLBACK: Returning empty list, will use rule-based decision")
         elif len(selected_cards) > 0:
             # 只在成功映射时输出（减少日志）
             print(f"[RL Debug] Mapped to {len(selected_cards)} cards: {selected_cards}")
@@ -409,6 +433,10 @@ class RLDecisionEngine:
         
         if len(valid_cards) != len(selected_cards):
             print(f"[RL Debug] Filtered: {len(selected_cards)} -> {len(valid_cards)} valid cards")
+        
+        # 如果模型输出无效，返回空列表，让上层决策引擎使用规则引擎
+        if len(valid_cards) == 0 and len(valid_indices) > 0:
+            print(f"[RL Debug] Model output invalid, falling back to rule-based decision")
         
         return valid_cards
 

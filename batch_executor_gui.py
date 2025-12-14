@@ -93,7 +93,7 @@ class BatchExecutorGUI:
         
         # 目标场数
         ttk.Label(config_frame, text="目标场数:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.target_games_var = tk.StringVar(value="100")
+        self.target_games_var = tk.StringVar(value="3")
         target_games_entry = ttk.Entry(config_frame, textvariable=self.target_games_var, width=20)
         target_games_entry.grid(row=0, column=1, sticky=tk.W, pady=5, padx=5)
         ttk.Label(config_frame, text="场", foreground="gray").grid(row=0, column=2, sticky=tk.W)

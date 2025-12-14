@@ -701,13 +701,19 @@ class YF2_V5_Client:
                 # 4. 炸弹策略
                 # 5. 残局策略
                 
-                # 0. 保护队友机制：当队友已经压制了对手的牌型时，不应该再次压制
+                # 0. 保护队友机制：核心规则 - 队友出牌时必须PASS
                 teammate_pos = game_state.get("teammate_pos", -1)
+                cur_pos = game_state.get("cur_pos", -1)
                 greater_pos = game_state.get("greater_pos", -1)
                 greater_action = game_state.get("greater_action", [])
                 
+                # 核心规则：如果当前出牌的是队友（cur_pos == teammate_pos），必须PASS
+                if cur_pos == teammate_pos and action_type != "PASS":
+                    score_adjustment -= 1000.0  # 极大减分，强制PASS
+                    strategy_reason = f"核心规则：队友（位置{cur_pos}）正在出牌，必须PASS，不能压制队友"
+                
                 # 如果队友已经压制了对手（greater_pos == teammate_pos），且当前动作也是压制动作
-                if greater_pos == teammate_pos and action_type != "PASS":
+                elif greater_pos == teammate_pos and action_type != "PASS":
                     # 检查是否与队友的牌型相同或相似
                     if greater_action and len(greater_action) > 0:
                         greater_type = greater_action[0] if isinstance(greater_action, list) else str(greater_action)
@@ -898,6 +904,18 @@ class YF2_V5_Client:
                     
                     # 1. 出单相关建议
                     if action_type == "Single" or action_type == "SINGLE":
+                        # 核心规则：检查是否拆小对出单（禁止拆小对）
+                        if action_card_count == 1 and action_cards:
+                            card_rank_str = action_cards[0][1] if len(action_cards[0]) >= 2 else ""
+                            # rank_map和rank_count在_apply_strategy_suggestions函数中已定义
+                            card_rank = rank_map.get(card_rank_str, 0)
+                            # 检查手牌中这个点数是否有对子（说明是拆对）
+                            if card_rank in rank_count and rank_count[card_rank] >= 2:
+                                # 这是拆对，检查是否是小对（4以下，即3和4）
+                                if card_rank <= 4:  # 3, 4 是小对
+                                    score_adjustment -= 50.0  # 大幅减分，禁止拆小对
+                                    strategy_reason = f"核心规则：禁止拆小对（对{card_rank_str}）出单，应保留对子"
+                        
                         if "出单" in single_action or "打一张" in single_action:
                             if "起始出单" in single_action or "有保护" in single_reason:
                                 # 有保护出单，大幅加分
