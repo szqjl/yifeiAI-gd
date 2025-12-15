@@ -50,6 +50,12 @@ def single_card_strategy(
     if teammate_straight_history is None:
         teammate_straight_history = []
     
+    # 最高优先级：队友剩一张牌，优先传单（传牌技巧）
+    if teammate_rest_cards == 1 and is_active:
+        action = "传单（队友剩一张）"
+        reason = "明知队友有单王，传单。队友只剩一张牌，放心出小单。"
+        return {'action': action, 'reason': reason}
+    
     # 特殊情形：对方任何一家只剩下一张牌，根据角色出不同的单
     opponent_any_one_rest_one = any(rest == 1 for rest in opponent_rest_cards_list)
     if opponent_any_one_rest_one:

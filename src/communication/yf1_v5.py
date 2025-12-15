@@ -99,9 +99,9 @@ class YF1_V5_Client:
         
         # V5特性：智能决策融合
         self.use_hybrid_decision = True  # 使用混合决策（RL + Knowledge + Rule-based）
-        self.rl_weight = 0.15  # RL决策权重（进一步降低）
-        self.knowledge_weight = 0.25  # 知识库权重（进一步降低）
-        self.rule_weight = 0.6  # 规则引擎权重（进一步提高，优先策略建议）
+        self.rl_weight = 0.4  # RL决策权重（提高，让训练出的模型真正发挥作用）
+        self.knowledge_weight = 0.3  # 知识库权重
+        self.rule_weight = 0.3  # 规则引擎权重（降低，给RL更多空间）
         
         self.hand_cards = [] # Track current hand
         
@@ -2025,8 +2025,8 @@ class YF1_V5_Client:
                 
                 rl_action = self.rl_engine.decide(data_with_hand)
                 if rl_action is not None and 0 <= rl_action < len(action_list):
-                    # RL决策评分（使用权重，降低RL影响力）
-                    rl_score = 80.0 * self.rl_weight  # 降低基础RL评分到80
+                    # RL决策评分（提高RL影响力，让训练出的模型真正发挥作用）
+                    rl_score = 150.0 * self.rl_weight  # 提高基础RL评分到150，让RL决策更有竞争力
                     candidates.append((rl_action, rl_score, "RL"))
                     self.rl_decision_count += 1
                     self.logger.debug(f"RL decision: action={rl_action}, score={rl_score:.1f}")
