@@ -14,7 +14,7 @@ import time  # Add at top if not present
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent)) # Add project root
-from decision.yf_v5_stage5_decision_engine import YF_V5_Stage5_DecisionEngine
+from decision.hybrid_decision_engine_v5 import HybridDecisionEngineV5
 from decision.rl_decision_engine import RLDecisionEngine
 from communication.game_recorder import GameRecorder
 from communication.websocket_manager import WebSocketManager
@@ -78,9 +78,10 @@ class YF2_V5_Client:
         self.ws_manager = WebSocketManager(self.user_info, use_local=use_local_websocket)
         self.websocket = None  # 保持向后兼容
         
-        # Initialize YF_V5_Stage5_DecisionEngine (阶段5增强决策引擎)
-        self.logger.info("🎯 Initializing YF_V5 Stage5 Enhanced Decision Engine")
-        self.decision_engine = YF_V5_Stage5_DecisionEngine(player_id)
+        # Initialize HybridDecisionEngineV5 (V5混合决策引擎)
+        self.logger.info("🎯 Initializing HybridDecisionEngineV5")
+        config = {"performance_threshold": 1.0}
+        self.decision_engine = HybridDecisionEngineV5(player_id, config)
         
         # Initialize Dynamic Grouping Optimizer (动态组牌优化器)
         self.grouping_optimizer = DynamicGroupingOptimizer()
