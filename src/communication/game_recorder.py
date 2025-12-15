@@ -320,34 +320,36 @@ class GameRecorder:
             return None
         
         try:
-        end_time = datetime.now()
-        self.current_game["end_time"] = end_time.isoformat()
-        self.current_game["duration"] = (end_time - self.game_start_time).total_seconds()
-        self.current_game["result"] = result
-        
-        # 生成文件名
-        # 格式：YYYYMMDDHHMMSSffffff [player_name]-[opponent_name].json
-        filename = self._generate_filename(result)
-        filepath = self.record_dir / filename
+            end_time = datetime.now()
+            self.current_game["end_time"] = end_time.isoformat()
+            self.current_game["duration"] = (end_time - self.game_start_time).total_seconds()
+            self.current_game["result"] = result
+            
+            # 生成文件名
+            # 格式：YYYYMMDDHHMMSSffffff [player_name]-[opponent_name].json
+            filename = self._generate_filename(result)
+            filepath = self.record_dir / filename
             
             # 确保目录存在
             self.record_dir.mkdir(exist_ok=True)
-        
-        # 保存为JSON文件
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(self.current_game, f, ensure_ascii=False, indent=2)
-        
+            
+            # 保存为JSON文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(self.current_game, f, ensure_ascii=False, indent=2)
+            
             logger.info(f"✓ 游戏记录已保存: {filepath}")
-        print(f"游戏记录已保存: {filepath}")
-        
-        # 重置
-        self.current_game = None
-        self.game_start_time = None
-        
-        return filepath
+            print(f"游戏记录已保存: {filepath}")
+            
+            # 重置
+            self.current_game = None
+            self.game_start_time = None
+            
+            return filepath
+            
         except Exception as e:
             logger.error(f"✗ 保存游戏记录失败: {e}", exc_info=True)
             print(f"✗ 保存游戏记录失败: {e}")
+            return None
             return None
     
     def _generate_filename(self, result: Dict) -> str:
@@ -418,8 +420,8 @@ class GameRecorder:
             game_data = GameRecorder._load_pickle_game(filepath)
         else:
             # JSON 格式（默认）
-        with open(filepath, 'r', encoding='utf-8') as f:
-            game_data = json.load(f)
+            with open(filepath, 'r', encoding='utf-8') as f:
+                game_data = json.load(f)
         
         # 尝试合并同一局游戏的其他客户端记录
         game_data = GameRecorder._merge_same_game_records(game_data, filepath)
