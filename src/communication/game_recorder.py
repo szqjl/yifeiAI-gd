@@ -365,8 +365,8 @@ class GameRecorder:
         victory_num = result.get("victoryNum", [0, 0, 0, 0])
         
         # 判断对手位置（队友是(player_id+2)%4）
-        teammate_pos = (self.player_id + 2) % 4
-        opponent_positions = [i for i in range(4) if i != self.player_id and i != teammate_pos]
+        teammate_pos = (int(self.player_id) + 2) % 4
+        opponent_positions = [i for i in range(4) if i != int(self.player_id) and i != teammate_pos]
         
         # 根据胜利次数判断对手名称
         if len(opponent_positions) >= 2:
