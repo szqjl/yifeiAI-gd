@@ -341,10 +341,32 @@ class HybridDecisionEngineV4:
             List of (action_idx, score) tuples, sorted by score descending
             Returns empty list if YF fails or returns None
         """
-        # YF策略已移除lalala依赖，直接返回空列表，触发Layer 2/3
-        # 保留该方法是为了保持API兼容性
-        self.logger.debug("YF strategy: lalala dependency removed, triggering Layer 2/3")
-        return []
+        candidates = []
+        
+        try:
+            # 延迟初始化YFAdapter（首次使用时）
+            if self.yf_adapter is None:
+                from communication.lalala_adapter_v4 import YFAdapter
+                self.yf_adapter = YFAdapter(self.player_id)
+                self.logger.info("YFAdapter initialized (lazy)")
+            
+            # 获取YF策略的候选动作
+            yf_candidates = self.yf_adapter.decide(message)
+            
+            if yf_candidates:
+                candidates = yf_candidates
+                self.logger.debug(
+                    f"YF generated {len(candidates)} candidates: "
+                    f"{[idx for idx, _ in candidates[:3]]}..."
+                )
+            else:
+                self.logger.debug("YF returned empty candidates, triggering Layer 2/3")
+            
+            return candidates
+            
+        except Exception as e:
+            self.logger.warning(f"YF strategy failed: {e}")
+            return []
     
     def _try_decision_engine(self, message: dict) -> List[tuple]:
         """
