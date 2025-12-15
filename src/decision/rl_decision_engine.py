@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from typing import List, Dict
+from typing import List, Dict, Optional
 import logging
 from src.rl_agent.agent import PPOAgent
 # Assuming we have a base class or interface, but for now standalone
@@ -81,12 +81,13 @@ class RLDecisionEngine:
             print(error_msg)
             self.model_loaded = False
 
-    def _stage5_model_inference(self, state_vec: np.ndarray) -> np.ndarray:
+    def _stage5_model_inference(self, state_vec: np.ndarray, context: Optional[Dict] = None) -> np.ndarray:
         """
-        超优化版模型推理（使用基线评估参数）
+        超优化版模型推理（支持阶段6动态阈值和概率校准）
 
         Args:
             state_vec: 预处理的状态向量 (512维)
+            context: 上下文信息（用于动态阈值调整）
 
         Returns:
             二进制动作向量
@@ -96,6 +97,18 @@ class RLDecisionEngine:
                 state_tensor = torch.FloatTensor(state_vec).unsqueeze(0).to(self.device)
                 action_logits = self.policy_net(state_tensor)
 
+                # **阶段6新增**：如果提供了上下文，使用动态阈值和概率校准
+                if context is not None:
+                    try:
+                        from src.decision.prediction_optimizer import get_prediction_optimizer
+                        optimizer = get_prediction_optimizer()
+                        result = optimizer.optimize_prediction(action_logits, context)
+                        action_binary = result['predictions'].squeeze(0).cpu().numpy()
+                        self.logger.debug(f"Dynamic threshold: {result['threshold']:.3f}, Confidence: {result['confidence']:.3f}")
+                        return action_binary
+                    except Exception as e:
+                        self.logger.warning(f"Failed to use prediction optimizer: {e}, falling back to baseline")
+                
                 # **基线评估参数**：使用阶段0验证的标准参数作为统一标尺
                 # 与训练时评估参数保持一致：阈值0.3，缩放因子5.0
                 prediction_threshold = 0.3  # 基线阈值（阶段0基线参数）
@@ -321,7 +334,9 @@ class RLDecisionEngine:
         # 2. Query Agent/Model
         if self.use_stage5_model and self.model_loaded:
             # 使用阶段5增强模型推理
-            action_binary = self._stage5_model_inference(state_vec)
+            # **阶段6新增**：构建上下文信息用于动态阈值调整
+            context = self._build_context(data, state_info)
+            action_binary = self._stage5_model_inference(state_vec, context)
         else:
             # 使用传统PPOAgent推理
             action_binary, _ = self.agent.select_action(state_vec)

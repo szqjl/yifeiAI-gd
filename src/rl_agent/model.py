@@ -183,16 +183,17 @@ class ImprovedGuandanPolicyNet(nn.Module):
                  strategy_num_classes=7, enable_strategy_head=True, attention_heads=8,
                  enable_strategy_tasks=True):
         """
-        改进的策略网络 - 支持6个策略学习任务
+        改进的策略网络 - 支持7个策略学习任务（新增策略原因学习）
         
         Args:
-            enable_strategy_tasks: 是否启用6个策略学习任务头
+            enable_strategy_tasks: 是否启用7个策略学习任务头
                 - 任务1: 组牌策略分类（是否组牌、组什么牌型）
                 - 任务2: 角色判断（主攻/助攻/平衡）
                 - 任务3: 牌力评估（0-10分，回归任务）
                 - 任务4: 保护/压制判断（保护队友/压制对手/无）
                 - 任务5: 炸弹出炸时机（开局/中期/残局/关键压制/不出）
                 - 任务6: 红心配策略（组牌/炸弹/保留/不使用）
+                - 任务7: 策略原因学习（学习"为什么这样选择"，26类原因类型）
         """
         super(ImprovedGuandanPolicyNet, self).__init__()
 
@@ -295,6 +296,23 @@ class ImprovedGuandanPolicyNet(nn.Module):
                 nn.Dropout(dropout_rate)
             )
             self.red_heart_head = nn.Linear(hidden_dim // 2, 4)  # 4类策略
+            
+            # 任务7: 策略原因学习（学习"为什么这样选择"）- 新增
+            # 原因类型：bomb_urgent, bomb_endgame, bomb_counter, bomb_opportunity,
+            # suppress_urgent, suppress_combo, suppress_block, suppress_general,
+            # protect_teammate_urgent, protect_teammate, protect_advantage, protect_general,
+            # control_urgent, control_endgame, control_general,
+            # group_reduce_hands, group_reduce_singles, group_optimize, group_general,
+            # follow_counter, follow_single, follow_general,
+            # discard_opening, discard_endgame, discard_general, unknown
+            self.reason_processor = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
+                nn.LayerNorm(hidden_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(dropout_rate)
+            )
+            # 26种策略原因类型（根据strategy_reason_extractor.py中的reason_type）
+            self.reason_head = nn.Linear(hidden_dim // 2, 26)  # 26类策略原因
 
         # 初始化权重
         self._initialize_weights()
@@ -313,7 +331,7 @@ class ImprovedGuandanPolicyNet(nn.Module):
         
         Args:
             return_strategy: 是否返回策略分类（7类）
-            return_strategy_tasks: 是否返回6个策略学习任务输出
+            return_strategy_tasks: 是否返回7个策略学习任务输出（包括策略原因学习）
         """
         batch_size = x.size(0)
 
@@ -368,13 +386,18 @@ class ImprovedGuandanPolicyNet(nn.Module):
             red_heart_features = self.red_heart_processor(features)
             red_heart_logits = self.red_heart_head(red_heart_features)
             
+            # 任务7: 策略原因学习（学习"为什么这样选择"）- 新增
+            reason_features = self.reason_processor(features)
+            reason_logits = self.reason_head(reason_features)
+            
             strategy_tasks = {
                 'grouping': grouping_logits,           # (batch, 7)
                 'role': role_logits,                    # (batch, 3)
                 'power': power_score,                   # (batch, 1) 回归
                 'protect_suppress': protect_suppress_logits,  # (batch, 3)
                 'bomb_timing': bomb_timing_logits,      # (batch, 5)
-                'red_heart': red_heart_logits           # (batch, 4)
+                'red_heart': red_heart_logits,          # (batch, 4)
+                'reason': reason_logits                 # (batch, 26) 新增：策略原因
             }
             result.append(strategy_tasks)
         

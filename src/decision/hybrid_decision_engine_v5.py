@@ -599,6 +599,14 @@ class HybridDecisionEngineV5:
             else:
                 cards_left[i] = 27
         
+        # Rule 0: Teammate Passing (传牌) - 最高优先级
+        # 当获得出牌权且队友剩一张牌时，优先传单
+        action = self._check_teammate_passing(
+            message, action_list, teammate_pos, greater_pos, cards_left
+        )
+        if action is not None:
+            return action
+        
         # Rule 1: Teammate Protection
         action = self._check_teammate_protection(
             message, action_list, teammate_pos, greater_pos, cards_left
@@ -622,6 +630,117 @@ class HybridDecisionEngineV5:
         
         # No critical rules triggered
         return None
+    
+    def _check_teammate_passing(
+        self,
+        message: dict,
+        action_list: List,
+        teammate_pos: int,
+        greater_pos: int,
+        cards_left: dict
+    ) -> Optional[int]:
+        """
+        检查是否需要传牌给队友（传牌技巧）。
+        
+        根据传牌技巧文档：
+        - 明知队友有单王，传单
+        - 队友只剩一张牌，放心出小单
+        - 对家和下家都只剩一张牌，发级牌完美放走对家
+        
+        Args:
+            message: Game state message
+            action_list: Available actions
+            teammate_pos: Teammate position
+            greater_pos: Position of player with greatest card
+            cards_left: Dictionary of remaining cards per player
+            
+        Returns:
+            Action index to pass single card to teammate, None otherwise
+        """
+        # 检查是否获得出牌权（主动出牌）
+        my_pos = message.get("myPos", 0)
+        cur_pos = message.get("curPos", -1)
+        is_active = (greater_pos == my_pos) or (cur_pos == -1)
+        
+        if not is_active:
+            return None  # 不是主动出牌，不需要传牌
+        
+        # 检查队友剩余牌数
+        teammate_cards = cards_left.get(teammate_pos, 27)
+        
+        # 关键规则：队友剩一张牌，优先传单
+        if teammate_cards == 1:
+            # 查找单牌动作（Single类型）
+            single_actions = []
+            for idx, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) >= 1:
+                    if action[0] == "Single":
+                        single_actions.append((idx, action))
+            
+            if single_actions:
+                # 优先选择最小的单牌传队友（根据传牌技巧：队友只剩一张牌，放心出小单）
+                # 但也要考虑不能给下家顺牌
+                best_single = None
+                best_idx = None
+                
+                for idx, action in single_actions:
+                    if len(action) >= 2:
+                        card_rank = action[1]
+                        # 优先选择小单（3-9），避免给下家顺牌
+                        if card_rank in ['3', '4', '5', '6', '7', '8', '9']:
+                            if best_single is None or self._compare_card_rank(card_rank, best_single) < 0:
+                                best_single = card_rank
+                                best_idx = idx
+                
+                # 如果没有小单，选择最小的单牌
+                if best_idx is None and single_actions:
+                    best_idx = single_actions[0][0]
+                
+                if best_idx is not None:
+                    self.logger.info(
+                        f"[Critical Rule] Teammate passing: teammate has 1 card, "
+                        f"pass single card (action={best_idx})"
+                    )
+                    return best_idx
+        
+        # 检查：对家和下家都只剩一张牌，发级牌
+        next_pos = (my_pos + 1) % 4
+        next_cards = cards_left.get(next_pos, 27)
+        if teammate_cards == 1 and next_cards == 1:
+            # 查找级牌单张
+            level_card_actions = []
+            for idx, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) >= 1:
+                    if action[0] == "Single" and len(action) >= 3:
+                        cards = action[2] if isinstance(action[2], list) else []
+                        # 检查是否是级牌（这里简化处理，实际需要根据curRank判断）
+                        # 假设级牌是2
+                        if any('2' in str(card) for card in cards):
+                            level_card_actions.append(idx)
+            
+            if level_card_actions:
+                self.logger.info(
+                    f"[Critical Rule] Teammate passing: teammate and lower hand both have 1 card, "
+                    f"pass level card (action={level_card_actions[0]})"
+                )
+                return level_card_actions[0]
+        
+        return None
+    
+    def _compare_card_rank(self, rank1: str, rank2: str) -> int:
+        """比较两张牌的大小，返回-1表示rank1<rank2，0表示相等，1表示rank1>rank2"""
+        rank_order = ['3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A', '2', 'B', 'R']
+        try:
+            idx1 = rank_order.index(rank1) if rank1 in rank_order else -1
+            idx2 = rank_order.index(rank2) if rank2 in rank_order else -1
+            if idx1 < idx2:
+                return -1
+            elif idx1 > idx2:
+                return 1
+            else:
+                return 0
+        except:
+            return 0
     
     def _check_teammate_protection(
         self, 

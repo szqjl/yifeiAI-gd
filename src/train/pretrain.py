@@ -892,11 +892,28 @@ class GuandanDataset(Dataset):
         protect_suppress_label = strategy_tasks.get('protect_suppress', 2)
         bomb_timing_label = strategy_tasks.get('bomb_timing', 4)
         red_heart_label = strategy_tasks.get('red_heart', 3)
+        
+        # **新增**：提取策略原因标签（任务7：策略原因学习）
+        # 策略原因类型映射（26类，根据strategy_reason_extractor.py）
+        strategy_reason = state_dict.get('strategy_reason', {})
+        reason_type = strategy_reason.get('reason_type', 'unknown')
+        reason_type_map = {
+            'bomb_urgent': 0, 'bomb_endgame': 1, 'bomb_counter': 2, 'bomb_opportunity': 3,
+            'suppress_urgent': 4, 'suppress_combo': 5, 'suppress_block': 6, 'suppress_general': 7,
+            'protect_teammate_urgent': 8, 'protect_teammate': 9, 'protect_advantage': 10, 'protect_general': 11,
+            'control_urgent': 12, 'control_endgame': 13, 'control_general': 14,
+            'group_reduce_hands': 15, 'group_reduce_singles': 16, 'group_optimize': 17, 'group_general': 18,
+            'follow_counter': 19, 'follow_single': 20, 'follow_general': 21,
+            'discard_opening': 22, 'discard_endgame': 23, 'discard_general': 24,
+            'unknown': 25
+        }
+        reason_label = reason_type_map.get(reason_type, 25)  # 默认unknown=25
 
         return torch.FloatTensor(state_vec), torch.FloatTensor(action_vec), strategy_type_idx, pattern_type_idx, strategy_pattern_idx, \
                torch.tensor(grouping_label, dtype=torch.long), torch.tensor(role_label, dtype=torch.long), \
                torch.tensor(power_score, dtype=torch.float32), torch.tensor(protect_suppress_label, dtype=torch.long), \
-               torch.tensor(bomb_timing_label, dtype=torch.long), torch.tensor(red_heart_label, dtype=torch.long)
+               torch.tensor(bomb_timing_label, dtype=torch.long), torch.tensor(red_heart_label, dtype=torch.long), \
+               torch.tensor(reason_label, dtype=torch.long)  # 新增：策略原因标签
 
     def _infer_strategy_pattern(self, state_dict, strategy_type):
         """
@@ -1209,9 +1226,9 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     # **阶段3任务2回退**: 隐藏层维度回退到256（512在796样本上效果差，完全匹配准确率0.00%）
     # **阶段3任务2.5方案C**: 分离的特征提取层（共享底层特征，分离高层特征）
     # **阶段4新增**: 改进模型架构（注意力机制 + 残差连接）
-    # **新增**：启用6个策略学习任务
-    enable_strategy_tasks = True  # 默认启用6个策略任务
-    strategy_tasks_weight = 0.5  # 6个策略任务的总权重（平均每个任务约0.083）
+    # **新增**：启用7个策略学习任务（包含策略原因学习）
+    enable_strategy_tasks = True  # 默认启用7个策略任务
+    strategy_tasks_weight = 0.5  # 7个策略任务的总权重（平均每个任务约0.071，阶段6支持动态调整）
     
     if use_improved_model:
         model = ImprovedGuandanPolicyNet(
@@ -1388,8 +1405,24 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         model.train()  # 确保模型处于训练模式
         
         for batch in dataloader:
-            # 处理数据：支持多任务学习和策略模式识别 + 6个策略任务
-            if len(batch) == 11:
+            # 处理数据：支持多任务学习和策略模式识别 + 7个策略任务（新增策略原因学习）
+            if len(batch) == 12:
+                # **新增**：返回12个值（state, action, strategy, pattern, strategy_pattern, 
+                #          grouping, role, power, protect_suppress, bomb_timing, red_heart, reason）
+                states, actions, strategy_labels, pattern_types, strategy_pattern_labels, \
+                grouping_labels, role_labels, power_scores, protect_suppress_labels, \
+                bomb_timing_labels, red_heart_labels, reason_labels = batch
+                strategy_labels = strategy_labels.to(device)
+                pattern_types = pattern_types.to(device)
+                strategy_pattern_labels = strategy_pattern_labels.to(device)
+                grouping_labels = grouping_labels.to(device)
+                role_labels = role_labels.to(device)
+                power_scores = power_scores.to(device)
+                protect_suppress_labels = protect_suppress_labels.to(device)
+                bomb_timing_labels = bomb_timing_labels.to(device)
+                red_heart_labels = red_heart_labels.to(device)
+                reason_labels = reason_labels.to(device)  # 新增：策略原因标签
+            elif len(batch) == 11:
                 # **新增**：返回11个值（state, action, strategy, pattern, strategy_pattern, 
                 #          grouping, role, power, protect_suppress, bomb_timing, red_heart）
                 states, actions, strategy_labels, pattern_types, strategy_pattern_labels, \
@@ -1404,6 +1437,7 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 protect_suppress_labels = protect_suppress_labels.to(device)
                 bomb_timing_labels = bomb_timing_labels.to(device)
                 red_heart_labels = red_heart_labels.to(device)
+                reason_labels = None  # 旧数据没有策略原因标签
             elif len(batch) == 5:
                 # 阶段5：返回5个值（state, action, strategy, pattern, strategy_pattern）
                 states, actions, strategy_labels, pattern_types, strategy_pattern_labels = batch
@@ -1609,9 +1643,21 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     # 任务6: 红心配策略（交叉熵）
                     red_heart_loss = nn.CrossEntropyLoss()(strategy_tasks_outputs['red_heart'], red_heart_labels)
                     
-                    # 总策略任务损失（平均每个任务权重约0.083）
+                    # 任务7: 策略原因学习（交叉熵）- 新增：学习"为什么这样选择"
+                    reason_loss = torch.tensor(0.0, device=device)
+                    if reason_labels is not None and 'reason' in strategy_tasks_outputs:
+                        # 忽略unknown类别（索引25）
+                        valid_reason_mask = (reason_labels < 25)  # 排除unknown（索引25）
+                        if valid_reason_mask.sum() > 0:
+                            valid_reason_labels = reason_labels[valid_reason_mask]
+                            valid_reason_logits = strategy_tasks_outputs['reason'][valid_reason_mask]
+                            reason_loss = nn.CrossEntropyLoss()(valid_reason_logits, valid_reason_labels)
+                    
+                    # 总策略任务损失（平均每个任务权重约0.071，7个任务）
+                    # **阶段6新增**：使用动态调整的策略任务权重
+                    current_weight = current_strategy_tasks_weight if 'current_strategy_tasks_weight' in locals() else strategy_tasks_weight
                     strategy_tasks_loss = (grouping_loss + role_loss + power_loss * 0.1 + 
-                                          protect_suppress_loss + bomb_timing_loss + red_heart_loss) / 6.0 * strategy_tasks_weight
+                                          protect_suppress_loss + bomb_timing_loss + red_heart_loss + reason_loss) / 7.0 * current_weight
                     
                     # **新增**：策略一致性损失 + 联合损失
                     # 1. 策略一致性损失：鼓励动作预测和策略分类在语义上一致
@@ -1712,14 +1758,39 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     else:
                         dynamic_strategy_loss = torch.tensor(0.0, device=device)
                 
-                # **阶段5更新**: 组合损失（包含所有高级策略学习组件 + 6个策略任务 + 策略一致性损失）
+                # **阶段6新增**: 胜率导向损失函数（学习"什么有效"）
+                # 基于策略有效性调整损失权重：策略有效性越高，损失权重越大（鼓励学习有效策略）
+                win_rate_oriented_loss = torch.tensor(0.0, device=device)
+                win_rate_weight = 0.3  # 胜率导向损失权重
+                
+                # 从状态中提取策略有效性（如果可用）
+                # 策略有效性越高，说明这个决策越有效，应该给予更高的学习权重
+                if hasattr(states, 'strategy_effectiveness'):
+                    # 如果states包含策略有效性信息，使用它来调整损失权重
+                    strategy_effectiveness = states.strategy_effectiveness  # (batch_size,)
+                    # 归一化策略有效性到[0.5, 2.0]范围，作为损失权重
+                    # 有效性越高，权重越大，鼓励模型学习有效策略
+                    effectiveness_weights = 0.5 + 1.5 * strategy_effectiveness  # 归一化到[0.5, 2.0]
+                    # 对动作损失和策略损失应用有效性权重
+                    weighted_action_loss = action_loss * effectiveness_weights.mean()
+                    weighted_strategy_loss = strategy_loss * effectiveness_weights.mean()
+                    # 胜率导向损失 = 加权后的损失差异
+                    win_rate_oriented_loss = (weighted_action_loss + weighted_strategy_loss) * win_rate_weight
+                else:
+                    # 如果没有策略有效性信息，使用策略效果分数（从state_dict中提取）
+                    # 注意：这需要在数据加载时提取strategy_effectiveness
+                    # 暂时使用策略一致性损失作为代理
+                    win_rate_oriented_loss = strategy_consistency_loss * win_rate_weight * 0.5
+                
+                # **阶段5更新**: 组合损失（包含所有高级策略学习组件 + 7个策略任务 + 策略一致性损失 + 胜率导向损失）
                 total_batch_loss = (current_action_weight * action_loss +
                                   current_strategy_weight * strategy_loss +
                                   strategy_pattern_weight * strategy_pattern_loss +
                                   opponent_model_weight * opponent_model_loss +
                                   dynamic_strategy_weight * dynamic_strategy_loss +
-                                  strategy_tasks_loss +  # 新增：6个策略任务损失
-                                  strategy_consistency_loss)  # 新增：策略一致性损失
+                                  strategy_tasks_loss +  # 新增：7个策略任务损失（包含策略原因学习）
+                                  strategy_consistency_loss +  # 新增：策略一致性损失
+                                  win_rate_oriented_loss)  # 新增：胜率导向损失（阶段6）
                 
                 total_action_loss += action_loss.item()
                 total_strategy_loss += strategy_loss.item()
@@ -1952,11 +2023,12 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         else:
             print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}, Action Exact Accuracy: {action_exact_accuracy:.2%}, Action Card Accuracy: {action_card_accuracy:.2%}, LR: {current_lr:.6f}")
         
-        # **阶段3任务2.5方案B**: 动态损失权重调整
+        # **阶段3任务2.5方案B + 阶段6增强**: 动态损失权重调整（基于任务准确率和游戏表现）
         if use_dynamic_weight and enable_strategy_head and (epoch + 1) % weight_adjust_interval == 0 and epoch > 0:
-            # 根据任务准确率动态调整权重
+            # 根据任务准确率和策略有效性动态调整权重
             # 如果动作预测准确率低，增加动作预测权重
             # 如果策略分类准确率高，可以适当降低策略分类权重
+            # **阶段6新增**：根据策略有效性调整策略任务权重
             
             # 获取最近N个epoch的平均准确率（用于稳定性）
             lookback = min(weight_adjust_interval, len(training_history['action_exact_accuracy']))
@@ -1964,13 +2036,20 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 recent_action_acc = np.mean(training_history['action_exact_accuracy'][-lookback:])
                 recent_strategy_acc = np.mean(training_history['strategy_accuracy'][-lookback:]) if len(training_history['strategy_accuracy']) >= lookback else strategy_accuracy
                 
+                # **阶段6新增**：获取策略理解率（如果可用）
+                recent_strategy_understanding = 0.0
+                if 'strategy_understanding_rate' in training_history and len(training_history['strategy_understanding_rate']) >= lookback:
+                    recent_strategy_understanding = np.mean(training_history['strategy_understanding_rate'][-lookback:])
+                
                 # 调整策略：
                 # 1. 如果动作预测准确率 < 20%，增加动作预测权重（最多增加到2.0倍）
                 # 2. 如果策略分类准确率 > 95%，可以适当降低策略分类权重（最多降低到0.1）
-                # 3. 权重调整幅度：每次调整10%
+                # 3. **阶段6新增**：如果策略理解率 < 30%，增加策略任务权重
+                # 4. 权重调整幅度：每次调整10%
                 
                 old_action_weight = current_action_weight
                 old_strategy_weight = current_strategy_weight
+                old_strategy_tasks_weight = current_strategy_tasks_weight
                 
                 if recent_action_acc < 0.20:  # 动作预测准确率低
                     # 增加动作预测权重
@@ -1982,9 +2061,19 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     current_strategy_weight = max(current_strategy_weight * 0.9, strategy_loss_weight * 0.1)
                     print(f"  [动态权重调整] 策略分类准确率高({recent_strategy_acc:.2%})，降低策略分类权重: {old_strategy_weight:.3f} → {current_strategy_weight:.3f}")
                 
+                # **阶段6新增**：根据策略理解率调整策略任务权重
+                if recent_strategy_understanding > 0 and recent_strategy_understanding < 0.30:
+                    # 策略理解率低，增加策略任务权重（鼓励学习策略原理）
+                    current_strategy_tasks_weight = min(current_strategy_tasks_weight * 1.15, 1.0)  # 最多增加到1.0
+                    print(f"  [动态权重调整] 策略理解率低({recent_strategy_understanding:.2%})，增加策略任务权重: {old_strategy_tasks_weight:.3f} → {current_strategy_tasks_weight:.3f}")
+                elif recent_strategy_understanding > 0.60:
+                    # 策略理解率高，可以适当降低策略任务权重
+                    current_strategy_tasks_weight = max(current_strategy_tasks_weight * 0.95, 0.2)  # 最少保持0.2
+                    print(f"  [动态权重调整] 策略理解率高({recent_strategy_understanding:.2%})，降低策略任务权重: {old_strategy_tasks_weight:.3f} → {current_strategy_tasks_weight:.3f}")
+                
                 # 如果权重发生变化，打印当前权重
-                if abs(current_action_weight - old_action_weight) > 0.001 or abs(current_strategy_weight - old_strategy_weight) > 0.001:
-                    print(f"  [动态权重调整] 当前权重: α={current_action_weight:.3f}, β={current_strategy_weight:.3f}")
+                if abs(current_action_weight - old_action_weight) > 0.001 or abs(current_strategy_weight - old_strategy_weight) > 0.001 or abs(current_strategy_tasks_weight - old_strategy_tasks_weight) > 0.001:
+                    print(f"  [动态权重调整] 当前权重: α={current_action_weight:.3f}, β={current_strategy_weight:.3f}, 策略任务={current_strategy_tasks_weight:.3f}")
         
         # **阶段2任务3新增**: 保存模型检查点（每10个epoch保存一次）
         if (epoch + 1) % 10 == 0 or epoch == epochs - 1:
