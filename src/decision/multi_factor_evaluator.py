@@ -42,37 +42,44 @@ class MultiFactorEvaluator:
         # 添加游戏阶段分析器
         self.game_stage_analyzer = GameStageAnalyzer()
         
-        # 评估权重配置
-        # 增加grouping_strategy权重，体现胜负规则优先的最高准则
+        # 评估权重配置 - 决策质量提升版本
+        # 增加对手建模和策略组合因子，提升决策质量
         self.weights = {
-            "grouping_strategy": 0.30,  # 提高组牌策略权重，体现胜负规则优先
-            "remaining_cards": 0.15,
-            "card_type_value": 0.15,
-            "cooperation": 0.15,
-            "risk": 0.10,
-            "timing": 0.10,  # 时机评估权重
-            "hand_structure": 0.05
+            "grouping_strategy": 0.25,    # 战术规则核心
+            "remaining_cards": 0.20,      # 出牌积极性
+            "card_type_value": 0.20,      # 牌型价值
+            "cooperation": 0.10,          # 配合度
+            "risk": 0.08,                 # 风险评估
+            "timing": 0.07,               # 时机评估
+            "opponent_modeling": 0.05,    # 新增：对手建模
+            "strategy_combination": 0.05  # 新增：策略组合
         }
     
-    def evaluate_all_actions(self, action_list: List[List], 
-                            target_action: Optional[List] = None) -> List[Tuple[int, float]]:
+    def evaluate_all_actions(self, action_list: List[List],
+                            target_action: Optional[List] = None,
+                            game_context: Optional[Dict] = None) -> List[Tuple[int, float]]:
         """
         评估所有可选动作
-        
+
         Args:
             action_list: 动作列表
             target_action: 目标动作（被动出牌时）
-        
+            game_context: 游戏上下文信息
+
         Returns:
             评估结果列表 [(索引, 分数), ...]，按分数降序排列
         """
         evaluations = []
-        
+
+        # 分析游戏阶段
+        game_phase = self._analyze_game_phase(game_context)
+
         for idx, action in enumerate(action_list):
             if action[0] == "PASS":
                 score = 0.0
             else:
-                score = self._evaluate_action(action, target_action)
+                # 使用动态评估，根据游戏阶段调整
+                score = self._dynamic_evaluation(action, target_action, game_phase)
             evaluations.append((idx, score))
         
         # 按分数降序排序
@@ -140,20 +147,27 @@ class MultiFactorEvaluator:
             suggestions = grouping_result["suggestions"]
             if suggestions:
                 # 取第一个建议的分数（因为我们只传递了一个动作）
-                grouping_score = suggestions[0]["score"] / 100.0  # 归一化到 0-1 范围
+                # 进一步优化：使用原始分数，除以50进行温和归一化，保留更多战术信息
+                raw_score = suggestions[0]["score"]
+                grouping_score = raw_score / 50.0  # 更温和的归一化，保留战术强度
         
         # 添加组牌策略评分
         scores["grouping_strategy"] = grouping_score
-        
-        # 更新权重配置，添加组牌策略权重
-        if "grouping_strategy" not in self.weights:
-            # 重新分配权重，确保总和为1.0
-            # 将hand_structure的权重部分转移给grouping_strategy
-            self.weights["hand_structure"] = 0.02
-            self.weights["grouping_strategy"] = 0.03
-        
+
+        # 9. 对手建模评估（新增）
+        scores["opponent_modeling"] = self._evaluate_opponent_modeling(action, target_action)
+
+        # 10. 策略组合评估（新增）
+        scores["strategy_combination"] = self._evaluate_strategy_combination(action)
+
+        # 确保所有评分因子都有对应的权重
+        for factor in scores:
+            if factor not in self.weights:
+                print(f"Warning: Missing weight for factor: {factor}, using default 0.1")
+                self.weights[factor] = 0.1
+
         # 计算加权总分
-        total_score = sum(scores[factor] * self.weights[factor] 
+        total_score = sum(scores[factor] * self.weights[factor]
                          for factor in scores)
         
         return total_score
@@ -315,4 +329,142 @@ class MultiFactorEvaluator:
             return 0.4
         else:  # 其他牌型，中性影响
             return 0.5
+
+    def _analyze_game_phase(self, game_context: Optional[Dict]) -> str:
+        """分析游戏阶段
+
+        Args:
+            game_context: 游戏上下文信息
+
+        Returns:
+            游戏阶段: 'early', 'mid', 'late'
+        """
+        if not game_context:
+            return 'mid'  # 默认中期
+
+        # 基于剩余牌数判断游戏阶段
+        player_cards = game_context.get('player_cards', [])
+        remaining_count = len(player_cards)
+
+        if remaining_count >= 15:
+            return 'early'  # 早期：15张以上
+        elif remaining_count >= 8:
+            return 'mid'    # 中期：8-14张
+        else:
+            return 'late'   # 后期：7张以下
+
+    def _dynamic_evaluation(self, action: List, target_action: Optional[List], game_phase: str) -> float:
+        """动态评估：根据游戏阶段调整评估策略
+
+        Args:
+            action: 动作
+            target_action: 目标动作
+            game_phase: 游戏阶段 ('early', 'mid', 'late')
+
+        Returns:
+            动态评估分数
+        """
+        # 基础评估
+        base_score = self._evaluate_action(action, target_action)
+
+        # 根据游戏阶段调整权重
+        phase_adjustments = {
+            'early': {
+                # 早期：强调减少轮次，积极出牌
+                'grouping_strategy': 1.2,  # 提高战术权重
+                'remaining_cards': 1.1,    # 鼓励出牌
+                'card_type_value': 0.9,    # 降低牌型权重
+            },
+            'mid': {
+                # 中期：平衡发展
+                'grouping_strategy': 1.0,  # 标准权重
+                'remaining_cards': 1.0,
+                'card_type_value': 1.0,
+                'opponent_modeling': 1.1,  # 提高对手建模权重
+            },
+            'late': {
+                # 后期：全力以赴，重视牌型价值
+                'grouping_strategy': 0.9,  # 降低战术权重
+                'remaining_cards': 1.2,    # 强烈鼓励出牌
+                'card_type_value': 1.1,    # 提高牌型权重
+                'strategy_combination': 1.1,  # 重视策略组合
+            }
+        }
+
+        adjustments = phase_adjustments.get(game_phase, {})
+
+        # 应用阶段调整
+        adjusted_score = base_score
+        for factor, adjustment in adjustments.items():
+            if factor in self.weights:
+                # 直接调整基础得分中的对应因子权重
+                # 这是一个简化的实现，通过调整权重来影响决策
+                weight_diff = (adjustment - 1.0) * self.weights[factor]
+                adjusted_score += (base_score * 0.1 * weight_diff)  # 小幅调整
+
+        return adjusted_score
+
+    def _evaluate_opponent_modeling(self, action: List, target_action: Optional[List]) -> float:
+        """评估对手建模因子
+
+        基于对手历史行为预测，评估当前动作的对抗价值
+
+        Args:
+            action: 当前动作
+            target_action: 目标动作（被动出牌时）
+
+        Returns:
+            对手建模评分 (0-1)
+        """
+        if not action or action[0] == "PASS":
+            return 0.5  # PASS的中性评分
+
+        # 基础评估：根据动作类型判断对抗价值
+        action_type = action[0]
+
+        # 强力动作在对抗中更有价值
+        if action_type == "Bomb":
+            return 0.8  # 炸弹具有最高对抗价值
+        elif action_type in ["Straight", "StraightFlush"]:
+            return 0.7  # 顺子具有较强控制力
+        elif action_type in ["ThreeWithTwo", "ThreePair"]:
+            return 0.6  # 组合牌有一定对抗价值
+        elif action_type in ["Three", "TwoTrips"]:
+            return 0.5  # 中等对抗价值
+        elif action_type in ["Pair", "Single"]:
+            return 0.3  # 基础牌型，对抗价值较低
+        else:
+            return 0.4  # 其他类型，中性评估
+
+    def _evaluate_strategy_combination(self, action: List) -> float:
+        """评估策略组合因子
+
+        考虑动作在整体策略中的作用和多回合价值
+
+        Args:
+            action: 当前动作
+
+        Returns:
+            策略组合评分 (0-1)
+        """
+        if not action or action[0] == "PASS":
+            return 0.3  # PASS在策略组合中价值较低
+
+        action_type = action[0]
+
+        # 评估策略组合价值
+        if action_type == "Bomb":
+            return 0.6  # 炸弹在策略组合中很重要，但不是首选
+        elif action_type in ["StraightFlush", "Straight"]:
+            return 0.8  # 长牌型在策略组合中价值很高
+        elif action_type == "ThreeWithTwo":
+            return 0.7  # 带牌组合在策略中很灵活
+        elif action_type in ["ThreePair", "TwoTrips"]:
+            return 0.5  # 多牌组合有一定策略价值
+        elif action_type == "Three":
+            return 0.4  # 基础三张，中等策略价值
+        elif action_type in ["Pair", "Single"]:
+            return 0.2  # 基础牌型，策略价值较低
+        else:
+            return 0.4  # 其他类型，中性评估
 

@@ -159,6 +159,15 @@ class YF2_V5_Client:
     async def process_message(self, data: dict):
         """Process a message from the server"""
         message_type = data.get("type", "")
+
+        # **调试**：打印完整的服务器消息，帮助验证接收内容
+        if message_type in ["notify", "act"]:  # 只对游戏相关消息打印
+            import json
+            print(f"\n[服务器消息调试] 收到 {message_type} 消息:")
+            print(f"完整消息: {json.dumps(data, indent=2, ensure_ascii=False)[:1500]}...")  # 限制长度避免输出过长
+            print(f"[服务器消息调试] 消息类型: {message_type}")
+            if "data" in data:
+                print(f"[服务器消息调试] 数据字段: {list(data['data'].keys()) if isinstance(data['data'], dict) else type(data['data'])}")
         
         if message_type == "act":
             await self.handle_action_request(data)
@@ -169,6 +178,22 @@ class YF2_V5_Client:
     async def handle_action_request(self, data: dict):
         """Handle action request from server (V5增强决策)"""
         self.decision_count += 1
+
+        # 检查是否是贡牌或还牌阶段
+        stage = data.get("stage", "")
+        if stage == "tribute":
+            self._handle_tribute_action(data)
+        elif stage == "back":
+            self._handle_back_action(data)
+        else:
+            # 普通play阶段，显示等级信息（类似client3/4）
+            self_rank = data.get("selfRank", "?")
+            oppo_rank = data.get("oppoRank", "?")
+            cur_rank = data.get("curRank", "?")
+
+            if self_rank != "?" or oppo_rank != "?" or cur_rank != "?":
+                print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
+
         action_list = data.get("actionList", [])
         
         if not action_list:
@@ -179,11 +204,14 @@ class YF2_V5_Client:
         try:
             # V5增强：智能混合决策
             if self.use_hybrid_decision:
-                act_index = self._hybrid_decision(data, action_list)
+                act_index, best_score, best_layer, candidates = self._hybrid_decision_with_details(data, action_list)
             else:
                 # 回退到默认决策
                 act_index = self.decision_engine.decide(data)
-            
+                best_score = None
+                best_layer = "RuleBased"
+                candidates = []
+
             # Get decision details for recording
             decision_context = {
                 "myPos": data.get("myPos", self.player_id),
@@ -193,10 +221,10 @@ class YF2_V5_Client:
                 "version": "v5",
                 "decision_type": "hybrid" if self.use_hybrid_decision else "default_fallback"
             }
-            
-            # Record decision
+
+            # Record decision with full details
             selected_action = action_list[act_index] if act_index < len(action_list) else []
-            self.game_recorder.record_decision(act_index, selected_action, context=decision_context)
+            self.game_recorder.record_decision(act_index, selected_action, score=best_score, layer=best_layer, candidates=candidates, context=decision_context)
             
             # Validate action index
             if not self.validate_action(act_index, action_list):
@@ -2191,14 +2219,244 @@ class YF2_V5_Client:
         )
         if len(top_candidates) > 1:
             self.logger.info(f"Top candidates: {[(idx, f'{score:.1f}', src) for idx, score, src in top_candidates]}")
-        
+
         return best_action
+
+    def _hybrid_decision_with_details(self, data: dict, action_list: list) -> tuple:
+        """
+        V5增强：智能混合决策（返回详细信息用于记录）
+
+        Returns:
+            tuple: (action_index, score, layer, candidates)
+        """
+        # 复用现有的 _hybrid_decision 逻辑，但修改返回格式
+        import time
+        decision_start_time = time.time()
+
+        candidates = []
+
+        # 1. 获取基础决策引擎的候选（包含知识库增强）
+        try:
+            # 使用V5引擎生成候选（已经包含知识库增强）
+            base_candidates = self.decision_engine._generate_candidates(data)
+            if base_candidates:
+                # 增强候选（知识库已应用）
+                enhanced_candidates = self.decision_engine._enhance_candidates(base_candidates, data)
+                for idx, score, layer in enhanced_candidates:
+                    # 应用知识库权重
+                    weighted_score = score * self.knowledge_weight
+                    candidates.append((idx, weighted_score, "Knowledge"))
+                    self.knowledge_decision_count += 1
+        except Exception as e:
+            self.logger.warning(f"Base decision engine failed: {e}")
+
+        # 2. 获取RL决策（如果可用）
+        if self.rl_available and self.rl_engine:
+            try:
+                # 注入手牌信息
+                # 优先使用服务器发送的最新handCards，如果没有则使用自己维护的
+                server_hand_cards = data.get("handCards", [])
+                if server_hand_cards:
+                    # 服务器发送了最新手牌，使用服务器的（更准确）
+                    hand_cards_for_rl = server_hand_cards
+                    if len(server_hand_cards) != len(self.hand_cards):
+                        self.logger.debug(f"Server handCards ({len(server_hand_cards)}) differs from self.hand_cards ({len(self.hand_cards)}), using server's")
+                else:
+                    # 服务器没有发送，使用自己维护的
+                    hand_cards_for_rl = self.hand_cards
+                    self.logger.debug(f"No server handCards, using self.hand_cards ({len(hand_cards_for_rl)})")
+
+                data_with_hand = data.copy()
+                data_with_hand['handCards'] = hand_cards_for_rl
+
+                rl_action = self.rl_engine.decide(data_with_hand)
+                if rl_action is not None and 0 <= rl_action < len(action_list):
+                    # RL决策评分（使用权重）
+                    rl_score = 80.0 * self.rl_weight  # 降低基础RL评分到80
+                    candidates.append((rl_action, rl_score, "RL"))
+                    self.rl_decision_count += 1
+                    self.logger.debug(f"RL decision: action={rl_action}, score={rl_score:.1f}")
+            except Exception as e:
+                self.logger.warning(f"RL decision failed: {e}")
+
+        # 3. 应用新增策略（牌力评估、单牌策略、炸弹策略、残局策略）
+        try:
+            game_state = self._extract_game_state(data)
+            strategy_candidates = self._apply_strategy_suggestions(game_state, action_list)
+            candidates.extend(strategy_candidates)
+        except Exception as e:
+            self.logger.warning(f"Strategy decision failed: {e}", exc_info=True)
+
+        # 4. 如果没有候选，使用V5引擎的decide方法
+        if not candidates:
+            self.logger.warning("No candidates from hybrid decision, using default fallback")
+            action_index = self.decision_engine.decide(data)
+            return action_index, None, "RuleBased", []
+
+        # 5. 合并同一动作的多个候选（关键修复：避免策略建议被覆盖）
+        # 同一动作可能有多个候选（知识库、RL、策略），需要合并取最高分
+        merged_candidates = {}
+        for idx, score, source in candidates:
+            if idx not in merged_candidates:
+                merged_candidates[idx] = (score, source)
+            else:
+                # 如果已有该动作的候选，取评分更高的
+                existing_score, existing_source = merged_candidates[idx]
+                if score > existing_score:
+                    merged_candidates[idx] = (score, source)
+                # 如果是策略建议，优先保留（策略评分通常更高）
+                elif "Strategy" in source and "Strategy" not in existing_source:
+                    merged_candidates[idx] = (score, source)
+
+        # 转换为列表并排序
+        merged_list = [(idx, score, source) for idx, (score, source) in merged_candidates.items()]
+        merged_list.sort(key=lambda x: x[1], reverse=True)
+
+        if not merged_list:
+            self.logger.warning("No merged candidates, using V4 fallback")
+            action_index = self.decision_engine.decide(data)
+            return action_index, None, "RuleBased", []
+
+        best_action, best_score, best_source = merged_list[0]
+
+        # 记录前3个候选，便于调试
+        top_candidates = merged_list[:3] if len(merged_list) >= 3 else merged_list
+        self.logger.info(
+            f"Hybrid decision: action={best_action}, score={best_score:.1f}, "
+            f"source={best_source}, total_candidates={len(merged_list)} (merged from {len(candidates)} raw candidates)"
+        )
+        if len(top_candidates) > 1:
+            self.logger.info(f"Top candidates: {[(idx, f'{score:.1f}', src) for idx, score, src in top_candidates]}")
+
+        # 记录决策统计到决策引擎
+        duration = time.time() - decision_start_time
+        if hasattr(self, 'decision_engine') and hasattr(self.decision_engine, 'stats'):
+            # 映射layer名称用于统计
+            stat_layer = best_source
+            if stat_layer.startswith("Strategy"):
+                stat_layer = "RuleBased"
+            elif stat_layer.startswith("Knowledge"):
+                stat_layer = "KnowledgeEnhanced"
+            self.decision_engine.stats.record_success(stat_layer, duration)
+
+        return best_action, best_score, best_source, merged_list
     
     def handle_notification(self, data: dict):
         """Handle notification from server"""
         stage = data.get("stage", "")
-        
-        if stage == "beginning":
+        message_type = data.get("type", "")
+
+        # 兼容处理：如果没有stage字段，但有handCards，认为是beginning阶段
+        is_beginning = (stage == "beginning") or (
+            stage == "" and "handCards" in data and data.get("handCards")
+        )
+
+        # 处理贡牌阶段
+        if stage == "tribute":
+            self._handle_tribute_notification(data)
+            return
+
+        # 处理还牌阶段
+        if stage == "back":
+            self._handle_back_notification(data)
+            return
+
+        # 处理游戏结果
+        if stage == "gameResult":
+            self.game_count += 1
+            victory_num = data.get("victoryNum", [])
+            draws = data.get("draws", [])
+
+            result = {
+                "victoryNum": victory_num,
+                "draws": draws,
+                "total_decisions": self.decision_count,
+                "game_count": self.game_count,
+                "rl_decisions": self.rl_decision_count,
+                "knowledge_decisions": self.knowledge_decision_count,
+                "strategy_decisions": self.strategy_decision_count
+            }
+
+            self.logger.info("=" * 60)
+            self.logger.info("GAME RESULT (V5)")
+            self.logger.info("=" * 60)
+            self.logger.info(f"Victory counts: {victory_num}")
+            self.logger.info(f"Total decisions: {self.decision_count}")
+            self.logger.info(f"RL decisions: {self.rl_decision_count}")
+            self.logger.info(f"Knowledge decisions: {self.knowledge_decision_count}")
+            self.logger.info(f"Strategy decisions: {self.strategy_decision_count}")
+            self.logger.info(f"Total games played: {self.game_count}")
+
+            # Get statistics from decision engine
+            stats = self.decision_engine.get_statistics()
+            self.logger.info(f"Layer usage statistics:")
+            for layer, layer_data in stats["layer_usage"].items():
+                success = layer_data["success"]
+                failure = layer_data["failure"]
+                total = success + failure  # Calculate total from success + failure
+                success_rate = (success / total * 100) if total > 0 else 0
+                self.logger.info(f"  {layer}: {success}/{total} ({success_rate:.1f}%)")
+
+            # Record game result
+            self.game_recorder.end_game(result)
+            return
+
+        # 处理所有其他notify消息（包括没有stage或stage不是预期值的）
+        if not stage or stage not in ["beginning", "play"]:
+            # 对于没有stage或未知stage的消息，也尝试处理可能的出牌信息
+            if "curAction" in data or "curPos" in data:
+                # 这可能是出牌通知消息
+                cur_pos = data.get("curPos", -1)
+                cur_action = data.get("curAction", [])
+                greater_pos = data.get("greaterPos", -1)
+                greater_action = data.get("greaterAction", [])
+
+                if cur_action and len(cur_action) > 0:
+                    # 显示当前动作和最大动作信息（类似client3/4）
+                    print(f"当前动作为{cur_pos}号-{cur_action}， 最大动作为{greater_pos}号-{greater_action}")
+
+                    # 显示剩余牌数信息（类似client3/4）
+                    public_info = data.get("publicInfo", [])
+                    if public_info:
+                        remaining_info = []
+                        for i, info in enumerate(public_info):
+                            if isinstance(info, dict) and "rest" in info:
+                                remaining_info.append(str(info["rest"]))
+                            else:
+                                remaining_info.append("27")  # 默认值
+                        if remaining_info:
+                            print(f"下家剩余牌数: {' '.join(remaining_info)}")
+
+                    # 显示PASS统计信息
+                    pass_count = getattr(self, 'pass_num', 0)
+                    print(f"连续pass数目： {pass_count}")
+
+                    # 格式化出牌信息
+                    if cur_action[0] != "PASS":
+                        action_str = f"{cur_pos}号位打出{cur_action}"
+                        greater_str = f"最大动作为{greater_pos}号位打出的{greater_action}" if greater_action else ""
+                        print(f"{action_str}， {greater_str}")
+                        self.logger.info(f"{action_str}， {greater_str}")
+                    elif cur_action[0] == "PASS":
+                        # 也显示PASS信息，保持与client3/4的一致性
+                        action_str = f"{cur_pos}号位打出{cur_action}"
+                        greater_str = f"最大动作为{greater_pos}号位打出的{greater_action}" if greater_action else ""
+                        print(f"{action_str}， {greater_str}")
+                        self.logger.info(f"{action_str}， {greater_str}")
+
+                    # 记录到游戏记录器
+                        # 确保级牌信息正确记录
+                        context = {
+                            "publicInfo": data.get("publicInfo", []),
+                            "selfRank": data.get("selfRank") or data.get("self_rank"),
+                            "oppoRank": data.get("oppoRank") or data.get("oppo_rank"),
+                            "curRank": data.get("curRank") or data.get("cur_rank"),
+                            "restCards": data.get("restCards", [])
+                        }
+                    self.game_recorder.record_action(cur_pos, cur_action, greater_pos, greater_action, context)
+                return
+
+        if is_beginning:
             # 获取初始手牌信息
             hand_cards = data.get("handCards", [])
             self.hand_cards = hand_cards # Store for RL engine
@@ -2228,19 +2486,115 @@ class YF2_V5_Client:
             self.logger.info(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
             
             # 打印等级信息（用于调试）
-            self_rank = data.get("selfRank") or data.get("self_rank") or data.get("myRank") or "?"
-            oppo_rank = data.get("oppoRank") or data.get("oppo_rank") or data.get("opponentRank") or "?"
-            cur_rank = data.get("curRank") or data.get("cur_rank") or data.get("currentRank") or "?"
-            
-            # 如果还是 "?"，打印可用的键以便调试
+            # 尝试多种可能的字段名组合（按照平台实际发送的字段优先）
+            self_rank = (data.get("selfRank") or data.get("self_rank") or data.get("myRank") or
+                        data.get("rank") or data.get("level") or data.get("grade") or
+                        data.get("playerRank") or data.get("teamRank") or "?")
+            oppo_rank = (data.get("oppoRank") or data.get("oppo_rank") or data.get("opponentRank") or
+                        data.get("opponent_rank") or data.get("enemyRank") or "?")
+            cur_rank = (data.get("curRank") or data.get("cur_rank") or data.get("currentRank") or
+                       data.get("current_rank") or data.get("gameRank") or "?")
+
+            # **新增**：尝试平台实际可能使用的字段名（基于client客户端的显示）
+            # 如果标准字段都找不到，尝试从服务器消息的实际结构中查找
             if self_rank == "?" or oppo_rank == "?" or cur_rank == "?":
-                available_keys = [k for k in data.keys() if 'rank' in k.lower() or 'level' in k.lower() or 'grade' in k.lower()]
+                # 打印所有可能的等级相关字段，帮助调试
+                rank_fields = []
+                for key, value in data.items():
+                    if any(term in key.lower() for term in ['rank', 'level', 'grade', 'player', 'team', 'enemy', 'current', 'self', 'oppo', 'my']):
+                        rank_fields.append(f"{key}: {value}")
+
+                if rank_fields:
+                    print(f"[等级字段调试] 发现可能的等级相关字段: {rank_fields}")
+                else:
+                    print(f"[等级字段调试] 未发现任何等级相关字段")
+
+                # 尝试从游戏状态或上下文信息中获取
+                # 有时候等级信息可能在其他地方
+
+            # 增强兼容性：尝试更多可能的等级信息字段
+            # **修复**：基于client客户端显示字母等级，尝试从服务器消息中直接查找
+            rank_found = False
+
+            # 首先尝试标准字段
+            if self_rank == "?":
+                # 尝试从其他可能的位置获取等级信息
+                for key in ["rank", "level", "grade", "playerRank"]:
+                    if key in data and data[key] is not None:
+                        self_rank = str(data[key])
+                        rank_found = True
+                        print(f"[等级修复] 从字段 '{key}' 获取self_rank: {self_rank}")
+                        break
+
+            if oppo_rank == "?":
+                # 对于oppo_rank，尝试team相关的字段
+                for key in ["opponent_rank", "teamRank", "enemyRank"]:
+                    if key in data and data[key] is not None:
+                        oppo_rank = str(data[key])
+                        rank_found = True
+                        print(f"[等级修复] 从字段 '{key}' 获取oppo_rank: {oppo_rank}")
+                        break
+
+            if cur_rank == "?":
+                # 尝试更多可能的当前等级字段
+                for key in ["currentRank", "gameRank", "activeRank"]:
+                    if key in data and data[key] is not None:
+                        cur_rank = str(data[key])
+                        rank_found = True
+                        print(f"[等级修复] 从字段 '{key}' 获取cur_rank: {cur_rank}")
+                        break
+
+            # 如果还是找不到，尝试从消息的嵌套结构中查找
+            if not rank_found and (self_rank == "?" or oppo_rank == "?" or cur_rank == "?"):
+                print(f"[等级修复] 尝试从消息结构中查找等级信息...")
+
+                # 检查是否有嵌套的等级信息
+                for key, value in data.items():
+                    if isinstance(value, dict):
+                        for sub_key, sub_value in value.items():
+                            if any(term in sub_key.lower() for term in ['rank', 'level', 'grade']):
+                                print(f"[等级修复] 发现嵌套字段 {key}.{sub_key}: {sub_value}")
+
+            # 如果仍然获取不到等级信息，使用默认值并记录警告
+            if cur_rank == "?":
+                # 默认使用"2"作为当前级牌（掼蛋的常见默认值）
+                cur_rank = "2"
+                print(f"[Warning] 无法获取当前等级，使用默认值: {cur_rank}")
+
+            if self_rank == "?":
+                self_rank = "?"
+                print(f"[Warning] 无法获取己方等级信息")
+
+            if oppo_rank == "?":
+                oppo_rank = "?"
+                print(f"[Warning] 无法获取对方等级信息")
+
+            # 如果还是 "?"，进行更详细的调试
+            if self_rank == "?" or oppo_rank == "?" or cur_rank == "?":
+                print(f"[Debug] 等级信息获取失败，开始详细调试...")
+
+                # 打印所有可能的等级相关键
+                available_keys = [k for k in data.keys() if any(term in k.lower() for term in ['rank', 'level', 'grade', 'player', 'team', 'enemy', 'current', 'game'])]
                 if available_keys:
-                    print(f"[Debug] 等级信息未找到，但发现相关键: {available_keys}")
-                # 打印所有键的前20个（避免输出过长）
-                all_keys = list(data.keys())[:20]
-                print(f"[Debug] 数据键（前20个）: {all_keys}")
-            
+                    print(f"[Debug] 发现可能的等级相关键: {available_keys}")
+                else:
+                    print(f"[Debug] 未发现任何等级相关键")
+
+                # 打印数据结构预览
+                print(f"[Debug] 服务器消息结构预览:")
+                for key, value in list(data.items())[:10]:  # 只显示前10个键值对
+                    if isinstance(value, (str, int, float, bool)) or (isinstance(value, list) and len(value) <= 3):
+                        print(f"  {key}: {value}")
+                    elif isinstance(value, dict):
+                        nested_keys = list(value.keys())[:3]
+                        print(f"  {key}: dict with keys {nested_keys}")
+                    else:
+                        print(f"  {key}: {type(value).__name__} (too long to display)")
+
+                print(f"[Debug] 尝试的字段名组合: selfRank, self_rank, myRank, rank, level, grade, playerRank, teamRank")
+                print(f"[Debug] 尝试的字段名组合: oppoRank, oppo_rank, opponentRank, opponent_rank, enemyRank")
+                print(f"[Debug] 尝试的字段名组合: curRank, cur_rank, currentRank, current_rank, gameRank")
+
             print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
             
             # 尝试获取所有玩家的手牌信息
@@ -2288,11 +2642,11 @@ class YF2_V5_Client:
             if len(all_players_hands) > 1:
                 self.logger.info(f"已记录{len(all_players_hands)}个玩家的手牌: {list(all_players_hands.keys())}")
             
-            # 开始记录游戏
+            # 开始记录游戏 - 使用前面获取到的等级信息
             game_info = {
-                "selfRank": data.get("selfRank"),
-                "oppoRank": data.get("oppoRank"),
-                "curRank": data.get("curRank")
+                "selfRank": self_rank if self_rank != "?" else None,
+                "oppoRank": oppo_rank if oppo_rank != "?" else None,
+                "curRank": cur_rank if cur_rank != "?" else None
             }
             self.game_recorder.start_game(hand_cards, my_pos, game_info, all_players_hands)
         
@@ -2349,37 +2703,85 @@ class YF2_V5_Client:
                     else:
                         self.my_pass_num = 0
             
+            # 显示当前动作和最大动作信息（类似client3/4）
+            print(f"当前动作为{cur_pos}号-{cur_action}， 最大动作为{greater_pos}号-{greater_action}")
+
+            # 显示剩余牌数信息（类似client3/4）
+            public_info = data.get("publicInfo", [])
+            if public_info:
+                remaining_info = []
+                for i, info in enumerate(public_info):
+                    if isinstance(info, dict) and "rest" in info:
+                        remaining_info.append(str(info["rest"]))
+                    else:
+                        remaining_info.append("27")  # 默认值
+                if remaining_info:
+                    print(f"下家剩余牌数: {' '.join(remaining_info)}")
+
+            # 显示PASS统计信息
+            pass_count = getattr(self, 'pass_num', 0)
+            print(f"连续pass数目： {pass_count}")
+
             # 格式化出牌信息
             if cur_action and len(cur_action) > 0 and cur_action[0] != "PASS":
                 action_str = f"{cur_pos}号位打出{cur_action}"
                 greater_str = f"最大动作为{greater_pos}号位打出的{greater_action}" if greater_action else ""
+                print(f"{action_str}， {greater_str}")
                 self.logger.info(f"{action_str}， {greater_str}")
-                
-                # Update my hand cards if I played
-                if cur_pos == self.player_id:
-                    if len(cur_action) >= 3 and isinstance(cur_action[2], list):
-                        played_cards = cur_action[2]
-                        old_hand_size = len(self.hand_cards)
-                        for card in played_cards:
-                            if card in self.hand_cards:
-                                self.hand_cards.remove(card)
-                            else:
-                                self.logger.warning(f"Card {card} not found in hand_cards when trying to remove")
-                        new_hand_size = len(self.hand_cards)
-                        if old_hand_size != new_hand_size + len(played_cards):
-                            self.logger.warning(f"Hand size mismatch: removed {len(played_cards)} cards, hand size changed from {old_hand_size} to {new_hand_size}")
-            
-            # 记录到游戏记录器
-            context = {
-                "publicInfo": data.get("publicInfo", []),
-                "selfRank": data.get("selfRank"),
-                "oppoRank": data.get("oppoRank"),
-                "curRank": data.get("curRank"),
-                "restCards": data.get("restCards", [])
-            }
-            self.game_recorder.record_action(cur_pos, cur_action, greater_pos, greater_action, context)
-        
-        elif stage == "gameResult":
+            elif cur_action and len(cur_action) > 0 and cur_action[0] == "PASS":
+                # 也显示PASS信息，保持与client3/4的一致性
+                action_str = f"{cur_pos}号位打出{cur_action}"
+                greater_str = f"最大动作为{greater_pos}号位打出的{greater_action}" if greater_action else ""
+                print(f"{action_str}， {greater_str}")
+                self.logger.info(f"{action_str}， {greater_str}")
+
+    def _handle_tribute_notification(self, data: dict):
+        """处理贡牌通知"""
+        result = data.get("result", [])
+        if result:
+            for tribute_result in result:
+                if len(tribute_result) >= 3:
+                    tribute_pos, receive_tribute_pos, card = tribute_result
+                    print(f"{tribute_pos}号位进贡给{receive_tribute_pos}号位牌{card}")
+
+    def _handle_back_notification(self, data: dict):
+        """处理还牌通知"""
+        result = data.get("result", [])
+        if result:
+            for back_result in result:
+                if len(back_result) >= 3:
+                    back_pos, receive_back_pos, card = back_result
+                    print(f"{back_pos}号位还贡给{receive_back_pos}号位牌{card}")
+
+    def _handle_tribute_action(self, data: dict):
+        """处理轮到自己进贡"""
+        # 显示等级信息
+        self_rank = data.get("selfRank", "?")
+        oppo_rank = data.get("oppoRank", "?")
+        cur_rank = data.get("curRank", "?")
+        print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
+
+        # 显示可选的进贡牌
+        action_list = data.get("actionList", {})
+        if "tribute" in action_list:
+            tribute_cards = action_list["tribute"]
+            print("轮到自己进贡，可以进贡的牌有:")
+            print(tribute_cards)
+
+    def _handle_back_action(self, data: dict):
+        """处理轮到自己还贡"""
+        # 显示等级信息
+        self_rank = data.get("selfRank", "?")
+        oppo_rank = data.get("oppoRank", "?")
+        cur_rank = data.get("curRank", "?")
+        print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
+
+        # 显示可选的还贡牌
+        action_list = data.get("actionList", {})
+        if "back" in action_list:
+            back_cards = action_list["back"]
+            print("轮到自己还贡，可以还贡的牌有:")
+            print(back_cards)
             self.game_count += 1
             victory_num = data.get("victoryNum", [])
             draws = data.get("draws", [])

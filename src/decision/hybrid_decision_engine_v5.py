@@ -173,8 +173,8 @@ class HybridDecisionEngineV5:
                 # Knowledge layer modified candidates
                 decision_layer = "KnowledgeEnhanced"
             else:
-                # Using original candidates
-                decision_layer = "Hybrid"
+                # Using original candidates (Rule-based decision)
+                decision_layer = "RuleBased"
             
             self.stats.record_success(decision_layer, duration)
             
@@ -318,7 +318,7 @@ class HybridDecisionEngineV5:
                 self.rule_based_engine = DecisionEngine(state_manager)
                 self.logger.info("DecisionEngine initialized (lazy)")
             
-            # 获取所有评估结果（top-k）
+            # 获取所有评估结果（top-k）- 修复：从3个增加到5个
             evaluations = self._get_top_evaluations(message, top_k=5)
             
             if evaluations:
@@ -362,7 +362,7 @@ class HybridDecisionEngineV5:
             self.logger.error(f"Rule-Based decision error: {e}", exc_info=True)
             return []
     
-    def _get_top_evaluations(self, message: dict, top_k: int = 3) -> List[tuple]:
+    def _get_top_evaluations(self, message: dict, top_k: int = 8) -> List[tuple]:
         """
         Get top-k evaluated actions from Rule-Based Engine.
         
@@ -392,22 +392,108 @@ class HybridDecisionEngineV5:
             
             # Get current action for passive decision
             cur_action = message.get("curAction")
-            
-            # Use DecisionEngine's evaluator to get all evaluations
+
+            # 构建游戏上下文，用于动态评估
+            game_context = {
+                'player_cards': message.get('handCards', []),
+                'current_round': message.get('curRound', 1),
+                'stage': message.get('stage', 'play'),
+                'game_phase': self._analyze_game_phase(message)
+            }
+
+            # Use DecisionEngine's evaluator to get all evaluations with dynamic context
             evaluations = self.rule_based_engine.evaluator.evaluate_all_actions(
-                action_list, cur_action
+                action_list, cur_action, game_context
             )
             
             # Sort by score descending and take top-k
             sorted_evaluations = sorted(evaluations, key=lambda x: x[1], reverse=True)
             top_evaluations = sorted_evaluations[:top_k]
-            
+
+            # 修复：确保动作多样性，避免所有候选都是低分动作
+            top_evaluations = self._ensure_action_diversity(top_evaluations, sorted_evaluations)
+
             return top_evaluations
             
         except Exception as e:
             self.logger.debug(f"Failed to get top evaluations: {e}")
             return []
-    
+
+    def _ensure_action_diversity(self, top_evaluations: List[tuple], all_evaluations: List[tuple]) -> List[tuple]:
+        """
+        确保动作多样性，避免所有候选都是低分动作
+
+        Args:
+            top_evaluations: 当前的top-k评估结果
+            all_evaluations: 所有的评估结果
+
+        Returns:
+            多样化后的评估结果
+        """
+        if not top_evaluations or len(all_evaluations) <= len(top_evaluations):
+            return top_evaluations
+
+        # 降低高分阈值，确保有更多高分动作被考虑
+        high_score_threshold = 0.3  # 从0.4降到0.3，更容易触发
+        high_score_actions = [eval for eval in all_evaluations if eval[1] >= high_score_threshold]
+
+        # 如果有高分动作，强制包含至少两个
+        if len(high_score_actions) >= 3:
+            # 检查top_evaluations中高分动作的数量
+            high_score_in_top = [eval for eval in top_evaluations if eval[1] >= high_score_threshold]
+            if len(high_score_in_top) < 2:
+                # 需要添加更多高分动作
+                missing_count = 2 - len(high_score_in_top)
+                additional_high_score = high_score_actions[:missing_count]
+
+                # 移除一些低分动作，添加高分动作
+                low_score_in_top = [eval for eval in top_evaluations if eval[1] < high_score_threshold]
+                keep_count = len(top_evaluations) - missing_count
+
+                if keep_count > 0:
+                    top_evaluations = (high_score_in_top + low_score_in_top[:keep_count] + additional_high_score)
+                else:
+                    top_evaluations = high_score_in_top + additional_high_score
+
+                top_evaluations.sort(key=lambda x: x[1], reverse=True)
+
+        # 确保不全是PASS - 更严格的要求
+        non_pass_actions = [eval for eval in all_evaluations if eval[0] != 0]  # 0是PASS
+        pass_only_threshold = len(top_evaluations) // 2  # 最多只允许一半是PASS
+
+        if len(non_pass_actions) >= 2:
+            non_pass_in_top = [eval for eval in top_evaluations if eval[0] != 0]
+            if len(non_pass_in_top) < max(1, pass_only_threshold):
+                # 非PASS动作太少，强制添加
+                additional_non_pass = non_pass_actions[:2]  # 至少添加2个非PASS动作
+                # 移除一些PASS动作
+                pass_actions = [eval for eval in top_evaluations if eval[0] == 0]
+                keep_pass_count = max(0, len(top_evaluations) - len(additional_non_pass) - len(non_pass_in_top))
+
+                top_evaluations = (non_pass_in_top + pass_actions[:keep_pass_count] + additional_non_pass)
+                top_evaluations.sort(key=lambda x: x[1], reverse=True)
+
+        return top_evaluations
+
+    def _analyze_game_phase(self, message: dict) -> str:
+        """分析游戏阶段
+
+        Args:
+            message: 游戏状态消息
+
+        Returns:
+            游戏阶段: 'early', 'mid', 'late'
+        """
+        hand_cards = message.get('handCards', [])
+        remaining_count = len(hand_cards)
+
+        if remaining_count >= 15:
+            return 'early'  # 早期：15张以上
+        elif remaining_count >= 8:
+            return 'mid'    # 中期：8-14张
+        else:
+            return 'late'   # 后期：7张以下
+
     def _random_valid_action(self, message: dict) -> int:
         """
         Guaranteed fallback: select random valid action.
@@ -831,11 +917,15 @@ class DecisionStatistics:
     def record_success(self, layer: str, duration: float):
         """
         Record successful decision.
-        
+
         Args:
             layer: Layer name
             duration: Decision duration in seconds
         """
+        # 映射策略相关的layer名称到RuleBased层级
+        if layer.startswith("Strategy"):
+            layer = "RuleBased"
+
         if layer in self.layer_usage:
             self.layer_usage[layer]["success"] += 1
             self.layer_usage[layer]["total_time"] += duration
@@ -844,11 +934,15 @@ class DecisionStatistics:
     def record_failure(self, layer: str, error: str):
         """
         Record failed decision attempt.
-        
+
         Args:
             layer: Layer name
             error: Error message
         """
+        # 映射策略相关的layer名称到RuleBased层级
+        if layer.startswith("Strategy"):
+            layer = "RuleBased"
+
         if layer in self.layer_usage:
             self.layer_usage[layer]["failure"] += 1
             self.error_log.append({
