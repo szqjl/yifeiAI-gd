@@ -181,10 +181,13 @@ class YF2_V5_Client:
         try:
             # V5增强：智能混合决策
             if self.use_hybrid_decision:
-                act_index = self._hybrid_decision(data, action_list)
+                act_index, best_score, best_layer, candidates = self._hybrid_decision_with_details(data, action_list)
             else:
                 # 回退到默认决策
                 act_index = self.decision_engine.decide(data)
+                best_score = None
+                best_layer = "DefaultFallback"
+                candidates = []
             
             # Get decision details for recording
             decision_context = {
@@ -196,9 +199,9 @@ class YF2_V5_Client:
                 "decision_type": "hybrid" if self.use_hybrid_decision else "default_fallback"
             }
             
-            # Record decision
+            # Record decision with full details
             selected_action = action_list[act_index] if act_index < len(action_list) else []
-            self.game_recorder.record_decision(act_index, selected_action, context=decision_context)
+            self.game_recorder.record_decision(act_index, selected_action, score=best_score, layer=best_layer, candidates=candidates, context=decision_context)
             
             # Validate action index
             if not self.validate_action(act_index, action_list):
@@ -1230,7 +1233,21 @@ class YF2_V5_Client:
     
     def _hybrid_decision(self, data: dict, action_list: list) -> int:
         """
-        V5增强：智能混合决策
+        V5增强：智能混合决策（简化版本，仅返回动作索引）
+        
+        Args:
+            data: 游戏状态消息
+            action_list: 可用动作列表
+            
+        Returns:
+            最优动作索引
+        """
+        result = self._hybrid_decision_with_details(data, action_list)
+        return result[0]  # 只返回动作索引
+    
+    def _hybrid_decision_with_details(self, data: dict, action_list: list) -> tuple:
+        """
+        V5增强：智能混合决策（详细版本）
         
         融合多种决策源：
         1. RL决策（如果可用）
@@ -1242,7 +1259,7 @@ class YF2_V5_Client:
             action_list: 可用动作列表
             
         Returns:
-            最优动作索引
+            (最优动作索引, 评分, 决策层, 候选列表)
         """
         candidates = []
         
@@ -1301,7 +1318,8 @@ class YF2_V5_Client:
         # 4. 如果没有候选，使用V5引擎的decide方法
         if not candidates:
             self.logger.warning("No candidates from hybrid decision, using default fallback")
-            return self.decision_engine.decide(data)
+            fallback_action = self.decision_engine.decide(data)
+            return fallback_action, 50.0, "DefaultFallback", []
         
         # 5. 合并同一动作的多个候选（关键修复：避免策略建议被覆盖）
         # 同一动作可能有多个候选（知识库、RL、策略），需要合并取最高分
@@ -1324,7 +1342,8 @@ class YF2_V5_Client:
         
         if not merged_list:
             self.logger.warning("No merged candidates, using V4 fallback")
-            return self.decision_engine.decide(data)
+            fallback_action = self.decision_engine.decide(data)
+            return fallback_action, 50.0, "V4Fallback", []
         
         best_action, best_score, best_source = merged_list[0]
         
@@ -1337,7 +1356,8 @@ class YF2_V5_Client:
         if len(top_candidates) > 1:
             self.logger.info(f"Top candidates: {[(idx, f'{score:.1f}', src) for idx, score, src in top_candidates]}")
         
-        return best_action
+        # 返回详细信息：(动作索引, 评分, 决策层, 候选列表)
+        return best_action, best_score, best_source, merged_list
     
     def handle_notification(self, data: dict):
         """Handle notification from server"""

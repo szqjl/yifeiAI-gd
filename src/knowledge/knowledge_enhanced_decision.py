@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-????????? (Knowledge-Enhanced Decision)
-???
-- ????????????
-- ???????????
+知识增强决策引擎 (Knowledge-Enhanced Decision)
+基于知识库的决策增强
+
+- 继承自基础决策引擎
+- 增加知识库规则应用
 """
 
 from typing import Dict, List, Optional
 import sys
 from pathlib import Path
 
-# ??src????????????
+# 添加src目录到路径
 if str(Path(__file__).parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -21,7 +22,7 @@ from knowledge.knowledge_translator import KnowledgeTranslator
 
 
 class KnowledgeEnhancedDecisionEngine(DecisionEngine):
-    """??????????"""
+    """知识增强决策引擎"""
     
     def __init__(self, state_manager: EnhancedGameStateManager, 
                  knowledge_loader: Optional[KnowledgeLoader] = None,
@@ -60,12 +61,12 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
     
     def active_decision(self, message: Dict, action_list: List[List]) -> int:
         """
-        ??????????????
+        主动出牌决策（知识增强）
         """
-        # ??????
+        # 基础评估
         evaluations = self.evaluator.evaluate_all_actions(action_list, None)
         
-        # ???????????
+        # 应用知识库规则
         if self.knowledge_loader:
             enhanced_evaluations = self._apply_knowledge_rules(
                 evaluations, action_list, message, is_active=True
@@ -73,13 +74,13 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
         else:
             enhanced_evaluations = evaluations
         
-        # ????
+        # 超时检查
         if self.timer.check_timeout():
             if enhanced_evaluations:
                 return enhanced_evaluations[0][0]
             return 0
         
-        # ?????????
+        # 选择最佳动作
         for idx, score in enhanced_evaluations:
             action = action_list[idx]
             if action[0] != "PASS":
@@ -91,14 +92,14 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
     
     def passive_decision(self, message: Dict, action_list: List[List]) -> int:
         """
-        ??????????????
+        被动出牌决策（知识增强）
         """
         cur_action = message.get("curAction")
         
-        # ??????
+        # 基础评估
         evaluations = self.evaluator.evaluate_all_actions(action_list, cur_action)
         
-        # ???????????
+        # 应用知识库规则
         if self.knowledge_loader:
             enhanced_evaluations = self._apply_knowledge_rules(
                 evaluations, action_list, message, is_active=False
@@ -106,13 +107,13 @@ class KnowledgeEnhancedDecisionEngine(DecisionEngine):
         else:
             enhanced_evaluations = evaluations
         
-        # ????
+        # 超时检查
         if self.timer.check_timeout():
             if enhanced_evaluations:
                 return enhanced_evaluations[0][0]
             return 0
         
-        # ?????????
+        # 选择最佳动作
         for idx, score in enhanced_evaluations:
             if self.timer.check_timeout():
                 return idx
