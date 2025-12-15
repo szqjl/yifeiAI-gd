@@ -174,9 +174,14 @@ def bomb_strategy(
                 down_pos = 3
             else:  # my_pos == 3
                 down_pos = 0
-            
+
             if greater_pos == down_pos:
                 suggestions.append({'action': '炸（下家剩9）', 'reason': '下家剩9张，下家有炸要先炸。'})
+
+    # **增强**：残局阶段更积极使用炸弹
+    if opponent_rest_cards <= 8:
+        if opponent_action_type in ['pair', 'trips'] and opponent_action_rank < 12:
+            suggestions.append({'action': '炸（残局压制）', 'reason': '残局阶段，积极压制对手小牌型。'})
     
     # ========== 第六节：不宜出炸 ==========
     
@@ -197,6 +202,13 @@ def bomb_strategy(
     if opponent_rest_cards > 10:
         if opponent_action_type in ['single', 'pair', 'trips']:
             suggestions.append({'action': '不炸（小牌型）', 'reason': f'非残局，{opponent_action_type}不值得炸。'})
+
+    # **增强**：中期阶段谨慎控制炸弹使用
+    if opponent_rest_cards > 12:  # 中期阶段
+        if opponent_action_type in ['pair', 'trips'] and opponent_action_rank < 8:
+            suggestions.append({'action': '不炸（中期保守）', 'reason': '中期阶段，很小的对子和三张不炸，节省炸弹。'})
+        elif opponent_action_type in ['pair', 'trips'] and opponent_action_rank >= 8 and opponent_action_rank < 12:
+            suggestions.append({'action': '谨慎炸（中期评估）', 'reason': '中期阶段，中等大小的对子三张，评估牌路后再决定是否炸。'})
     
     # ========== 原有8点要领 ==========
     

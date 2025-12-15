@@ -203,6 +203,31 @@ def endgame_strategy(
     if power < 5:
         reason += " 牌力弱，优先放给对家。"
 
+    # **增强**：残局阶段统筹计算牌力（谨慎策略）
+    # 只有在非常有把握的情况下才考虑拆炸弹冲刺
+    if opponent_rest_cards <= 6 and my_rest_cards <= 6 and power >= 6:
+        # 检查是否能一手出完获胜（不拆炸弹的情况下）
+        one_hand_result = check_one_hand_finish(my_rest_cards, action_list, hand_cards, sorted_cards, bomb_info, rank_card)
+        if one_hand_result['can_finish'] and one_hand_result['action_type'] not in ['Bomb', 'BOMB']:
+            # 只有非炸弹的一手出完才优先
+            action = f"一手冲刺-{one_hand_result['action_type']}"
+            reason = f"残局统筹计算：{one_hand_result['reason']}，优先一手冲刺获胜"
+
+        # 特殊情况：剩余3张或更少，且有把握的情况下才考虑拆炸弹冲刺
+        elif my_rest_cards <= 3 and opponent_rest_cards <= 4:
+            # 检查是否有A、2、王等大牌，且对手无法反制
+            if hand_cards:
+                has_big_cards = any(
+                    card[1] in ['2', 'A'] or 'B' in card or 'R' in card
+                    for card in hand_cards if len(card) >= 2
+                )
+                # 检查对手是否还有反制能力
+                opponent_has_counter = opponent_rest_cards >= 2  # 对手至少有2张牌可能有反制
+
+                if has_big_cards and not opponent_has_counter:
+                    action = "大牌冲刺"
+                    reason = "残局统筹计算：剩余极少牌且有大牌，对手无反制能力，优先用大牌冲刺获胜"
+
     return {'action': action, 'reason': reason}
 
 if __name__ == "__main__":

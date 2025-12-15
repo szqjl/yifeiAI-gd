@@ -153,6 +153,15 @@ class YF1_V5_Client:
     async def process_message(self, data: dict):
         """Process a message from the server"""
         message_type = data.get("type", "")
+
+        # **调试**：打印完整的服务器消息，帮助验证接收内容
+        if message_type in ["notify", "act"]:  # 只对游戏相关消息打印
+            import json
+            print(f"\n[服务器消息调试] 收到 {message_type} 消息:")
+            print(f"完整消息: {json.dumps(data, indent=2, ensure_ascii=False)[:1500]}...")  # 限制长度避免输出过长
+            print(f"[服务器消息调试] 消息类型: {message_type}")
+            if "data" in data:
+                print(f"[服务器消息调试] 数据字段: {list(data['data'].keys()) if isinstance(data['data'], dict) else type(data['data'])}")
         
         if message_type == "act":
             await self.handle_action_request(data)
@@ -1279,11 +1288,11 @@ class YF1_V5_Client:
             if len(all_players_hands) > 1:
                 self.logger.info(f"已记录{len(all_players_hands)}个玩家的手牌: {list(all_players_hands.keys())}")
             
-            # 开始记录游戏
+            # 开始记录游戏 - 使用前面获取到的等级信息
             game_info = {
-                "selfRank": data.get("selfRank"),
-                "oppoRank": data.get("oppoRank"),
-                "curRank": data.get("curRank")
+                "selfRank": self_rank if self_rank != "?" else None,
+                "oppoRank": oppo_rank if oppo_rank != "?" else None,
+                "curRank": cur_rank if cur_rank != "?" else None
             }
             self.game_recorder.start_game(hand_cards, my_pos, game_info, all_players_hands)
         
@@ -1339,13 +1348,14 @@ class YF1_V5_Client:
                                 self.hand_cards.remove(card)
             
             # 记录到游戏记录器
-            context = {
-                "publicInfo": data.get("publicInfo", []),
-                "selfRank": data.get("selfRank"),
-                "oppoRank": data.get("oppoRank"),
-                "curRank": data.get("curRank"),
-                "restCards": data.get("restCards", [])
-            }
+                    # 确保级牌信息正确记录
+                    context = {
+                        "publicInfo": data.get("publicInfo", []),
+                        "selfRank": data.get("selfRank") or data.get("self_rank"),
+                        "oppoRank": data.get("oppoRank") or data.get("oppo_rank"),
+                        "curRank": data.get("curRank") or data.get("cur_rank"),
+                        "restCards": data.get("restCards", [])
+                    }
             self.game_recorder.record_action(cur_pos, cur_action, greater_pos, greater_action, context)
         
         elif stage == "gameResult":
