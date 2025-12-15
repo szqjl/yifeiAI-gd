@@ -268,6 +268,29 @@ def evaluate_grouping_effect(hand_cards: List[Union[str, int]], action_cards: Li
                     # 非残局阶段，主攻配钢板，减分
                     score -= 60.0
                     reasons.append("主攻用红心配组钢板，应优先保留用于配炸")
+        elif action_type in ["Trips", "TRIPS"]:
+            # **核心规则**：谨慎使用红桃配和大牌组成三张
+            # 检查是否用红桃配（百搭牌）组三张
+            if has_wild_card and action_cards:
+                # 检查三张中是否包含红桃配和大牌
+                has_red_diamond = any('HR' in card for card in action_cards)
+                has_big_cards = any(card[1] in ['A', 'K', 'Q', 'J'] for card in action_cards if len(card) >= 2)
+
+                if has_red_diamond and has_big_cards:
+                    # 开局和中期阶段禁止用红桃配和大牌组三张阻击
+                    if game_phase in ["opening", "mid"] or my_rest_cards > 15:
+                        score -= 120.0  # 大幅减分，强烈不建议
+                        reasons.append("核心规则：开局中期禁止用红桃配和大牌组三张阻击对手，应让对手继续出牌")
+
+                    # 残局阶段可以考虑，但仍需谨慎
+                    elif game_phase == "endgame" and opponent_rest_cards <= 10:
+                        score -= 50.0  # 中等减分，可以接受但非最优
+                        reasons.append("残局阶段：可以用红桃配和大牌组三张，但优先考虑其他用途")
+
+                    else:
+                        # 其他情况，给予轻微惩罚
+                        score -= 30.0
+                        reasons.append("谨慎使用：红桃配和大牌组三张，评估对手情况后再决定")
             else:  # 助攻（牌力弱）
                 # 助攻配钢板，减分较大
                 if game_phase == "endgame":
@@ -341,11 +364,28 @@ def evaluate_grouping_effect(hand_cards: List[Union[str, int]], action_cards: Li
                 score -= 40.0  # 从-20提升到-40
                 reasons.append("初期保留红桃配，为后期提供更多战略变化")
     
-    # 4. 惩罚：拆炸弹组其他牌型
+    # 4. 惩罚：拆炸弹组其他牌型（分阶段处理）
     if bomb_broken and action_type not in ["Bomb", "BOMB", "StraightFlush"]:
-        # 拆了炸弹组其他牌型，给予额外惩罚
-        score -= 50.0
-        reasons.append(f"拆炸弹组{action_type}，代价过大，不建议")
+        # 根据游戏阶段调整拆炸弹的惩罚力度
+        if game_phase == "opening" or my_rest_cards > 15:
+            # 开局和前期，严格禁止拆炸弹
+            score -= 80.0
+            reasons.append(f"开局前期拆炸弹组{action_type}，代价过大，强烈不建议")
+
+        elif game_phase == "mid" and opponent_rest_cards > 10:
+            # 中期阶段，拆炸弹需要谨慎
+            score -= 60.0
+            reasons.append(f"中期拆炸弹组{action_type}，评估对手情况后再决定")
+
+        elif game_phase == "endgame" and opponent_rest_cards <= 8:
+            # 残局阶段，可以适当拆炸弹控制牌路，但仍需谨慎
+            score -= 20.0
+            reasons.append(f"残局阶段拆炸弹组{action_type}，用于控制牌路，可以接受但非最优")
+
+        else:
+            # 其他情况，中等惩罚
+            score -= 40.0
+            reasons.append(f"拆炸弹组{action_type}，代价较大，谨慎使用")
     
     # 4. 开局阶段：优先组牌
     if game_phase == "opening":

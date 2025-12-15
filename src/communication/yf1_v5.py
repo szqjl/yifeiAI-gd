@@ -160,6 +160,15 @@ class YF1_V5_Client:
     async def process_message(self, data: dict):
         """Process a message from the server"""
         message_type = data.get("type", "")
+
+        # **调试**：打印完整的服务器消息，帮助验证接收内容
+        if message_type in ["notify", "act"]:  # 只对游戏相关消息打印
+            import json
+            print(f"\n[服务器消息调试] 收到 {message_type} 消息:")
+            print(f"完整消息: {json.dumps(data, indent=2, ensure_ascii=False)[:1500]}...")  # 限制长度避免输出过长
+            print(f"[服务器消息调试] 消息类型: {message_type}")
+            if "data" in data:
+                print(f"[服务器消息调试] 数据字段: {list(data['data'].keys()) if isinstance(data['data'], dict) else type(data['data'])}")
         
         if message_type == "act":
             await self.handle_action_request(data)
@@ -167,9 +176,73 @@ class YF1_V5_Client:
         elif message_type == "notify":
             self.handle_notification(data)
     
+    def _handle_tribute_notification(self, data: dict):
+        """处理贡牌通知"""
+        result = data.get("result", [])
+        if result:
+            for tribute_result in result:
+                if len(tribute_result) >= 3:
+                    tribute_pos, receive_tribute_pos, card = tribute_result
+                    print(f"{tribute_pos}号位进贡给{receive_tribute_pos}号位牌{card}")
+
+    def _handle_back_notification(self, data: dict):
+        """处理还牌通知"""
+        result = data.get("result", [])
+        if result:
+            for back_result in result:
+                if len(back_result) >= 3:
+                    back_pos, receive_back_pos, card = back_result
+                    print(f"{back_pos}号位还贡给{receive_back_pos}号位牌{card}")
+
+    def _handle_tribute_action(self, data: dict):
+        """处理轮到自己进贡"""
+        # 显示等级信息
+        self_rank = data.get("selfRank", "?")
+        oppo_rank = data.get("oppoRank", "?")
+        cur_rank = data.get("curRank", "?")
+        print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
+
+        # 显示可选的进贡牌
+        action_list = data.get("actionList", {})
+        if "tribute" in action_list:
+            tribute_cards = action_list["tribute"]
+            print("轮到自己进贡，可以进贡的牌有:")
+            print(tribute_cards)
+
+    def _handle_back_action(self, data: dict):
+        """处理轮到自己还贡"""
+        # 显示等级信息
+        self_rank = data.get("selfRank", "?")
+        oppo_rank = data.get("oppoRank", "?")
+        cur_rank = data.get("curRank", "?")
+        print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
+
+        # 显示可选的还贡牌
+        action_list = data.get("actionList", {})
+        if "back" in action_list:
+            back_cards = action_list["back"]
+            print("轮到自己还贡，可以还贡的牌有:")
+            print(back_cards)
+
     async def handle_action_request(self, data: dict):
         """Handle action request from server (V5增强决策)"""
         self.decision_count += 1
+
+        # 检查是否是贡牌或还牌阶段
+        stage = data.get("stage", "")
+        if stage == "tribute":
+            self._handle_tribute_action(data)
+        elif stage == "back":
+            self._handle_back_action(data)
+        else:
+            # 普通play阶段，显示等级信息（类似client3/4）
+            self_rank = data.get("selfRank", "?")
+            oppo_rank = data.get("oppoRank", "?")
+            cur_rank = data.get("curRank", "?")
+
+            if self_rank != "?" or oppo_rank != "?" or cur_rank != "?":
+                print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
+
         action_list = data.get("actionList", [])
         
         if not action_list:
@@ -1995,8 +2068,107 @@ class YF1_V5_Client:
     def handle_notification(self, data: dict):
         """Handle notification from server"""
         stage = data.get("stage", "")
-        
-        if stage == "beginning":
+        message_type = data.get("type", "")
+
+        # 兼容处理：如果没有stage字段，但有handCards，认为是beginning阶段
+        is_beginning = (stage == "beginning") or (
+            stage == "" and "handCards" in data and data.get("handCards")
+        )
+
+        # 处理贡牌阶段
+        if stage == "tribute":
+            self._handle_tribute_notification(data)
+            return
+
+        # 处理还牌阶段
+        if stage == "back":
+            self._handle_back_notification(data)
+            return
+
+        # 处理游戏结果
+        if stage == "gameResult":
+            self.game_count += 1
+            victory_num = data.get("victoryNum", [])
+            draws = data.get("draws", [])
+
+            result = {
+                "victoryNum": victory_num,
+                "draws": draws,
+                "total_decisions": self.decision_count,
+                "game_count": self.game_count,
+                "rl_decisions": self.rl_decision_count,
+                "knowledge_decisions": self.knowledge_decision_count,
+                "strategy_decisions": self.strategy_decision_count
+            }
+
+            self.logger.info("=" * 60)
+            self.logger.info("GAME RESULT (V5)")
+            self.logger.info("=" * 60)
+            self.logger.info(f"Victory counts: {victory_num}")
+            self.logger.info(f"Total decisions: {self.decision_count}")
+
+            # Record game result
+            if hasattr(self, 'game_recorder'):
+                self.game_recorder.end_game(result)
+            return
+
+        # 处理所有其他notify消息（包括没有stage或stage不是预期值的）
+        if not stage or stage not in ["beginning", "play"]:
+            # 对于没有stage或未知stage的消息，也尝试处理可能的出牌信息
+            if "curAction" in data or "curPos" in data:
+                # 这可能是出牌通知消息
+                cur_pos = data.get("curPos", -1)
+                cur_action = data.get("curAction", [])
+                greater_pos = data.get("greaterPos", -1)
+                greater_action = data.get("greaterAction", [])
+
+                if cur_action and len(cur_action) > 0:
+                    # 显示当前动作和最大动作信息（类似client3/4）
+                    print(f"当前动作为{cur_pos}号-{cur_action}， 最大动作为{greater_pos}号-{greater_action}")
+
+                    # 显示剩余牌数信息（类似client3/4）
+                    public_info = data.get("publicInfo", [])
+                    if public_info:
+                        remaining_info = []
+                        for i, info in enumerate(public_info):
+                            if isinstance(info, dict) and "rest" in info:
+                                remaining_info.append(str(info["rest"]))
+                            else:
+                                remaining_info.append("27")  # 默认值
+                        if remaining_info:
+                            print(f"下家剩余牌数: {' '.join(remaining_info)}")
+
+                    # 显示PASS统计信息
+                    pass_count = getattr(self, 'pass_num', 0)
+                    print(f"连续pass数目： {pass_count}")
+
+                    # 格式化出牌信息
+                    if cur_action[0] != "PASS":
+                        action_str = f"{cur_pos}号位打出{cur_action}"
+                        greater_str = f"最大动作为{greater_pos}号位打出的{greater_action}" if greater_action else ""
+                        print(f"{action_str}， {greater_str}")
+                        self.logger.info(f"{action_str}， {greater_str}")
+                    elif cur_action[0] == "PASS":
+                        # 也显示PASS信息，保持与client3/4的一致性
+                        action_str = f"{cur_pos}号位打出{cur_action}"
+                        greater_str = f"最大动作为{greater_pos}号位打出的{greater_action}" if greater_action else ""
+                        print(f"{action_str}， {greater_str}")
+                        self.logger.info(f"{action_str}， {greater_str}")
+
+                    # 记录到游戏记录器
+                    if hasattr(self, 'game_recorder'):
+                        # 确保级牌信息正确记录
+                        context = {
+                            "publicInfo": data.get("publicInfo", []),
+                            "selfRank": data.get("selfRank") or data.get("self_rank"),
+                            "oppoRank": data.get("oppoRank") or data.get("oppo_rank"),
+                            "curRank": data.get("curRank") or data.get("cur_rank"),
+                            "restCards": data.get("restCards", [])
+                        }
+                        self.game_recorder.record_action(cur_pos, cur_action, greater_pos, greater_action, context)
+                return
+
+        if is_beginning:
             # 获取初始手牌信息
             hand_cards = data.get("handCards", [])
             self.hand_cards = hand_cards # Store for RL engine
@@ -2024,9 +2196,30 @@ class YF1_V5_Client:
             self.logger.info(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
             
             # 打印等级信息（用于调试）
-            self_rank = data.get("selfRank", "?")
-            oppo_rank = data.get("oppoRank", "?")
-            cur_rank = data.get("curRank", "?")
+            self_rank = data.get("selfRank") or data.get("self_rank") or data.get("myRank") or "?"
+            oppo_rank = data.get("oppoRank") or data.get("oppo_rank") or data.get("opponentRank") or "?"
+            cur_rank = data.get("curRank") or data.get("cur_rank") or data.get("currentRank") or "?"
+
+            # 增强兼容性：尝试更多可能的等级信息字段
+            if self_rank == "?":
+                # 尝试从其他可能的位置获取等级信息
+                for key in ["rank", "level", "grade", "playerRank"]:
+                    if key in data and data[key] is not None:
+                        self_rank = str(data[key])
+                        break
+
+            if oppo_rank == "?":
+                # 对于oppo_rank，尝试team相关的字段
+                for key in ["opponent_rank", "teamRank", "enemyRank"]:
+                    if key in data and data[key] is not None:
+                        oppo_rank = str(data[key])
+                        break
+
+            if cur_rank == "?":
+                # 默认使用"2"作为当前级牌（掼蛋的常见默认值）
+                cur_rank = "2"
+                print(f"[Info] 使用默认级牌: {cur_rank}")
+
             print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
             
             # 尝试获取所有玩家的手牌信息
@@ -2074,11 +2267,11 @@ class YF1_V5_Client:
             if len(all_players_hands) > 1:
                 self.logger.info(f"已记录{len(all_players_hands)}个玩家的手牌: {list(all_players_hands.keys())}")
             
-            # 开始记录游戏
+            # 开始记录游戏 - 使用前面获取到的等级信息
             game_info = {
-                "selfRank": data.get("selfRank"),
-                "oppoRank": data.get("oppoRank"),
-                "curRank": data.get("curRank")
+                "selfRank": self_rank if self_rank != "?" else None,
+                "oppoRank": oppo_rank if oppo_rank != "?" else None,
+                "curRank": cur_rank if cur_rank != "?" else None
             }
             self.game_recorder.start_game(hand_cards, my_pos, game_info, all_players_hands)
         
@@ -2119,10 +2312,36 @@ class YF1_V5_Client:
                             self.logger.info(f"从第一个play消息中获取所有玩家手牌: {list(all_hands.keys())}")
                 self._first_play_processed = True
             
+            # 显示当前动作和最大动作信息（类似client3/4）
+            print(f"当前动作为{cur_pos}号-{cur_action}， 最大动作为{greater_pos}号-{greater_action}")
+
+            # 显示剩余牌数信息（类似client3/4）
+            public_info = data.get("publicInfo", [])
+            if public_info:
+                remaining_info = []
+                for i, info in enumerate(public_info):
+                    if isinstance(info, dict) and "rest" in info:
+                        remaining_info.append(str(info["rest"]))
+                    else:
+                        remaining_info.append("27")  # 默认值
+                if remaining_info:
+                    print(f"下家剩余牌数: {' '.join(remaining_info)}")
+
+            # 显示PASS统计信息
+            pass_count = getattr(self, 'pass_num', 0)
+            print(f"连续pass数目： {pass_count}")
+
             # 格式化出牌信息
             if cur_action and len(cur_action) > 0 and cur_action[0] != "PASS":
                 action_str = f"{cur_pos}号位打出{cur_action}"
                 greater_str = f"最大动作为{greater_pos}号位打出的{greater_action}" if greater_action else ""
+                print(f"{action_str}， {greater_str}")
+                self.logger.info(f"{action_str}， {greater_str}")
+            elif cur_action and len(cur_action) > 0 and cur_action[0] == "PASS":
+                # 也显示PASS信息，保持与client3/4的一致性
+                action_str = f"{cur_pos}号位打出{cur_action}"
+                greater_str = f"最大动作为{greater_pos}号位打出的{greater_action}" if greater_action else ""
+                print(f"{action_str}， {greater_str}")
                 self.logger.info(f"{action_str}， {greater_str}")
                 
                 # Update my hand cards if I played
@@ -2174,10 +2393,9 @@ class YF1_V5_Client:
             for layer, layer_data in stats["layer_usage"].items():
                 success = layer_data["success"]
                 failure = layer_data["failure"]
-                total = success + failure
-                if total > 0:
-                    rate = success / total * 100
-                    self.logger.info(f"  {layer}: {success}/{total} ({rate:.1f}%)")
+                total = success + failure  # Calculate total from success + failure
+                success_rate = (success / total * 100) if total > 0 else 0
+                self.logger.info(f"  {layer}: {success}/{total} ({success_rate:.1f}%)")
             
             self.logger.info("=" * 60)
             

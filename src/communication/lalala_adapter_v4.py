@@ -151,10 +151,10 @@ class YFAdapter:
             ValueError: If conversion fails
         """
         try:
-            # 转换手牌格式
+            # 转换手牌格式为客户端期望的列表格式
             if "handCards" in message:
-                message["handCards"] = self._convert_cards(message["handCards"])
-                self.logger.debug(f"Converted handCards: {len(message['handCards'])} cards")
+                message["handCards"] = self._convert_cards_to_client_format(message["handCards"])
+                self.logger.debug(f"Converted handCards to client format: {len(message['handCards'])} cards")
             
             # 转换当前动作
             if "curAction" in message and isinstance(message["curAction"], list):
@@ -181,6 +181,56 @@ class YFAdapter:
             self.logger.error(f"Message conversion failed: {e}", exc_info=True)
             raise ValueError(f"Failed to convert message format: {e}")
     
+    def _convert_cards_to_client_format(self, cards: Union[str, List]) -> List:
+        """
+        将卡牌转换为客户端期望的格式：从字符串格式转换为列表格式
+
+        Args:
+            cards: 字符串格式的卡牌，如 ["H4", "S5"] 或 "H4,S5"
+
+        Returns:
+            客户端格式的卡牌: [["H", "4"], ["S", "5"]]
+        """
+        # 先转换为标准字符串列表格式
+        if isinstance(cards, str):
+            if cards.strip() == "":
+                return []
+            cards = [c.strip() for c in cards.split(',') if c.strip()]
+
+        if not isinstance(cards, list):
+            raise ValueError(f"Invalid card format: expected str or list, got {type(cards)}")
+
+        # 转换为客户端期望的列表格式
+        result = []
+        for card in cards:
+            converted_card = self._convert_single_card_to_list(card)
+            if converted_card is not None:
+                result.append(converted_card)
+
+        return result
+
+    def _convert_single_card_to_list(self, card: str) -> List:
+        """
+        将单张卡牌从字符串格式转换为列表格式
+
+        Args:
+            card: 字符串格式的卡牌，如 "H4"
+
+        Returns:
+            列表格式的卡牌: ["H", "4"]
+        """
+        if not isinstance(card, str) or len(card) < 2:
+            return None
+
+        # 大小王特殊处理
+        if card in ['R', 'B']:
+            return [card, card]
+
+        # 普通牌: "H4" -> ["H", "4"], "H10" -> ["H", "T"]
+        suit = card[0]
+        rank = card[1:].replace('10', 'T')
+        return [suit, rank]
+
     def _convert_cards(self, cards: Union[str, List]) -> List:
         """
         Convert card format from string to list.
