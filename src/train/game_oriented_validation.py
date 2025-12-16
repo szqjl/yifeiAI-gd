@@ -189,6 +189,9 @@ class GameOrientedValidator:
         for record in game_records:
             # 提取对手信息（简化：使用游戏ID的前缀作为对手标识）
             game_id = record.get('game_id', 'unknown')
+            # 确保game_id不是None
+            if game_id is None:
+                game_id = 'unknown'
             opponent_key = game_id[:10] if len(game_id) > 10 else 'unknown'
             opponent_groups[opponent_key].append(record)
         
