@@ -496,16 +496,51 @@ class ImprovedGuandanPolicyNet(nn.Module):
             logits = self.forward(state, return_strategy=False)
             probs = torch.sigmoid(logits)
             
-            # **基线评估参数**：使用阶段0验证的标准参数
-            # 缩放因子5.0，阈值0.3（阶段0基线，完全匹配准确率37.31%）
-            probs = probs * scaling_factor  # 基线缩放因子5.0
+            # **阶段6修复**：使用Top-K选择替代固定阈值，解决预测卡牌数量过多问题
+            # 根据分析结果，真实卡牌数量为2-7张，但模型预测了30+张
+            probs = probs * scaling_factor  # 应用缩放因子
             probs = torch.clamp(probs, 0, 1)  # 确保概率值在[0, 1]范围内
             
-            if deterministic:
-                # **基线预测阈值**：使用0.3（阶段0基线参数）
-                action = (probs > threshold).float()
+            # **Top-K选择策略**：选择概率最高的K张卡牌（K在2-7之间）
+            # 首先尝试使用阈值，如果选择的卡牌数量在合理范围内（2-7张），使用阈值
+            # 否则使用Top-K选择
+            action_threshold = (probs > threshold).float()
+            num_selected = action_threshold.sum().item()
+            
+            if 2 <= num_selected <= 7:
+                # 阈值选择的结果在合理范围内，使用阈值
+                action = action_threshold
             else:
-                # 对于随机策略，也可以使用阈值而不是采样
-                action = (probs > threshold).float()
+                # 阈值选择的结果不合理，使用Top-K选择
+                # K值根据手牌数量动态调整：最少2张，最多7张，不超过手牌数
+                # 这里假设手牌数不超过27张（一副牌的一半）
+                k_min, k_max = 2, 7
+                # 如果可能，根据概率分布自适应选择K
+                # 计算概率的百分位数来确定合理的K值
+                sorted_probs, _ = torch.sort(probs.squeeze(), descending=True)
+                # 找到概率明显下降的点（使用概率差值的阈值）
+                if len(sorted_probs) > k_max:
+                    prob_diff = sorted_probs[:k_max] - sorted_probs[k_max:k_max+1]
+                    # 如果前K_max个概率都明显高于后面的，使用K_max
+                    if prob_diff.min() > 0.1:
+                        k = k_max
+                    else:
+                        # 找到概率下降最明显的位置
+                        prob_diffs = sorted_probs[:-1] - sorted_probs[1:]
+                        # 找到第一个差值大于0.15的位置
+                        k = k_min
+                        for i in range(k_min-1, min(k_max, len(prob_diffs))):
+                            if prob_diffs[i] > 0.15:
+                                k = i + 1
+                                break
+                        k = min(k, k_max)
+                else:
+                    k = min(len(sorted_probs), k_max)
+                
+                # Top-K选择
+                _, top_k_indices = torch.topk(probs.squeeze(), k=k, dim=0)
+                action = torch.zeros_like(probs.squeeze())
+                action[top_k_indices] = 1.0
+                action = action.unsqueeze(0) if probs.dim() > 1 else action
                 
             return action.cpu().numpy()
