@@ -32,6 +32,7 @@ from src.train.pretrain import train_bc
 from src.train.game_oriented_evaluator import GameOrientedEvaluator
 from src.train.game_oriented_validation import GameOrientedValidator
 from src.knowledge_processor.replay_parser import ReplayParser
+from src.utils.device_selector import select_compatible_device, get_device_info
 
 # 导入1312转换器
 try:
@@ -294,7 +295,26 @@ class EnhancedStage6TrainingGUI:
         self.log_text.pack(fill=tk.BOTH, expand=True)
         self.log("🎯 阶段6游戏导向训练工具（增强版）已启动")
         self.log(f"📊 PyTorch版本: {torch.__version__}")
-        self.log(f"🖥️ CUDA可用: {torch.cuda.is_available()}")
+        
+        # 显示设备信息
+        device_info = get_device_info()
+        if device_info['cuda_available']:
+            self.log(f"🖥️ 检测到 {device_info['device_count']} 个GPU设备:")
+            for dev in device_info['devices']:
+                if 'error' in dev:
+                    self.log(f"   GPU {dev['id']}: 无法获取信息 ({dev['error']})")
+                else:
+                    status = "✓ 兼容" if dev['compatible'] else "✗ 不兼容（太旧）"
+                    self.log(f"   GPU {dev['id']}: {dev['name']} (Capability {dev['capability']}, {dev['memory_gb']:.1f}GB) [{status}]")
+            
+            # 选择兼容的设备
+            device, gpu_id = select_compatible_device(force_cpu=False)
+            if gpu_id is not None:
+                self.log(f"✓ 已选择GPU {gpu_id}: {torch.cuda.get_device_name(0)}")
+            else:
+                self.log("⚠ 未找到兼容的GPU，将使用CPU训练")
+        else:
+            self.log("🖥️ CUDA不可用，将使用CPU训练")
 
     def create_eval_tab(self, parent):
         """创建训练评估标签页"""
@@ -308,6 +328,16 @@ class EnhancedStage6TrainingGUI:
         ttk.Button(eval_config_frame, text="浏览", command=self.browse_eval_model_path).grid(row=0, column=2, padx=5)
         ttk.Button(eval_config_frame, text="📊 开始评估", command=self.evaluate_model).grid(row=0, column=3, padx=5)
         eval_config_frame.columnconfigure(1, weight=1)
+        
+        # 模型输出分布分析
+        analysis_frame = ttk.LabelFrame(parent, text="模型输出分布分析", padding="10")
+        analysis_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(analysis_frame, text="分析轮数:").grid(row=0, column=0, sticky=tk.W, padx=5)
+        self.analysis_rounds_var = tk.StringVar(value="10")
+        ttk.Entry(analysis_frame, textvariable=self.analysis_rounds_var, width=10).grid(row=0, column=1, sticky=tk.W, padx=5)
+        ttk.Button(analysis_frame, text="🔍 分析输出分布", command=self.analyze_model_outputs).grid(row=0, column=2, padx=5)
+        ttk.Label(analysis_frame, text="（用于诊断胜率为0的轮次问题）", font=("", 8)).grid(row=0, column=3, sticky=tk.W, padx=5)
 
         # 评估结果
         eval_result_frame = ttk.LabelFrame(parent, text="评估结果", padding="10")
@@ -933,6 +963,67 @@ class EnhancedStage6TrainingGUI:
                 # 添加详细输出
                 result_text += f"\n详细输出:\n{'-' * 60}\n{eval_output}\n"
 
+                # 保存评估结果到JSON文件
+                try:
+                    os.makedirs("training_logs", exist_ok=True)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    log_filename = f"training_logs/stage6_evaluation_{timestamp}.json"
+                    
+                    # 准备保存的数据（转换为可序列化的格式）
+                    save_data = {
+                        'timestamp': timestamp,
+                        'model_path': model_path,
+                        'data_dir': data_dir,
+                        'evaluation': {
+                            'win_rate': float(eval_result.get('win_rate', 0)),
+                            'win_rate_ci': [float(eval_result.get('win_rate_ci', (0, 0))[0]), 
+                                          float(eval_result.get('win_rate_ci', (0, 0))[1])],
+                            'strategy_adaptability': float(eval_result.get('strategy_adaptability', 0)),
+                            'decision_quality': float(eval_result.get('decision_quality', 0)),
+                            'prediction_accuracy': float(eval_result.get('prediction_accuracy', 0)),
+                            'total_score': float(eval_result.get('total_score', 0))
+                        },
+                        'stability': {
+                            'is_stable': bool(stability.get('is_stable', False)),
+                            'statistics': {
+                                'mean_win_rate': float(stability.get('statistics', {}).get('mean_win_rate', 0)),
+                                'std_win_rate': float(stability.get('statistics', {}).get('std_win_rate', 0)),
+                                'cv_win_rate': float(stability.get('statistics', {}).get('cv_win_rate', 0)),
+                                'mean_total_score': float(stability.get('statistics', {}).get('mean_total_score', 0)),
+                                'std_total_score': float(stability.get('statistics', {}).get('std_total_score', 0)),
+                                'cv_total_score': float(stability.get('statistics', {}).get('cv_total_score', 0))
+                            },
+                            'round_results': [
+                                {
+                                    'round': int(r['round']),
+                                    'win_rate': float(r['win_rate']),
+                                    'total_score': float(r['total_score']),
+                                    'num_games': int(r['num_games'])
+                                }
+                                for r in stability.get('round_results', [])
+                            ]
+                        },
+                        'adaptability': {
+                            'is_adaptive': bool(adaptability.get('is_adaptive', False)),
+                            'statistics': adaptability.get('statistics', {})
+                        },
+                        'summary': {
+                            'is_improved': bool(summary.get('is_improved', False)),
+                            'is_stable': bool(summary.get('is_stable', False)),
+                            'is_adaptive': bool(summary.get('is_adaptive', False)),
+                            'overall_pass': bool(summary.get('overall_pass', False))
+                        },
+                        'raw_output': eval_output
+                    }
+                    
+                    with open(log_filename, 'w', encoding='utf-8') as f:
+                        json.dump(save_data, f, ensure_ascii=False, indent=2)
+                    
+                    self.log(f"💾 评估结果已保存到: {log_filename}")
+                    result_text += f"\n💾 评估结果已保存到: {log_filename}\n"
+                except Exception as save_error:
+                    self.log(f"⚠️ 保存评估结果失败: {save_error}", "WARNING")
+
                 self.root.after(0, lambda: self.eval_text.insert(tk.END, result_text))
                 self.log("✅ 评估完成")
                 self.status_var.set("✅ 评估完成")
@@ -943,6 +1034,104 @@ class EnhancedStage6TrainingGUI:
                 self.root.after(0, lambda: self.eval_text.insert(tk.END, f"\n评估失败: {str(e)}\n"))
 
         threading.Thread(target=evaluate_thread, daemon=True).start()
+    
+    def analyze_model_outputs(self):
+        """分析模型输出分布"""
+        model_path = self.eval_model_path_var.get()
+        data_dir = self.data_dir_var.get()
+        
+        if not os.path.exists(model_path):
+            messagebox.showwarning("警告", f"模型文件不存在: {model_path}")
+            return
+        
+        try:
+            num_rounds = int(self.analysis_rounds_var.get())
+        except ValueError:
+            messagebox.showwarning("警告", "分析轮数必须是整数")
+            return
+        
+        self.log("🔍 开始模型输出分布分析...")
+        self.eval_text.insert(tk.END, "\n" + "="*60 + "\n")
+        self.eval_text.insert(tk.END, "模型输出分布分析\n")
+        self.eval_text.insert(tk.END, "="*60 + "\n\n")
+        self.status_var.set("🔄 正在分析模型输出分布...")
+        
+        def analyze_thread():
+            try:
+                from src.train.analyze_model_output_distribution import analyze_model_outputs
+                
+                # 生成输出文件路径
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = f"training_logs/model_output_analysis_{timestamp}.json"
+                
+                # 运行分析
+                results = analyze_model_outputs(
+                    model_path=model_path,
+                    data_dir=data_dir,
+                    player_id=0,
+                    num_rounds=num_rounds,
+                    output_path=output_path
+                )
+                
+                # 显示结果
+                result_text = f"\n分析完成！\n"
+                result_text += f"输出文件: {output_path}\n\n"
+                
+                if results and 'round_results' in results:
+                    result_text += "各轮次分析结果:\n"
+                    result_text += "-" * 60 + "\n"
+                    
+                    for round_result in results['round_results']:
+                        round_num = round_result.get('round', 0)
+                        num_samples = round_result.get('num_samples', 0)
+                        
+                        if 'error' in round_result:
+                            result_text += f"第{round_num}轮: 错误 - {round_result['error']}\n"
+                        else:
+                            stats = round_result.get('statistics', {})
+                            anomalies = round_result.get('anomalies', {})
+                            
+                            result_text += f"\n第{round_num}轮 (样本数: {num_samples}):\n"
+                            
+                            if stats:
+                                logits = stats.get('logits', {})
+                                probs = stats.get('probs', {})
+                                scaled_probs = stats.get('scaled_probs', {})
+                                pred_counts = stats.get('predicted_card_counts', {})
+                                
+                                result_text += f"  Logits: 均值={logits.get('mean', 0):.4f}, 标准差={logits.get('std', 0):.4f}\n"
+                                result_text += f"  Probs: 均值={probs.get('mean', 0):.4f}, 范围=[{probs.get('min', 0):.4f}, {probs.get('max', 0):.4f}]\n"
+                                result_text += f"  Scaled Probs: 均值={scaled_probs.get('mean', 0):.4f}\n"
+                                result_text += f"  预测卡牌数: 均值={pred_counts.get('mean', 0):.2f}, 范围=[{pred_counts.get('min', 0)}, {pred_counts.get('max', 0)}]\n"
+                            
+                            if anomalies:
+                                zero_ratio = anomalies.get('zero_output_ratio', 0)
+                                invalid_ratio = anomalies.get('invalid_output_ratio', 0)
+                                
+                                if zero_ratio > 0:
+                                    result_text += f"  ⚠️ 零输出比例: {zero_ratio:.1%}\n"
+                                if invalid_ratio > 0:
+                                    result_text += f"  ⚠️ 无效输出比例: {invalid_ratio:.1%}\n"
+                                
+                                if zero_ratio > 0.1 or invalid_ratio > 0.5:
+                                    result_text += f"  ❌ 该轮次输出异常，可能是导致胜率为0的原因！\n"
+                    
+                    result_text += "\n" + "="*60 + "\n"
+                    result_text += f"详细结果已保存到: {output_path}\n"
+                
+                self.root.after(0, lambda: self.eval_text.insert(tk.END, result_text))
+                self.log(f"✅ 模型输出分布分析完成，结果已保存到: {output_path}")
+                self.status_var.set("✅ 分析完成")
+                
+            except Exception as e:
+                error_msg = f"分析失败: {str(e)}"
+                self.log(f"❌ {error_msg}", "ERROR")
+                self.status_var.set("❌ 分析失败")
+                self.root.after(0, lambda: self.eval_text.insert(tk.END, f"\n{error_msg}\n"))
+                import traceback
+                traceback.print_exc()
+        
+        threading.Thread(target=analyze_thread, daemon=True).start()
 
     # ========== 工具方法 ==========
 

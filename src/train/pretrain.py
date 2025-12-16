@@ -31,6 +31,7 @@ from src.rl_agent.model import GuandanPolicyNet, ImprovedGuandanPolicyNet
 from src.rl_agent.strategy_pattern_recognizer import StrategyPatternRecognizer
 from src.rl_agent.opponent_model import OpponentModel
 from src.rl_agent.dynamic_strategy_adjuster import DynamicStrategyAdjuster
+from src.utils.device_selector import select_compatible_device
 
 
 def augment_training_data(raw_data, augmentation_factor=2):
@@ -1305,14 +1306,10 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     model_setup_start = time.time()
     print(f"[DEBUG] [2/8] 时间戳: {time.strftime('%H:%M:%S', time.localtime())}")
 
-    # **修复**: 支持强制使用CPU训练（解决旧GPU兼容性问题）
+    # **修复**: 使用智能GPU选择，自动跳过不兼容的旧GPU（CUDA capability < 3.7）
     # 如果环境变量FORCE_CPU=1，强制使用CPU
     force_cpu = os.environ.get('FORCE_CPU', '0') == '1'
-    if force_cpu:
-        device = torch.device("cpu")
-        print(f"[警告] 强制使用CPU训练（FORCE_CPU=1）")
-    else:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device, gpu_id = select_compatible_device(force_cpu=force_cpu)
     print(f"Using device: {device}")
     print(f"[DEBUG] [2/8] 设备选择完成，耗时: {time.time() - model_setup_start:.2f}秒")
     

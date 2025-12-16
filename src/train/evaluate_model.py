@@ -58,7 +58,7 @@ def evaluate_model(model_path="models/bc_model_v1.pth", data_dir="game_records")
     
     # 加载模型时，需要检查是否有策略分类头
     try:
-        checkpoint = torch.load(model_path, map_location=device)
+        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
         
         # 处理不同的模型保存格式
         if isinstance(checkpoint, dict):
