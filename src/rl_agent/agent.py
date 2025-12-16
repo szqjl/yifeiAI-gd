@@ -54,9 +54,38 @@ class PPOAgent:
             probs = probs * 5.0  # 进一步调整后的缩放因子（从7.0降低到5.0）
             probs = torch.clamp(probs, 0, 1)  # 确保概率值在[0, 1]范围内
             
-            # **调整预测阈值**：使用阈值而不是采样
-            # 基于自动测试，最优参数组合为：缩放因子5.0 + 阈值0.5
-            action = (probs > self.prediction_threshold).float()
+            # **阶段6修复**：使用Top-K选择替代固定阈值，解决预测卡牌数量过多问题
+            # 首先尝试使用阈值，如果选择的卡牌数量在合理范围内（2-7张），使用阈值
+            # 否则使用Top-K选择
+            action_threshold = (probs > self.prediction_threshold).float()
+            num_selected = action_threshold.sum().item()
+            
+            if 2 <= num_selected <= 7:
+                # 阈值选择的结果在合理范围内，使用阈值
+                action = action_threshold
+            else:
+                # 阈值选择的结果不合理，使用Top-K选择
+                k_min, k_max = 2, 7
+                sorted_probs, _ = torch.sort(probs.squeeze(), descending=True)
+                
+                if len(sorted_probs) > k_max:
+                    # 找到概率明显下降的点
+                    prob_diffs = sorted_probs[:-1] - sorted_probs[1:]
+                    k = k_min
+                    for i in range(k_min-1, min(k_max, len(prob_diffs))):
+                        if prob_diffs[i] > 0.15:
+                            k = i + 1
+                            break
+                    k = min(k, k_max)
+                else:
+                    k = min(len(sorted_probs), k_max)
+                
+                # Top-K选择
+                _, top_k_indices = torch.topk(probs.squeeze(), k=k, dim=0)
+                action = torch.zeros_like(probs.squeeze())
+                action[top_k_indices] = 1.0
+                if probs.dim() > 1:
+                    action = action.unsqueeze(0)
             
             # 计算log_prob（用于PPO训练）
             # 注意：这里使用缩放前的原始概率计算log_prob，以保持训练一致性
@@ -121,5 +150,5 @@ class PPOAgent:
         torch.save(self.policy.state_dict(), path)
 
     def load(self, path):
-        self.policy.load_state_dict(torch.load(path, map_location=self.device))
+        self.policy.load_state_dict(torch.load(path, map_location=self.device, weights_only=False))
         self.policy_old.load_state_dict(self.policy.state_dict())

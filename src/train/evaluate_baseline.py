@@ -62,7 +62,7 @@ def evaluate_baseline(model_path="models/bc_model_v1.pth", data_dir="game_record
     print(f"[OK] 使用设备: {device}")
     
     try:
-        checkpoint = torch.load(model_path, map_location=device)
+        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
         
         if isinstance(checkpoint, dict):
             if 'model_state_dict' in checkpoint:

@@ -109,18 +109,48 @@ class RLDecisionEngine:
                     except Exception as e:
                         self.logger.warning(f"Failed to use prediction optimizer: {e}, falling back to baseline")
                 
-                # **基线评估参数**：使用阶段0验证的标准参数作为统一标尺
-                # 与训练时评估参数保持一致：阈值0.3，缩放因子5.0
-                prediction_threshold = 0.3  # 基线阈值（阶段0基线参数）
+                # **阶段6修复**：使用Top-K选择替代固定阈值，解决预测卡牌数量过多问题
+                prediction_threshold = 0.3  # 基线阈值（用于初步筛选）
                 scaling_factor = 5.0  # 基线缩放因子（阶段0基线参数）
                 
                 # 对于行为克隆模型，我们使用sigmoid + 缩放 + 阈值来获取二进制动作
                 probs = torch.sigmoid(action_logits)
                 probs = probs * scaling_factor  # 应用缩放因子
                 probs = torch.clamp(probs, 0, 1)  # 限制在[0,1]范围内
-                # 使用0.3作为阈值（与训练时评估一致）
-                action_binary = (probs > prediction_threshold).float().squeeze(0).cpu().numpy()
-
+                
+                # **Top-K选择策略**：优先使用阈值，如果结果不合理则使用Top-K
+                probs_squeezed = probs.squeeze(0)
+                action_threshold = (probs_squeezed > prediction_threshold).float()
+                num_selected = action_threshold.sum().item()
+                
+                if 2 <= num_selected <= 7:
+                    # 阈值选择的结果在合理范围内，使用阈值
+                    action_binary = action_threshold.cpu().numpy()
+                else:
+                    # 阈值选择的结果不合理，使用Top-K选择
+                    # K值在2-7之间，根据概率分布自适应选择
+                    k_min, k_max = 2, 7
+                    
+                    # 计算Top-K
+                    sorted_probs, _ = torch.sort(probs_squeezed, descending=True)
+                    if len(sorted_probs) > k_max:
+                        # 找到概率明显下降的点
+                        prob_diffs = sorted_probs[:-1] - sorted_probs[1:]
+                        k = k_min
+                        for i in range(k_min-1, min(k_max, len(prob_diffs))):
+                            if prob_diffs[i] > 0.15:
+                                k = i + 1
+                                break
+                        k = min(k, k_max)
+                    else:
+                        k = min(len(sorted_probs), k_max)
+                    
+                    # Top-K选择
+                    _, top_k_indices = torch.topk(probs_squeezed, k=k, dim=0)
+                    action_binary = torch.zeros_like(probs_squeezed)
+                    action_binary[top_k_indices] = 1.0
+                    action_binary = action_binary.cpu().numpy()
+                
                 return action_binary
 
         except Exception as e:
