@@ -174,10 +174,10 @@ def bomb_strategy(
                 down_pos = 3
             else:  # my_pos == 3
                 down_pos = 0
-
+            
             if greater_pos == down_pos:
                 suggestions.append({'action': '炸（下家剩9）', 'reason': '下家剩9张，下家有炸要先炸。'})
-
+    
     # **增强**：残局阶段更积极使用炸弹
     if opponent_rest_cards <= 8:
         if opponent_action_type in ['pair', 'trips'] and opponent_action_rank < 12:

@@ -230,7 +230,7 @@ class YFAdapter:
         suit = card[0]
         rank = card[1:].replace('10', 'T')
         return [suit, rank]
-
+    
     def _convert_cards(self, cards: Union[str, List]) -> List:
         """
         Convert card format from string to list.
