@@ -23,6 +23,24 @@
     "CJ",
     "SJ"
   ],
+  "all_players_hands": {
+    "0": [],
+    "1": [],
+    "2": [],
+    "3": [
+      "H5"
+    ]
+  },
+  "game_info": {
+    "curRank": "2",
+    "game_result": "win",
+    "rank": 2,
+    "rank_name": "二游",
+    "all_ranks": {
+      "1": 1,
+      "2": 3
+    }
+  },
   "actions": [
     {
       "cur_pos": 3,
@@ -64,5 +82,9 @@
       "cur_pos": 3,
       "cur_action": "['Discard', 'Discard', ['S8', 'S7', 'S6', 'S5', 'S4', 'D0']]"
     }
-  ]
+  ],
+  "_conversion_meta": {
+    "result_updated_from_rep": true,
+    "rep_file": "C:\\Program Files (x86)\\gdgame\\MobileGD\\replay\\szqjl_2024-01-18_10_48_16_.rep"
+  }
 }

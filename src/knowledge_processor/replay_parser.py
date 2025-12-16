@@ -42,84 +42,79 @@ except ImportError:
             # 如果设置失败，继续执行（可能是文件操作冲突或其他原因）
             pass
 
-# 导入策略类型识别函数
-# 注意：这里使用相对导入避免循环依赖
-try:
-    from src.train.evaluate_strategy_types import identify_strategy_type
-except ImportError:
-    # 如果导入失败，定义一个简化版本（包含7种策略类型）
-    def identify_strategy_type(state_dict, action_cards, last_action=None):
-        """简化版策略类型识别（如果无法导入完整版本）"""
-        if not action_cards:
-            return 'unknown'
-        
-        action_type = state_dict.get('action_type', '')
-        player_rest_cards = state_dict.get('player_rest_cards', [27, 27, 27, 27])
-        current_player = state_dict.get('current_player', 0)
-        
-        # 计算队友和对手
-        teammate = (current_player + 2) % 4
-        opponents = [i for i in range(4) if i != current_player and i != teammate]
-        
-        # 获取对手和队友的剩余牌数
-        opponent_rest_cards = [player_rest_cards[i] for i in opponents if i < len(player_rest_cards)]
-        teammate_rest_cards = player_rest_cards[teammate] if teammate < len(player_rest_cards) else 27
-        min_opponent_cards = min(opponent_rest_cards) if opponent_rest_cards else 27
-        
-        # 1. 判断是否是出炸弹（优先级最高）
-        if action_type in ['Bomb', 'BOMB']:
-            return 'bomb'
-        
-        # 2. 判断是否是保护队友
-        if last_action:
-            history = state_dict.get('history', [])
-            if history:
-                last_history = history[-1]
-                last_action_player = last_history.get('player')
-                if last_action_player is not None and last_action_player in opponents:
-                    if action_type == last_action.get('type') and action_type not in ['PASS', '']:
-                        # 如果队友快走完（剩余牌数<=10），优先识别为保护队友
-                        if teammate_rest_cards <= 10:
-                            return 'protect'
-                        # 如果队友牌数明显少于对手（队友牌数 <= 对手最小牌数-5），也可能是保护队友
-                        elif min_opponent_cards > 0 and teammate_rest_cards <= min_opponent_cards - 5:
-                            return 'protect'
-                        # 否则识别为压制对手
-                        else:
-                            return 'suppress'
-        
-        # 额外判断：如果队友快走完且对手也快走完，使用大牌可能是保护队友
-        if teammate_rest_cards <= 10 and min_opponent_cards <= 10:
-            # 如果出牌数量多（>=4），可能是保护队友
-            if len(action_cards) >= 4 and action_type not in ['Bomb', 'BOMB']:
-                return 'protect'
-        
-        # 3. 判断是否是压制对手
-        if min_opponent_cards <= 8:
-            # 如果出牌数量多（>=4），且不是炸弹，可能是压制
-            if len(action_cards) >= 4 and action_type not in ['Bomb', 'BOMB']:
-                return 'suppress'
-            # 如果是对子、三带二等组合牌型，且对手快走完，可能是压制
-            if action_type in ['Pair', 'Trips', 'ThreeWithTwo', 'Straight']:
-                return 'suppress'
-        
-        # 4. 判断控牌
-        if min_opponent_cards <= 8:
-            # 如果出牌数量多，且不是组合牌型，可能是控牌
-            if len(action_cards) >= 4 and action_type not in ['Pair', 'Trips', 'ThreeWithTwo', 'Straight']:
-                return 'control'
-        
-        # 5. 判断跟牌
-        if last_action and last_action.get('type') not in ['PASS', None, '']:
-            if action_type == last_action.get('type') and action_type not in ['PASS', '']:
-                return 'follow'
-        
-        # 6. 判断组牌
-        if action_type in ['Pair', 'Trips', 'ThreeWithTwo', 'Straight', 'ThreePair', 'TwoTrips']:
-            return 'group'
-        
-        # 7. 其他情况：顺牌/出牌
-        return 'discard'
+# 直接定义策略类型识别函数，避免循环导入
+def identify_strategy_type(state_dict, action_cards, last_action=None):
+    """简化版策略类型识别（避免循环导入）"""
+    if not action_cards:
+        return 'unknown'
+
+    action_type = state_dict.get('action_type', '')
+    player_rest_cards = state_dict.get('player_rest_cards', [27, 27, 27, 27])
+    current_player = state_dict.get('current_player', 0)
+
+    # 计算队友和对手
+    teammate = (current_player + 2) % 4
+    opponents = [i for i in range(4) if i != current_player and i != teammate]
+
+    # 获取对手和队友的剩余牌数
+    opponent_rest_cards = [player_rest_cards[i] for i in opponents if i < len(player_rest_cards)]
+    teammate_rest_cards = player_rest_cards[teammate] if teammate < len(player_rest_cards) else 27
+    min_opponent_cards = min(opponent_rest_cards) if opponent_rest_cards else 27
+
+    # 1. 判断是否是出炸弹（优先级最高）
+    if action_type in ['Bomb', 'BOMB']:
+        return 'bomb'
+
+    # 2. 判断是否是保护队友
+    if last_action:
+        history = state_dict.get('history', [])
+        if history:
+            last_history = history[-1]
+            last_action_player = last_history.get('player')
+            if last_action_player is not None and last_action_player in opponents:
+                if action_type == last_action.get('type') and action_type not in ['PASS', '']:
+                    # 如果队友快走完（剩余牌数<=10），优先识别为保护队友
+                    if teammate_rest_cards <= 10:
+                        return 'protect'
+                    # 如果队友牌数明显少于对手（队友牌数 <= 对手最小牌数-5），也可能是保护队友
+                    elif min_opponent_cards > 0 and teammate_rest_cards <= min_opponent_cards - 5:
+                        return 'protect'
+                    # 否则识别为压制对手
+                    else:
+                        return 'suppress'
+
+    # 额外判断：如果队友快走完且对手也快走完，使用大牌可能是保护队友
+    if teammate_rest_cards <= 10 and min_opponent_cards <= 10:
+        # 如果出牌数量多（>=4），可能是保护队友
+        if len(action_cards) >= 4 and action_type not in ['Bomb', 'BOMB']:
+            return 'protect'
+
+    # 3. 判断是否是压制对手
+    if min_opponent_cards <= 8:
+        # 如果出牌数量多（>=4），且不是炸弹，可能是压制
+        if len(action_cards) >= 4 and action_type not in ['Bomb', 'BOMB']:
+            return 'suppress'
+        # 如果是对子、三带二等组合牌型，且对手快走完，可能是压制
+        if action_type in ['Pair', 'Trips', 'ThreeWithTwo', 'Straight']:
+            return 'suppress'
+
+    # 4. 判断控牌
+    if min_opponent_cards <= 8:
+        # 如果出牌数量多，且不是组合牌型，可能是控牌
+        if len(action_cards) >= 4 and action_type not in ['Pair', 'Trips', 'ThreeWithTwo', 'Straight']:
+            return 'control'
+
+    # 5. 判断跟牌
+    if last_action and last_action.get('type') not in ['PASS', None, '']:
+        if action_type == last_action.get('type') and action_type not in ['PASS', '']:
+            return 'follow'
+
+    # 6. 判断组牌
+    if action_type in ['Pair', 'Trips', 'ThreeWithTwo', 'Straight', 'ThreePair', 'TwoTrips']:
+        return 'group'
+
+    # 7. 其他情况：顺牌/出牌
+    return 'discard'
 
 class ReplayParser:
     def __init__(self, data_dir: str):

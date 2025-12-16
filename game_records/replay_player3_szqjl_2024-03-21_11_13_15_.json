@@ -26,6 +26,24 @@
     "SJ",
     "HK"
   ],
+  "all_players_hands": {
+    "0": [],
+    "1": [],
+    "2": [],
+    "3": [
+      "B"
+    ]
+  },
+  "game_info": {
+    "curRank": "2",
+    "game_result": "win",
+    "rank": 3,
+    "rank_name": "三游",
+    "all_ranks": {
+      "1": 0,
+      "2": 2
+    }
+  },
   "actions": [
     {
       "cur_pos": 3,
@@ -75,5 +93,9 @@
       "cur_pos": 3,
       "cur_action": "['Discard', 'Discard', ['HQ', 'DQ', 'D0']]"
     }
-  ]
+  ],
+  "_conversion_meta": {
+    "result_updated_from_rep": true,
+    "rep_file": "C:\\Program Files (x86)\\gdgame\\MobileGD\\replay\\szqjl_2024-03-21_11_09_25_.rep"
+  }
 }

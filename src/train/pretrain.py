@@ -33,6 +33,71 @@ from src.rl_agent.opponent_model import OpponentModel
 from src.rl_agent.dynamic_strategy_adjuster import DynamicStrategyAdjuster
 
 
+def augment_training_data(raw_data, augmentation_factor=2):
+    """
+    数据增强：生成更多样化的训练样本
+    通过轻微修改现有样本创建变体，提高模型泛化能力
+
+    Args:
+        raw_data: 原始训练数据
+        augmentation_factor: 增强倍数
+
+    Returns:
+        增强后的训练数据
+    """
+    import random
+    augmented_data = raw_data.copy()
+
+    print(f"🔄 开始数据增强：原始样本 {len(raw_data)} 个，增强倍数 {augmentation_factor}")
+
+    for _ in range(augmentation_factor - 1):
+        for state_dict, action_cards in raw_data:
+            # 创建样本变体
+            augmented_state = state_dict.copy()
+            augmented_action = action_cards.copy()
+
+            # 1. 手牌顺序随机化（模拟不同手牌排列）
+            if 'hand' in augmented_state and len(augmented_state['hand']) > 5:
+                # 随机打乱部分手牌顺序
+                hand_copy = augmented_state['hand'].copy()
+                # 只打乱后半部分，保持关键牌相对稳定
+                mid_point = len(hand_copy) // 2
+                random.shuffle(hand_copy[mid_point:])
+                augmented_state['hand'] = hand_copy
+
+            # 2. 历史记录截断变体（模拟不同记忆深度）
+            if 'history' in augmented_state and len(augmented_state['history']) > 3:
+                # 随机截断历史记录长度
+                max_history = random.randint(3, len(augmented_state['history']))
+                augmented_state['history'] = augmented_state['history'][-max_history:]
+
+            # 3. 游戏阶段轻微扰动（模拟相似局面）
+            if 'game_phase' in augmented_state:
+                # 在相邻阶段间轻微变动
+                current_phase = augmented_state['game_phase']
+                if random.random() < 0.3:  # 30%概率变动
+                    if current_phase == 0 and random.random() < 0.5:
+                        augmented_state['game_phase'] = 1
+                    elif current_phase == 1:
+                        augmented_state['game_phase'] = 0 if random.random() < 0.4 else 2
+                    elif current_phase == 2 and random.random() < 0.5:
+                        augmented_state['game_phase'] = 1
+
+            # 4. 玩家剩余牌数轻微扰动（模拟相似局面）
+            if 'player_rest_cards' in augmented_state:
+                rest_cards = augmented_state['player_rest_cards'].copy()
+                for i in range(len(rest_cards)):
+                    # 在±2范围内轻微扰动
+                    perturbation = random.randint(-2, 2)
+                    rest_cards[i] = max(0, min(27, rest_cards[i] + perturbation))
+                augmented_state['player_rest_cards'] = rest_cards
+
+            augmented_data.append((augmented_state, augmented_action))
+
+    print(f"✅ 数据增强完成：增强后样本 {len(augmented_data)} 个")
+    return augmented_data
+
+
 def identify_card_pattern_type(action_cards, state_dict=None):
     """
     识别卡牌模式类型（阶段3任务2.6方案D改进版：渐进式课程学习）
@@ -1039,6 +1104,7 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         enable_dynamic_strategy: 是否启用动态策略调整（阶段5，默认True）
         dynamic_strategy_weight: 动态策略调整损失权重（阶段5，默认0.1）
     """
+    import time
     print("Starting Behavior Cloning Pre-training...")
     print(f"Data directory: {data_dir}")
     print(f"Epochs: {epochs}, Batch size: {batch_size}, Learning rate: {lr}")
@@ -1051,13 +1117,40 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
             print(f"[阶段2多任务学习] 策略分类头: 启用, 损失权重: α={action_loss_weight}, β={strategy_loss_weight}")
     else:
         print(f"[阶段2多任务学习] 策略分类头: 禁用（单任务学习）")
-    
+
     # 1. Load Data
+    print("[DEBUG] [1/8] 开始数据加载阶段...")
+    start_time = time.time()
+    print(f"[DEBUG] [1/8] 时间戳: {time.strftime('%H:%M:%S', time.localtime())}")
+    print("[INFO] 📂 正在初始化ReplayParser...")
+    parser_init_start = time.time()
     parser = ReplayParser(data_dir)
+    parser_init_time = time.time() - parser_init_start
+    print(f"[DEBUG] [1/8] ReplayParser初始化完成，耗时: {parser_init_time:.2f}秒")
+
+    print("[INFO] 📖 正在加载replay文件（这可能需要一些时间，请稍候）...")
+    load_start = time.time()
+    print(f"[DEBUG] [1/8] 开始加载replay文件，时间戳: {time.strftime('%H:%M:%S', time.localtime())}")
     replays = parser.load_replays()
+    load_time = time.time() - load_start
+    print(f"[DEBUG] [1/8] replay文件加载完成，耗时: {load_time:.2f}秒")
+    print(f"[INFO] ✅ 已加载 {len(replays)} 个replay文件")
+
+    print("[INFO] 🔄 正在提取训练数据...")
+    extract_start = time.time()
+    print(f"[DEBUG] [1/8] 开始提取训练数据，时间戳: {time.strftime('%H:%M:%S', time.localtime())}")
     raw_data = parser.extract_training_data(replays)
-    print(f"Loaded {len(raw_data)} samples.")
+    extract_time = time.time() - extract_start
+    print(f"[DEBUG] [1/8] 训练数据提取完成，耗时: {extract_time:.2f}秒")
+    print(f"[INFO] ✅ 已提取 {len(raw_data)} 个训练样本")
+    data_load_total = time.time() - start_time
+    print(f"[DEBUG] [1/8] 数据加载阶段总耗时: {data_load_total:.2f}秒")
     
+    # 阶段6优化：数据增强（提升泛化能力）
+    if len(raw_data) > 1000:  # 只有在数据量足够时才进行增强
+        raw_data = augment_training_data(raw_data, augmentation_factor=3)  # 3倍数据增强
+        print(f"📈 数据增强后总样本数: {len(raw_data)}")
+
     # 限制数据量（用于测试）
     if max_samples is not None and len(raw_data) > max_samples:
         raw_data = raw_data[:max_samples]
@@ -1208,6 +1301,10 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     
     # 2. Setup Model
+    print("[DEBUG] [2/8] 开始模型设置阶段...")
+    model_setup_start = time.time()
+    print(f"[DEBUG] [2/8] 时间戳: {time.strftime('%H:%M:%S', time.localtime())}")
+
     # **修复**: 支持强制使用CPU训练（解决旧GPU兼容性问题）
     # 如果环境变量FORCE_CPU=1，强制使用CPU
     force_cpu = os.environ.get('FORCE_CPU', '0') == '1'
@@ -1217,6 +1314,7 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
+    print(f"[DEBUG] [2/8] 设备选择完成，耗时: {time.time() - model_setup_start:.2f}秒")
     
     # **关键修复**：模型输入输出维度必须与推理代码一致
     # 输入：512维状态向量
@@ -1230,6 +1328,8 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     enable_strategy_tasks = True  # 默认启用7个策略任务
     strategy_tasks_weight = 0.5  # 7个策略任务的总权重（平均每个任务约0.071，阶段6支持动态调整）
     
+    print("[DEBUG] [2/8] 开始创建模型...")
+    model_create_start = time.time()
     if use_improved_model:
         model = ImprovedGuandanPolicyNet(
             input_dim=512,
@@ -1244,9 +1344,9 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         print(f"Model: ImprovedGuandanPolicyNet, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate={dropout_rate}, strategy_head={enable_strategy_head}, attention_heads={attention_heads}, strategy_tasks={enable_strategy_tasks} (阶段4：注意力机制 + 残差连接 + 6个策略任务)")
     else:
         model = GuandanPolicyNet(
-            input_dim=512, 
+            input_dim=512,
             hidden_dim=256,  # 阶段3任务2回退：从512回退到256，任务1配置（24.62%准确率）
-            output_dim=512, 
+            output_dim=512,
             dropout_rate=dropout_rate,
             strategy_num_classes=7,
             enable_strategy_head=enable_strategy_head,
@@ -1256,6 +1356,8 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
             print(f"Model: GuandanPolicyNet, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate={dropout_rate}, strategy_head={enable_strategy_head} (阶段3任务2.5方案C：分离特征提取层)")
         else:
             print(f"Model: GuandanPolicyNet, input_dim=512, hidden_dim=256, output_dim=512, dropout_rate={dropout_rate}, strategy_head={enable_strategy_head} (阶段3任务2回退：恢复任务1配置)")
+    model_create_time = time.time() - model_create_start
+    print(f"[DEBUG] [2/8] 模型创建完成，耗时: {model_create_time:.2f}秒")
 
     # **阶段5新增**: 高级策略学习组件
     strategy_pattern_recognizer = None
@@ -1297,7 +1399,8 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     if enable_dynamic_strategy and dynamic_strategy_adjuster is not None:
         all_params.extend(dynamic_strategy_adjuster.parameters())
 
-    optimizer = optim.Adam(all_params, lr=lr)
+    # 阶段6优化：使用AdamW优化器（更好的权重衰减）
+    optimizer = optim.AdamW(all_params, lr=lr, weight_decay=1e-4, betas=(0.9, 0.999))
     
     # **阶段3任务2.5回退**: 回退到BCE Loss（Focal Loss效果不理想）
     # 使用加权BCE Loss，增加对预测过少的惩罚
@@ -1338,7 +1441,11 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
     
     # 3. Training Loop
-    # **阶段2任务3新增**: 评估指标记录
+    print("[DEBUG] [3/8] 开始训练循环准备...")
+    training_prep_start = time.time()
+    print(f"[DEBUG] [3/8] 时间戳: {time.strftime('%H:%M:%S', time.localtime())}")
+
+    # **阶段2任务3新增 + 阶段6评估优化**: 评估指标记录
     training_history = {
         'epochs': [],
         'total_loss': [],
@@ -1348,8 +1455,26 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         'action_card_accuracy': [],
         'strategy_accuracy': [],
         'strategy_accuracy_by_class': {i: [] for i in range(7)},  # 7个策略类别
-        'strategy_understanding_rate': []  # 策略理解率（动作预测和策略分类都正确）
+        'strategy_understanding_rate': [],  # 策略理解率（动作预测和策略分类都正确）
+        # **阶段6新增评估指标**
+        'loss_stability': [],  # 损失稳定性（方差）
+        'accuracy_trend': [],  # 准确率趋势（斜率）
+        'overfitting_risk': [],  # 过拟合风险（训练/验证损失比值）
+        'learning_efficiency': [],  # 学习效率（准确率/损失比值）
+        'pattern_recognition_score': [],  # 牌型识别得分
+        'strategy_consistency_score': []  # 策略一致性得分
     }
+
+    # 阶段6优化：早停机制
+    best_loss = float('inf')
+    patience = 15  # 容忍15个epoch无改善
+    patience_counter = 0
+    min_delta = 1e-4  # 最小改善阈值
+    training_prep_time = time.time() - training_prep_start
+    print(f"[DEBUG] [3/8] 训练准备完成，耗时: {training_prep_time:.2f}秒")
+    print("[DEBUG] [4/8] 开始训练循环...")
+    training_start = time.time()
+    print(f"[DEBUG] [4/8] 训练开始时间戳: {time.strftime('%H:%M:%S', time.localtime())}")
     
     # **阶段3任务2.5方案B**: 动态损失权重调整
     # 初始化当前权重（用于动态调整）
@@ -1365,6 +1490,12 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         print(f"[阶段3任务2.6方案D改进版] 渐进式课程学习：共{actual_stages}个阶段，每个阶段训练约 {epochs_per_stage} 个epoch")
     
     for epoch in range(epochs):
+        if epoch == 0:
+            print(f"[DEBUG] [4/8] 开始Epoch 1，时间戳: {time.strftime('%H:%M:%S', time.localtime())}")
+        elif epoch == 1:
+            epoch1_time = time.time() - training_start
+            print(f"[DEBUG] [4/8] Epoch 1完成，耗时: {epoch1_time:.2f}秒，开始Epoch 2")
+
         # **阶段3任务2.6方案D改进版**: 渐进式课程学习 - 检查是否需要切换到下一个阶段
         if use_curriculum_learning and curriculum_stage_data and epochs_per_stage:
             # 计算应该切换到哪个阶段（从阶段1开始，索引0）
@@ -1380,7 +1511,7 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                       f"(样本数={len(stage_info['data'])})")
                 print(f"    牌型分布: {stage_info.get('pattern_types', {})}")
                 print(f"    策略类型分布: {stage_info.get('strategy_types', {})}")
-        
+
         total_loss = 0
         total_action_loss = 0
         total_strategy_loss = 0
@@ -1389,25 +1520,32 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
         total_opponent_model_loss = 0    # 阶段5新增：对手建模损失
         total_dynamic_strategy_loss = 0  # 阶段5新增：动态策略调整损失
         total_strategy_tasks_loss = 0    # 新增：6个策略任务损失
-        
+
         # **阶段2任务3新增**: 评估指标统计
         total_samples = 0
         correct_action_predictions = 0  # 完全匹配的动作预测数
         total_action_cards = 0
         matched_action_cards = 0  # 匹配的卡牌数
-        
+
         total_strategy_samples = 0  # 有效策略样本数（排除unknown）
         correct_strategy_predictions = 0  # 正确的策略分类数
         strategy_correct_by_class = {i: {'correct': 0, 'total': 0} for i in range(7)}  # 各类别统计
-        
+
         strategy_understanding_count = 0  # 策略理解正确数（动作和策略都正确）
-        
+
         model.train()  # 确保模型处于训练模式
+        epoch_batch_start = time.time()
+        print(f"[DEBUG] [4/8] Epoch {epoch+1} 开始处理batch，时间戳: {time.strftime('%H:%M:%S', time.localtime())}")
         
-        for batch in dataloader:
+        for batch_idx, batch in enumerate(dataloader):
+            if batch_idx == 0 and epoch == 0:
+                first_batch_time = time.time() - epoch_batch_start
+                print(f"[DEBUG] [4/8] 第一个batch加载完成，耗时: {first_batch_time:.2f}秒")
+                print(f"[DEBUG] [4/8] 开始处理第一个batch，时间戳: {time.strftime('%H:%M:%S', time.localtime())}")
+
             # 处理数据：支持多任务学习和策略模式识别 + 7个策略任务（新增策略原因学习）
             if len(batch) == 12:
-                # **新增**：返回12个值（state, action, strategy, pattern, strategy_pattern, 
+                # **新增**：返回12个值（state, action, strategy, pattern, strategy_pattern,
                 #          grouping, role, power, protect_suppress, bomb_timing, red_heart, reason）
                 states, actions, strategy_labels, pattern_types, strategy_pattern_labels, \
                 grouping_labels, role_labels, power_scores, protect_suppress_labels, \
@@ -1423,7 +1561,7 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 red_heart_labels = red_heart_labels.to(device)
                 reason_labels = reason_labels.to(device)  # 新增：策略原因标签
             elif len(batch) == 11:
-                # **新增**：返回11个值（state, action, strategy, pattern, strategy_pattern, 
+                # **新增**：返回11个值（state, action, strategy, pattern, strategy_pattern,
                 #          grouping, role, power, protect_suppress, bomb_timing, red_heart）
                 states, actions, strategy_labels, pattern_types, strategy_pattern_labels, \
                 grouping_labels, role_labels, power_scores, protect_suppress_labels, \
@@ -1486,16 +1624,16 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 protect_suppress_labels = None
                 bomb_timing_labels = None
                 red_heart_labels = None
-            
+
             states, actions = states.to(device), actions.to(device)
-            
+
             optimizer.zero_grad()
-            
+
             # 前向传播
             if enable_strategy_head and strategy_labels is not None:
                 # 多任务学习：同时返回动作预测、策略分类和6个策略任务
-                if enable_strategy_tasks and grouping_labels is not None:
-                    # 返回动作预测、策略分类和6个策略任务
+                if enable_strategy_tasks and grouping_labels is not None and use_improved_model:
+                    # 只有ImprovedGuandanPolicyNet才支持return_strategy_tasks
                     outputs = model(states, return_strategy=True, return_strategy_tasks=True)
                     if len(outputs) == 3:
                         action_logits, strategy_logits, strategy_tasks_outputs = outputs
@@ -1503,7 +1641,7 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                         action_logits, strategy_logits = outputs[:2]
                         strategy_tasks_outputs = None
                 else:
-                    # 只返回动作预测和策略分类
+                    # 只返回动作预测和策略分类（GuandanPolicyNet只支持这个）
                     action_logits, strategy_logits = model(states, return_strategy=True)
                     strategy_tasks_outputs = None
 
@@ -1988,6 +2126,46 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 training_history['strategy_accuracy_by_class'][label_idx].append(class_accuracy)
             else:
                 training_history['strategy_accuracy_by_class'][label_idx].append(0.0)
+
+        # **阶段6评估优化**: 计算高级评估指标
+        # 损失稳定性（最近5个epoch的损失方差）
+        if len(training_history['total_loss']) >= 5:
+            recent_losses = training_history['total_loss'][-5:]
+            loss_variance = np.var(recent_losses)
+            training_history['loss_stability'].append(loss_variance)
+        else:
+            training_history['loss_stability'].append(0.0)
+
+        # 准确率趋势（最近5个epoch的准确率斜率）
+        if len(training_history['action_exact_accuracy']) >= 5:
+            recent_accs = training_history['action_exact_accuracy'][-5:]
+            # 计算简单线性回归斜率
+            x = np.arange(len(recent_accs))
+            slope = np.polyfit(x, recent_accs, 1)[0] if len(set(recent_accs)) > 1 else 0.0
+            training_history['accuracy_trend'].append(slope)
+        else:
+            training_history['accuracy_trend'].append(0.0)
+
+        # 过拟合风险（训练损失相对稳定性）
+        if len(training_history['total_loss']) >= 3:
+            recent_losses = training_history['total_loss'][-3:]
+            loss_trend = np.polyfit(np.arange(3), recent_losses, 1)[0] if len(set(recent_losses)) > 1 else 0.0
+            # 正斜率表示损失仍在下降（正常），负斜率可能表示过拟合
+            overfitting_risk = max(0, -loss_trend * 100)  # 转换为正值表示风险
+            training_history['overfitting_risk'].append(overfitting_risk)
+        else:
+            training_history['overfitting_risk'].append(0.0)
+
+        # 学习效率（准确率/损失比值）
+        efficiency = action_exact_accuracy / (avg_loss + 1e-8)  # 避免除零
+        training_history['learning_efficiency'].append(efficiency)
+
+        # 牌型识别得分（基于卡牌级别准确率和策略准确率）
+        pattern_score = (action_card_accuracy + strategy_accuracy) / 2.0 if strategy_accuracy > 0 else action_card_accuracy
+        training_history['pattern_recognition_score'].append(pattern_score)
+
+        # 策略一致性得分（策略理解率）
+        training_history['strategy_consistency_score'].append(strategy_understanding_rate)
         
         # **阶段2任务3新增**: 详细日志输出
         if enable_strategy_head and strategy_loss_count > 0:
@@ -2010,7 +2188,7 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
             print(f"  Loss - {loss_str}, LR: {current_lr:.6f}")
             print(f"  Action Accuracy - Exact: {action_exact_accuracy:.2%}, Card: {action_card_accuracy:.2%}")
             print(f"  Strategy Accuracy - Overall: {strategy_accuracy:.2%}, Understanding Rate: {strategy_understanding_rate:.2%}")
-            
+
             # 各类别策略准确率（只显示有样本的类别）
             strategy_type_names = ['bomb', 'suppress', 'protect', 'control', 'group', 'follow', 'discard']
             class_accuracies = []
@@ -2020,6 +2198,29 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     class_accuracies.append(f"{strategy_type_names[label_idx]}: {class_acc:.2%}")
             if class_accuracies:
                 print(f"  Strategy Accuracy by Class - {', '.join(class_accuracies)}")
+
+            # **阶段6评估优化**: 显示高级评估指标
+            if epoch >= 4:  # 只有在有足够历史数据时才显示
+                loss_stability = training_history['loss_stability'][-1]
+                accuracy_trend = training_history['accuracy_trend'][-1]
+                overfitting_risk = training_history['overfitting_risk'][-1]
+                learning_efficiency = training_history['learning_efficiency'][-1]
+                pattern_score = training_history['pattern_recognition_score'][-1]
+                consistency_score = training_history['strategy_consistency_score'][-1]
+
+                print(f"  Advanced Metrics - Stability: {loss_stability:.6f}, Trend: {accuracy_trend:+.6f}, Overfit Risk: {overfitting_risk:.3f}")
+                print(f"  Advanced Metrics - Efficiency: {learning_efficiency:.3f}, Pattern Score: {pattern_score:.3f}, Consistency: {consistency_score:.3f}")
+
+                # 训练健康状态评估
+                health_status = "良好"
+                if loss_stability > 0.01:
+                    health_status = "不稳定"
+                elif overfitting_risk > 0.5:
+                    health_status = "可能过拟合"
+                elif accuracy_trend < -0.001:
+                    health_status = "准确率下降"
+
+                print(f"  Training Health: {health_status}")
         else:
             print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}, Action Exact Accuracy: {action_exact_accuracy:.2%}, Action Card Accuracy: {action_card_accuracy:.2%}, LR: {current_lr:.6f}")
         
@@ -2093,6 +2294,20 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
             }, checkpoint_path)
             print(f"  [Checkpoint] Model saved to {checkpoint_path}")
         
+        # 阶段6优化：早停机制
+        if avg_loss < best_loss - min_delta:
+            best_loss = avg_loss
+            patience_counter = 0
+            print(f"  [早停] 损失改善: {best_loss:.6f}")
+        else:
+            patience_counter += 1
+            print(f"  [早停] 无改善计数: {patience_counter}/{patience}")
+
+        if patience_counter >= patience:
+            print(f"  [早停] 触发早停机制，停止训练")
+            print(f"  [早停] 最佳损失: {best_loss:.6f} at epoch {epoch + 1 - patience}")
+            break
+
         # 更新学习率
         scheduler.step()
         
@@ -2130,7 +2345,14 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
             'strategy_understanding_rate': [float(x) for x in training_history['strategy_understanding_rate']],
             'strategy_accuracy_by_class': {
                 str(k): [float(x) for x in v] for k, v in training_history['strategy_accuracy_by_class'].items()
-            }
+            },
+            # **阶段6评估优化**: 新增高级评估指标
+            'loss_stability': [float(x) for x in training_history['loss_stability']],
+            'accuracy_trend': [float(x) for x in training_history['accuracy_trend']],
+            'overfitting_risk': [float(x) for x in training_history['overfitting_risk']],
+            'learning_efficiency': [float(x) for x in training_history['learning_efficiency']],
+            'pattern_recognition_score': [float(x) for x in training_history['pattern_recognition_score']],
+            'strategy_consistency_score': [float(x) for x in training_history['strategy_consistency_score']]
         }
         with open(history_file, 'w', encoding='utf-8') as f:
             json.dump(history_for_json, f, indent=2, ensure_ascii=False)
@@ -2163,20 +2385,41 @@ if __name__ == "__main__":
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
     
-    # 阶段1紧急修复：完整实施阶段1方案（方案G-1 + 方案G-2 + 方案I-1）
-    # 训练参数：
-    # - 数据量：全部数据（33,023个样本）
-    # - Epochs：50（快速测试修复效果）
-    # - Dropout：0.2（保持与方案C一致）
-    # - pos_weight：1.5（保持与方案C一致）
-    # - 学习率：0.0003
-    # - 批次大小：64
-    # - 课程学习：启用，4个阶段
-    # - 紧急修复（阶段1完整实施）：
-    #   - ✅ 方案G-1：预测数量惩罚权重：从0.2增加到1.0
-    #   - ✅ 方案G-2：重新启用Top-K损失（权重0.5）
-    #   - ✅ 方案I-1：学习率调度：从StepLR改为CosineAnnealingLR
-    # 目标：验证紧急修复是否能快速提升完全匹配准确率，从0%提升到5-10%
-    train_bc(epochs=200, max_samples=None, use_dynamic_weight=False, use_separated_features=True, lr=0.0005,
-             use_curriculum_learning=True, curriculum_stages=4, dropout_rate=0.2,
-             enable_strategy_head=False)  # 阶段0只训练动作预测，不启用策略分类头
+    # 阶段6深度优化：提升泛化能力和对弈表现
+    # 优化策略：
+    # 1. 数据层面：增加数据多样性，困难样本挖掘
+    # 2. 模型层面：增强正则化，提升泛化能力
+    # 3. 训练策略：改进课程学习，动态权重调整
+    # 4. 评估优化：统一训练/评估标准
+    print("="*80)
+    print("🎯 阶段6深度优化：提升AI泛化能力和对弈表现")
+    print("="*80)
+    print("优化目标：")
+    print("• 胜率提升：从'否'变为'是'")
+    print("• 稳定性：从'需改进'变为'良好'")
+    print("• 适应性：从'需改进'变为'良好'")
+    print("="*80)
+
+    train_bc(
+        epochs=100,  # 减少epochs，专注质量
+        max_samples=None,  # 使用全部数据
+        use_dynamic_weight=True,  # 启用动态权重调整
+        use_separated_features=True,  # 分离特征提取
+        lr=0.0003,  # 降低学习率，提高稳定性
+        use_curriculum_learning=True,
+        curriculum_stages=6,  # 增加课程学习阶段
+        dropout_rate=0.25,  # 提高dropout，增强泛化
+        enable_strategy_head=True,  # 启用策略学习
+        use_improved_loss=True,  # 使用改进损失函数
+        use_top_k_loss=True,  # 启用Top-K损失
+        enable_reason_learning=True,  # 策略原因学习
+        enable_win_rate_loss=True,  # 胜率导向损失
+        enable_dynamic_threshold=True,  # 动态阈值调整
+        # 阶段6特色配置
+        enable_strategy_pattern=True,
+        strategy_pattern_weight=0.15,
+        enable_opponent_modeling=True,
+        opponent_model_weight=0.12,
+        enable_dynamic_strategy=True,
+        dynamic_strategy_weight=0.12
+    )

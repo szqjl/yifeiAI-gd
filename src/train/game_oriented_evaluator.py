@@ -108,8 +108,33 @@ class GameOrientedEvaluator:
         total_games = 0
         
         for record in game_records:
+            # 支持两种数据格式：
+            # 1. 旧格式：result.victoryNum
+            # 2. 新格式：game_info.game_result 和 game_info.rank
             result = record.get('result', {})
+            game_info = record.get('game_info', {})
+            
+            # 尝试从新格式获取结果
+            if game_info:
+                game_result = game_info.get('game_result')
+                record_player_id = record.get('player_id', player_id)
+                
+                # 如果当前记录是目标玩家的记录
+                if record_player_id == player_id:
+                    if game_result == 'win':
+                        wins += 1
+                        total_games += 1
+                    elif game_result == 'loss':
+                        total_games += 1
+                    # game_result == 'unknown' 时跳过
+                    continue
+            
+            # 回退到旧格式：result.victoryNum
             victory_num = result.get('victoryNum', [])
+            
+            # 确保victory_num不是None
+            if victory_num is None:
+                victory_num = []
             
             if len(victory_num) > player_id:
                 total_games += 1
@@ -154,9 +179,25 @@ class GameOrientedEvaluator:
         total_decisions = 0
         
         for record in game_records:
+            # 支持两种数据格式
             result = record.get('result', {})
-            victory_num = result.get('victoryNum', [])
-            is_win = len(victory_num) > player_id and victory_num[player_id] > 0
+            game_info = record.get('game_info', {})
+            
+            # 尝试从新格式获取结果
+            is_win = False
+            if game_info:
+                game_result = game_info.get('game_result')
+                record_player_id = record.get('player_id', player_id)
+                
+                if record_player_id == player_id:
+                    is_win = (game_result == 'win')
+            
+            # 回退到旧格式
+            if not game_info or game_info.get('game_result') == 'unknown':
+                victory_num = result.get('victoryNum', [])
+                if victory_num is None:
+                    victory_num = []
+                is_win = len(victory_num) > player_id and victory_num[player_id] > 0
             
             my_decisions = record.get('my_decisions', [])
             for decision in my_decisions:
@@ -307,10 +348,32 @@ class GameOrientedEvaluator:
         eval2 = self.evaluate_model(model2_records, player_id)
         
         # 统计显著性检验（t检验）
-        win_rates1 = [1 if r.get('result', {}).get('victoryNum', [0])[player_id] > 0 else 0 
-                      for r in model1_records if len(r.get('result', {}).get('victoryNum', [])) > player_id]
-        win_rates2 = [1 if r.get('result', {}).get('victoryNum', [0])[player_id] > 0 else 0 
-                      for r in model2_records if len(r.get('result', {}).get('victoryNum', [])) > player_id]
+        # 支持两种数据格式
+        def get_win_status(record, pid):
+            """获取玩家是否获胜"""
+            game_info = record.get('game_info', {})
+            if game_info:
+                game_result = game_info.get('game_result')
+                record_player_id = record.get('player_id', pid)
+                if record_player_id == pid:
+                    if game_result == 'win':
+                        return 1
+                    elif game_result == 'loss':
+                        return 0
+                    else:
+                        return None  # unknown
+            
+            # 回退到旧格式
+            result = record.get('result', {})
+            victory_num = result.get('victoryNum', [])
+            if victory_num is None:
+                victory_num = []
+            if len(victory_num) > pid:
+                return 1 if victory_num[pid] > 0 else 0
+            return None
+        
+        win_rates1 = [w for r in model1_records if (w := get_win_status(r, player_id)) is not None]
+        win_rates2 = [w for r in model2_records if (w := get_win_status(r, player_id)) is not None]
         
         p_value = 1.0
         if len(win_rates1) > 1 and len(win_rates2) > 1:

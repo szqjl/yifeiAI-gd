@@ -24,6 +24,22 @@
     "SJ",
     "HK"
   ],
+  "all_players_hands": {
+    "0": [],
+    "1": [],
+    "2": [],
+    "3": []
+  },
+  "game_info": {
+    "curRank": "2",
+    "game_result": "win",
+    "rank": 1,
+    "rank_name": "头游",
+    "all_ranks": {
+      "1": 0,
+      "2": 2
+    }
+  },
   "actions": [
     {
       "cur_pos": 0,
@@ -73,5 +89,9 @@
       "cur_pos": 0,
       "cur_action": "['Discard', 'Discard', ['C4', 'C4', 'D2']]"
     }
-  ]
+  ],
+  "_conversion_meta": {
+    "result_updated_from_rep": true,
+    "rep_file": "C:\\Program Files (x86)\\gdgame\\MobileGD\\replay\\szqjl_2024-01-15_16_47_11_.rep"
+  }
 }

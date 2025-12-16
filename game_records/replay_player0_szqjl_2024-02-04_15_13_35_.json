@@ -26,6 +26,24 @@
     "CQ",
     "DT"
   ],
+  "all_players_hands": {
+    "0": [
+      "C4"
+    ],
+    "1": [],
+    "2": [],
+    "3": []
+  },
+  "game_info": {
+    "curRank": "2",
+    "game_result": "loss",
+    "rank": 2,
+    "rank_name": "二游",
+    "all_ranks": {
+      "1": 2,
+      "2": 0
+    }
+  },
   "actions": [
     {
       "cur_pos": 0,
@@ -63,5 +81,9 @@
       "cur_pos": 0,
       "cur_action": "['Discard', 'Discard', ['S9', 'S9', 'C9', 'D9', 'D9', 'D0']]"
     }
-  ]
+  ],
+  "_conversion_meta": {
+    "result_updated_from_rep": true,
+    "rep_file": "C:\\Program Files (x86)\\gdgame\\MobileGD\\replay\\szqjl_2024-02-04_15_10_46_.rep"
+  }
 }
