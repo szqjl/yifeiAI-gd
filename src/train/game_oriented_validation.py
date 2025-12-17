@@ -30,8 +30,8 @@ class GameOrientedValidator:
     执行对比实验和稳定性测试
     """
     
-    def __init__(self):
-        self.evaluator = GameOrientedEvaluator()
+    def __init__(self, model_path: Optional[str] = None):
+        self.evaluator = GameOrientedEvaluator(model_path=model_path)
     
     def compare_models(self, model1_records: List[Dict], model2_records: List[Dict],
                       model1_name: str = "模型1", model2_name: str = "模型2",
@@ -53,8 +53,8 @@ class GameOrientedValidator:
         print(f"模型对比: {model1_name} vs {model2_name}")
         print("="*60)
         
-        eval1 = self.evaluator.evaluate_model(model1_records, player_id)
-        eval2 = self.evaluator.evaluate_model(model2_records, player_id)
+        eval1 = self.evaluator.evaluate_model(model1_records, player_id, model_path=self.evaluator.model_path)
+        eval2 = self.evaluator.evaluate_model(model2_records, player_id, model_path=self.evaluator.model_path)
         
         # 计算改进幅度
         improvement = {
@@ -123,7 +123,7 @@ class GameOrientedValidator:
             end_idx = start_idx + games_per_round if round_idx < num_rounds - 1 else len(game_records)
             round_records = game_records[start_idx:end_idx]
             
-            eval_result = self.evaluator.evaluate_model(round_records, player_id)
+            eval_result = self.evaluator.evaluate_model(round_records, player_id, model_path=self.evaluator.model_path)
             round_results.append({
                 'round': round_idx + 1,
                 'win_rate': eval_result['win_rate'],
@@ -201,7 +201,7 @@ class GameOrientedValidator:
         group_results = []
         for opponent_key, records in opponent_groups.items():
             if len(records) >= 5:  # 至少5局才统计
-                eval_result = self.evaluator.evaluate_model(records, player_id)
+                eval_result = self.evaluator.evaluate_model(records, player_id, model_path=self.evaluator.model_path)
                 group_results.append({
                     'opponent': opponent_key,
                     'num_games': len(records),
@@ -266,7 +266,7 @@ class GameOrientedValidator:
         # 1. 基础评估
         print("\n1. 基础评估")
         print("-" * 60)
-        eval_result = self.evaluator.evaluate_model(game_records, player_id)
+        eval_result = self.evaluator.evaluate_model(game_records, player_id, model_path=self.evaluator.model_path)
         results['evaluation'] = eval_result
         
         # 2. 对比实验（如果有基线）
@@ -318,7 +318,8 @@ class GameOrientedValidator:
 
 def validate_game_records(data_dir: str = "game_records", 
                           baseline_dir: Optional[str] = None,
-                          player_id: int = 0):
+                          player_id: int = 0,
+                          model_path: Optional[str] = None):
     """
     验证游戏记录
     
@@ -326,6 +327,7 @@ def validate_game_records(data_dir: str = "game_records",
         data_dir: 当前模型的游戏记录目录
         baseline_dir: 基线模型的游戏记录目录（可选）
         player_id: 玩家ID
+        model_path: 模型路径（如果提供，将使用模型推理进行评估）
     """
     # 加载当前模型记录
     parser = ReplayParser(data_dir)
@@ -338,7 +340,7 @@ def validate_game_records(data_dir: str = "game_records",
         baseline_records = baseline_parser.load_replays()
     
     # 执行综合验证
-    validator = GameOrientedValidator()
+    validator = GameOrientedValidator(model_path=model_path)
     results = validator.comprehensive_validation(
         current_records, baseline_records, player_id
     )
