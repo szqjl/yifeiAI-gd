@@ -129,3 +129,4 @@ Remove-Item -Recurse -Force "$env:APPDATA\Cursor\Code Cache"
 - **问题**: Cursor IDE 欢迎页面无法打开
 - **状态**: 待解决
 
+

@@ -8,6 +8,17 @@
 docs/skill/*.docx
 docs/skill/*.pdf
 
+# Model files - too large for git repository
+# 模型文件 - 文件太大，不适合直接提交到git仓库
+# Keep only final models, exclude intermediate checkpoints
+# 只保留最终模型，排除中间检查点
+models/*epoch_*.pth
+models/*test*.pth
+models/*quick*.pth
+# Keep final models (without epoch/test/quick in name)
+# 保留最终模型（名称中不包含epoch/test/quick的）
+# models/*.pth  # Uncomment this if you want to exclude ALL model files
+
 # Temporary files
 tmp/
 *.tmp
