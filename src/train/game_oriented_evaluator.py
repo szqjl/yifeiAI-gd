@@ -38,23 +38,93 @@ class GameOrientedEvaluator:
     - 预测准确性（权重10%）
     """
     
-    def __init__(self):
+    def __init__(self, model_path: Optional[str] = None):
         self.win_rate_weight = 0.5
         self.strategy_adaptability_weight = 0.2
         self.decision_quality_weight = 0.2
         self.prediction_accuracy_weight = 0.1
+        self.model_path = model_path
+        self.model = None
+        self.device = None
         
-    def evaluate_model(self, game_records: List[Dict], player_id: int = 0) -> Dict:
+    def _load_model(self):
+        """加载模型用于推理"""
+        if self.model is not None:
+            return
+        
+        if not self.model_path or not os.path.exists(self.model_path):
+            print(f"[WARNING] 模型路径不存在: {self.model_path}，将使用历史数据评估")
+            return
+        
+        try:
+            import torch
+            from src.rl_agent.model import GuandanPolicyNet, ImprovedGuandanPolicyNet
+            from src.utils.device_selector import select_compatible_device
+            
+            self.device, _ = select_compatible_device()
+            
+            # 加载模型
+            checkpoint = torch.load(self.model_path, map_location=self.device, weights_only=False)
+            
+            # 检测模型类型
+            if isinstance(checkpoint, dict):
+                if 'model_state_dict' in checkpoint:
+                    model_state_dict = checkpoint['model_state_dict']
+                else:
+                    model_state_dict = checkpoint
+            else:
+                model_state_dict = checkpoint
+            
+            # 检测是否有策略头
+            has_strategy_head = any('fc_strategy' in k for k in model_state_dict.keys())
+            
+            # 尝试使用ImprovedGuandanPolicyNet，如果失败则使用GuandanPolicyNet
+            try:
+                self.model = ImprovedGuandanPolicyNet(
+                    input_dim=512,
+                    hidden_dim=256,
+                    output_dim=512,
+                    dropout_rate=0.1,
+                    strategy_num_classes=7,
+                    enable_strategy_head=has_strategy_head
+                ).to(self.device)
+                self.model.load_state_dict(model_state_dict, strict=False)
+            except:
+                self.model = GuandanPolicyNet(
+                    input_dim=512,
+                    hidden_dim=256,
+                    output_dim=512,
+                    dropout_rate=0.1,
+                    strategy_num_classes=7,
+                    enable_strategy_head=has_strategy_head
+                ).to(self.device)
+                self.model.load_state_dict(model_state_dict, strict=False)
+            
+            self.model.eval()
+            print(f"[OK] 模型已加载: {self.model_path}")
+        except Exception as e:
+            print(f"[ERROR] 模型加载失败: {e}")
+            import traceback
+            traceback.print_exc()
+            self.model = None
+        
+    def evaluate_model(self, game_records: List[Dict], player_id: int = 0, model_path: Optional[str] = None) -> Dict:
         """
         计算综合评估分数
         
         Args:
             game_records: 游戏记录列表，每个记录包含result字段
             player_id: 要评估的玩家ID（默认0）
+            model_path: 模型路径（可选，如果提供则进行模型推理评估）
             
         Returns:
             评估结果字典，包含各项指标和综合分数
         """
+        # 如果提供了模型路径，加载模型
+        if model_path:
+            self.model_path = model_path
+            self._load_model()
+        
         # 1. 计算胜率
         win_rate, win_rate_ci = self._calculate_win_rate(game_records, player_id)
         
@@ -64,8 +134,11 @@ class GameOrientedEvaluator:
         # 3. 计算决策质量
         decision_quality = self._assess_decision_quality(game_records, player_id)
         
-        # 4. 计算预测准确性
-        prediction_accuracy = self._measure_prediction_accuracy(game_records, player_id)
+        # 4. 计算预测准确性（如果模型已加载，使用模型推理；否则使用历史数据）
+        if self.model is not None:
+            prediction_accuracy = self._measure_prediction_accuracy_with_model(game_records, player_id)
+        else:
+            prediction_accuracy = self._measure_prediction_accuracy(game_records, player_id)
         
         # 5. 计算综合分数
         total_score = (
@@ -285,8 +358,7 @@ class GameOrientedEvaluator:
     
     def _measure_prediction_accuracy(self, game_records: List[Dict], player_id: int) -> float:
         """
-        测量预测准确性
-        基于动作预测的准确性（如果有相关数据）
+        测量预测准确性（基于历史数据）
         
         Args:
             game_records: 游戏记录列表
@@ -295,8 +367,6 @@ class GameOrientedEvaluator:
         Returns:
             预测准确性分数（0-1）
         """
-        # 这里暂时返回一个基于决策评分的代理指标
-        # 实际应该基于模型预测的准确性
         if not game_records:
             return 0.0
         
@@ -308,7 +378,6 @@ class GameOrientedEvaluator:
             for decision in my_decisions:
                 total_decisions += 1
                 score = decision.get('score', 0) or 0
-                # 高分决策可能表示预测更准确
                 if score > 250:
                     high_confidence_decisions += 1
         
@@ -317,6 +386,120 @@ class GameOrientedEvaluator:
         
         accuracy = high_confidence_decisions / total_decisions
         return min(1.0, max(0.0, accuracy))
+    
+    def _measure_prediction_accuracy_with_model(self, game_records: List[Dict], player_id: int) -> float:
+        """
+        使用模型推理测量预测准确性
+        
+        Args:
+            game_records: 游戏记录列表
+            player_id: 玩家ID
+            
+        Returns:
+            预测准确性分数（0-1）
+        """
+        if self.model is None:
+            return self._measure_prediction_accuracy(game_records, player_id)
+        
+        try:
+            import torch
+            from src.knowledge_processor.replay_parser import ReplayParser
+            from src.train.pretrain import GuandanDataset
+            
+            # 提取训练数据（game_records 就是 replay 列表）
+            # 如果 game_records 为空或格式不对，尝试从数据目录加载
+            if not game_records or not isinstance(game_records[0], dict):
+                parser = ReplayParser("game_records")
+                game_records = parser.load_replays()
+            
+            if not game_records:
+                print("[WARNING] 无法获取游戏记录，使用历史数据评估")
+                return self._measure_prediction_accuracy(game_records, player_id)
+            
+            # 提取训练数据
+            parser = ReplayParser("game_records")
+            raw_data = parser.extract_training_data(game_records)
+            
+            if not raw_data:
+                print("[WARNING] 无法从游戏记录中提取训练数据，使用历史数据评估")
+                return self._measure_prediction_accuracy(game_records, player_id)
+            
+            # 限制样本数量（避免评估时间过长）
+            max_samples = min(1000, len(raw_data))
+            raw_data = raw_data[:max_samples]
+            
+            dataset = GuandanDataset(raw_data)
+            dataloader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=False)
+            
+            total_samples = 0
+            exact_matches = 0
+            card_matches = 0
+            total_cards = 0
+            
+            threshold = 0.3
+            scaling_factor = 5.0
+            
+            with torch.no_grad():
+                for batch in dataloader:
+                    if len(batch) < 2:
+                        continue
+                    
+                    states, actions = batch[0], batch[1]
+                    states = states.to(self.device)
+                    actions = actions.to(self.device)
+                    
+                    # 模型推理
+                    outputs = self.model(states, return_strategy=False)
+                    if isinstance(outputs, tuple):
+                        action_logits = outputs[0]
+                    else:
+                        action_logits = outputs
+                    
+                    # 应用阈值和缩放
+                    probs = torch.sigmoid(action_logits) * scaling_factor
+                    predictions = (probs > threshold).float()
+                    
+                    # 计算准确率
+                    batch_size = actions.size(0)
+                    for i in range(batch_size):
+                        true_action = actions[i].cpu().numpy()
+                        pred_action = predictions[i].cpu().numpy()
+                        
+                        total_samples += 1
+                        
+                        # 完全匹配
+                        if np.array_equal(true_action, pred_action):
+                            exact_matches += 1
+                        
+                        # 卡牌级别匹配
+                        true_cards = np.where(true_action > 0.5)[0]
+                        pred_cards = np.where(pred_action > 0.5)[0]
+                        total_cards += len(true_cards)
+                        
+                        if len(true_cards) > 0:
+                            matched_cards = len(np.intersect1d(true_cards, pred_cards))
+                            card_matches += matched_cards
+            
+            if total_samples == 0:
+                return 0.0
+            
+            # 计算准确率
+            exact_accuracy = exact_matches / total_samples
+            card_accuracy = card_matches / max(1, total_cards)
+            
+            # 综合准确率：完全匹配 * 0.3 + 卡牌匹配 * 0.7
+            accuracy = exact_accuracy * 0.3 + card_accuracy * 0.7
+            
+            print(f"[模型推理评估] 样本数={total_samples}, 完全匹配={exact_matches}, 卡牌匹配={card_matches}/{total_cards}")
+            print(f"[模型推理评估] 完全匹配率={exact_accuracy:.2%}, 卡牌匹配率={card_accuracy:.2%}, 综合准确率={accuracy:.2%}")
+            
+            return min(1.0, max(0.0, accuracy))
+            
+        except Exception as e:
+            print(f"[ERROR] 模型推理评估失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return self._measure_prediction_accuracy(game_records, player_id)
     
     def _extract_strategy_type(self, layer: str) -> Optional[str]:
         """从layer字符串中提取策略类型"""

@@ -146,14 +146,17 @@ try:
         enable_strategy_head=True,
         action_loss_weight=1.5,
         strategy_loss_weight=0.1,
-        use_improved_model=False,
+        use_improved_model=True,      # 阶段6优化版：使用ImprovedGuandanPolicyNet支持策略原因学习
+        attention_heads=8,
         enable_strategy_pattern=True,
         strategy_pattern_weight=0.05,
         enable_opponent_modeling=True,
         opponent_model_weight=0.05,
         enable_dynamic_strategy=True,
         dynamic_strategy_weight=0.05,
-        # TODO: 添加freeze_backbone=True参数支持
+        freeze_backbone=True,         # 阶段6优化版：冻结主干
+        enable_win_rate_oriented_loss=True,  # 阶段6优化版：启用胜率导向损失
+        win_rate_oriented_loss_weight=0.5,   # 阶段6优化版：胜率导向损失权重
     )
     
     print()
@@ -217,15 +220,19 @@ try:
         enable_strategy_head=True,
         action_loss_weight=1.5,
         strategy_loss_weight=0.1,
-        use_improved_model=False,
+        use_improved_model=True,      # 阶段6优化版：使用ImprovedGuandanPolicyNet支持策略原因学习
+        attention_heads=8,
         enable_strategy_pattern=True,
-        strategy_pattern_weight=0.05,
+        strategy_pattern_weight=0.1,   # 第二阶段：提高策略模式权重
         enable_opponent_modeling=True,
-        opponent_model_weight=0.05,
+        opponent_model_weight=0.1,   # 第二阶段：提高对手建模权重
         enable_dynamic_strategy=True,
-        dynamic_strategy_weight=0.05,
-        # TODO: 添加load_pretrained_model=stage1_model_path参数支持
-        # TODO: 添加trajectory_data=trajectory_path参数支持
+        dynamic_strategy_weight=0.1,   # 第二阶段：提高动态策略权重
+        freeze_backbone=False,        # 第二阶段：解冻所有层
+        load_pretrained_model=stage1_model_path,  # 阶段6优化版：加载第一阶段模型
+        trajectory_data=trajectory_path,         # 阶段6优化版：混合轨迹数据
+        enable_win_rate_oriented_loss=True,  # 阶段6优化版：启用胜率导向损失
+        win_rate_oriented_loss_weight=0.7,   # 第二阶段：提高胜率导向损失权重
     )
     
     print()
