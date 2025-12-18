@@ -1,0 +1,412 @@
+{
+  "num_rounds": 10,
+  "round_results": [
+    {
+      "round": 1,
+      "num_samples": 1000,
+      "statistics": {
+        "logits": {
+          "mean": -5.554496765136719,
+          "std": 1.118050217628479,
+          "min": -7.230076789855957,
+          "max": 4.418208599090576
+        },
+        "probs": {
+          "mean": 0.011564411222934723,
+          "std": 0.044053900986909866,
+          "min": 0.0007239406695589423,
+          "max": 0.9880878329277039
+        },
+        "scaled_probs": {
+          "mean": 0.05183624476194382,
+          "std": 0.1245141550898552
+        },
+        "predicted_card_counts": {
+          "mean": 32.409,
+          "std": 6.46666212199153,
+          "min": 15,
+          "max": 44
+        },
+        "true_card_counts": {
+          "mean": 2.5480000972747803,
+          "std": 1.8026912212371826,
+          "min": 0,
+          "max": 7
+        }
+      },
+      "anomalies": {
+        "zero_output_count": 0,
+        "zero_output_ratio": 0.0,
+        "invalid_output_count": 0,
+        "invalid_output_ratio": 0.0
+      }
+    },
+    {
+      "round": 2,
+      "num_samples": 1000,
+      "statistics": {
+        "logits": {
+          "mean": -5.577326774597168,
+          "std": 1.1497149467468262,
+          "min": -7.1936492919921875,
+          "max": 4.102257251739502
+        },
+        "probs": {
+          "mean": 0.012172644026577473,
+          "std": 0.04819202423095703,
+          "min": 0.0007507781265303493,
+          "max": 0.9837337136268616
+        },
+        "scaled_probs": {
+          "mean": 0.053579460829496384,
+          "std": 0.131039097905159
+        },
+        "predicted_card_counts": {
+          "mean": 35.558,
+          "std": 3.5171914932229664,
+          "min": 23,
+          "max": 44
+        },
+        "true_card_counts": {
+          "mean": 2.9649999141693115,
+          "std": 1.4675744771957397,
+          "min": 1,
+          "max": 7
+        }
+      },
+      "anomalies": {
+        "zero_output_count": 0,
+        "zero_output_ratio": 0.0,
+        "invalid_output_count": 0,
+        "invalid_output_ratio": 0.0
+      }
+    },
+    {
+      "round": 3,
+      "num_samples": 1000,
+      "statistics": {
+        "logits": {
+          "mean": -5.582170009613037,
+          "std": 1.1443662643432617,
+          "min": -7.172438144683838,
+          "max": 3.984398126602173
+        },
+        "probs": {
+          "mean": 0.012024160474538803,
+          "std": 0.04765892028808594,
+          "min": 0.0007668608450330794,
+          "max": 0.9817360639572144
+        },
+        "scaled_probs": {
+          "mean": 0.052923783659935,
+          "std": 0.12898682057857513
+        },
+        "predicted_card_counts": {
+          "mean": 34.971,
+          "std": 3.661169075582279,
+          "min": 22,
+          "max": 44
+        },
+        "true_card_counts": {
+          "mean": 3.315999984741211,
+          "std": 1.545362114906311,
+          "min": 1,
+          "max": 7
+        }
+      },
+      "anomalies": {
+        "zero_output_count": 0,
+        "zero_output_ratio": 0.0,
+        "invalid_output_count": 0,
+        "invalid_output_ratio": 0.0
+      }
+    },
+    {
+      "round": 4,
+      "num_samples": 1000,
+      "statistics": {
+        "logits": {
+          "mean": -5.586504936218262,
+          "std": 1.1071557998657227,
+          "min": -7.231069087982178,
+          "max": 3.8737082481384277
+        },
+        "probs": {
+          "mean": 0.01129488367587328,
+          "std": 0.043941281735897064,
+          "min": 0.0007232232019305229,
+          "max": 0.9796419143676758
+        },
+        "scaled_probs": {
+          "mean": 0.04999138042330742,
+          "std": 0.11923520267009735
+        },
+        "predicted_card_counts": {
+          "mean": 31.633,
+          "std": 3.8644936278896878,
+          "min": 19,
+          "max": 43
+        },
+        "true_card_counts": {
+          "mean": 3.1579999923706055,
+          "std": 1.566855549812317,
+          "min": 2,
+          "max": 7
+        }
+      },
+      "anomalies": {
+        "zero_output_count": 0,
+        "zero_output_ratio": 0.0,
+        "invalid_output_count": 0,
+        "invalid_output_ratio": 0.0
+      }
+    },
+    {
+      "round": 5,
+      "num_samples": 1000,
+      "statistics": {
+        "logits": {
+          "mean": -5.5862321853637695,
+          "std": 1.1071950197219849,
+          "min": -7.210519313812256,
+          "max": 4.1291117668151855
+        },
+        "probs": {
+          "mean": 0.011294706724584103,
+          "std": 0.04392823949456215,
+          "min": 0.0007382280309684575,
+          "max": 0.9841578006744385
+        },
+        "scaled_probs": {
+          "mean": 0.04999252408742905,
+          "std": 0.11925867199897766
+        },
+        "predicted_card_counts": {
+          "mean": 31.522,
+          "std": 3.895833158645272,
+          "min": 22,
+          "max": 43
+        },
+        "true_card_counts": {
+          "mean": 3.368000030517578,
+          "std": 1.6566762924194336,
+          "min": 1,
+          "max": 7
+        }
+      },
+      "anomalies": {
+        "zero_output_count": 0,
+        "zero_output_ratio": 0.0,
+        "invalid_output_count": 0,
+        "invalid_output_ratio": 0.0
+      }
+    },
+    {
+      "round": 6,
+      "num_samples": 1000,
+      "statistics": {
+        "logits": {
+          "mean": -5.581665992736816,
+          "std": 1.1195381879806519,
+          "min": -7.257665157318115,
+          "max": 4.059685230255127
+        },
+        "probs": {
+          "mean": 0.011577890254557133,
+          "std": 0.04545776918530464,
+          "min": 0.000704255246091634,
+          "max": 0.9830381870269775
+        },
+        "scaled_probs": {
+          "mean": 0.05108676478266716,
+          "std": 0.12244219332933426
+        },
+        "predicted_card_counts": {
+          "mean": 33.071,
+          "std": 3.741651907914471,
+          "min": 22,
+          "max": 43
+        },
+        "true_card_counts": {
+          "mean": 3.4010000228881836,
+          "std": 1.741895318031311,
+          "min": 2,
+          "max": 7
+        }
+      },
+      "anomalies": {
+        "zero_output_count": 0,
+        "zero_output_ratio": 0.0,
+        "invalid_output_count": 0,
+        "invalid_output_ratio": 0.0
+      }
+    },
+    {
+      "round": 7,
+      "num_samples": 1000,
+      "statistics": {
+        "logits": {
+          "mean": -5.582382678985596,
+          "std": 1.1172000169754028,
+          "min": -7.4010009765625,
+          "max": 3.7491354942321777
+        },
+        "probs": {
+          "mean": 0.011528520844876766,
+          "std": 0.04529339820146561,
+          "min": 0.0006102685583755374,
+          "max": 0.9770032167434692
+        },
+        "scaled_probs": {
+          "mean": 0.05085945501923561,
+          "std": 0.12170372903347015
+        },
+        "predicted_card_counts": {
+          "mean": 32.759,
+          "std": 3.6423782066117183,
+          "min": 20,
+          "max": 43
+        },
+        "true_card_counts": {
+          "mean": 3.075000047683716,
+          "std": 1.4762706756591797,
+          "min": 1,
+          "max": 7
+        }
+      },
+      "anomalies": {
+        "zero_output_count": 0,
+        "zero_output_ratio": 0.0,
+        "invalid_output_count": 0,
+        "invalid_output_ratio": 0.0
+      }
+    },
+    {
+      "round": 8,
+      "num_samples": 1000,
+      "statistics": {
+        "logits": {
+          "mean": -5.579988479614258,
+          "std": 1.096200942993164,
+          "min": -7.217765808105469,
+          "max": 4.087594985961914
+        },
+        "probs": {
+          "mean": 0.011095721274614334,
+          "std": 0.04223828390240669,
+          "min": 0.0007329016807489097,
+          "max": 0.9834973812103271
+        },
+        "scaled_probs": {
+          "mean": 0.04944996535778046,
+          "std": 0.11708014458417892
+        },
+        "predicted_card_counts": {
+          "mean": 30.565,
+          "std": 4.283430284246494,
+          "min": 18,
+          "max": 43
+        },
+        "true_card_counts": {
+          "mean": 3.2070000171661377,
+          "std": 1.623006820678711,
+          "min": 1,
+          "max": 7
+        }
+      },
+      "anomalies": {
+        "zero_output_count": 0,
+        "zero_output_ratio": 0.0,
+        "invalid_output_count": 0,
+        "invalid_output_ratio": 0.0
+      }
+    },
+    {
+      "round": 9,
+      "num_samples": 1000,
+      "statistics": {
+        "logits": {
+          "mean": -5.570065975189209,
+          "std": 1.081663966178894,
+          "min": -7.230332851409912,
+          "max": 3.693669557571411
+        },
+        "probs": {
+          "mean": 0.010881317779421806,
+          "std": 0.04024325683712959,
+          "min": 0.0007237554527819157,
+          "max": 0.9757235050201416
+        },
+        "scaled_probs": {
+          "mean": 0.04884021729230881,
+          "std": 0.11449296772480011
+        },
+        "predicted_card_counts": {
+          "mean": 29.45,
+          "std": 4.129104019033669,
+          "min": 18,
+          "max": 42
+        },
+        "true_card_counts": {
+          "mean": 3.4059998989105225,
+          "std": 1.6658823490142822,
+          "min": 1,
+          "max": 7
+        }
+      },
+      "anomalies": {
+        "zero_output_count": 0,
+        "zero_output_ratio": 0.0,
+        "invalid_output_count": 0,
+        "invalid_output_ratio": 0.0
+      }
+    },
+    {
+      "round": 10,
+      "num_samples": 1000,
+      "statistics": {
+        "logits": {
+          "mean": -5.572035312652588,
+          "std": 1.077200174331665,
+          "min": -7.266829967498779,
+          "max": 3.636164903640747
+        },
+        "probs": {
+          "mean": 0.010776355862617493,
+          "std": 0.039673324674367905,
+          "min": 0.0006978349410928786,
+          "max": 0.9743233919143677
+        },
+        "scaled_probs": {
+          "mean": 0.0484333261847496,
+          "std": 0.11319797486066818
+        },
+        "predicted_card_counts": {
+          "mean": 28.918,
+          "std": 4.123502879834086,
+          "min": 17,
+          "max": 42
+        },
+        "true_card_counts": {
+          "mean": 3.065000057220459,
+          "std": 1.521438479423523,
+          "min": 1,
+          "max": 7
+        }
+      },
+      "anomalies": {
+        "zero_output_count": 0,
+        "zero_output_ratio": 0.0,
+        "invalid_output_count": 0,
+        "invalid_output_ratio": 0.0
+      }
+    }
+  ],
+  "metadata": {
+    "model_path": "models/bc_model_stage6_enhanced.pth",
+    "data_dir": "game_records",
+    "player_id": 0,
+    "total_games": 2010,
+    "timestamp": "20251216_223622"
+  }
+}
