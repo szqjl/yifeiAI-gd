@@ -136,6 +136,48 @@ class GameRecorder:
         if not self.record_dir.exists():
             self.record_dir.mkdir(parents=True, exist_ok=True)
         
+    def record_game_start(self, message: dict):
+        """
+        记录游戏开始（V7协议兼容方法）
+        
+        Args:
+            message: 游戏开始消息，包含playerPosition、handCards等信息
+        """
+        import logging
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        
+        try:
+            # 从V7协议的gameStart消息中提取信息
+            player_pos = message.get("playerPosition", self.player_id)
+            hand_cards = message.get("handCards", [])
+            
+            # 提取游戏信息
+            game_info = {
+                "curRank": message.get("curRank", "2"),
+                "selfRank": message.get("selfRank", "2"),
+                "oppoRank": message.get("oppoRank", "2"),
+            }
+            
+            # 提取所有玩家手牌（如果消息中包含）
+            all_players_hands = {}
+            if "allPlayersHands" in message:
+                all_players_hands = message["allPlayersHands"]
+            elif "all_players_hands" in message:
+                all_players_hands = message["all_players_hands"]
+            
+            # 调用start_game方法
+            self.start_game(
+                hand_cards=hand_cards,
+                my_pos=player_pos,
+                game_info=game_info,
+                all_players_hands=all_players_hands
+            )
+            
+            logger.info(f"✓ 游戏记录已初始化: 位置={player_pos}, 手牌数={len(hand_cards)}")
+            
+        except Exception as e:
+            logger.error(f"✗ 记录游戏开始失败: {e}", exc_info=True)
+    
     def start_game(self, hand_cards: List, my_pos: int, game_info: Dict = None, all_players_hands: Dict[int, List] = None):
         """
         开始记录一局游戏
@@ -274,6 +316,69 @@ class GameRecorder:
                 
         except Exception as e:
             logger.debug(f"卡牌验证时出错（非关键）：{e}")
+    
+    def record_my_action(self, message: dict, selected_action: Any, decision_time: float = None):
+        """
+        记录我方的动作（V7协议兼容方法）
+        
+        Args:
+            message: 游戏状态消息，包含当前状态信息
+            selected_action: 选择的动作（可能是字符串如"PASS"或列表）
+            decision_time: 决策耗时（秒）
+        """
+        if not self.current_game:
+            import logging
+            logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+            logger.warning("⚠ record_my_action() called but current_game is None")
+            return
+        
+        try:
+            # 提取当前状态信息
+            cur_pos = message.get("curPlayer", self.player_id)
+            hand_cards = message.get("handCards", [])
+            valid_actions = message.get("actions", [])
+            
+            # 构建决策记录
+            decision_record = {
+                "timestamp": datetime.now().isoformat(),
+                "cur_pos": cur_pos,
+                "hand_cards_count": len(hand_cards),
+                "selected_action": selected_action,
+                "decision_time": decision_time,
+                "valid_actions_count": len(valid_actions) if valid_actions else 0,
+                "context": {
+                    "curRank": message.get("curRank", "2"),
+                    "selfRank": message.get("selfRank", "2"),
+                    "oppoRank": message.get("oppoRank", "2"),
+                }
+            }
+            
+            self.current_game["my_decisions"].append(decision_record)
+            
+            # 同时记录为动作（如果动作不是PASS）
+            if selected_action and selected_action != "PASS":
+                # 尝试将动作转换为列表格式
+                if isinstance(selected_action, str):
+                    # 如果是字符串，可能需要解析（这里简化处理）
+                    cur_action = [selected_action]
+                elif isinstance(selected_action, list):
+                    cur_action = selected_action
+                else:
+                    cur_action = [str(selected_action)]
+                
+                # 记录动作
+                self.record_action(
+                    cur_pos=cur_pos,
+                    cur_action=cur_action,
+                    greater_pos=-1,
+                    greater_action=None,
+                    context=decision_record["context"]
+                )
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+            logger.error(f"✗ 记录我方动作失败: {e}", exc_info=True)
     
     def record_decision(self, action_index: int, action: List, 
                        score: float = None, layer: str = None,
@@ -1063,3 +1168,42 @@ class GameRecorder:
         
         print("=" * 80)
 
+    def record_game_end(self, message: dict):
+        """
+        记录游戏结束（V7协议兼容方法）
+        
+        Args:
+            message: 游戏结束消息，包含result等信息
+        """
+        import logging
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        
+        # 提取结果信息
+        result = {}
+        if isinstance(message, dict):
+            # V7协议格式
+            game_result = message.get("result", {})
+            if game_result:
+                result = {
+                    "winner": game_result.get("winner", -1),
+                    "scores": game_result.get("scores", []),
+                    "victoryNum": game_result.get("victoryNum", [])
+                }
+            else:
+                # 可能是V5协议格式
+                result = {
+                    "victoryNum": message.get("victoryNum", []),
+                    "draws": message.get("draws", 0)
+                }
+        
+        # 调用end_game保存记录
+        return self.end_game(result)
+    
+    def save_records(self):
+        """保存游戏记录（兼容V7客户端）"""
+        if self.current_game:
+            self.end_game({})  # 结束当前游戏并保存
+        
+        import logging
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        logger.info(f"游戏记录已保存到 {self.record_dir}")

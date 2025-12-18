@@ -85,7 +85,7 @@ class RobustGuandanNet(nn.Module):
             nn.Linear(512, 128),
             nn.ReLU(),
             nn.Dropout(dropout_rate * 0.5),
-            nn.Linear(128, 5)  # 5种策略类型
+            nn.Linear(128, 8)  # 8种策略类型 (group, follow, control, discard, unknown, suppress, protect, bomb)
         )
         
     def forward(self, x):
@@ -173,13 +173,12 @@ def train_stage7_robust_model(
     
     # 加载数据
     logger.info("加载训练数据...")
-    from enhanced_data_loader import create_enhanced_dataloader
+    from simple_data_loader import create_simple_dataloader
     
-    dataloader = create_enhanced_dataloader(
+    dataloader = create_simple_dataloader(
         data_dir=data_dir,
         batch_size=batch_size,
-        enable_augmentation=True,
-        balance_strategy=True,
+        max_samples=10000,  # 限制样本数量以加快训练
         shuffle=True
     )
     

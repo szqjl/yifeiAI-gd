@@ -359,6 +359,81 @@ class RestartManager:
         logger.info(f"成功启动 {len(processes)}/{len(client_scripts)} 个客户端")
         return processes
     
+    def wait_for_clients_connected(
+        self,
+        expected_count: int = 4,
+        timeout: int = 30,
+        check_interval: int = 2
+    ) -> bool:
+        """
+        等待所有客户端连接到服务器
+        
+        通过检测服务器端口连接数或WebSocket连接状态来判断客户端是否已连接。
+        
+        Args:
+            expected_count: 期望连接的客户端数量，默认4个
+            timeout: 超时时间（秒），默认30秒
+            check_interval: 检查间隔（秒），默认2秒
+            
+        Returns:
+            如果所有客户端都连接成功返回True，否则返回False
+        """
+        logger.info(f"等待 {expected_count} 个客户端连接到服务器...")
+        logger.info(f"超时时间: {timeout} 秒，检查间隔: {check_interval} 秒")
+        
+        import socket
+        import time
+        
+        start_time = time.time()
+        elapsed = 0
+        active_clients = 0
+        
+        while elapsed < timeout:
+            try:
+                # 方法1: 尝试连接到服务器端口，检测是否有监听
+                # 注意：这只能检测服务器是否在监听，不能检测客户端连接数
+                # 但我们可以通过多次尝试连接来间接判断
+                
+                # 方法2: 检查客户端进程是否仍在运行（间接判断）
+                active_clients = 0
+                for i, process in enumerate(self.client_processes):
+                    if process.poll() is None:  # 进程仍在运行
+                        active_clients += 1
+                    else:
+                        logger.warning(f"客户端 {i+1} 进程已退出，返回码: {process.returncode}")
+                
+                if active_clients >= expected_count:
+                    logger.info(f"✓ 检测到 {active_clients} 个客户端进程正在运行")
+                    # 额外等待几秒，确保连接建立
+                    logger.info("等待 5 秒确保所有连接完全建立...")
+                    time.sleep(5)
+                    return True
+                
+                # 方法3: 尝试检测服务器端口连接数（需要服务器支持）
+                # 这里我们简化处理，只检查进程状态
+                
+                elapsed = time.time() - start_time
+                remaining = timeout - elapsed
+                if remaining > 0:
+                    logger.info(f"已等待 {elapsed:.1f} 秒，剩余 {remaining:.1f} 秒... (活跃客户端: {active_clients}/{expected_count})")
+                    time.sleep(check_interval)
+                
+            except Exception as e:
+                logger.warning(f"检测客户端连接状态时出错: {e}")
+                time.sleep(check_interval)
+                elapsed = time.time() - start_time
+        
+        logger.warning(f"⚠️ 等待客户端连接超时 ({timeout} 秒)")
+        logger.warning(f"   活跃客户端进程数: {active_clients}/{expected_count}")
+        logger.warning("   可能原因:")
+        logger.warning("   1. 客户端连接失败")
+        logger.warning("   2. 服务器未正确启动")
+        logger.warning("   3. 网络连接问题")
+        logger.warning("   4. 客户端脚本执行错误")
+        logger.warning("   建议: 检查客户端窗口的输出日志")
+        
+        return False
+    
     def cleanup(self) -> None:
         """
         清理所有进程

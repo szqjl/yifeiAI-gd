@@ -1,8 +1,0 @@
-{
-  "test_time": "2025-12-08T13:22:00.727476",
-  "total_tests": 100,
-  "consistent_predictions": 90,
-  "inconsistent_predictions": 10,
-  "consistency_rate": 90.0,
-  "avg_similarity": 0.8641091964466243
-}

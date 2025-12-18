@@ -4,6 +4,7 @@ Stage 7 评估脚本
 """
 
 import torch
+from torch.utils.data import DataLoader
 import numpy as np
 import json
 import logging
@@ -46,14 +47,12 @@ class Stage7Evaluator:
         """评估预测准确性"""
         logger.info("评估预测准确性...")
         
-        from enhanced_data_loader import create_enhanced_dataloader
+        from simple_data_loader import create_simple_dataloader
         
-        dataloader = create_enhanced_dataloader(
+        dataloader = create_simple_dataloader(
             data_dir=self.data_dir,
             batch_size=64,
             max_samples=num_samples,
-            enable_augmentation=False,  # 评估时不使用数据增强
-            balance_strategy=False,     # 评估时不使用平衡采样
             shuffle=True
         )
         
@@ -153,14 +152,13 @@ class Stage7Evaluator:
         """评估模型稳定性"""
         logger.info(f"评估模型稳定性 ({num_rounds} 轮)...")
         
-        from enhanced_data_loader import create_enhanced_dataloader
+        from simple_data_loader import create_simple_dataloader
         
         # 创建完整数据集用于稳定性测试
-        full_dataloader = create_enhanced_dataloader(
+        full_dataloader = create_simple_dataloader(
             data_dir=self.data_dir,
             batch_size=32,
-            enable_augmentation=False,
-            balance_strategy=False,
+            max_samples=num_rounds * samples_per_round * 2,  # 确保有足够的数据
             shuffle=False
         )
         dataset = full_dataloader.dataset
@@ -207,7 +205,7 @@ class Stage7Evaluator:
                 "min": np.min(card_accuracies),
                 "max": np.max(card_accuracies)
             },
-            "is_stable": np.std(exact_match_rates) < 0.05 and np.std(card_accuracies) < 0.02
+            "is_stable": bool(np.std(exact_match_rates) < 0.05 and np.std(card_accuracies) < 0.02)
         }
         
         return stability_metrics
@@ -272,15 +270,15 @@ class Stage7Evaluator:
         final_results = {
             "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
             "model_path": self.model_path,
-            "evaluation_time_seconds": evaluation_time,
+            "evaluation_time_seconds": float(evaluation_time),
             "accuracy_evaluation": accuracy_results,
             "stability_evaluation": stability_results,
-            "comprehensive_score": comprehensive_score,
+            "comprehensive_score": float(comprehensive_score),
             "summary": {
-                "is_improved": comprehensive_score > 0.6,
+                "is_improved": bool(comprehensive_score > 0.6),
                 "is_stable": stability_results["is_stable"],
                 "prediction_quality": "Good" if accuracy_results["exact_match_rate"] > 0.3 else "Needs Improvement",
-                "overall_pass": comprehensive_score > 0.6 and stability_results["is_stable"]
+                "overall_pass": bool(comprehensive_score > 0.6 and stability_results["is_stable"])
             }
         }
         

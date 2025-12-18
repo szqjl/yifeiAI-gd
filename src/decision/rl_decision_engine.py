@@ -294,6 +294,7 @@ class RLDecisionEngine:
                 print(f"[RL Debug] Desired ranks: {desired_ranks}, Action ranks: {action_ranks}")
             
             # Check if ranks match exactly (e.g., S8 and D8 both have rank '8')
+            # 阶段6修复：rank匹配优先级最高，直接返回
             if desired_ranks == action_ranks and len(desired_ranks) > 0:
                 # 添加索引范围检查，防止返回无效索引
                 if i >= len(action_list):
@@ -307,14 +308,17 @@ class RLDecisionEngine:
             card_match_score = 0.0
             
             # Check if there's any rank overlap (partial rank match)
-            # This handles cases where model wants rank '3' but only pair/triple of '3' is available
+            # 阶段6修复：提高rank匹配的评分，让rank匹配更容易被选中
             if desired_ranks and action_ranks:
                 rank_overlap = desired_ranks & action_ranks
                 if rank_overlap:
-                    # Calculate overlap score: how many desired ranks are in this action
-                    rank_match_score = len(rank_overlap) / len(desired_ranks)
+                    # 阶段6修复：提高rank匹配评分，从 len(overlap)/len(desired) 改为更宽松的评分
+                    # 如果有一半以上的ranks匹配，就给高分
+                    overlap_ratio = len(rank_overlap) / len(desired_ranks) if desired_ranks else 0
+                    # 阶段6修复：rank匹配评分从 overlap_ratio 提高到 overlap_ratio * 1.5，让rank匹配更有竞争力
+                    rank_match_score = overlap_ratio * 1.5  # 提高rank匹配的竞争力
                     if i < 3:
-                        print(f"[RL Debug] Found rank overlap {rank_overlap} at index {i} (score: {rank_match_score:.2f})")
+                        print(f"[RL Debug] Found rank overlap {rank_overlap} at index {i} (score: {rank_match_score:.2f}, overlap_ratio: {overlap_ratio:.2f})")
             
             # Partial match scoring (exact card match)
             if desired_cards:
@@ -322,20 +326,34 @@ class RLDecisionEngine:
                 if len(action_cards) > 0 or len(desired_cards) > 0:
                     card_match_score = match_count / max(len(action_cards), len(desired_cards))
             
-            # Use the better of rank match or card match
-            combined_score = max(rank_match_score, card_match_score)
+            # 阶段6修复：优先使用rank匹配，rank匹配比精确卡牌匹配更重要
+            # 因为模型可能选择不同花色的相同rank卡牌（如S3 vs H3）
+            if rank_match_score > 0:
+                # 如果有rank匹配，优先使用rank匹配分数
+                combined_score = max(rank_match_score, card_match_score * 0.8)  # rank匹配权重更高
+            else:
+                # 没有rank匹配时，使用卡牌匹配
+                combined_score = card_match_score
+            
             if combined_score > best_match_score:
                 best_match_score = combined_score
                 best_idx = i
                     
-        # If we found a partial match, use it (lower threshold for rank matches)
-        if best_match_score > 0.3:  # Lowered from 0.5 to allow rank-based matches
+        # If we found a partial match, use it (阶段6修复：大幅降低阈值，允许更多匹配)
+        # 降低阈值从0.3到0.1，让rank匹配更容易通过
+        if best_match_score > 0.1:  # 阶段6修复：从0.3降低到0.1，允许更多有效匹配
             # 添加索引范围检查
             if best_idx >= len(action_list):
                 print(f"[RL Debug] ERROR: best_idx {best_idx} >= action_list length {len(action_list)}, falling back to PASS")
                 return 0
             print(f"RL desired {desired_cards} - using match (score: {best_match_score:.2f}) at index {best_idx}")
             return best_idx
+        
+        # 阶段6修复：即使没有完全匹配，如果有rank匹配，也尝试使用
+        if desired_cards and best_match_score > 0.05:  # 非常低的阈值，只要有rank匹配就尝试
+            if best_idx < len(action_list):
+                print(f"RL desired {desired_cards} - using weak match (score: {best_match_score:.2f}) at index {best_idx}")
+                return best_idx
             
         # If no match, fallback to PASS (index 0)
         if desired_cards:
@@ -649,38 +667,77 @@ class RLDecisionEngine:
             # Fallback to simple hash for unexpected formats
             return sum(ord(c) for c in card_code) % 54
 
+    def _index_to_rank(self, idx):
+        """
+        从索引提取rank（用于rank匹配回退）
+        """
+        rank_map = {
+            0: '2', 1: '3', 2: '4', 3: '5', 4: '6', 5: '7', 6: '8', 7: '9',
+            8: 'T', 9: 'J', 10: 'Q', 11: 'K', 12: 'A', 13: 'B', 14: 'R'
+        }
+        if idx <= 59:
+            rank_val = idx % 15
+            return rank_map.get(rank_val, '?')
+        return '?'
+    
+    def _card_to_rank(self, card_code):
+        """
+        从卡牌代码提取rank
+        """
+        if len(card_code) >= 2:
+            return card_code[1]
+        return '?'
+    
     def _indices_to_cards(self, indices, current_hand):
         """
         Map indices back to actual cards in hand.
-        Since our hash is lossy (modulo 54), this is tricky.
-        We need to find a card in hand that matches the index.
+        改进版：如果精确索引不匹配，尝试rank匹配（阶段6修复）
         """
         result = []
         hand_copy = list(current_hand)
         
-        # 预先计算手牌中每张卡的索引，用于调试
+        # 预先计算手牌中每张卡的索引和rank，用于调试和匹配
         hand_indices = {self._card_to_index(card): card for card in current_hand}
+        hand_ranks = {}  # rank -> [cards with this rank]
+        for card in current_hand:
+            rank = self._card_to_rank(card)
+            if rank not in hand_ranks:
+                hand_ranks[rank] = []
+            hand_ranks[rank].append(card)
         
         for idx in indices:
-            # Find a card in hand that maps to this index
+            # 第一步：尝试精确索引匹配
             found = False
-            for card in hand_copy:
-                if self._card_to_index(card) == idx:
+            if idx in hand_indices:
+                card = hand_indices[idx]
+                if card in hand_copy:
                     result.append(card)
-                    hand_copy.remove(card) # Consume card
+                    hand_copy.remove(card)
                     found = True
-                    break
+                    continue
             
             if not found:
-                # Model asked for a card we don't have
-                # 计算这个索引对应的卡牌（用于调试）
+                # 第二步：尝试rank匹配（阶段6修复：即使索引不匹配，如果rank匹配也使用）
+                expected_rank = self._index_to_rank(idx)
+                if expected_rank != '?' and expected_rank in hand_ranks:
+                    # 找到相同rank的卡牌，使用第一张
+                    matching_cards = [c for c in hand_ranks[expected_rank] if c in hand_copy]
+                    if matching_cards:
+                        card = matching_cards[0]
+                        result.append(card)
+                        hand_copy.remove(card)
+                        found = True
+                        print(f"[RL Debug] Index {idx} (expected rank: {expected_rank}) matched by rank: {card}")
+                        continue
+            
+            if not found:
+                # 精确索引和rank都不匹配
                 expected_card = self._index_to_card_code(idx)
+                expected_rank = self._index_to_rank(idx)
                 available_indices = sorted(hand_indices.keys())
                 # 只在调试模式下输出详细信息（减少日志）
-                # 如果有很多无效索引，只输出前几个
                 if len([i for i in indices if i not in hand_indices]) <= 3:
-                    print(f"[RL Debug] Index {idx} (expected: {expected_card}) not found in hand. Available indices: {available_indices[:10]}...")
-                # 不重复输出手牌信息（已经在其他地方输出）
+                    print(f"[RL Debug] Index {idx} (expected: {expected_card}, rank: {expected_rank}) not found in hand. Available indices: {available_indices[:10]}...")
                 
         return result
     

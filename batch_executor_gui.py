@@ -250,8 +250,8 @@ class BatchExecutorGUI:
         # 队伍A（您的队）：0号(Test_N1) + 2号(Test_N2)
         # 队伍B（对手队）：1号(client3) + 3号(client4)
         
-        # 选项3：使用V5智能混合决策系统（最新版本，RL+知识库+规则引擎）⭐ 推荐
-        default_clients = [
+        # 选项3：使用V5智能混合决策系统（RL+知识库+规则引擎）
+        default_clients_v5 = [
             "src/communication/yf1_v5.py",                   # 0号位 - YiFei V5
             "src/communication/run_lalala_client3.py",       # 1号位 - 对手1
             "src/communication/yf2_v5.py",                   # 2号位 - YiFei V5
@@ -260,8 +260,33 @@ class BatchExecutorGUI:
         # 队伍分组：
         # 队伍A（YiFei V5队）：0号(yf1_v5) + 2号(yf2_v5)
         # 队伍B（对手队）：1号(client3) + 3号(client4)
-        # 注：V5版本使用智能混合决策系统，具有RL决策引擎集成、知识库增强、规则引擎和智能决策融合
-        #     RL决策 + 知识库增强决策 + 规则引擎决策 → 智能融合
+        # 注：V5版本使用智能混合决策引擎，具有：
+        #     - RL决策引擎
+        #     - 知识库增强
+        #     - 规则引擎回退
+        #     - 多层次决策融合
+        
+        # 选项4：使用V6阶段6游戏导向训练系统（策略原因学习 + 胜率导向损失）
+        default_clients_v6 = [
+            "src/communication/yf1_v6.py",                   # 0号位 - YiFei V6
+            "src/communication/run_lalala_client3.py",       # 1号位 - 对手1
+            "src/communication/yf2_v6.py",                   # 2号位 - YiFei V6
+            "src/communication/run_lalala_client4.py"        # 3号位 - 对手2
+        ]
+        # 队伍分组：
+        # 队伍A（YiFei V6队）：0号(yf1_v6) + 2号(yf2_v6)
+        # 队伍B（对手队）：1号(client3) + 3号(client4)
+        # 注：V6版本基于V5，加入阶段6游戏导向训练改进：
+        #     - 策略原因学习：理解"为什么这样选择"
+        #     - 胜率导向损失：学习"什么有效"
+        #     - 动态阈值调整：根据局面自适应
+        #     - 概率校准：提高预测准确性
+        
+        # 默认使用V6（如果存在），否则使用V5
+        if all(os.path.exists(c) for c in default_clients_v6):
+            default_clients = default_clients_v6
+        else:
+            default_clients = default_clients_v5
         
         # 检查哪些客户端存在
         existing_clients = [c for c in default_clients if os.path.exists(c)]

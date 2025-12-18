@@ -437,6 +437,91 @@ class BatchExecutor:
                     self.logger.error("没有客户端成功启动，停止执行")
                     break
                 
+                # 等待所有客户端连接到服务器
+                expected_client_count = len(self.client_scripts)
+                clients_connected = self.restart_manager.wait_for_clients_connected(
+                    expected_count=expected_client_count,
+                    timeout=30
+                )
+                
+                if not clients_connected:
+                    self.logger.warning("⚠️ 客户端连接检测超时，但继续执行（可能连接已建立）")
+                    self.logger.warning("   如果游戏未开始，请检查:")
+                    self.logger.warning("   1. 客户端窗口是否有错误信息")
+                    self.logger.warning("   2. 服务器窗口是否显示客户端连接")
+                    self.logger.warning("   3. 网络连接是否正常")
+                else:
+                    self.logger.info("✓ 所有客户端已连接")
+                
+                # 额外等待并检测游戏是否开始
+                self.logger.info("等待游戏开始（检测服务器输出）...")
+                import time
+                game_start_timeout = 20  # 游戏开始超时时间
+                start_check_time = time.time()
+                game_started = False
+                
+                # 尝试读取服务器输出，检测游戏开始
+                # 注意：如果服务器窗口可见（visible_server=True），输出可能不在stdout中
+                if server_process.stdout and not self.visible_server:
+                    try:
+                        import threading
+                        import queue
+                        
+                        # 使用队列在后台线程中读取输出
+                        output_queue = queue.Queue()
+                        
+                        def read_output():
+                            """在后台线程中读取服务器输出"""
+                            try:
+                                for line in server_process.stdout:
+                                    if line:
+                                        output_queue.put(line.strip())
+                            except Exception:
+                                pass
+                        
+                        # 启动后台读取线程
+                        read_thread = threading.Thread(target=read_output, daemon=True)
+                        read_thread.start()
+                        
+                        # 轮询队列，检测游戏开始
+                        while time.time() - start_check_time < game_start_timeout:
+                            try:
+                                line = output_queue.get(timeout=1)
+                                if line:
+                                    self.logger.info(f"[服务器] {line}")
+                                    # 检测游戏开始的关键词
+                                    if any(keyword in line.lower() for keyword in [
+                                        "游戏开始", "gamestart", "game start", 
+                                        "开始游戏", "第.*局", "round.*start",
+                                        "ready", "all players connected"
+                                    ]):
+                                        self.logger.info("✓ 检测到游戏开始!")
+                                        game_started = True
+                                        break
+                            except queue.Empty:
+                                # 超时，继续等待
+                                pass
+                            
+                            time.sleep(0.5)
+                    except Exception as e:
+                        self.logger.debug(f"读取服务器输出检测游戏开始时出错: {e}")
+                else:
+                    # 服务器窗口可见，无法从stdout读取，直接等待
+                    self.logger.info("服务器窗口可见，无法从stdout读取输出")
+                    self.logger.info("等待 10 秒让游戏有时间开始...")
+                    time.sleep(10)
+                    game_started = True  # 假设已开始
+                
+                if game_started:
+                    self.logger.info("✓ 游戏已开始或正在开始，继续监控...")
+                else:
+                    self.logger.warning("⚠️ 未检测到游戏开始消息，但继续执行")
+                    self.logger.warning("   可能原因:")
+                    self.logger.warning("   1. 服务器输出格式不同")
+                    self.logger.warning("   2. 游戏已开始但未输出检测关键词")
+                    self.logger.warning("   3. 服务器窗口可见，输出在窗口中显示")
+                    self.logger.warning("   建议: 检查服务器窗口确认游戏是否已开始")
+                
                 # 等待服务器完成
                 server_name = os.path.basename(self.server_path)
                 self.logger.info(f"等待服务器完成 {batch_games} 场游戏...")

@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 REM Stage 7 鲁棒性增强训练启动脚本
 
 echo ========================================
@@ -31,12 +32,31 @@ if errorlevel 1 (
 
 REM 检查必要的包
 echo 检查依赖包...
-python -c "import torch, numpy, json" > nul 2>&1
+python -c "import torch, numpy, json, pathlib" > nul 2>&1
 if errorlevel 1 (
-    echo [错误] 缺少必要的Python包 (torch, numpy, json)
-    echo 请运行: pip install torch numpy
-    pause
-    exit /b 1
+    echo [错误] 缺少必要的Python包
+    echo.
+    echo 请安装以下依赖包:
+    echo   pip install torch numpy
+    echo.
+    echo 如果使用conda:
+    echo   conda install pytorch numpy -c pytorch
+    echo.
+    set /p install_deps="是否现在安装依赖包? (y/n): "
+    if /i "!install_deps!"=="y" (
+        echo 正在安装依赖包...
+        pip install torch numpy
+        if errorlevel 1 (
+            echo [错误] 依赖包安装失败
+            pause
+            exit /b 1
+        )
+        echo [OK] 依赖包安装成功
+    ) else (
+        echo 请手动安装依赖包后重新运行
+        pause
+        exit /b 1
+    )
 )
 
 REM 检查数据目录
