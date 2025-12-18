@@ -225,6 +225,39 @@ class EnhancedStage6TrainingGUI:
         ttk.Checkbutton(feature_frame, text="训练完成后自动进行游戏导向评估",
                        variable=self.auto_evaluate_var).grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=5)
 
+<<<<<<< HEAD
+=======
+        # 阶段6优化版：两阶段训练选项
+        ttk.Separator(feature_frame, orient='horizontal').grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
+        
+        self.enable_two_stage_var = tk.BooleanVar(value=True)
+        # 使用tk.Checkbutton以支持font参数，或移除font参数使用ttk.Checkbutton
+        two_stage_check = ttk.Checkbutton(feature_frame, text="✅ 启用两阶段训练（阶段6优化版，提升稳定性）",
+                       variable=self.enable_two_stage_var)
+        two_stage_check.grid(row=5, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5)
+        
+        two_stage_info_frame = ttk.Frame(feature_frame)
+        two_stage_info_frame.grid(row=6, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=20, pady=5)
+        
+        # 使用tk.Label以支持font和foreground参数
+        tk.Label(two_stage_info_frame, text="第一阶段：冻结主干（fc1, fc2），只训练决策头", 
+                 font=("Arial", 8), fg="gray").pack(anchor=tk.W)
+        tk.Label(two_stage_info_frame, text="第二阶段：全量微调，混合原始数据+成功轨迹", 
+                 font=("Arial", 8), fg="gray").pack(anchor=tk.W)
+        
+        # 两阶段训练配置
+        two_stage_config_frame = ttk.Frame(feature_frame)
+        two_stage_config_frame.grid(row=7, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=20, pady=5)
+        
+        ttk.Label(two_stage_config_frame, text="第一阶段轮数:").grid(row=0, column=0, sticky=tk.W, padx=5)
+        self.stage1_epochs_var = tk.StringVar(value="30")
+        ttk.Entry(two_stage_config_frame, textvariable=self.stage1_epochs_var, width=10).grid(row=0, column=1, padx=5)
+        
+        ttk.Label(two_stage_config_frame, text="第二阶段轮数:").grid(row=0, column=2, sticky=tk.W, padx=5)
+        self.stage2_epochs_var = tk.StringVar(value="50")
+        ttk.Entry(two_stage_config_frame, textvariable=self.stage2_epochs_var, width=10).grid(row=0, column=3, padx=5)
+
+>>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
         # 配置管理
         config_mgmt_frame = ttk.LabelFrame(parent, text="配置管理", padding="10")
         config_mgmt_frame.pack(fill=tk.X, pady=5)
@@ -326,7 +359,12 @@ class EnhancedStage6TrainingGUI:
         self.eval_model_path_var = tk.StringVar(value="models/bc_model_stage6_enhanced.pth")
         ttk.Entry(eval_config_frame, textvariable=self.eval_model_path_var, width=50).grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
         ttk.Button(eval_config_frame, text="浏览", command=self.browse_eval_model_path).grid(row=0, column=2, padx=5)
+<<<<<<< HEAD
         ttk.Button(eval_config_frame, text="📊 开始评估", command=self.evaluate_model).grid(row=0, column=3, padx=5)
+=======
+        ttk.Button(eval_config_frame, text="🔍 自动检测最新", command=self.auto_detect_latest_model).grid(row=0, column=3, padx=5)
+        ttk.Button(eval_config_frame, text="📊 开始评估", command=self.evaluate_model).grid(row=0, column=4, padx=5)
+>>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
         eval_config_frame.columnconfigure(1, weight=1)
         
         # 模型输出分布分析
@@ -639,6 +677,45 @@ class EnhancedStage6TrainingGUI:
         )
         if path:
             self.eval_model_path_var.set(path)
+<<<<<<< HEAD
+=======
+    
+    def auto_detect_latest_model(self):
+        """自动检测最新的模型文件"""
+        import glob
+        import os
+        
+        model_dir = "models"
+        if not os.path.exists(model_dir):
+            messagebox.showwarning("警告", "models目录不存在")
+            return
+        
+        # 查找所有stage6相关的模型文件
+        patterns = [
+            "bc_model_stage6_stage2_*.pth",  # 两阶段训练的最终模型
+            "bc_model_stage6_enhanced*.pth",  # 增强版模型
+            "bc_model_stage6*.pth",  # 其他阶段6模型
+        ]
+        
+        latest_model = None
+        latest_time = 0
+        
+        for pattern in patterns:
+            files = glob.glob(os.path.join(model_dir, pattern))
+            for file in files:
+                mtime = os.path.getmtime(file)
+                if mtime > latest_time:
+                    latest_time = mtime
+                    latest_model = file
+        
+        if latest_model:
+            self.eval_model_path_var.set(latest_model)
+            self.log(f"✅ 已自动检测到最新模型: {latest_model}")
+            messagebox.showinfo("成功", f"已自动选择最新模型:\n{os.path.basename(latest_model)}")
+        else:
+            messagebox.showwarning("警告", "未找到阶段6模型文件")
+            self.log("⚠️ 未找到阶段6模型文件", "WARNING")
+>>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
 
     # ========== 训练方法 ==========
 
@@ -713,6 +790,7 @@ class EnhancedStage6TrainingGUI:
                     print("[INFO] 💡 预计需要5-15秒，取决于数据量（4000+文件约需6秒）")
                     print("[INFO] 💡 如果长时间无响应，请耐心等待，不要关闭窗口")
                     
+<<<<<<< HEAD
                     train_bc(
                         data_dir=data_dir,
                         epochs=int(self.epochs_var.get()),
@@ -732,6 +810,104 @@ class EnhancedStage6TrainingGUI:
                         enable_dynamic_strategy=True,
                         dynamic_strategy_weight=0.1
                     )
+=======
+                    # 阶段6优化版：两阶段训练
+                    if self.enable_two_stage_var.get():
+                        from datetime import datetime
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        
+                        # 第一阶段：冻结主干
+                        stage1_model_path = model_path.replace('.pth', f'_stage1_{timestamp}.pth')
+                        self.root.after(0, lambda: self.log("="*60))
+                        self.root.after(0, lambda: self.log("🔒 第一阶段：冻结主干，训练决策头"))
+                        self.root.after(0, lambda: self.log("="*60))
+                        
+                        train_bc(
+                            data_dir=data_dir,
+                            epochs=int(self.stage1_epochs_var.get()),
+                            batch_size=32,  # 第一阶段：较小批次
+                            lr=0.0002,  # 第一阶段：决策头学习率
+                            model_path=stage1_model_path,
+                            max_samples=int(self.max_samples_var.get()),
+                            enable_strategy_head=True,
+                            action_loss_weight=1.5,
+                            strategy_loss_weight=0.1,
+                            use_improved_model=False,
+                            enable_strategy_pattern=True,
+                            strategy_pattern_weight=0.05,
+                            enable_opponent_modeling=True,
+                            opponent_model_weight=0.05,
+                            enable_dynamic_strategy=True,
+                            dynamic_strategy_weight=0.05,
+                            freeze_backbone=True,  # 阶段6优化版：冻结主干
+                        )
+                        
+                        self.root.after(0, lambda: self.log(f"✅ 第一阶段完成，模型: {stage1_model_path}"))
+                        
+                        # 轨迹收集（简化版，实际应该从游戏记录中收集）
+                        self.root.after(0, lambda: self.log("📊 轨迹收集阶段（简化版）..."))
+                        trajectory_path = None  # 暂时不收集轨迹
+                        
+                        # 第二阶段：全量微调
+                        stage2_model_path = model_path.replace('.pth', f'_stage2_{timestamp}.pth')
+                        self.root.after(0, lambda: self.log("="*60))
+                        self.root.after(0, lambda: self.log("🔄 第二阶段：全量微调"))
+                        self.root.after(0, lambda: self.log("="*60))
+                        
+                        train_bc(
+                            data_dir=data_dir,
+                            epochs=int(self.stage2_epochs_var.get()),
+                            batch_size=int(self.batch_size_var.get()),
+                            lr=0.0001,  # 第二阶段：全量微调学习率（更低）
+                            model_path=stage2_model_path,
+                            max_samples=int(self.max_samples_var.get()) + 4000,  # 第二阶段：更多样本
+                            enable_strategy_head=True,
+                            action_loss_weight=1.5,
+                            strategy_loss_weight=0.1,
+                            use_improved_model=False,
+                            enable_strategy_pattern=True,
+                            strategy_pattern_weight=0.05,
+                            enable_opponent_modeling=True,
+                            opponent_model_weight=0.05,
+                            enable_dynamic_strategy=True,
+                            dynamic_strategy_weight=0.05,
+                            freeze_backbone=False,  # 第二阶段：解冻所有层
+                            load_pretrained_model=stage1_model_path,  # 加载第一阶段模型
+                            trajectory_data=trajectory_path,  # 轨迹数据（如果有）
+                        )
+                        
+                        self.root.after(0, lambda: self.log(f"✅ 第二阶段完成，最终模型: {stage2_model_path}"))
+                        
+                        # 复制第二阶段模型到最终路径
+                        import shutil
+                        if os.path.exists(stage2_model_path):
+                            shutil.copy(stage2_model_path, model_path)
+                            self.root.after(0, lambda: self.log(f"✅ 最终模型已保存到: {model_path}"))
+                            # 阶段6优化版：自动更新评估模型路径
+                            self.root.after(0, lambda: self.eval_model_path_var.set(model_path))
+                            self.root.after(0, lambda: self.log(f"📊 评估模型路径已自动更新为: {model_path}"))
+                    else:
+                        # 单阶段训练（原方式）
+                        train_bc(
+                            data_dir=data_dir,
+                            epochs=int(self.epochs_var.get()),
+                            batch_size=int(self.batch_size_var.get()),
+                            lr=float(self.lr_var.get()),
+                            model_path=model_path,
+                            max_samples=int(self.max_samples_var.get()),
+                            enable_strategy_head=True,
+                            action_loss_weight=1.0,
+                            strategy_loss_weight=0.3,
+                            use_improved_model=True,
+                            attention_heads=8,
+                            enable_strategy_pattern=True,
+                            strategy_pattern_weight=0.1,
+                            enable_opponent_modeling=True,
+                            opponent_model_weight=0.1,
+                            enable_dynamic_strategy=True,
+                            dynamic_strategy_weight=0.1
+                        )
+>>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
 
                 # 实时处理输出（逐行处理，避免一次性处理大量输出导致卡顿）
                 training_output = stdout_capture.getvalue()
@@ -748,6 +924,14 @@ class EnhancedStage6TrainingGUI:
                 self.root.after(0, lambda: self.update_progress(100, "训练完成！", ""))
                 self.status_var.set("✅ 阶段6训练完成")
                 self.training_active = False
+<<<<<<< HEAD
+=======
+                
+                # 阶段6优化版：如果使用单阶段训练，也自动更新评估模型路径
+                if not self.enable_two_stage_var.get():
+                    self.root.after(0, lambda: self.eval_model_path_var.set(model_path))
+                    self.root.after(0, lambda: self.log(f"📊 评估模型路径已自动更新为: {model_path}"))
+>>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
 
                 if self.auto_evaluate_var.get():
                     self.log("📊 开始游戏导向评估...")
@@ -922,7 +1106,11 @@ class EnhancedStage6TrainingGUI:
                 stdout_capture = io.StringIO()
                 
                 with redirect_stdout(stdout_capture):
+<<<<<<< HEAD
                     validator = GameOrientedValidator()
+=======
+                    validator = GameOrientedValidator(model_path=model_path)
+>>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
                     results = validator.comprehensive_validation(game_records, player_id=0)
                 
                 # 获取评估输出
