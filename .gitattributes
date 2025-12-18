@@ -1,6 +1,5 @@
 # 强制所有文本文件使用UTF-8编码
 * text=auto eol=lf
-
 # Python文件
 *.py text eol=lf charset=utf-8
 # PowerShell脚本
@@ -13,6 +12,9 @@
 *.json text eol=lf charset=utf-8
 *.yaml text eol=lf charset=utf-8
 *.yml text eol=lf charset=utf-8
+*.pth filter=lfs diff=lfs merge=lfs -text
+*.pkl filter=lfs diff=lfs merge=lfs -text
+*.h5 filter=lfs diff=lfs merge=lfs -text
 *.pth !text !filter !merge !diff
 *.pkl !text !filter !merge !diff
 *.h5 !text !filter !merge !diff
