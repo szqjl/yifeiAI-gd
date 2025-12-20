@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "*.rep": "xml"
+  },
+  "files.encoding": "utf8",
+  "editor.defaultFormatter": null,
+  "xml.format.enabled": true
+}

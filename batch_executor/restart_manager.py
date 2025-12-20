@@ -1,0 +1,482 @@
+"""
+重启管理模块
+
+管理服务器和客户端的重启，包括启动、等待和清理功能。
+"""
+
+import subprocess
+import sys
+import time
+import logging
+import os
+from typing import List, Optional
+from pathlib import Path
+
+from .process_monitor import ProcessMonitor
+
+
+logger = logging.getLogger(__name__)
+
+
+class RestartManager:
+    """管理服务器和客户端的重启"""
+    
+    def __init__(self, process_monitor: Optional[ProcessMonitor] = None, project_root: Optional[Path] = None):
+        """
+        初始化重启管理器
+        
+        Args:
+            process_monitor: 进程监控器实例，如果未提供则创建新实例
+            project_root: 项目根目录（用于路径解析）
+        """
+        self.process_monitor = process_monitor or ProcessMonitor()
+        self.server_process: Optional[subprocess.Popen] = None
+        self.client_processes: List[subprocess.Popen] = []
+        # 如果没有提供项目根目录，使用默认值（batch_executor的父目录）
+        if project_root is None:
+            project_root = Path(__file__).parent.parent
+        self.project_root = project_root
+    
+    def restart_server(
+        self,
+        server_path: str,
+        game_count: int,
+        visible_server: bool = False,  # Add this parameter
+        max_retries: int = 3,
+        wait_time: int = 15
+    ) -> Optional[subprocess.Popen]:
+        """
+        重启服务器
+        
+        构建服务器启动命令，使用subprocess.Popen启动，
+        等待服务器就绪，实现重试逻辑。
+        
+        Args:
+            server_path: 服务器可执行文件路径
+            game_count: 游戏场数
+            max_retries: 最大重试次数，默认3次
+            wait_time: 等待服务器就绪的时间（秒），默认15秒
+            
+        Returns:
+            成功启动的服务器进程，如果失败返回None
+        """
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"尝试启动服务器 (尝试 {attempt + 1}/{max_retries})")
+                logger.info(f"服务器路径: {server_path}")
+                logger.info(f"游戏场数: {game_count}")
+                
+                # 检查服务器文件是否存在
+                if not os.path.exists(server_path):
+                    logger.error(f"服务器文件不存在: {server_path}")
+                    return None
+                
+                # 构建启动命令
+                command = [server_path, str(game_count)]
+                
+                # 获取服务器所在目录作为工作目录
+                server_dir = os.path.dirname(server_path) or "."
+                logger.info(f"工作目录: {server_dir}")
+                
+                # 启动服务器进程
+                # 捕获输出以便读取战绩，但不阻塞
+                creationflags = 0
+                if hasattr(subprocess, 'CREATE_NO_WINDOW'):
+                    creationflags = subprocess.CREATE_NO_WINDOW
+
+                if visible_server and sys.platform == 'win32':
+                    if hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
+                        creationflags = subprocess.CREATE_NEW_CONSOLE
+                    else:
+                        # Fallback for older Python versions
+                        creationflags = 0  # Let it create default window
+
+                process = subprocess.Popen(
+                    command,
+                    cwd=server_dir,  # 设置工作目录
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    creationflags=creationflags,  # 设置创建标志
+                    text=True,
+                    bufsize=1  # 行缓冲
+                )
+                
+                logger.info(f"服务器进程已启动，PID: {process.pid}")
+                
+                # Enhanced waiting loop with real-time stdout reading
+                check_interval = 2
+                elapsed = 0
+                server_output_lines = []
+
+                logger.info(f"服务器窗口已启动，PID: {process.pid}")
+                logger.info("等待服务器输出 'ready for connect' 或类似就绪消息...")
+
+                while elapsed < wait_time:
+                    time.sleep(min(check_interval, wait_time - elapsed))
+                    elapsed += check_interval
+                    
+                    # Try to read available stdout lines (may be limited in CREATE_NEW_CONSOLE mode)
+                    try:
+                        if process.stdout:
+                            while True:
+                                line = process.stdout.readline()
+                                if not line:
+                                    break
+                                line = line.strip()
+                                if line:
+                                    server_output_lines.append(line)
+                                    logger.info(f"[服务器] {line}")
+                                    # Check for readiness message
+                                    if any(keyword in line.lower() for keyword in ["ready for connect", "server started", "listening", "waiting for players", "ready"]):
+                                        logger.info("✓ 检测到服务器就绪消息!")
+                                        # We can break early if ready message found
+                                        elapsed = wait_time  # Force exit loop
+                                        break
+                    except Exception as read_error:
+                        # In CREATE_NEW_CONSOLE mode, stdout might not be available
+                        logger.debug(f"读取服务器输出时出错 (正常在可见窗口模式): {read_error}")
+                    
+                    # Check process status
+                    return_code = process.poll()
+                    if return_code is not None:
+                        logger.warning(f"服务器进程在 {elapsed} 秒后退出，返回码: {return_code}")
+                        # Read any remaining output
+                        try:
+                            if process.stdout:
+                                remaining = process.stdout.read()
+                                if remaining:
+                                    remaining_lines = [line.strip() for line in remaining.splitlines() if line.strip()]
+                                    server_output_lines.extend(remaining_lines)
+                                    for line in remaining_lines[-5:]:
+                                        logger.info(f"[服务器最终输出] {line}")
+                        except:
+                            pass
+                        break
+
+                # If using visible window, check port instead of stdout
+                if visible_server and sys.platform == 'win32':
+                    logger.info("服务端窗口已可见，检查端口是否监听...")
+                    # Try to detect if port 23456 is listening
+                    import socket
+                    port_ready = False
+                    for _ in range(5):  # Try 5 times
+                        try:
+                            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            sock.settimeout(1)
+                            result = sock.connect_ex(('127.0.0.1', 23456))
+                            sock.close()
+                            if result == 0:
+                                logger.info("✓ 检测到服务器端口23456已监听!")
+                                port_ready = True
+                                break
+                        except:
+                            pass
+                        time.sleep(1)
+                    
+                    if not port_ready:
+                        logger.warning("未能检测到端口监听，但继续执行（服务器可能需要更多时间）")
+                    logger.info("如果连接失败，请检查服务器窗口输出")
+
+                # Log captured output summary
+                if server_output_lines:
+                    logger.info(f"捕获到服务器输出 {len(server_output_lines)} 行 (最后5行):")
+                    for line in server_output_lines[-5:]:
+                        logger.info(f"  {line}")
+                else:
+                    if visible_server:
+                        logger.info("无捕获输出 (正常，可见窗口模式)，请查看弹出的服务端窗口")
+                    else:
+                        logger.warning("无服务器输出，服务器可能未正常启动")
+
+                # Final check
+                if process.poll() is None:
+                    logger.info("✓ 服务器启动成功，进程正在运行")
+                    self.server_process = process
+                    return process
+                else:
+                    return_code = process.returncode
+                    logger.error(f"✗ 服务器进程已终止，返回码: {return_code}")
+                    if server_output_lines:
+                        logger.error("服务器错误输出 (最后10行):")
+                        for line in server_output_lines[-10:]:
+                            logger.error(f"  {line}")
+                    else:
+                        logger.error("提示: 服务器可能启动失败，请检查服务器路径、参数和权限")
+                    
+            except FileNotFoundError:
+                logger.error(f"服务器可执行文件不存在: {server_path}")
+                return None
+            except PermissionError:
+                logger.error(f"没有权限执行服务器: {server_path}")
+                return None
+            except Exception as e:
+                logger.error(f"启动服务器时发生错误: {e}", exc_info=True)
+            
+            # 如果不是最后一次尝试，等待后重试
+            if attempt < max_retries - 1:
+                logger.info("等待5秒后重试...")
+                time.sleep(5)
+        
+        logger.error(f"服务器启动失败，已重试{max_retries}次")
+        return None
+    
+    def restart_clients(
+        self,
+        client_scripts: List[str],
+        wait_between: int = 3  # 3 seconds between clients to ensure connection order
+    ) -> List[subprocess.Popen]:
+        """
+        重启所有客户端
+        
+        按顺序启动所有客户端，每个客户端之间等待指定时间。
+        处理启动失败，继续启动其他客户端。
+        
+        Args:
+            client_scripts: 客户端脚本路径列表
+            wait_between: 每个客户端之间的等待时间（秒），默认3秒
+            
+        Returns:
+            成功启动的客户端进程列表
+        """
+        processes = []
+        
+        for i, script_path in enumerate(client_scripts):
+            try:
+                script_path = script_path.strip()  # 去除前后空格
+                
+                # 将相对路径转换为绝对路径
+                if not os.path.isabs(script_path):
+                    # 如果是相对路径，先尝试相对于当前工作目录
+                    abs_script_path = os.path.abspath(script_path)
+                    
+                    # 如果当前工作目录下的路径不存在，尝试相对于项目根目录
+                    if not os.path.exists(abs_script_path):
+                        abs_script_path = self.project_root / script_path
+                        abs_script_path = str(abs_script_path.resolve())
+                else:
+                    abs_script_path = script_path
+                
+                # 验证文件是否存在
+                if not os.path.exists(abs_script_path):
+                    logger.error(f"客户端脚本不存在: {script_path}")
+                    logger.error(f"  尝试的绝对路径: {abs_script_path}")
+                    logger.error(f"  当前工作目录: {os.getcwd()}")
+                    logger.error(f"  项目根目录: {self.project_root}")
+                    continue
+                
+                logger.info(f"启动客户端 {i + 1}/{len(client_scripts)}: {script_path}")
+                logger.info(f"  绝对路径: {abs_script_path}")
+                
+                # 确定如何启动客户端（Python脚本）
+                command = ['python', abs_script_path]
+                
+                # 启动客户端进程
+                # 不捕获输出，让输出显示在控制台窗口中
+                # Windows上使用start命令创建新窗口，其他平台使用默认方式
+                if sys.platform == 'win32':
+                    # Windows: 使用start命令创建新的控制台窗口显示客户端输出
+                    # start命令会打开新窗口并执行命令
+                    # 使用start命令在新窗口中启动，窗口标题包含脚本名便于识别
+                    window_title = f"客户端{i+1}: {os.path.basename(abs_script_path)}"
+                    # 确保工作目录是项目根目录，这样相对导入才能正常工作
+                    work_dir = str(self.project_root.resolve())
+                    # 计算相对于项目根目录的路径（与CMD文件格式一致）
+                    try:
+                        rel_path = os.path.relpath(abs_script_path, work_dir)
+                        rel_path_normalized = rel_path.replace('/', '\\')
+                    except ValueError:
+                        # 如果无法计算相对路径，使用绝对路径
+                        rel_path_normalized = abs_script_path.replace('/', '\\')
+                    # 使用与CMD文件相同的格式：start "窗口标题" cmd /k "python 相对路径"
+                    # 这样工作目录会自动设置为当前目录（项目根目录）
+                    start_command = f'start "{window_title}" cmd /k "cd /d {work_dir} && python {rel_path_normalized}"'
+                    process = subprocess.Popen(
+                        start_command,
+                        shell=True,  # 使用shell=True来执行start命令
+                        cwd=work_dir,  # 设置工作目录
+                        creationflags=subprocess.CREATE_NO_WINDOW  # 隐藏启动命令本身的窗口
+                    )
+                    # 注意：使用start命令时，返回的process是start命令的进程，不是客户端进程
+                    # 实际客户端会在新窗口中运行
+                    logger.info(f"客户端 {i + 1} 已在新窗口中启动")
+                    logger.info(f"  原始路径: {script_path}")
+                    logger.info(f"  绝对路径: {abs_script_path}")
+                    logger.info(f"  相对路径: {rel_path_normalized}")
+                    logger.info(f"  工作目录: {work_dir}")
+                    logger.info(f"  窗口标题: {window_title}")
+                    logger.info(f"  启动命令: {start_command}")
+                    logger.info(f"  提示: 如果看不到窗口，请检查任务栏或使用 Alt+Tab 切换")
+                    # 创建一个虚拟的进程对象用于跟踪
+                    class VirtualProcess:
+                        def __init__(self, pid, window_title):
+                            self.pid = pid
+                            self.returncode = None
+                            self.window_title = window_title
+                        def poll(self):
+                            return self.returncode
+                        def terminate(self):
+                            # 尝试终止新窗口中的进程
+                            try:
+                                subprocess.run(['taskkill', '/F', '/FI', f'WINDOWTITLE eq {self.window_title}*'], 
+                                             capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                            except:
+                                pass
+                        def kill(self):
+                            self.terminate()
+                    process = VirtualProcess(process.pid, window_title)
+                else:
+                    # Linux/Mac: 使用默认方式
+                    process = subprocess.Popen(command)
+                
+                logger.info(f"客户端 {i + 1} 已启动，PID: {process.pid}")
+                processes.append(process)
+                
+                # 等待后再启动下一个客户端 (确保顺序连接)
+                if i < len(client_scripts) - 1:
+                    logger.info(f"等待 {wait_between} 秒后启动下一个客户端（确保连接顺序）...")
+                    time.sleep(wait_between)
+                    
+                    # 验证当前客户端进程仍在运行
+                    if process.poll() is None:
+                        logger.info(f"✓ 客户端 {i + 1} 进程运行正常")
+                    else:
+                        logger.warning(f"⚠ 客户端 {i + 1} 进程已退出，返回码: {process.returncode}")
+                    
+            except FileNotFoundError:
+                logger.error(f"客户端脚本不存在: {script_path}")
+                # 继续启动其他客户端
+                continue
+            except PermissionError:
+                logger.error(f"没有权限执行客户端: {script_path}")
+                # 继续启动其他客户端
+                continue
+            except Exception as e:
+                logger.error(f"启动客户端时发生错误: {e}", exc_info=True)
+                # 继续启动其他客户端
+                continue
+        
+        self.client_processes = processes
+        logger.info(f"成功启动 {len(processes)}/{len(client_scripts)} 个客户端")
+        return processes
+    
+    def wait_for_clients_connected(
+        self,
+        expected_count: int = 4,
+        timeout: int = 30,
+        check_interval: int = 2
+    ) -> bool:
+        """
+        等待所有客户端连接到服务器
+        
+        通过检测服务器端口连接数或WebSocket连接状态来判断客户端是否已连接。
+        
+        Args:
+            expected_count: 期望连接的客户端数量，默认4个
+            timeout: 超时时间（秒），默认30秒
+            check_interval: 检查间隔（秒），默认2秒
+            
+        Returns:
+            如果所有客户端都连接成功返回True，否则返回False
+        """
+        logger.info(f"等待 {expected_count} 个客户端连接到服务器...")
+        logger.info(f"超时时间: {timeout} 秒，检查间隔: {check_interval} 秒")
+        
+        import socket
+        import time
+        
+        start_time = time.time()
+        elapsed = 0
+        active_clients = 0
+        
+        while elapsed < timeout:
+            try:
+                # 方法1: 尝试连接到服务器端口，检测是否有监听
+                # 注意：这只能检测服务器是否在监听，不能检测客户端连接数
+                # 但我们可以通过多次尝试连接来间接判断
+                
+                # 方法2: 检查客户端进程是否仍在运行（间接判断）
+                active_clients = 0
+                for i, process in enumerate(self.client_processes):
+                    if process.poll() is None:  # 进程仍在运行
+                        active_clients += 1
+                    else:
+                        logger.warning(f"客户端 {i+1} 进程已退出，返回码: {process.returncode}")
+                
+                if active_clients >= expected_count:
+                    logger.info(f"✓ 检测到 {active_clients} 个客户端进程正在运行")
+                    # 额外等待几秒，确保连接建立
+                    logger.info("等待 5 秒确保所有连接完全建立...")
+                    time.sleep(5)
+                    return True
+                
+                # 方法3: 尝试检测服务器端口连接数（需要服务器支持）
+                # 这里我们简化处理，只检查进程状态
+                
+                elapsed = time.time() - start_time
+                remaining = timeout - elapsed
+                if remaining > 0:
+                    logger.info(f"已等待 {elapsed:.1f} 秒，剩余 {remaining:.1f} 秒... (活跃客户端: {active_clients}/{expected_count})")
+                    time.sleep(check_interval)
+                
+            except Exception as e:
+                logger.warning(f"检测客户端连接状态时出错: {e}")
+                time.sleep(check_interval)
+                elapsed = time.time() - start_time
+        
+        logger.warning(f"⚠️ 等待客户端连接超时 ({timeout} 秒)")
+        logger.warning(f"   活跃客户端进程数: {active_clients}/{expected_count}")
+        logger.warning("   可能原因:")
+        logger.warning("   1. 客户端连接失败")
+        logger.warning("   2. 服务器未正确启动")
+        logger.warning("   3. 网络连接问题")
+        logger.warning("   4. 客户端脚本执行错误")
+        logger.warning("   建议: 检查客户端窗口的输出日志")
+        
+        return False
+    
+    def cleanup(self) -> None:
+        """
+        清理所有进程
+        
+        终止所有服务器和客户端进程，释放资源。
+        """
+        logger.info("开始清理所有进程...")
+        
+        # 终止所有客户端进程
+        for i, process in enumerate(self.client_processes):
+            try:
+                if process.poll() is None:  # 进程仍在运行
+                    logger.info(f"终止客户端进程 {i + 1}, PID: {process.pid}")
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        logger.warning(f"客户端进程 {process.pid} 未响应终止信号，强制结束")
+                        process.kill()
+            except Exception as e:
+                logger.error(f"终止客户端进程时发生错误: {e}")
+        
+        # 终止服务器进程
+        if self.server_process is not None:
+            try:
+                if self.server_process.poll() is None:  # 进程仍在运行
+                    logger.info(f"终止服务器进程, PID: {self.server_process.pid}")
+                    self.server_process.terminate()
+                    try:
+                        self.server_process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        logger.warning(f"服务器进程 {self.server_process.pid} 未响应终止信号，强制结束")
+                        self.server_process.kill()
+            except Exception as e:
+                logger.error(f"终止服务器进程时发生错误: {e}")
+        
+        # 使用进程监控器确保服务器进程已终止
+        # 注意：不要杀死所有python.exe进程，因为GUI本身也是Python进程
+        process_names = ['guandan_offline_v1006.exe']
+        self.process_monitor.kill_all(process_names)
+        
+        # 清空进程列表
+        self.client_processes = []
+        self.server_process = None
+        
+        logger.info("清理完成")

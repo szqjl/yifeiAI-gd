@@ -1,0 +1,24 @@
+# 强制所有文本文件使用UTF-8编码
+* text=auto eol=lf
+
+# Python文件
+*.py text eol=lf charset=utf-8
+
+# PowerShell脚本
+*.ps1 text eol=lf charset=utf-8
+
+# Markdown文件
+*.md text eol=lf charset=utf-8
+
+# 批处理文件
+*.bat text eol=crlf charset=utf-8
+
+# 配置文件
+*.json text eol=lf charset=utf-8
+*.yaml text eol=lf charset=utf-8
+*.yml text eol=lf charset=utf-8
+
+# 二进制文件 - 不进行文本处理
+*.pth !text !filter !merge !diff
+*.pkl !text !filter !merge !diff
+*.h5 !text !filter !merge !diff

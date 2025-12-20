@@ -1,0 +1,645 @@
+"""
+主执行器模块
+
+整合所有模块，实现批量游戏执行的主控制逻辑。
+"""
+
+from dataclasses import dataclass, asdict
+from datetime import datetime
+import json
+import os
+import signal
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Optional
+import logging
+
+
+@dataclass
+class ExecutionState:
+    """执行状态"""
+    target_games: int
+    completed_games: int
+    restart_count: int
+    current_batch: int
+    start_time: datetime
+    last_update: datetime
+    
+    def save(self, filepath: str) -> None:
+        """
+        保存执行状态到文件
+        
+        Args:
+            filepath: 保存文件路径
+        """
+        # 将datetime对象转换为ISO格式字符串
+        state_dict = asdict(self)
+        state_dict['start_time'] = self.start_time.isoformat()
+        state_dict['last_update'] = self.last_update.isoformat()
+        
+        # 使用临时文件+原子重命名确保数据安全
+        dir_name = os.path.dirname(filepath) or '.'
+        fd, temp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(state_dict, f, indent=2, ensure_ascii=False)
+            
+            # 原子重命名
+            if os.path.exists(filepath):
+                os.replace(temp_path, filepath)
+            else:
+                os.rename(temp_path, filepath)
+        except Exception:
+            # 清理临时文件
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
+    
+    @classmethod
+    def load(cls, filepath: str) -> 'ExecutionState':
+        """
+        从文件加载执行状态
+        
+        Args:
+            filepath: 文件路径
+            
+        Returns:
+            ExecutionState对象
+        """
+        with open(filepath, 'r', encoding='utf-8') as f:
+            state_dict = json.load(f)
+        
+        # 将ISO格式字符串转换回datetime对象
+        state_dict['start_time'] = datetime.fromisoformat(state_dict['start_time'])
+        state_dict['last_update'] = datetime.fromisoformat(state_dict['last_update'])
+        
+        return cls(**state_dict)
+
+
+class SignalHandler:
+    """信号处理器，用于捕获终止信号并优雅退出"""
+    
+    def __init__(self, state_file: str, logger: Optional[logging.Logger] = None):
+        """
+        初始化信号处理器
+        
+        Args:
+            state_file: 状态保存文件路径
+            logger: 日志记录器（可选）
+        """
+        self.state_file = state_file
+        self.logger = logger or logging.getLogger(__name__)
+        self.execution_state: Optional[ExecutionState] = None
+        self.shutdown_requested = False
+        
+        # 注册信号处理函数
+        signal.signal(signal.SIGINT, self._handle_signal)
+        signal.signal(signal.SIGTERM, self._handle_signal)
+    
+    def set_execution_state(self, state: ExecutionState) -> None:
+        """
+        设置当前执行状态
+        
+        Args:
+            state: 执行状态对象
+        """
+        self.execution_state = state
+    
+    def _handle_signal(self, signum: int, frame) -> None:
+        """
+        处理终止信号
+        
+        Args:
+            signum: 信号编号
+            frame: 当前栈帧
+        """
+        signal_name = "SIGINT" if signum == signal.SIGINT else "SIGTERM"
+        self.logger.info(f"接收到 {signal_name} 信号，准备优雅退出...")
+        
+        # 标记关闭请求
+        self.shutdown_requested = True
+        
+        # 保存当前状态
+        if self.execution_state:
+            try:
+                self.execution_state.save(self.state_file)
+                self.logger.info(f"执行状态已保存到 {self.state_file}")
+            except Exception as e:
+                self.logger.error(f"保存执行状态失败: {e}", exc_info=True)
+        
+        # 退出程序
+        self.logger.info("系统正在退出...")
+        sys.exit(0)
+    
+    def is_shutdown_requested(self) -> bool:
+        """
+        检查是否请求关闭
+        
+        Returns:
+            如果请求关闭返回True，否则返回False
+        """
+        return self.shutdown_requested
+
+
+class BatchExecutor:
+    """批量游戏执行主控制器"""
+    
+    def __init__(
+        self,
+        target_games: int,
+        server_path: str,
+        client_scripts: list,
+        diagnose_only: bool = False,
+        state_file: str = "execution_state.json",
+        score_file: str = "game_scores.json",
+        enable_signal_handler: bool = True,
+        visible_server: bool = False
+    ):
+        """
+        初始化批量执行器
+        
+        Args:
+            target_games: 目标游戏场数
+            server_path: 服务器可执行文件路径
+            client_scripts: 客户端脚本路径列表
+            diagnose_only: 是否仅执行诊断
+            state_file: 执行状态保存文件
+            score_file: 战绩保存文件
+            enable_signal_handler: 是否启用信号处理器（GUI模式下应设为False）
+            visible_server: 是否在Windows上显示服务器控制台窗口
+        """
+        self.target_games = target_games
+        self.server_path = server_path
+        self.client_scripts = client_scripts
+        self.diagnose_only = diagnose_only
+        self.state_file = state_file
+        self.score_file = score_file
+        self.logger = logging.getLogger("batch_executor")
+        self._running = False
+        self._current_state = None
+        self.visible_server = visible_server
+        
+        # 保存项目根目录（用于路径解析）
+        self.project_root = Path(__file__).parent.parent
+        self.logger.debug(f"项目根目录: {self.project_root}")
+        self.logger.debug(f"当前工作目录: {os.getcwd()}")
+        
+        # 导入所需模块
+        from .diagnostic import DiagnosticModule
+        from .process_monitor import ProcessMonitor
+        from .tracker import ScoreTracker
+        from .restart_manager import RestartManager
+        from .input_validator import InputValidator
+        
+        # 初始化各个模块
+        self.diagnostic = DiagnosticModule()
+        self.process_monitor = ProcessMonitor()
+        self.tracker = ScoreTracker(score_file)
+        self.restart_manager = RestartManager(self.process_monitor, self.project_root)
+        self.validator = InputValidator()
+        
+        # 初始化信号处理器（仅在主线程中）
+        self.signal_handler = None
+        if enable_signal_handler:
+            try:
+                self.signal_handler = SignalHandler(state_file, self.logger)
+            except ValueError as e:
+                self.logger.warning(f"无法初始化信号处理器: {e}，将在非主线程模式下运行")
+        
+        # 验证目标场数
+        try:
+            self.validator.validate_target_games(target_games)
+        except ValueError as e:
+            self.logger.error(f"目标场数验证失败: {e}")
+            raise
+    
+    def run_diagnostic(self):
+        """
+        运行诊断模块
+        
+        Returns:
+            DiagnosticReport对象，如果诊断失败则返回None
+        """
+        self.logger.info("=" * 60)
+        self.logger.info("开始诊断服务器参数问题...")
+        self.logger.info("=" * 60)
+        
+        # 检查配置文件
+        server_dir = os.path.dirname(self.server_path) or "."
+        config_files = self.diagnostic.check_config_files(server_dir)
+        
+        if config_files:
+            self.logger.info(f"发现配置文件: {', '.join(config_files)}")
+        else:
+            self.logger.info("未发现配置文件")
+        
+        # 启动服务器并捕获输出
+        self.logger.info(f"启动服务器进行诊断: {self.server_path} {self.target_games}")
+        
+        try:
+            import subprocess
+            # 诊断模式下不使用CREATE_NEW_CONSOLE，这样才能捕获输出
+            process = subprocess.Popen(
+                [self.server_path, str(self.target_games)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            
+            # 捕获输出
+            server_output = self.diagnostic.capture_server_output(process, timeout=10)
+            
+            # 提取游戏次数
+            actual_count = self.diagnostic.extract_game_count(server_output)
+            
+            # 生成诊断报告
+            report = self.diagnostic.diagnose(
+                expected=self.target_games,
+                actual=actual_count,
+                config_files=config_files,
+                server_output=server_output
+            )
+            
+            # 显示诊断结果
+            self.logger.info("\n" + "=" * 60)
+            self.logger.info("诊断报告")
+            self.logger.info("=" * 60)
+            self.logger.info(f"期望游戏次数: {report.expected_count}")
+            self.logger.info(f"实际游戏次数: {report.actual_count if report.actual_count else '未检测到'}")
+            
+            if report.mismatch_detected:
+                self.logger.warning("检测到参数不匹配!")
+                self.logger.info("\n可能原因:")
+                for cause in report.possible_causes:
+                    self.logger.info(f"  - {cause}")
+                
+                self.logger.info("\n建议:")
+                for rec in report.recommendations:
+                    self.logger.info(f"  - {rec}")
+            else:
+                self.logger.info("参数设置正确，未发现问题")
+            
+            self.logger.info("=" * 60)
+            
+            # 清理诊断进程
+            try:
+                process.terminate()
+                process.wait(timeout=5)
+            except Exception:
+                process.kill()
+            
+            return report
+            
+        except Exception as e:
+            self.logger.error(f"诊断过程中发生错误: {e}", exc_info=True)
+            return None
+    
+    def display_progress(self, state: ExecutionState) -> None:
+        """
+        显示执行进度
+        
+        Args:
+            state: 当前执行状态
+        """
+        remaining = state.target_games - state.completed_games
+        elapsed = datetime.now() - state.start_time
+        
+        self.logger.info("\n" + "=" * 60)
+        self.logger.info("执行进度")
+        self.logger.info("=" * 60)
+        self.logger.info(f"目标场数: {state.target_games}")
+        self.logger.info(f"已完成: {state.completed_games}")
+        self.logger.info(f"剩余: {remaining}")
+        self.logger.info(f"当前批次: {state.current_batch}")
+        self.logger.info(f"重启次数: {state.restart_count}")
+        self.logger.info(f"已运行时间: {elapsed}")
+        
+        # 显示累计战绩
+        if self.tracker.total_games > 0:
+            self.logger.info("\n" + self.tracker.generate_report())
+        
+        self.logger.info("=" * 60 + "\n")
+    
+    def run(self) -> None:
+        """执行批量游戏"""
+        # 立即创建执行状态，以便GUI可以显示
+        state = ExecutionState(
+            target_games=self.target_games,
+            completed_games=0,
+            restart_count=0,
+            current_batch=1,
+            start_time=datetime.now(),
+            last_update=datetime.now()
+        )
+        
+        # 保存当前状态供外部访问
+        self._current_state = state
+        self._running = True
+        
+        # 设置到信号处理器（如果存在）
+        if self.signal_handler:
+            self.signal_handler.set_execution_state(state)
+        
+        self.logger.info("批量游戏执行系统启动")
+        self.logger.info(f"目标场数: {self.target_games}")
+        self.logger.info(f"服务器路径: {self.server_path}")
+        self.logger.info(f"客户端数量: {len(self.client_scripts)}")
+        
+        # 运行诊断
+        diagnostic_report = self.run_diagnostic()
+        
+        if self.diagnose_only:
+            self.logger.info("仅诊断模式，退出")
+            self._running = False
+            return
+        
+        # 检查诊断是否成功
+        if diagnostic_report is None:
+            self.logger.warning("诊断失败，但将继续执行。")
+            self.logger.warning("如果遇到问题，请检查服务器路径和配置。")
+        elif diagnostic_report.mismatch_detected:
+            self.logger.info("\n检测到参数问题，将使用自动重启机制完成目标场数")
+        
+        # 加载之前的战绩（如果存在）
+        try:
+            self.tracker.load()
+            if self.tracker.total_games > 0:
+                self.logger.info(f"加载之前的战绩: {self.tracker.total_games}场")
+        except Exception as e:
+            self.logger.warning(f"加载战绩失败: {e}")
+        
+        # 计算需要的重启次数
+        restart_count = self.validator.calculate_restart_count(self.target_games)
+        self.logger.info(f"预计需要重启 {restart_count} 次")
+        
+        # 清空之前的战绩，开始新的对战
+        self.tracker.team_a_wins = 0
+        self.tracker.team_b_wins = 0
+        self.tracker.total_games = 0
+        self.logger.info("已清空之前的战绩，开始新的对战")
+        
+        # 记录初始战绩，用于计算增量
+        initial_team_a = 0
+        initial_team_b = 0
+        
+        # 主执行循环
+        try:
+            while state.completed_games < state.target_games and self._running:
+                if self.signal_handler and self.signal_handler.is_shutdown_requested():
+                    self.logger.info("检测到关闭请求，停止执行")
+                    break
+                
+                # 显示进度
+                self.display_progress(state)
+                
+                # 计算本批次要执行的场数
+                remaining = state.target_games - state.completed_games
+                batch_games = min(remaining, self.validator.single_run_limit)
+                
+                self.logger.info(f"开始批次 {state.current_batch}，执行 {batch_games} 场游戏")
+                
+                # 清理之前的进程
+                self.restart_manager.cleanup()
+                
+                # 启动服务器
+                server_process = self.restart_manager.restart_server(
+                    self.server_path,
+                    batch_games,
+                    visible_server=self.visible_server
+                )
+                
+                if server_process is None:
+                    self.logger.error("服务器启动失败，停止执行")
+                    break
+                
+                # restart_manager.restart_server() 已经等待服务器就绪
+                # 检测到 "ready for connect" 后会立即返回
+                # 这里只需要额外等待2秒确保端口完全监听
+                self.logger.info("服务器已就绪，等待2秒确保端口完全监听...")
+                import time
+                time.sleep(2)
+                
+                # 验证服务器进程仍在运行
+                if server_process.poll() is not None:
+                    self.logger.error(f"服务器进程已退出，返回码: {server_process.returncode}")
+                    self.logger.error("请检查服务器窗口或日志，查看启动失败原因")
+                    break
+                
+                self.logger.info("✓ 服务器端口就绪，开始启动客户端...")
+                
+                # 启动客户端
+                client_processes = self.restart_manager.restart_clients(
+                    self.client_scripts
+                )
+                
+                if not client_processes:
+                    self.logger.error("没有客户端成功启动，停止执行")
+                    break
+                
+                # 等待所有客户端连接到服务器
+                expected_client_count = len(self.client_scripts)
+                clients_connected = self.restart_manager.wait_for_clients_connected(
+                    expected_count=expected_client_count,
+                    timeout=30
+                )
+                
+                if not clients_connected:
+                    self.logger.warning("⚠️ 客户端连接检测超时，但继续执行（可能连接已建立）")
+                    self.logger.warning("   如果游戏未开始，请检查:")
+                    self.logger.warning("   1. 客户端窗口是否有错误信息")
+                    self.logger.warning("   2. 服务器窗口是否显示客户端连接")
+                    self.logger.warning("   3. 网络连接是否正常")
+                else:
+                    self.logger.info("✓ 所有客户端已连接")
+                
+                # 额外等待并检测游戏是否开始
+                self.logger.info("等待游戏开始（检测服务器输出）...")
+                import time
+                game_start_timeout = 20  # 游戏开始超时时间
+                start_check_time = time.time()
+                game_started = False
+                
+                # 尝试读取服务器输出，检测游戏开始
+                # 注意：如果服务器窗口可见（visible_server=True），输出可能不在stdout中
+                if server_process.stdout and not self.visible_server:
+                    try:
+                        import threading
+                        import queue
+                        
+                        # 使用队列在后台线程中读取输出
+                        output_queue = queue.Queue()
+                        
+                        def read_output():
+                            """在后台线程中读取服务器输出"""
+                            try:
+                                for line in server_process.stdout:
+                                    if line:
+                                        output_queue.put(line.strip())
+                            except Exception:
+                                pass
+                        
+                        # 启动后台读取线程
+                        read_thread = threading.Thread(target=read_output, daemon=True)
+                        read_thread.start()
+                        
+                        # 轮询队列，检测游戏开始
+                        while time.time() - start_check_time < game_start_timeout:
+                            try:
+                                line = output_queue.get(timeout=1)
+                                if line:
+                                    self.logger.info(f"[服务器] {line}")
+                                    # 检测游戏开始的关键词
+                                    if any(keyword in line.lower() for keyword in [
+                                        "游戏开始", "gamestart", "game start", 
+                                        "开始游戏", "第.*局", "round.*start",
+                                        "ready", "all players connected"
+                                    ]):
+                                        self.logger.info("✓ 检测到游戏开始!")
+                                        game_started = True
+                                        break
+                            except queue.Empty:
+                                # 超时，继续等待
+                                pass
+                            
+                            time.sleep(0.5)
+                    except Exception as e:
+                        self.logger.debug(f"读取服务器输出检测游戏开始时出错: {e}")
+                else:
+                    # 服务器窗口可见，无法从stdout读取，直接等待
+                    self.logger.info("服务器窗口可见，无法从stdout读取输出")
+                    self.logger.info("等待 10 秒让游戏有时间开始...")
+                    time.sleep(10)
+                    game_started = True  # 假设已开始
+                
+                if game_started:
+                    self.logger.info("✓ 游戏已开始或正在开始，继续监控...")
+                else:
+                    self.logger.warning("⚠️ 未检测到游戏开始消息，但继续执行")
+                    self.logger.warning("   可能原因:")
+                    self.logger.warning("   1. 服务器输出格式不同")
+                    self.logger.warning("   2. 游戏已开始但未输出检测关键词")
+                    self.logger.warning("   3. 服务器窗口可见，输出在窗口中显示")
+                    self.logger.warning("   建议: 检查服务器窗口确认游戏是否已开始")
+                
+                # 等待服务器完成
+                server_name = os.path.basename(self.server_path)
+                self.logger.info(f"等待服务器完成 {batch_games} 场游戏...")
+                
+                # 等待服务器进程结束并读取输出
+                server_output = []
+                try:
+                    # 读取输出
+                    if server_process.stdout:
+                        for line in server_process.stdout:
+                            server_output.append(line.strip())
+                            # 实时打印服务器输出
+                            if line.strip():
+                                self.logger.info(f"[服务器] {line.strip()}")
+                    
+                    server_process.wait(timeout=60)  # 等待进程结束
+                    self.logger.info("服务器进程已正常结束")
+                except subprocess.TimeoutExpired:
+                    self.logger.warning("服务器未在预期时间内终止，强制结束")
+                    server_process.kill()
+                except Exception as e:
+                    self.logger.error(f"读取服务器输出时出错: {e}")
+                
+                # 更新状态
+                state.completed_games += batch_games
+                state.last_update = datetime.now()
+                
+                # 从服务器输出读取本批次战绩
+                # 服务器输出格式: "达到设定场次, 其中0号位胜利X次，1号位胜利Y次，2号位胜利Z次，3号位胜利W次"
+                try:
+                    import re
+                    # 从服务器输出中查找战绩
+                    for line in reversed(server_output):
+                        if "达到设定场次" in line or "其中" in line:
+                            # 提取各位置胜利次数
+                            matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
+                            if matches:
+                                wins = {int(pos): int(count) for pos, count in matches}
+                                # 0号和2号是team_a，1号和3号是team_b
+                                current_team_a = wins.get(0, 0) + wins.get(2, 0)
+                                current_team_b = wins.get(1, 0) + wins.get(3, 0)
+                                
+                                # 计算本批次的增量
+                                delta_a = current_team_a - initial_team_a
+                                delta_b = current_team_b - initial_team_b
+                                
+                                # 累加到tracker
+                                for _ in range(delta_a):
+                                    self.tracker.record_game("team_a")
+                                for _ in range(delta_b):
+                                    self.tracker.record_game("team_b")
+                                
+                                # 更新初始值
+                                initial_team_a = current_team_a
+                                initial_team_b = current_team_b
+                                
+                                self.logger.info(f"本批次增量: Team A +{delta_a}, Team B +{delta_b}")
+                                self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
+                                break
+                except Exception as e:
+                    self.logger.warning(f"读取战绩失败: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
+                # 保存战绩和状态
+                try:
+                    self.tracker.save()
+                    state.save(self.state_file)
+                except Exception as e:
+                    self.logger.error(f"保存数据失败: {e}", exc_info=True)
+                
+                # 检查是否需要重启
+                if state.completed_games < state.target_games:
+                    state.restart_count += 1
+                    state.current_batch += 1
+                    self.logger.info(f"准备重启，已完成 {state.completed_games}/{state.target_games} 场")
+                else:
+                    self.logger.info("所有游戏已完成!")
+            
+            # 显示最终结果
+            self.logger.info("\n" + "=" * 60)
+            self.logger.info("执行完成!")
+            self.logger.info("=" * 60)
+            self.display_progress(state)
+            self.logger.info("\n最终战绩:")
+            self.logger.info(self.tracker.generate_report())
+            self.logger.info("=" * 60)
+            
+        except Exception as e:
+            self.logger.error(f"执行过程中发生错误: {e}", exc_info=True)
+            raise
+        finally:
+            # 清理所有进程
+            self.logger.info("清理进程...")
+            self.restart_manager.cleanup()
+            self._running = False
+    
+    def start(self) -> None:
+        """启动执行（用于GUI）"""
+        self.run()
+    
+    def stop(self) -> None:
+        """停止执行（用于GUI）"""
+        self._running = False
+        self.logger.info("收到停止请求")
+        
+        # 保存当前状态
+        if self._current_state:
+            try:
+                self._current_state.save(self.state_file)
+                self.logger.info(f"执行状态已保存到 {self.state_file}")
+            except Exception as e:
+                self.logger.error(f"保存执行状态失败: {e}", exc_info=True)
+    
+    def is_running(self) -> bool:
+        """检查是否正在运行"""
+        return self._running
+    
+    def get_state(self) -> Optional[ExecutionState]:
+        """获取当前执行状态"""
+        return self._current_state

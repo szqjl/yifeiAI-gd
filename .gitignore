@@ -1,0 +1,46 @@
+# Large files - Gitee free version doesn't support Git LFS
+# 大文件 - Gitee 免费版不支持 Git LFS
+
+# Large document files (>50MB) - exclude from git
+# 大文档文件（>50MB）- 从 git 中排除
+# Note: Keep markdown versions instead
+# 注意：保留 markdown 版本代替
+docs/skill/*.docx
+docs/skill/*.pdf
+
+# Model files - too large for git repository
+# 模型文件 - 文件太大，不适合直接提交到git仓库
+# Exclude ALL model files to reduce repository size
+# 排除所有模型文件以减少仓库大小
+models/*.pth
+models/*.pkl
+models/*.h5
+
+# Temporary files
+tmp/
+*.tmp
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Test files
+test_*.py
+*.md.bak
+
+# Game records and logs
+game_records/
+logs/
+
+# Windows special files
+nul
+
+# Temporary JSON files
+execution_state.json
+game_scores.json

@@ -1,0 +1,22 @@
+{
+  "timestamp": "2025-11-27 11:53:39",
+  "server_pid": 9108,
+  "clients": [
+    {
+      "pid": 15328,
+      "name": "client1"
+    },
+    {
+      "pid": 12460,
+      "name": "client3"
+    },
+    {
+      "pid": 124,
+      "name": "client2"
+    },
+    {
+      "pid": 6316,
+      "name": "client4"
+    }
+  ]
+}
