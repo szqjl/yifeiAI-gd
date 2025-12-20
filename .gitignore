@@ -34,9 +34,13 @@ __pycache__/
 test_*.py
 *.md.bak
 
+# Testscore directory (contains large binary files)
+Testscore/
+
 # Game records and logs
 game_records/
 logs/
+*.log
 
 # Windows special files
 nul
