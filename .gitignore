@@ -12,9 +12,11 @@ docs/skill/*.pdf
 # 模型文件 - 文件太大，不适合直接提交到git仓库
 # Exclude ALL model files to reduce repository size
 # 排除所有模型文件以减少仓库大小
+models/
 models/*.pth
 models/*.pkl
 models/*.h5
+models/*.json
 
 # Temporary files
 tmp/
