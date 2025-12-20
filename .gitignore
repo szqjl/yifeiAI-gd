@@ -8,17 +8,15 @@
 docs/skill/*.docx
 docs/skill/*.pdf
 
-# Model files - too large for git repository
-# 模型文件 - 文件太大，不适合直接提交到git仓库
-# Exclude ALL model files to reduce repository size
-# 排除所有模型文件以减少仓库大小
-# 使用 ** 匹配所有子目录
-models/**/*.pth
-models/**/*.pkl
+# Model files - 只忽略中间检查点，保留最终模型
+# 模型文件 - 只忽略训练过程中的检查点，最终模型可以推送
+# 策略：只推送关键最终模型（约50-100MB），忽略所有epoch检查点
+models/**/*_epoch_*.pth
+models/**/*_epoch_*.pkl
+models/*_epoch_*.pth
+models/*_epoch_*.pkl
+# 忽略所有.h5文件（通常较大）
 models/**/*.h5
-# 也匹配models根目录下的文件
-models/*.pth
-models/*.pkl
 models/*.h5
 
 # Temporary files
