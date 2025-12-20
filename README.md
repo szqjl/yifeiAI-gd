@@ -212,6 +212,39 @@ git checkout main
 
 ---
 
+## ⚠️ 模型文件管理（重要）
+
+**所有模型文件（包括检查点）都不会被推送到Git仓库。**
+
+### 其他电脑首次使用
+
+1. **拉取最新的 `.gitignore`**：
+   ```bash
+   git pull origin main
+   ```
+
+2. **检查模型文件是否会被推送**：
+   ```bash
+   python check_models_before_push.py
+   ```
+
+3. **如果发现模型文件被跟踪，执行以下命令移除**（保留本地文件）：
+   ```bash
+   git rm --cached models/*
+   git commit -m "移除模型文件跟踪"
+   ```
+
+### 推送前检查
+
+每次推送前建议运行检查脚本：
+```bash
+python check_models_before_push.py
+```
+
+如果脚本显示 ✅，说明模型文件不会被推送，可以安全推送。
+
+---
+
 ## 📁 项目结构
 
 ```
