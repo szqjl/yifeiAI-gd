@@ -17,6 +17,10 @@ models/*.pth
 models/*.pkl
 models/*.h5
 models/*.json
+# Model checkpoints (中间检查点)
+models/*_epoch_*.pth
+models/*checkpoint*.pth
+models/*_training_history.json
 
 # Temporary files
 tmp/
