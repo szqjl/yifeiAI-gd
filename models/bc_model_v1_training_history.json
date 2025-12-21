@@ -1,0 +1,49 @@
+{
+  "epochs": [
+    1
+  ],
+  "total_loss": [
+    58.85343933105469
+  ],
+  "action_loss": [
+    58.85343933105469
+  ],
+  "strategy_loss": [
+    0.0
+  ],
+  "action_exact_accuracy": [
+    0.0
+  ],
+  "action_card_accuracy": [
+    0.00201171875
+  ],
+  "strategy_accuracy": [
+    0.0
+  ],
+  "strategy_understanding_rate": [
+    0.0
+  ],
+  "strategy_accuracy_by_class": {
+    "0": [
+      0.0
+    ],
+    "1": [
+      0.0
+    ],
+    "2": [
+      0.0
+    ],
+    "3": [
+      0.0
+    ],
+    "4": [
+      0.0
+    ],
+    "5": [
+      0.0
+    ],
+    "6": [
+      0.0
+    ]
+  }
+}

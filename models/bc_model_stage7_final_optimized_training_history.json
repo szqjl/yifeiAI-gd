@@ -1,0 +1,134 @@
+[
+  {
+    "epoch": 1,
+    "total_loss": 289.5190064186274,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 2.02957036883332,
+    "avg_predicted_cards": 7.4173573866406635,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 2.4274772618477742,
+    "learning_rate": 7.996919999781688e-05,
+    "epoch_time": 1.9946894645690918
+  },
+  {
+    "epoch": 2,
+    "total_loss": 64.1895126741986,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 1.7658004552819009,
+    "avg_predicted_cards": 3.308629936616285,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 1.0828147438966014,
+    "learning_rate": 7.987684748263846e-05,
+    "epoch_time": 1.9110116958618164
+  },
+  {
+    "epoch": 3,
+    "total_loss": 48.72818716182265,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 1.4882181148196376,
+    "avg_predicted_cards": 2.5441248171623596,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 0.8326152864209351,
+    "learning_rate": 7.97230848553493e-05,
+    "epoch_time": 1.8917932510375977
+  },
+  {
+    "epoch": 4,
+    "total_loss": 47.00447734566622,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 1.4006236015364182,
+    "avg_predicted_cards": 2.621647976596782,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 0.8579862773256741,
+    "learning_rate": 7.950814920677574e-05,
+    "epoch_time": 1.9078075885772705
+  },
+  {
+    "epoch": 5,
+    "total_loss": 45.717887567919355,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 1.3587927721267523,
+    "avg_predicted_cards": 2.5353486104339344,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 0.8297430987713419,
+    "learning_rate": 7.923237195210905e-05,
+    "epoch_time": 1.8974096775054932
+  },
+  {
+    "epoch": 6,
+    "total_loss": 44.30250955182453,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 1.3468050034933312,
+    "avg_predicted_cards": 2.59190638712823,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 0.8482527525131642,
+    "learning_rate": 7.889617831988717e-05,
+    "epoch_time": 1.9501211643218994
+  },
+  {
+    "epoch": 7,
+    "total_loss": 41.886564831401024,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 1.3317268553168276,
+    "avg_predicted_cards": 2.626523647001463,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 0.8595819371310037,
+    "learning_rate": 7.85000866963232e-05,
+    "epoch_time": 1.9125940799713135
+  },
+  {
+    "epoch": 8,
+    "total_loss": 39.864207489545954,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 1.3431085770906404,
+    "avg_predicted_cards": 2.627011214041931,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 0.8597415031115366,
+    "learning_rate": 7.804470782599138e-05,
+    "epoch_time": 1.8535003662109375
+  },
+  {
+    "epoch": 9,
+    "total_loss": 38.34165389038796,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 1.3668558313403019,
+    "avg_predicted_cards": 2.637737688932228,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 0.8632519546832615,
+    "learning_rate": 7.753074387010324e-05,
+    "epoch_time": 1.917895793914795
+  },
+  {
+    "epoch": 10,
+    "total_loss": 37.7276729761168,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 1.3511221117751544,
+    "avg_predicted_cards": 2.6094588005850805,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 0.8539971278123505,
+    "learning_rate": 7.695898732382589e-05,
+    "epoch_time": 1.8810453414916992
+  },
+  {
+    "epoch": 11,
+    "total_loss": 36.85190828456435,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 1.3319602442342182,
+    "avg_predicted_cards": 2.6923451974646513,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 0.8811233445029519,
+    "learning_rate": 7.633031979431199e-05,
+    "epoch_time": 1.9488165378570557
+  },
+  {
+    "epoch": 12,
+    "total_loss": 35.651185035705566,
+    "exact_match_rate": 0.0,
+    "strategy_loss": 1.326408818710682,
+    "avg_predicted_cards": 2.606045831301804,
+    "avg_true_cards": 3.055582642613359,
+    "prediction_ratio": 0.8528801659486197,
+    "learning_rate": 7.564571064132528e-05,
+    "epoch_time": 1.891378402709961
+  }
+]

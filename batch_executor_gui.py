@@ -282,8 +282,26 @@ class BatchExecutorGUI:
         #     - 动态阈值调整：根据局面自适应
         #     - 概率校准：提高预测准确性
         
-        # 默认使用V6（如果存在），否则使用V5
-        if all(os.path.exists(c) for c in default_clients_v6):
+        # 选项5：使用M1硬编码规则引擎（全新的硬编码规则引擎，5阶段细分路由）
+        default_clients_m1 = [
+            "src/communication/yf1_m1.py",                   # 0号位 - YiFei M1
+            "src/communication/run_lalala_client3.py",       # 1号位 - 对手1
+            "src/communication/yf2_m1.py",                   # 2号位 - YiFei M1
+            "src/communication/run_lalala_client4.py"        # 3号位 - 对手2
+        ]
+        # 队伍分组：
+        # 队伍A（YiFei M1队）：0号(yf1_m1) + 2号(yf2_m1)
+        # 队伍B（对手队）：1号(client3) + 3号(client4)
+        # 注：M1版本是全新的硬编码规则引擎，具有：
+        #     - 5阶段细分路由（开局、中局前期、中局后期、残局前期、残局后期）
+        #     - 主动/被动出牌分离
+        #     - 完善的策略逻辑（整合策略函数和知识库文档）
+        #     - 完全独立于V5/V6版本
+        
+        # 默认使用M1（如果存在），否则使用V6，再否则使用V5
+        if all(os.path.exists(c) for c in default_clients_m1):
+            default_clients = default_clients_m1
+        elif all(os.path.exists(c) for c in default_clients_v6):
             default_clients = default_clients_v6
         else:
             default_clients = default_clients_v5

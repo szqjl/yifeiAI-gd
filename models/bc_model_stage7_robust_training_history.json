@@ -1,0 +1,191 @@
+[
+  {
+    "epoch": 1,
+    "total_loss": 35.30279845948432,
+    "action_loss": 50.1208649653538,
+    "strategy_loss": 1.0831875037995113,
+    "threshold_loss": 0.015558916195236432,
+    "learning_rate": 9.939057285945933e-05,
+    "epoch_time": 3.782369613647461
+  },
+  {
+    "epoch": 2,
+    "total_loss": 35.78022265586124,
+    "action_loss": 50.89233357131861,
+    "strategy_loss": 0.7778680905414994,
+    "threshold_loss": 0.00016402745744822233,
+    "learning_rate": 9.757729755661011e-05,
+    "epoch_time": 3.8896713256835938
+  },
+  {
+    "epoch": 3,
+    "total_loss": 35.76576922957305,
+    "action_loss": 50.88637554873327,
+    "strategy_loss": 0.7265023835905039,
+    "threshold_loss": 6.509026769699456e-05,
+    "learning_rate": 9.460482294732421e-05,
+    "epoch_time": 3.5880630016326904
+  },
+  {
+    "epoch": 4,
+    "total_loss": 35.75966816798896,
+    "action_loss": 50.8834956466772,
+    "strategy_loss": 0.7060885558462446,
+    "threshold_loss": 3.63357265805288e-05,
+    "learning_rate": 9.05463412215599e-05,
+    "epoch_time": 3.6605513095855713
+  },
+  {
+    "epoch": 5,
+    "total_loss": 35.75330068503216,
+    "action_loss": 50.882639818130784,
+    "strategy_loss": 0.6772502531671221,
+    "threshold_loss": 2.8504986501757463e-05,
+    "learning_rate": 8.55017856687341e-05,
+    "epoch_time": 3.6462831497192383
+  },
+  {
+    "epoch": 6,
+    "total_loss": 35.74994338697689,
+    "action_loss": 50.88181727707006,
+    "strategy_loss": 0.6633431985499753,
+    "threshold_loss": 2.5131197987905862e-05,
+    "learning_rate": 7.959536998847742e-05,
+    "epoch_time": 3.584449291229248
+  },
+  {
+    "epoch": 7,
+    "total_loss": 35.74481876640563,
+    "action_loss": 50.877892269450385,
+    "strategy_loss": 0.6514606916221084,
+    "threshold_loss": 2.4326313053911025e-05,
+    "learning_rate": 7.297252973710757e-05,
+    "epoch_time": 3.5692532062530518
+  },
+  {
+    "epoch": 8,
+    "total_loss": 35.73981752820835,
+    "action_loss": 50.87561815103908,
+    "strategy_loss": 0.6344148660920987,
+    "threshold_loss": 2.3113401575582355e-05,
+    "learning_rate": 6.57963412215599e-05,
+    "epoch_time": 3.5837199687957764
+  },
+  {
+    "epoch": 9,
+    "total_loss": 35.7366094649977,
+    "action_loss": 50.87299981086877,
+    "strategy_loss": 0.627538447357287,
+    "threshold_loss": 2.205135198057908e-05,
+    "learning_rate": 5.8243506019491436e-05,
+    "epoch_time": 3.690018653869629
+  },
+  {
+    "epoch": 10,
+    "total_loss": 35.73502488348894,
+    "action_loss": 50.87255905540126,
+    "strategy_loss": 0.6211605698439726,
+    "threshold_loss": 2.099075874148358e-05,
+    "learning_rate": 5.05e-05,
+    "epoch_time": 3.586146354675293
+  },
+  {
+    "epoch": 11,
+    "total_loss": 35.7332813967565,
+    "action_loss": 50.87131191666718,
+    "strategy_loss": 0.616807226922102,
+    "threshold_loss": 2.1739705759970024e-05,
+    "learning_rate": 4.2756493980508586e-05,
+    "epoch_time": 3.6008028984069824
+  },
+  {
+    "epoch": 12,
+    "total_loss": 35.724358455390686,
+    "action_loss": 50.86162022876132,
+    "strategy_loss": 0.6061098228214653,
+    "threshold_loss": 2.3205224844242616e-05,
+    "learning_rate": 3.5203658778440106e-05,
+    "epoch_time": 3.617816686630249
+  },
+  {
+    "epoch": 13,
+    "total_loss": 35.722126638813386,
+    "action_loss": 50.86364573581963,
+    "strategy_loss": 0.5878621668192991,
+    "threshold_loss": 2.242491248169036e-05,
+    "learning_rate": 2.8027470262892437e-05,
+    "epoch_time": 3.5718960762023926
+  },
+  {
+    "epoch": 14,
+    "total_loss": 35.71648715559844,
+    "action_loss": 50.85429192804227,
+    "strategy_loss": 0.5924050921847106,
+    "threshold_loss": 2.2822975592667706e-05,
+    "learning_rate": 2.1404630011522586e-05,
+    "epoch_time": 3.561645746231079
+  },
+  {
+    "epoch": 15,
+    "total_loss": 35.717848467978705,
+    "action_loss": 50.8604977844627,
+    "strategy_loss": 0.5774897384415766,
+    "threshold_loss": 2.241384404702898e-05,
+    "learning_rate": 1.54982143312659e-05,
+    "epoch_time": 3.6543679237365723
+  },
+  {
+    "epoch": 16,
+    "total_loss": 35.7168478267208,
+    "action_loss": 50.859613673702164,
+    "strategy_loss": 0.5755808659040245,
+    "threshold_loss": 2.178349200945539e-05,
+    "learning_rate": 1.0453658778440109e-05,
+    "epoch_time": 3.664900541305542
+  },
+  {
+    "epoch": 17,
+    "total_loss": 35.70885394636993,
+    "action_loss": 50.85105089321258,
+    "strategy_loss": 0.5655806279106504,
+    "threshold_loss": 2.3219512490434038e-05,
+    "learning_rate": 6.395177052675795e-06,
+    "epoch_time": 3.65337872505188
+  },
+  {
+    "epoch": 18,
+    "total_loss": 35.70775251935242,
+    "action_loss": 50.84841765871473,
+    "strategy_loss": 0.5692893866520778,
+    "threshold_loss": 2.26956560376273e-05,
+    "learning_rate": 3.4227024433899e-06,
+    "epoch_time": 3.5828237533569336
+  },
+  {
+    "epoch": 19,
+    "total_loss": 35.701759605650686,
+    "action_loss": 50.838797137995435,
+    "strategy_loss": 0.5729964870935792,
+    "threshold_loss": 2.3962802984827765e-05,
+    "learning_rate": 1.6094271405406859e-06,
+    "epoch_time": 3.5949761867523193
+  },
+  {
+    "epoch": 20,
+    "total_loss": 35.70905466747892,
+    "action_loss": 50.85001419456142,
+    "strategy_loss": 0.5702136510117038,
+    "threshold_loss": 2.2766999628998794e-05,
+    "learning_rate": 0.0001,
+    "epoch_time": 3.674215078353882
+  },
+  {
+    "epoch": 21,
+    "total_loss": 35.70472080692364,
+    "action_loss": 50.83716473913496,
+    "strategy_loss": 0.5935170847898835,
+    "threshold_loss": 2.204348603317256e-05,
+    "learning_rate": 9.984740801978984e-05,
+    "epoch_time": 3.7313232421875
+  }
+]

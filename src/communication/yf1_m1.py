@@ -208,12 +208,48 @@ class YF1_M1_Client:
             return
         
         try:
+            # 显示当前游戏状态信息（类似lalala客户端）
+            cur_pos = data.get("curPos", -1)
+            cur_action = data.get("curAction", [])
+            greater_pos = data.get("greaterPos", -1)
+            greater_action = data.get("greaterAction", [])
+            public_info = data.get("publicInfo", [])
+            
+            # 计算下家剩余牌数
+            my_pos = data.get("myPos", self.player_id)
+            lower_hand_pos = (my_pos + 1) % 4
+            lower_hand_rest = 27
+            if public_info and len(public_info) > lower_hand_pos:
+                lower_hand_rest = public_info[lower_hand_pos].get("rest", 27)
+            
+            # 显示当前动作和最大动作
+            print(f"当前动作为{cur_pos}号-动作{cur_action}， 最大动作为{greater_pos}号-动作{greater_action}")
+            print(f"下家还有{lower_hand_rest}张牌")
+            
+            # 显示可用动作数量（调试用）
+            valid_action_count = sum(1 for a in action_list if len(a) > 0 and a[0] != "PASS")
+            print(f"可用动作数: {valid_action_count}/{len(action_list)}")
+            if valid_action_count > 0:
+                # 显示前几个有效动作的类型
+                valid_types = [a[0] for a in action_list[:10] if len(a) > 0 and a[0] != "PASS"]
+                print(f"有效动作类型: {valid_types[:5]}")
+            
             # M1硬编码决策：直接使用RuleBasedDecisionEngineM1
             act_index = self.decision_engine.decide(data)
             
             # 获取阶段信息（用于日志）
             phase_info = self.decision_engine.get_phase_info(data)
-            self.logger.debug(f"Phase: {phase_info['game_phase']}, Handler: {phase_info['handler_key']}")
+            self.logger.info(f"Phase: {phase_info['game_phase']}, Handler: {phase_info['handler_key']}, 剩余牌数: {phase_info['my_remain']}")
+            
+            # 显示选择的动作（类似lalala客户端）
+            selected_action = action_list[act_index] if act_index < len(action_list) else []
+            print(f"[yf1_m1] 选择动作: {act_index}")
+            if selected_action:
+                print(f"  动作类型: {selected_action[0] if len(selected_action) > 0 else 'PASS'}")
+                if len(selected_action) > 1:
+                    print(f"  动作牌点: {selected_action[1]}")
+            else:
+                print(f"  警告: 选择的动作索引 {act_index} 无效或为空")
             
             # Get decision details for recording
             decision_context = {
@@ -228,7 +264,6 @@ class YF1_M1_Client:
             }
             
             # Record decision
-            selected_action = action_list[act_index] if act_index < len(action_list) else []
             self.game_recorder.record_decision(
                 act_index, 
                 selected_action, 
@@ -255,7 +290,7 @@ class YF1_M1_Client:
         """Send action to server"""
         try:
             message = {"type": "act", "actIndex": action_idx}
-            await self.ws_manager.send_message(message)
+            await self.ws_manager.send_json(message)
             self.logger.debug(f"Sent action: {action_idx}")
         except Exception as e:
             self.logger.error(f"Failed to send action: {e}", exc_info=True)
@@ -323,6 +358,15 @@ class YF1_M1_Client:
         hand_cards = data.get("handCards", [])
         if hand_cards:
             self.hand_cards = hand_cards
+        
+        # 显示其他玩家出牌信息（类似lalala客户端）
+        cur_pos = data.get("curPos", -1)
+        cur_action = data.get("curAction", [])
+        greater_pos = data.get("greaterPos", -1)
+        greater_action = data.get("greaterAction", [])
+        
+        if cur_pos != -1 and cur_action and cur_action[0] != "PASS":
+            print(f"{cur_pos}号位打出{cur_action}， 最大动作为{greater_pos}号位打出的{greater_action} 连续pass数目： 0")
 
 
 async def main():

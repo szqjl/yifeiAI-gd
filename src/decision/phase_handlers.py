@@ -48,15 +48,41 @@ class OpeningActiveHandler(BasePhaseHandler):
     
     def handle(self, message: Dict) -> int:
         """开局策略：专注于建立牌型结构，不考虑快速出完"""
+        import logging
+        logger = logging.getLogger("OpeningActiveHandler")
+        
         action_list = message.get("actionList", [])
         handcards = message.get("handCards", [])
         
         if not action_list:
+            logger.warning("动作列表为空，返回PASS")
             return 0
         
-        # 开局不需要检查"一手出完"（优化：避免不必要的检查）
+        # 如果只有一个动作（通常是PASS），直接返回
+        if len(action_list) == 1:
+            logger.warning("只有一个动作（PASS），返回0")
+            return 0
+        
+        # 过滤掉PASS动作
+        valid_actions = [(i, action) for i, action in enumerate(action_list) 
+                        if len(action) > 0 and action[0] != "PASS"]
+        
+        if not valid_actions:
+            logger.error("没有有效动作，返回PASS")
+            return 0
+        
+        logger.info(f"开局主动出牌: 有效动作数={len(valid_actions)}, 手牌数={len(handcards)}")
+        
         # 开局策略：建立牌型结构
-        return self._build_structure_strategy(message, action_list, handcards)
+        result = self._build_structure_strategy(message, action_list, handcards)
+        
+        # 如果返回0（PASS），强制选择一个有效动作（避免一直PASS）
+        if result == 0:
+            logger.warning(f"策略返回PASS，但存在{len(valid_actions)}个有效动作，强制选择第一个: {valid_actions[0][1][0]}")
+            return valid_actions[0][0]
+        
+        logger.info(f"策略选择: 索引{result}, 动作类型={action_list[result][0] if result < len(action_list) else '无效'}")
+        return result
     
     def _extract_game_state(self, message: Dict) -> Dict:
         """提取游戏状态信息"""
@@ -67,7 +93,8 @@ class OpeningActiveHandler(BasePhaseHandler):
         
         # 计算剩余牌数
         my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27]
+        # 初始化4个玩家的剩余牌数（0, 1, 2, 3号位）
+        opponent_rest_cards_list = [27, 27, 27, 27]
         teammate_rest_cards = 27
         
         if public_info and len(public_info) == 4:
@@ -96,9 +123,25 @@ class OpeningActiveHandler(BasePhaseHandler):
     
     def _build_structure_strategy(self, message: Dict, action_list: List, handcards: List) -> int:
         """建立牌型结构策略（开局专用）"""
+        import logging
+        logger = logging.getLogger("OpeningActiveHandler")
+        
         # 提取游戏状态
         state = self._extract_game_state(message)
         power = state['power']
+        
+        # 过滤掉PASS动作，只考虑实际出牌动作
+        valid_actions = [(i, action) for i, action in enumerate(action_list) 
+                        if len(action) > 0 and action[0] != "PASS"]
+        
+        if not valid_actions:
+            # 如果没有有效动作，只能PASS
+            logger.warning("没有有效动作，返回PASS")
+            return 0
+        
+        logger.debug(f"有效动作数: {len(valid_actions)}, 牌力: {power:.2f}")
+        if valid_actions:
+            logger.debug(f"有效动作类型: {[a[1][0] for a in valid_actions[:5]]}")
         
         # 根据开局策略文档，优先级策略：
         # 1. 牌力强（有王/级牌）：优先出天然单张
@@ -106,78 +149,89 @@ class OpeningActiveHandler(BasePhaseHandler):
         # 3. 牌力弱：助攻定位，不出单，保留牌型组合
         
         # 检查是否有王或级牌
-        has_king = any('R' in card or 'B' in card for card in handcards)
-        has_level_card = any(state['cur_rank'] in card for card in handcards)
+        has_king = any('R' in str(card) or 'B' in str(card) for card in handcards)
+        has_level_card = any(str(state['cur_rank']) in str(card) for card in handcards)
         
+        # 简化策略：不依赖策略函数的建议，直接根据牌力和牌型选择
         # 策略1：牌力强，有王/级牌，优先出天然单张
-        if (power >= 6 or has_king or has_level_card) and self.single_strategy:
-            # 使用单张策略
-            single_sugg = self.single_strategy(
-                game_phase='opening',
-                power=power,
-                opponent_rest_cards=min(state['opponent_rest_cards_list']),
-                has_king=has_king,
-                has_level_card=has_level_card,
-                is_active=True,
-                my_rest_cards=state['my_rest'],
-                teammate_rest_cards=state['teammate_rest_cards']
-            )
-            
-            if '出单' in single_sugg.get('action', '') or '出天然单' in single_sugg.get('action', ''):
-                # 选择最小的单张
-                for i, action in enumerate(action_list):
-                    if action[0] == 'Single' and action[0] != "PASS":
-                        return i
+        if power >= 6 or has_king or has_level_card:
+            # 直接选择最小的单张（不依赖策略函数建议）
+            for i, action in valid_actions:
+                if action[0] == 'Single':
+                    logger.info(f"牌力强，选择单张: {action[1] if len(action) > 1 else '?'} (索引{i})")
+                    return i
         
         # 策略2：牌力中下，情况不明对子先行
-        if power < 6 and self.pair_strategy:
-            pair_sugg = self.pair_strategy(
-                game_phase='opening',
-                power=power,
-                opponent_rest_cards=min(state['opponent_rest_cards_list']),
-                is_active=True,
-                my_rest_cards=state['my_rest']
-            )
-            
-            if '对子先行' in pair_sugg.get('action', '') or '出对' in pair_sugg.get('action', ''):
-                # 选择最小的对子
-                for i, action in enumerate(action_list):
-                    if action[0] == 'Pair' and action[0] != "PASS":
-                        return i
+        if power < 6:
+            # 优先选择对子
+            for i, action in valid_actions:
+                if action[0] == 'Pair':
+                    logger.info(f"牌力中下，选择对子: {action[1] if len(action) > 1 else '?'} (索引{i})")
+                    return i
         
         # 策略3：牌力弱，助攻定位，优先保留牌型组合
         if power < 5:
             # 优先出三连对/钢板（对手难管）
             priority_order = ['TwoTrips', 'ThreePair', 'Straight', 'ThreeWithTwo', 'Trips']
             for card_type in priority_order:
-                for i, action in enumerate(action_list):
-                    if action[0] == card_type and action[0] != "PASS":
+                for i, action in valid_actions:
+                    if action[0] == card_type:
                         return i
             # 如果没有组合牌型，再考虑对子
-            for i, action in enumerate(action_list):
-                if action[0] == 'Pair' and action[0] != "PASS":
+            for i, action in valid_actions:
+                if action[0] == 'Pair':
                     return i
             # 最后才考虑单张
-            for i, action in enumerate(action_list):
-                if action[0] == 'Single' and action[0] != "PASS":
+            for i, action in valid_actions:
+                if action[0] == 'Single':
                     return i
         else:
             # 牌力正常，按常规优先级：小单张 → 三连对/钢板 → 顺子 → 三带二 → 三张 → 对子
             priority_order = ['Single', 'TwoTrips', 'ThreePair', 'Straight', 
                              'ThreeWithTwo', 'Trips', 'Pair']
             for card_type in priority_order:
-                for i, action in enumerate(action_list):
-                    if action[0] == card_type and action[0] != "PASS":
+                for i, action in valid_actions:
+                    if action[0] == card_type:
                         # 单张选择最小的
                         if card_type == 'Single':
                             return i
                         return i
         
+        # 如果所有策略都不匹配，至少选择第一个非PASS动作（避免一直PASS）
+        import logging
+        logger = logging.getLogger("OpeningActiveHandler")
+        if valid_actions:
+            selected_idx = valid_actions[0][0]
+            selected_action = valid_actions[0][1]
+            logger.warning(f"所有策略都不匹配，选择第一个有效动作: 索引{selected_idx}, 类型{selected_action[0] if len(selected_action) > 0 else 'UNKNOWN'}")
+            return selected_idx
+        
+        logger.error("没有找到任何有效动作，返回PASS")
         return 0
 
 
 class OpeningPassiveHandler(BasePhaseHandler):
     """开局被动出牌处理器"""
+    
+    # 牌点大小顺序：3 < 4 < 5 < 6 < 7 < 8 < 9 < T < J < Q < K < A < 2 < B < R
+    RANK_ORDER = ['3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A', '2', 'B', 'R']
+    
+    @classmethod
+    def _compare_rank(cls, rank1: str, rank2: str) -> int:
+        """比较两张牌的大小，返回-1表示rank1<rank2，0表示相等，1表示rank1>rank2"""
+        try:
+            idx1 = cls.RANK_ORDER.index(str(rank1)) if str(rank1) in cls.RANK_ORDER else -1
+            idx2 = cls.RANK_ORDER.index(str(rank2)) if str(rank2) in cls.RANK_ORDER else -1
+            if idx1 < 0 or idx2 < 0:
+                return 0  # 无法比较
+            if idx1 < idx2:
+                return -1
+            elif idx1 > idx2:
+                return 1
+            else:
+                return 0
+        except (ValueError, IndexError):
+            return 0
     
     def __init__(self, config: Dict):
         super().__init__(config)
@@ -199,7 +253,14 @@ class OpeningPassiveHandler(BasePhaseHandler):
             self.pair_strategy = None
     
     def handle(self, message: Dict) -> int:
-        """开局被动出牌策略：顺上家、控下家、让对家"""
+        """开局被动出牌策略：顺队友、控对手
+        
+        注意：
+        - 队友：0和2是队友，1和3是队友（队友位置 = (my_pos + 2) % 4）
+        - 上家和下家都是对手，不是队友
+        - 队友出牌：让过（顺队友）
+        - 对手出牌：尽量压制（控对手）
+        """
         action_list = message.get("actionList", [])
         handcards = message.get("handCards", [])
         cur_action = message.get("curAction")
@@ -242,14 +303,17 @@ class OpeningPassiveHandler(BasePhaseHandler):
         cur_rank = message.get("curRank", "2")
         
         my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27]
+        # 初始化4个玩家的剩余牌数（0, 1, 2, 3号位）
+        opponent_rest_cards_list = [27, 27, 27, 27]
         teammate_rest_cards = 27
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
                     rest = info.get("rest", 27)
-                    opponent_rest_cards_list[i] = rest
+                    # 确保索引在范围内
+                    if 0 <= i < len(opponent_rest_cards_list):
+                        opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
                         teammate_rest_cards = rest
         
@@ -268,44 +332,74 @@ class OpeningPassiveHandler(BasePhaseHandler):
         }
     
     def _is_teammate(self, pos: int, my_pos: int) -> bool:
-        """判断是否是队友"""
+        """
+        判断是否是队友
+        
+        掼蛋队友关系：
+        - 0号位和2号位是一队（队友）
+        - 1号位和3号位是一队（队友）
+        """
         if pos == -1 or my_pos == -1:
             return False
-        # 第1个和第3个为一队，第2个和第4个为一队
-        return (my_pos in [0, 2] and pos in [0, 2]) or (my_pos in [1, 3] and pos in [1, 3])
+        # 0和2是队友，1和3是队友
+        is_teammate = (my_pos in [0, 2] and pos in [0, 2]) or (my_pos in [1, 3] and pos in [1, 3])
+        return is_teammate
     
     def _handle_single_passive(self, message: Dict, action_list: List, state: Dict, greater_pos: int, my_pos: int) -> int:
         """处理单张被动出牌"""
-        if not self.single_strategy:
-            return self._default_passive_action(action_list)
+        import logging
+        logger = logging.getLogger("OpeningPassiveHandler")
+        
+        # 过滤掉PASS动作
+        valid_actions = [(i, action) for i, action in enumerate(action_list) 
+                        if len(action) > 0 and action[0] != "PASS"]
+        
+        if not valid_actions:
+            logger.warning("没有有效动作，返回PASS")
+            return 0
         
         cur_action = message.get("curAction", [])
         action_rank = cur_action[1] if len(cur_action) > 1 else ""
         
-        # 判断是否是上家出单（上家是朋友）
-        is_upper_hand = (greater_pos == (my_pos - 1) % 4) or (greater_pos == (my_pos + 3) % 4)
+        # 判断出牌者是否是队友
+        is_opponent_teammate = self._is_teammate(greater_pos, my_pos)
         
-        # 使用单张策略
-        single_sugg = self.single_strategy(
-            game_phase='opening',
-            power=state['power'],
-            opponent_rest_cards=min(state['opponent_rest_cards_list']),
-            is_active=False,
-            is_upper_hand=is_upper_hand,
-            my_rest_cards=state['my_rest'],
-            teammate_rest_cards=state['teammate_rest_cards']
-        )
-        
-        # 如果策略建议不出单，则PASS
-        if '不出单' in single_sugg.get('action', ''):
+        # 开局被动策略：
+        # - 队友出单：让过（顺队友）
+        # - 对手出单：尽量压制（控对手）
+        if is_opponent_teammate:
+            # 队友出单，开局阶段让过
+            logger.info(f"队友（位置{greater_pos}）出单，开局让过。我的位置: {my_pos}")
             return 0
         
-        # 选择能压制的最小单张
-        for i, action in enumerate(action_list):
-            if action[0] == 'Single' and action[0] != "PASS":
-                if len(action) > 1 and action[1] > action_rank:
-                    return i
+        # 对手出单，尽量压制
+        logger.info(f"对手（位置{greater_pos}）出单，我的位置: {my_pos}，尽量压制。当前牌点: {action_rank}")
+        logger.info(f"有效动作数: {len(valid_actions)}, 单张动作: {[a[1][0] for a in valid_actions if a[1][0] == 'Single'][:5]}")
         
+        # 选择能压制的最小单张
+        for i, action in valid_actions:
+            if action[0] == 'Single':
+                if len(action) > 1:
+                    card_rank = str(action[1])
+                    logger.debug(f"检查单张: {card_rank} vs {action_rank}")
+                    # 使用正确的牌点比较
+                    if self._compare_rank(card_rank, str(action_rank)) > 0:
+                        logger.info(f"✓ 选择压制单张: {card_rank} (索引{i})")
+                        return i
+        
+        # 如果没有能压制的，也选择最小的单张（至少跟牌，避免一直PASS）
+        for i, action in valid_actions:
+            if action[0] == 'Single':
+                card_rank = action[1] if len(action) > 1 else '?'
+                logger.warning(f"⚠ 没有能压制的单张，但选择单张避免PASS: {card_rank} (索引{i})")
+                return i
+        
+        # 如果连单张都没有，至少选择第一个有效动作（避免一直PASS）
+        if valid_actions:
+            logger.error(f"❌ 没有单张动作，强制选择第一个有效动作避免PASS: {valid_actions[0][1][0]} (索引{valid_actions[0][0]})")
+            return valid_actions[0][0]
+        
+        logger.error("❌ 没有找到任何有效动作，返回PASS")
         return 0
     
     def _handle_pair_passive(self, message: Dict, action_list: List, state: Dict, greater_pos: int, my_pos: int) -> int:
@@ -334,11 +428,29 @@ class OpeningPassiveHandler(BasePhaseHandler):
         if '让对子' in pair_sugg.get('action', ''):
             return 0
         
+        # 过滤掉PASS动作
+        valid_actions = [(i, action) for i, action in enumerate(action_list) 
+                        if len(action) > 0 and action[0] != "PASS"]
+        
+        if not valid_actions:
+            return 0
+        
         # 选择能压制的最小对子
-        for i, action in enumerate(action_list):
-            if action[0] == 'Pair' and action[0] != "PASS":
-                if len(action) > 1 and action[1] > action_rank:
-                    return i
+        for i, action in valid_actions:
+            if action[0] == 'Pair':
+                if len(action) > 1:
+                    card_rank = str(action[1])
+                    if self._compare_rank(card_rank, str(action_rank)) > 0:
+                        return i
+        
+        # 如果没有能压制的，也选择最小的对子（避免一直PASS）
+        for i, action in valid_actions:
+            if action[0] == 'Pair':
+                return i
+        
+        # 如果连对子都没有，至少选择第一个有效动作（避免一直PASS）
+        if valid_actions:
+            return valid_actions[0][0]
         
         return 0
     
@@ -348,15 +460,33 @@ class OpeningPassiveHandler(BasePhaseHandler):
         if state['power'] < 5:
             return 0  # PASS
         
+        # 过滤掉PASS动作
+        valid_actions = [(i, action) for i, action in enumerate(action_list) 
+                        if len(action) > 0 and action[0] != "PASS"]
+        
+        if not valid_actions:
+            return 0
+        
         # 选择能压制的最小动作
         cur_action = message.get("curAction", [])
         cur_type = cur_action[0] if len(cur_action) > 0 else ""
         cur_rank = cur_action[1] if len(cur_action) > 1 else ""
         
-        for i, action in enumerate(action_list):
-            if action[0] == cur_type and action[0] != "PASS":
-                if len(action) > 1 and action[1] > cur_rank:
-                    return i
+        for i, action in valid_actions:
+            if action[0] == cur_type:
+                if len(action) > 1:
+                    card_rank = str(action[1])
+                    if self._compare_rank(card_rank, str(cur_rank)) > 0:
+                        return i
+        
+        # 如果没有能压制的，也选择同类型的动作（避免一直PASS）
+        for i, action in valid_actions:
+            if action[0] == cur_type:
+                return i
+        
+        # 如果连同类型都没有，至少选择第一个有效动作（避免一直PASS）
+        if valid_actions:
+            return valid_actions[0][0]
         
         return 0
     
@@ -436,14 +566,17 @@ class MidEarlyActiveHandler(BasePhaseHandler):
         my_pos = message.get("myPos", 0)
         
         my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27]
+        # 初始化4个玩家的剩余牌数（0, 1, 2, 3号位）
+        opponent_rest_cards_list = [27, 27, 27, 27]
         teammate_rest_cards = 27
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
                     rest = info.get("rest", 27)
-                    opponent_rest_cards_list[i] = rest
+                    # 确保索引在范围内
+                    if 0 <= i < len(opponent_rest_cards_list):
+                        opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
                         teammate_rest_cards = rest
         
@@ -507,6 +640,26 @@ class MidEarlyActiveHandler(BasePhaseHandler):
 class MidEarlyPassiveHandler(BasePhaseHandler):
     """中局前期被动出牌处理器"""
     
+    # 牌点大小顺序：3 < 4 < 5 < 6 < 7 < 8 < 9 < T < J < Q < K < A < 2 < B < R
+    RANK_ORDER = ['3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A', '2', 'B', 'R']
+    
+    @classmethod
+    def _compare_rank(cls, rank1: str, rank2: str) -> int:
+        """比较两张牌的大小，返回-1表示rank1<rank2，0表示相等，1表示rank1>rank2"""
+        try:
+            idx1 = cls.RANK_ORDER.index(str(rank1)) if str(rank1) in cls.RANK_ORDER else -1
+            idx2 = cls.RANK_ORDER.index(str(rank2)) if str(rank2) in cls.RANK_ORDER else -1
+            if idx1 < 0 or idx2 < 0:
+                return 0  # 无法比较
+            if idx1 < idx2:
+                return -1
+            elif idx1 > idx2:
+                return 1
+            else:
+                return 0
+        except (ValueError, IndexError):
+            return 0
+    
     def __init__(self, config: Dict):
         super().__init__(config)
         self._init_helpers()
@@ -558,14 +711,17 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         my_pos = message.get("myPos", 0)
         
         my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27]
+        # 初始化4个玩家的剩余牌数（0, 1, 2, 3号位）
+        opponent_rest_cards_list = [27, 27, 27, 27]
         teammate_rest_cards = 27
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
                     rest = info.get("rest", 27)
-                    opponent_rest_cards_list[i] = rest
+                    # 确保索引在范围内
+                    if 0 <= i < len(opponent_rest_cards_list):
+                        opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
                         teammate_rest_cards = rest
         
@@ -609,10 +765,29 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         if '不出单' in single_sugg.get('action', ''):
             return 0
         
-        for i, action in enumerate(action_list):
-            if action[0] == 'Single' and action[0] != "PASS":
-                if len(action) > 1 and action[1] > action_rank:
-                    return i
+        # 过滤掉PASS动作
+        valid_actions = [(i, action) for i, action in enumerate(action_list) 
+                        if len(action) > 0 and action[0] != "PASS"]
+        
+        if not valid_actions:
+            return 0
+        
+        # 选择能压制的最小单张
+        for i, action in valid_actions:
+            if action[0] == 'Single':
+                if len(action) > 1:
+                    card_rank = str(action[1])
+                    if self._compare_rank(card_rank, str(action_rank)) > 0:
+                        return i
+        
+        # 如果没有能压制的，也选择最小的单张（避免一直PASS）
+        for i, action in valid_actions:
+            if action[0] == 'Single':
+                return i
+        
+        # 如果连单张都没有，至少选择第一个有效动作（避免一直PASS）
+        if valid_actions:
+            return valid_actions[0][0]
         
         return 0
     
@@ -638,10 +813,29 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         if '让对子' in pair_sugg.get('action', ''):
             return 0
         
-        for i, action in enumerate(action_list):
-            if action[0] == 'Pair' and action[0] != "PASS":
-                if len(action) > 1 and action[1] > action_rank:
-                    return i
+        # 过滤掉PASS动作
+        valid_actions = [(i, action) for i, action in enumerate(action_list) 
+                        if len(action) > 0 and action[0] != "PASS"]
+        
+        if not valid_actions:
+            return 0
+        
+        # 选择能压制的最小对子
+        for i, action in valid_actions:
+            if action[0] == 'Pair':
+                if len(action) > 1:
+                    card_rank = str(action[1])
+                    if self._compare_rank(card_rank, str(action_rank)) > 0:
+                        return i
+        
+        # 如果没有能压制的，也选择最小的对子（避免一直PASS）
+        for i, action in valid_actions:
+            if action[0] == 'Pair':
+                return i
+        
+        # 如果连对子都没有，至少选择第一个有效动作（避免一直PASS）
+        if valid_actions:
+            return valid_actions[0][0]
         
         return 0
     
@@ -654,10 +848,29 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         cur_type = cur_action[0] if len(cur_action) > 0 else ""
         cur_rank = cur_action[1] if len(cur_action) > 1 else ""
         
-        for i, action in enumerate(action_list):
-            if action[0] == cur_type and action[0] != "PASS":
-                if len(action) > 1 and action[1] > cur_rank:
-                    return i
+        # 过滤掉PASS动作
+        valid_actions = [(i, action) for i, action in enumerate(action_list) 
+                        if len(action) > 0 and action[0] != "PASS"]
+        
+        if not valid_actions:
+            return 0
+        
+        # 选择能压制的最小动作
+        for i, action in valid_actions:
+            if action[0] == cur_type:
+                if len(action) > 1:
+                    card_rank = str(action[1])
+                    if self._compare_rank(card_rank, str(cur_rank)) > 0:
+                        return i
+        
+        # 如果没有能压制的，也选择同类型的动作（避免一直PASS）
+        for i, action in valid_actions:
+            if action[0] == cur_type:
+                return i
+        
+        # 如果连同类型都没有，至少选择第一个有效动作（避免一直PASS）
+        if valid_actions:
+            return valid_actions[0][0]
         
         return 0
     
@@ -742,14 +955,17 @@ class MidLateActiveHandler(BasePhaseHandler):
         my_pos = message.get("myPos", 0)
         
         my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27]
+        # 初始化4个玩家的剩余牌数（0, 1, 2, 3号位）
+        opponent_rest_cards_list = [27, 27, 27, 27]
         teammate_rest_cards = 27
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
                     rest = info.get("rest", 27)
-                    opponent_rest_cards_list[i] = rest
+                    # 确保索引在范围内
+                    if 0 <= i < len(opponent_rest_cards_list):
+                        opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
                         teammate_rest_cards = rest
         
@@ -910,14 +1126,17 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
         my_pos = message.get("myPos", 0)
         
         my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27]
+        # 初始化4个玩家的剩余牌数（0, 1, 2, 3号位）
+        opponent_rest_cards_list = [27, 27, 27, 27]
         teammate_rest_cards = 27
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
                     rest = info.get("rest", 27)
-                    opponent_rest_cards_list[i] = rest
+                    # 确保索引在范围内
+                    if 0 <= i < len(opponent_rest_cards_list):
+                        opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
                         teammate_rest_cards = rest
         
@@ -952,6 +1171,26 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
 
 class EndgameEarlyPassiveHandler(BasePhaseHandler):
     """残局前期被动出牌处理器"""
+    
+    # 牌点大小顺序：3 < 4 < 5 < 6 < 7 < 8 < 9 < T < J < Q < K < A < 2 < B < R
+    RANK_ORDER = ['3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A', '2', 'B', 'R']
+    
+    @classmethod
+    def _compare_rank(cls, rank1: str, rank2: str) -> int:
+        """比较两张牌的大小，返回-1表示rank1<rank2，0表示相等，1表示rank1>rank2"""
+        try:
+            idx1 = cls.RANK_ORDER.index(str(rank1)) if str(rank1) in cls.RANK_ORDER else -1
+            idx2 = cls.RANK_ORDER.index(str(rank2)) if str(rank2) in cls.RANK_ORDER else -1
+            if idx1 < 0 or idx2 < 0:
+                return 0  # 无法比较
+            if idx1 < idx2:
+                return -1
+            elif idx1 > idx2:
+                return 1
+            else:
+                return 0
+        except (ValueError, IndexError):
+            return 0
     
     def __init__(self, config: Dict):
         super().__init__(config)
@@ -1075,14 +1314,17 @@ class EndgameLateActiveHandler(BasePhaseHandler):
         my_pos = message.get("myPos", 0)
         
         my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27]
+        # 初始化4个玩家的剩余牌数（0, 1, 2, 3号位）
+        opponent_rest_cards_list = [27, 27, 27, 27]
         teammate_rest_cards = 27
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
                     rest = info.get("rest", 27)
-                    opponent_rest_cards_list[i] = rest
+                    # 确保索引在范围内
+                    if 0 <= i < len(opponent_rest_cards_list):
+                        opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
                         teammate_rest_cards = rest
         
