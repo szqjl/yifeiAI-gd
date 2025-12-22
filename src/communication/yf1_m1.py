@@ -393,9 +393,15 @@ class YF1_M1_Client:
             "oppoRank": oppo_rank if oppo_rank != "?" else None,
             "curRank": cur_rank if cur_rank != "?" else None
         }
+        
+        # 如果已经有游戏记录在进行，先结束它（防止重复开始）
+        if self.game_recorder.current_game:
+            self.logger.warning(f"⚠ 检测到新游戏开始，但当前游戏记录未结束，先结束当前游戏")
+            self.game_recorder.end_game({"reason": "new_game_started"})
+        
         self.game_recorder.start_game(hand_cards, my_pos, game_info)
         self.game_count += 1
-        self.logger.info(f"✓ 游戏记录已开始: game_count={self.game_count}")
+        self.logger.info(f"✓ 游戏记录已开始: game_count={self.game_count}, current_game={self.game_recorder.current_game is not None}")
     
     def _handle_game_over(self, data: dict):
         """处理游戏结束通知"""
@@ -411,11 +417,20 @@ class YF1_M1_Client:
                 "game_count": self.game_count
             }
         
-        self.logger.info(f"游戏结束: {result}")
+        self.logger.info(f"游戏结束: {result}, current_game={self.game_recorder.current_game is not None}")
         print(f"游戏结束: {result}")
         
+        # 检查是否已经有游戏记录
+        if not self.game_recorder.current_game:
+            self.logger.warning(f"⚠ 游戏结束通知收到，但current_game为None，可能已经保存过了")
+            return
+        
         # 记录游戏结束
-        self.game_recorder.end_game(result)
+        filepath = self.game_recorder.end_game(result)
+        if filepath:
+            self.logger.info(f"✓ 游戏记录已保存: {filepath}")
+        else:
+            self.logger.warning(f"⚠ 游戏记录保存失败，可能原因：start_game()未被调用")
     
     def _handle_act_notification(self, data: dict):
         """处理其他玩家出牌通知"""
