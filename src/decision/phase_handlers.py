@@ -229,9 +229,9 @@ class OpeningActiveHandler(BasePhaseHandler):
                 for i, action in enumerate(action_list):
                     if isinstance(action, list) and len(action) > 0 and action[0] == card_type:
                         # 单张选择最小的
-                    if card_type == 'Single':
+                        if card_type == 'Single':
+                            return i
                         return i
-                    return i
         
         return 0
 
@@ -1064,7 +1064,7 @@ class MidLateActiveHandler(BasePhaseHandler):
     def _check_two_hand_complete(self, action_list: List, handcards: List) -> Optional[int]:
         """检查两手出完（M1增强：实现完整的两手出完逻辑）"""
         if not handcards or len(handcards) > 10:
-        return None
+            return None
 
         hand_count = len(handcards)
         
@@ -1140,7 +1140,7 @@ class MidLatePassiveHandler(MidEarlyPassiveHandler):
             return super().handle(message)
         else:
             # 牌力弱，让过
-        return 0
+            return 0
 
 
 class EndgameEarlyActiveHandler(BasePhaseHandler):
@@ -1193,7 +1193,7 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
                 return one_hand_result.get('best_action_index', 0)
         else:
             # 回退到基类方法
-        one_hand_idx = self._check_one_hand_complete(action_list, handcards)
+            one_hand_idx = self._check_one_hand_complete(action_list, handcards)
         if one_hand_idx is not None:
             return one_hand_idx
         
@@ -1313,7 +1313,7 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
         handcards = message.get("handCards", [])
         
         if not action_list or not cur_action:
-        return 0
+            return 0
         
         # 构建上下文信息
         context = self._build_context(message)
