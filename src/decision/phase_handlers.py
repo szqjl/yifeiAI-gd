@@ -118,6 +118,18 @@ class OpeningActiveHandler(BasePhaseHandler):
         import logging
         logger = logging.getLogger("OpeningActiveHandler")
         
+        # ⚠️ 出牌前扫描手牌最优组合
+        rank = message.get("curRank", "2")
+        if hasattr(self, 'combination_scanner') and self.combination_scanner:
+            try:
+                scan_result = self.combination_scanner.scan_optimal_combination(handcards, rank)
+                logger.info(f"手牌最优组合扫描结果: 评分={scan_result.get('combination_score', 0):.1f}, "
+                          f"多余单张={len(scan_result.get('excess_singles', []))}张")
+                if scan_result.get('excess_singles'):
+                    logger.debug(f"多余单张列表: {scan_result.get('excess_singles')}")
+            except Exception as e:
+                logger.warning(f"扫描手牌最优组合时出错: {e}")
+        
         # 构建上下文信息
         context = self._build_context(message)
         
