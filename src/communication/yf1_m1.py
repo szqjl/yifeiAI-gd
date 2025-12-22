@@ -443,6 +443,36 @@ class YF1_M1_Client:
         
         if cur_pos != -1 and cur_action and cur_action[0] != "PASS":
             print(f"{cur_pos}号位打出{cur_action}， 最大动作为{greater_pos}号位打出的{greater_action} 连续pass数目： 0")
+        
+        # ⚠️ 重要：记录所有玩家的出牌动作到游戏记录器
+        if cur_pos != -1 and cur_action:
+            # 解析curAction（可能是字符串格式）
+            if isinstance(cur_action, str):
+                try:
+                    import ast
+                    cur_action = ast.literal_eval(cur_action)
+                except:
+                    pass
+            
+            # 解析greaterAction（可能是字符串格式）
+            if isinstance(greater_action, str):
+                try:
+                    import ast
+                    greater_action = ast.literal_eval(greater_action)
+                except:
+                    pass
+            
+            # 构建上下文信息
+            context = {
+                "publicInfo": data.get("publicInfo", []),
+                "selfRank": data.get("selfRank"),
+                "oppoRank": data.get("oppoRank"),
+                "curRank": data.get("curRank"),
+                "restCards": data.get("restCards", [])
+            }
+            
+            # 记录动作
+            self.game_recorder.record_action(cur_pos, cur_action, greater_pos, greater_action, context)
 
 
 async def main():
