@@ -54,6 +54,56 @@ class BasePhaseHandler(ABC):
                 return i
         return None
     
+    def _validate_action_cards(self, action: List, handcards: List) -> bool:
+        """
+        验证动作中的卡牌是否在手牌中（卡牌一致性检查）
+        
+        Args:
+            action: 动作列表，格式为 [action_type, rank, cards]
+            handcards: 当前手牌列表
+            
+        Returns:
+            True: 动作中的所有卡牌都在手牌中
+            False: 动作中有卡牌不在手牌中
+        """
+        import logging
+        logger = logging.getLogger("BasePhaseHandler")
+        
+        if not action or not isinstance(action, list):
+            return True  # 无法验证，默认通过
+        
+        # 提取动作中的卡牌
+        action_cards = []
+        if len(action) >= 3 and isinstance(action[2], list):
+            action_cards = action[2]
+        elif len(action) == 2 and isinstance(action[1], list):
+            action_cards = action[1]
+        elif all(isinstance(card, str) for card in action):
+            # 如果action本身就是卡牌列表
+            action_cards = action
+        
+        if not action_cards:
+            # 如果没有卡牌（如PASS），直接通过
+            return True
+        
+        # 统计手牌中每张卡牌的数量
+        from collections import Counter
+        handcard_counts = Counter(handcards)
+        action_card_counts = Counter(action_cards)
+        
+        # 检查动作中的每张卡牌是否都在手牌中
+        for card, count in action_card_counts.items():
+            if card not in handcard_counts:
+                logger.warning(f"卡牌一致性检查失败：动作中的卡牌 {card} 不在手牌中")
+                logger.debug(f"动作: {action}, 手牌: {handcards}")
+                return False
+            if handcard_counts[card] < count:
+                logger.warning(f"卡牌一致性检查失败：动作中需要 {count} 张 {card}，但手牌中只有 {handcard_counts[card]} 张")
+                logger.debug(f"动作: {action}, 手牌: {handcards}")
+                return False
+        
+        return True
+    
     def _build_context(self, message: Dict) -> Dict:
         """构建上下文信息（供策略引擎使用）"""
         handcards = message.get("handCards", [])

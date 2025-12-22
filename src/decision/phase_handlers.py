@@ -128,19 +128,23 @@ class OpeningActiveHandler(BasePhaseHandler):
                 handcards = message.get("handCards", [])
                 rank = message.get("curRank", "2")
                 hand_structure = self.hand_analyzer.analyze(handcards, rank)
-            # 过滤PASS动作，同时记录原始索引
+            # 过滤PASS动作，同时记录原始索引，并验证卡牌一致性
             candidates = []
             candidate_indices = []
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0:
                     if action[0] != "PASS":
-                        candidates.append(action)
-                        candidate_indices.append(i)
+                        # ⚠️ 卡牌一致性检查：验证动作中的卡牌是否在手牌中
+                        if self._validate_action_cards(action, handcards):
+                            candidates.append(action)
+                            candidate_indices.append(i)
+                        else:
+                            logger.warning(f"Action {i} contains cards not in handcards, skipping: {action}")
                 elif action != "PASS":
                     candidates.append(action)
                     candidate_indices.append(i)
             
-            logger.debug(f"Filtered {len(candidates)} candidates from {len(action_list)} actions")
+            logger.debug(f"Filtered {len(candidates)} candidates from {len(action_list)} actions (after card validation)")
             
             if candidates:
                 try:
@@ -184,10 +188,11 @@ class OpeningActiveHandler(BasePhaseHandler):
             )
             
             if '出单' in single_sugg.get('action', '') or '出天然单' in single_sugg.get('action', ''):
-                # 选择最小的单张
+                # 选择最小的单张（验证卡牌一致性）
                 for i, action in enumerate(action_list):
                     if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
-                        return i
+                        if self._validate_action_cards(action, handcards):
+                            return i
         
         # 策略2：牌力中下，情况不明对子先行
         if power < 6 and self.pair_strategy:
@@ -500,16 +505,21 @@ class OpeningPassiveHandler(BasePhaseHandler):
             return 0
         
         # 选择能压制的最小单张（简化：只要找到Single就出，不比较rank）
-        # 注意：actionList中的动作都是能管上的，所以直接选择第一个Single即可
+        # ⚠️ 卡牌一致性检查：验证动作中的卡牌是否在手牌中
         logger.info("Searching for Single actions in actionList")
         single_count = 0
+        handcards = message.get("handCards", [])
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0:
                 if action[0] == 'Single':
                     single_count += 1
-                    logger.info(f"Found Single action at index {i}: {action}")
-                    # 选择第一个能管上的Single动作（actionList中的动作都是能管上的）
-                    return i
+                    # 验证卡牌一致性
+                    if self._validate_action_cards(action, handcards):
+                        logger.info(f"Found valid Single action at index {i}: {action}")
+                        # 选择第一个能管上的Single动作（actionList中的动作都是能管上的）
+                        return i
+                    else:
+                        logger.warning(f"Single action at index {i} failed card validation: {action}")
             elif isinstance(action, str) and action == 'Single':
                 single_count += 1
                 logger.info(f"Found Single action (string) at index {i}")
