@@ -205,8 +205,8 @@ class OpeningActiveHandler(BasePhaseHandler):
         if power < 5:
             # 优先出三连对/钢板（对手难管）
             priority_order = ['TwoTrips', 'ThreePair', 'Straight', 'ThreeWithTwo', 'Trips']
-            for card_type in priority_order:
-                for i, action in enumerate(action_list):
+        for card_type in priority_order:
+            for i, action in enumerate(action_list):
                     if isinstance(action, list) and len(action) > 0 and action[0] == card_type:
                         return i
             # 如果没有组合牌型，再考虑对子
@@ -225,9 +225,9 @@ class OpeningActiveHandler(BasePhaseHandler):
                 for i, action in enumerate(action_list):
                     if isinstance(action, list) and len(action) > 0 and action[0] == card_type:
                         # 单张选择最小的
-                        if card_type == 'Single':
-                            return i
+                    if card_type == 'Single':
                         return i
+                    return i
         
         return 0
 
@@ -1052,8 +1052,8 @@ class MidLateActiveHandler(BasePhaseHandler):
     def _check_two_hand_complete(self, action_list: List, handcards: List) -> Optional[int]:
         """检查两手出完（M1增强：实现完整的两手出完逻辑）"""
         if not handcards or len(handcards) > 10:
-            return None
-        
+        return None
+
         hand_count = len(handcards)
         
         # 尝试找到两个动作，使得它们的牌数之和等于剩余牌数
@@ -1128,7 +1128,7 @@ class MidLatePassiveHandler(MidEarlyPassiveHandler):
             return super().handle(message)
         else:
             # 牌力弱，让过
-            return 0
+        return 0
 
 
 class EndgameEarlyActiveHandler(BasePhaseHandler):
@@ -1137,6 +1137,7 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
     def __init__(self, config: Dict):
         super().__init__(config)
         self._init_helpers()
+        self._init_endgame_strategies()
     
     def _init_helpers(self):
         """初始化辅助工具"""
@@ -1150,6 +1151,14 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
             self.calculate_power = None
             self.endgame_strategy = None
             self.check_one_hand = None
+    
+    def _init_endgame_strategies(self):
+        """初始化残局策略选择器（提升：整合残局策略类）"""
+        try:
+            from .endgame_strategies import EndgameStrategySelector
+            self.strategy_selector = EndgameStrategySelector(self.config)
+        except ImportError:
+            self.strategy_selector = None
     
     def handle(self, message: Dict) -> int:
         """残局前期策略：快速出牌，保护队友，争取先手"""
@@ -1172,9 +1181,9 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
                 return one_hand_result.get('best_action_index', 0)
         else:
             # 回退到基类方法
-            one_hand_idx = self._check_one_hand_complete(action_list, handcards)
-            if one_hand_idx is not None:
-                return one_hand_idx
+        one_hand_idx = self._check_one_hand_complete(action_list, handcards)
+        if one_hand_idx is not None:
+            return one_hand_idx
         
         # ⭐ 使用优先级系统（提升：动态优先级，残局阶段）
         context = self._build_context(message)
@@ -1185,7 +1194,21 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
             if candidates:
                 return self.priority_system.select(candidates, hand_structure, context)
         
-        # 优先级2: 使用残局策略
+        # 优先级2: 使用残局策略类（提升：智能策略选择）
+        context = self._build_context(message)
+        context.update({
+            'my_remain': my_rest,
+            'teammate_rest_cards': state.get('teammate_rest_cards', 27),
+            'opponent_rest_cards_list': state.get('opponent_rest_cards_list', [27, 27, 27, 27])
+        })
+        
+        if self.strategy_selector:
+            strategy = self.strategy_selector.select_strategy(message, context)
+            strategy_result = strategy.execute(message, context)
+            if strategy_result is not None and 0 <= strategy_result < len(action_list):
+                return strategy_result
+        
+        # 降级方案：使用原有残局策略函数
         state = self._extract_game_state(message)
         if self.endgame_strategy:
             endgame_sugg = self.endgame_strategy(
@@ -1274,7 +1297,7 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
         handcards = message.get("handCards", [])
         
         if not action_list or not cur_action:
-            return 0
+        return 0
         
         # 构建上下文信息
         context = self._build_context(message)
@@ -1323,6 +1346,7 @@ class EndgameLateActiveHandler(BasePhaseHandler):
     def __init__(self, config: Dict):
         super().__init__(config)
         self._init_helpers()
+        self._init_endgame_strategies()
     
     def _init_helpers(self):
         """初始化辅助工具"""
@@ -1336,6 +1360,14 @@ class EndgameLateActiveHandler(BasePhaseHandler):
             self.calculate_power = None
             self.endgame_strategy = None
             self.check_one_hand = None
+    
+    def _init_endgame_strategies(self):
+        """初始化残局策略选择器（提升：整合残局策略类）"""
+        try:
+            from .endgame_strategies import EndgameStrategySelector
+            self.strategy_selector = EndgameStrategySelector(self.config)
+        except ImportError:
+            self.strategy_selector = None
     
     def handle(self, message: Dict) -> int:
         """残局后期策略：全力冲刺，一手出完优先，快速结束"""
@@ -1361,8 +1393,22 @@ class EndgameLateActiveHandler(BasePhaseHandler):
             if candidates:
                 return self.priority_system.select(candidates, hand_structure, context)
         
-        # 优先级2: 使用残局策略（残局后期更激进）
+        # 优先级2: 使用残局策略类（提升：智能策略选择，残局后期更激进）
+        context = self._build_context(message)
         state = self._extract_game_state(message)
+        context.update({
+            'my_remain': my_rest,
+            'teammate_rest_cards': state.get('teammate_rest_cards', 27),
+            'opponent_rest_cards_list': state.get('opponent_rest_cards_list', [27, 27, 27, 27])
+        })
+        
+        if self.strategy_selector:
+            strategy = self.strategy_selector.select_strategy(message, context)
+            strategy_result = strategy.execute(message, context)
+            if strategy_result is not None and 0 <= strategy_result < len(action_list):
+                return strategy_result
+        
+        # 降级方案：使用原有残局策略函数
         if self.endgame_strategy:
             endgame_sugg = self.endgame_strategy(
                 opponent_rest_cards=min(state['opponent_rest_cards_list']),

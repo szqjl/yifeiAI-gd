@@ -366,10 +366,23 @@ class PrioritySystem:
         })
     
     def _calculate_base_scores(self, candidates: List, hand_structure: Dict, context: Dict) -> List[float]:
-        """计算基础分数"""
+        """计算基础分数（提升：支持所有动作类型）"""
         scores = []
         is_active = context.get("is_active", True)
         priority_map = self.base_priority.get('active' if is_active else 'passive', {})
+        
+        # 动作类型到优先级键的映射（处理大小写和特殊名称）
+        action_type_mapping = {
+            'single': 'single',
+            'pair': 'pair',
+            'trips': 'trips',
+            'threewithtwo': 'three_with_two',
+            'threepair': 'threepair',
+            'twotrips': 'threepair',  # 钢板和三连对优先级相同
+            'straight': 'straight',
+            'straightflush': 'straight',
+            'bomb': 'use_bomb' if not is_active else 1000,  # 炸弹优先级最高
+        }
         
         for candidate in candidates:
             if not candidate or len(candidate) < 1:
@@ -377,15 +390,36 @@ class PrioritySystem:
                 continue
             
             action_type = candidate[0] if isinstance(candidate, list) else str(candidate)
+            action_type_lower = action_type.lower() if isinstance(action_type, str) else str(action_type).lower()
             
             # 检查一手出完
             handcards = context.get("handcards", [])
-            if len(candidate) > 2 and len(candidate[2]) == len(handcards):
-                scores.append(priority_map.get('one_hand_complete', 1000))
+            if len(candidate) > 2 and isinstance(candidate[2], list) and len(candidate[2]) == len(handcards):
+                scores.append(float(priority_map.get('one_hand_complete', 1000)))
                 continue
             
+            # 检查两手出完（主动出牌时）
+            if is_active and len(candidate) > 2 and isinstance(candidate[2], list):
+                card_count = len(candidate[2])
+                if card_count >= len(handcards) * 0.7:  # 出牌数超过70%手牌
+                    scores.append(float(priority_map.get('two_hand_complete', 900)))
+                    continue
+            
             # 根据动作类型获取优先级
-            score = priority_map.get(action_type.lower(), 100)
+            priority_key = action_type_mapping.get(action_type_lower, action_type_lower)
+            score = priority_map.get(priority_key, 100)
+            
+            # 特殊处理：单张的优先级根据牌值调整
+            if action_type_lower == 'single' and is_active:
+                # 小单张优先级更高
+                if len(candidate) > 1:
+                    card_rank = candidate[1] if isinstance(candidate[1], str) else str(candidate[1])
+                    # 提取牌值（去掉花色）
+                    rank_char = card_rank[-1] if len(card_rank) > 1 else card_rank
+                    small_ranks = ['3', '4', '5', '6', '7']
+                    if rank_char in small_ranks:
+                        score = priority_map.get('small_single', 800)
+            
             scores.append(float(score))
         
         return scores
