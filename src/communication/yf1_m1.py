@@ -185,6 +185,22 @@ class YF1_M1_Client:
         """Handle action request from server (M1硬编码决策)"""
         self.decision_count += 1
         
+        # 检查是否是游戏开始（如果还没有开始记录）
+        # 有些服务器可能在第一个action请求时发送handCards
+        if not self.game_recorder.current_game:
+            hand_cards = data.get("handCards", [])
+            if hand_cards and len(hand_cards) == 27:
+                self.logger.info("在action请求中检测到初始手牌，触发游戏开始")
+                my_pos = data.get("myPos", self.player_id)
+                game_info = {
+                    "selfRank": data.get("selfRank"),
+                    "oppoRank": data.get("oppoRank"),
+                    "curRank": data.get("curRank", "2")
+                }
+                self.game_recorder.start_game(hand_cards, my_pos, game_info)
+                self.game_count += 1
+                self.logger.info(f"✓ 游戏记录已开始（从action请求）: game_count={self.game_count}")
+        
         # 检查是否是贡牌或还牌阶段
         stage = data.get("stage", "")
         if stage == "tribute":
@@ -301,6 +317,9 @@ class YF1_M1_Client:
         notify_type = data.get("notifyType", "")
         stage = data.get("stage", "")
         
+        # 调试日志：记录收到的通知
+        self.logger.debug(f"收到通知: notifyType={notify_type}, stage={stage}, keys={list(data.keys())[:5]}")
+        
         # 优先使用notifyType，如果没有则使用stage
         if notify_type:
             notification_key = notify_type
@@ -309,11 +328,15 @@ class YF1_M1_Client:
         else:
             notification_key = ""
         
+        self.logger.debug(f"通知键: {notification_key}")
+        
         # 处理游戏开始（兼容多种格式）
         if notification_key in ["gameStart", "beginning"]:
+            self.logger.info(f"✓ 识别到游戏开始通知: notification_key={notification_key}")
             self._handle_game_start(data)
         # 处理游戏结束
         elif notification_key in ["gameOver", "gameResult"]:
+            self.logger.info(f"✓ 识别到游戏结束通知: notification_key={notification_key}")
             self._handle_game_over(data)
         # 处理进贡
         elif notification_key == "tribute":
@@ -325,6 +348,13 @@ class YF1_M1_Client:
         elif notification_key == "act" or (stage == "play" and notify_type == ""):
             # 记录其他玩家的出牌
             self._handle_act_notification(data)
+        else:
+            # 如果都没有匹配，记录警告
+            self.logger.warning(f"⚠ 未识别的通知类型: notifyType={notify_type}, stage={stage}, notification_key={notification_key}")
+            # 特殊处理：如果消息中有handCards但没有stage，可能是游戏开始
+            if "handCards" in data and not self.game_recorder.current_game:
+                self.logger.info("检测到handCards但无stage，尝试作为游戏开始处理")
+                self._handle_game_start(data)
     
     def _handle_game_start(self, data: dict):
         """处理游戏开始通知（兼容多种格式）"""
