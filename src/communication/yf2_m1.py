@@ -309,31 +309,54 @@ class YF2_M1_Client:
     
     def handle_notification(self, data: dict):
         """Handle notification from server"""
+        # 兼容两种格式：notifyType 和 stage
         notify_type = data.get("notifyType", "")
+        stage = data.get("stage", "")
         
-        if notify_type == "gameStart":
+        # 优先使用notifyType，如果没有则使用stage
+        if notify_type:
+            notification_key = notify_type
+        elif stage:
+            notification_key = stage
+        else:
+            notification_key = ""
+        
+        # 处理游戏开始（兼容多种格式）
+        if notification_key in ["gameStart", "beginning"]:
             self._handle_game_start(data)
-        elif notify_type == "gameOver":
+        # 处理游戏结束
+        elif notification_key in ["gameOver", "gameResult"]:
             self._handle_game_over(data)
-        elif notify_type == "tribute":
+        # 处理进贡
+        elif notification_key == "tribute":
             self._handle_tribute_notification(data)
-        elif notify_type == "back":
+        # 处理还贡
+        elif notification_key == "back":
             self._handle_back_notification(data)
-        elif notify_type == "act":
+        # 处理出牌通知
+        elif notification_key == "act" or (stage == "play" and notify_type == ""):
             # 记录其他玩家的出牌
             self._handle_act_notification(data)
     
     def _handle_game_start(self, data: dict):
-        """处理游戏开始通知"""
+        """处理游戏开始通知（兼容多种格式）"""
+        # 兼容多种格式：handCards字段或playerPosition字段
         hand_cards = data.get("handCards", [])
+        if not hand_cards:
+            # 尝试从其他字段获取
+            hand_cards = data.get("initial_hand", [])
+        
+        # 兼容多种格式：myPos字段或playerPosition字段
         my_pos = data.get("myPos", self.player_id)
+        if my_pos == self.player_id:
+            my_pos = data.get("playerPosition", my_pos)
         
         # 更新player_id（如果服务器分配的位置不同）
         if my_pos != self.player_id:
             self.logger.info(f"Position updated: {self.player_id} -> {my_pos}")
             self.player_id = my_pos
             # 重新初始化决策引擎（使用新的 player_id）
-            config = {"max_decision_time": 0.8, "enable_logging": True}
+            config = {"max_decision_time": 0.8, "enable_logging": True, "curRank": data.get("curRank", "2")}
             self.decision_engine = RuleBasedDecisionEngineM1(my_pos, config)
         
         self.hand_cards = hand_cards
@@ -354,15 +377,31 @@ class YF2_M1_Client:
         }
         self.game_recorder.start_game(hand_cards, my_pos, game_info)
         self.game_count += 1
+        self.logger.info(f"✓ 游戏记录已开始: game_count={self.game_count}")
     
     def _handle_game_over(self, data: dict):
         """处理游戏结束通知"""
+        # 兼容两种格式：result字段和gameResult格式
         result = data.get("result", {})
+        
+        # 如果是gameResult格式，提取victoryNum和draws
+        if not result and data.get("stage") == "gameResult":
+            result = {
+                "victoryNum": data.get("victoryNum", []),
+                "draws": data.get("draws", []),
+                "total_decisions": self.decision_count,
+                "game_count": self.game_count
+            }
+        
         self.logger.info(f"游戏结束: {result}")
         print(f"游戏结束: {result}")
         
         # 记录游戏结束
-        self.game_recorder.end_game(result)
+        filepath = self.game_recorder.end_game(result)
+        if filepath:
+            self.logger.info(f"✓ 游戏记录已保存: {filepath}")
+        else:
+            self.logger.warning(f"⚠ 游戏记录保存失败，可能原因：start_game()未被调用")
     
     def _handle_act_notification(self, data: dict):
         """处理其他玩家出牌通知"""
