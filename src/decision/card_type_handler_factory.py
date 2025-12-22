@@ -61,7 +61,8 @@ class CardTypeHandler(ABC):
     
     def analyze_structure(self, handcards: list, rank: str) -> Dict:
         """分析手牌结构（提升：统一的手牌分析接口）"""
-        # TODO: 实现手牌结构分析
+        if self.hand_analyzer:
+            return self.hand_analyzer.analyze(handcards, rank)
         return {}
 
 
@@ -111,91 +112,292 @@ class PairHandler(CardTypeHandler):
     """对子处理器"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理对子被动出牌"""
-        # TODO: 实现对子被动出牌逻辑
+        """处理对子被动出牌（提升：集成策略引擎）"""
         action_list = message.get("actionList", [])
+        cur_action = message.get("curAction")
+        
+        if not action_list or not cur_action:
+            return 0
+        
+        # ⭐ 1. 手牌结构分析
+        hand_structure = {}
+        if self.hand_analyzer:
+            handcards = message.get("handCards", [])
+            rank = message.get("curRank", "2")
+            hand_structure = self.hand_analyzer.analyze(handcards, rank)
+        
+        # ⭐ 2. 队友保护判断
+        if self.teammate_protection:
+            protection_action = self.teammate_protection.get_protection_action(message, context)
+            if protection_action is not None:
+                return protection_action
+        
+        # ⭐ 3. 优先级选择
+        candidates = self._get_candidates(message)
+        if self.priority_system and candidates:
+            return self.priority_system.select(candidates, hand_structure, context)
+        
+        # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
             if action[0] != "PASS" and action[0] == "Pair":
                 return i
         return 0
+    
+    def _get_candidates(self, message: Dict) -> list:
+        """获取候选动作"""
+        action_list = message.get("actionList", [])
+        return [a for a in action_list if a[0] == "Pair" and a[0] != "PASS"]
 
 
 class TripsHandler(CardTypeHandler):
     """三张处理器"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理三张被动出牌"""
-        # TODO: 实现三张被动出牌逻辑
+        """处理三张被动出牌（提升：集成策略引擎）"""
         action_list = message.get("actionList", [])
+        cur_action = message.get("curAction")
+        
+        if not action_list or not cur_action:
+            return 0
+        
+        # ⭐ 1. 手牌结构分析
+        hand_structure = {}
+        if self.hand_analyzer:
+            handcards = message.get("handCards", [])
+            rank = message.get("curRank", "2")
+            hand_structure = self.hand_analyzer.analyze(handcards, rank)
+        
+        # ⭐ 2. 队友保护判断
+        if self.teammate_protection:
+            protection_action = self.teammate_protection.get_protection_action(message, context)
+            if protection_action is not None:
+                return protection_action
+        
+        # ⭐ 3. 优先级选择
+        candidates = self._get_candidates(message)
+        if self.priority_system and candidates:
+            return self.priority_system.select(candidates, hand_structure, context)
+        
+        # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
             if action[0] != "PASS" and action[0] == "Trips":
                 return i
         return 0
+    
+    def _get_candidates(self, message: Dict) -> list:
+        """获取候选动作"""
+        action_list = message.get("actionList", [])
+        return [a for a in action_list if a[0] == "Trips" and a[0] != "PASS"]
 
 
 class ThreeWithTwoHandler(CardTypeHandler):
     """三带二处理器"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理三带二被动出牌"""
-        # TODO: 实现三带二被动出牌逻辑
+        """处理三带二被动出牌（提升：集成策略引擎）"""
         action_list = message.get("actionList", [])
+        cur_action = message.get("curAction")
+        
+        if not action_list or not cur_action:
+            return 0
+        
+        # ⭐ 1. 手牌结构分析
+        hand_structure = {}
+        if self.hand_analyzer:
+            handcards = message.get("handCards", [])
+            rank = message.get("curRank", "2")
+            hand_structure = self.hand_analyzer.analyze(handcards, rank)
+        
+        # ⭐ 2. 队友保护判断
+        if self.teammate_protection:
+            protection_action = self.teammate_protection.get_protection_action(message, context)
+            if protection_action is not None:
+                return protection_action
+        
+        # ⭐ 3. 优先级选择
+        candidates = self._get_candidates(message)
+        if self.priority_system and candidates:
+            return self.priority_system.select(candidates, hand_structure, context)
+        
+        # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
             if action[0] != "PASS" and action[0] == "ThreeWithTwo":
                 return i
         return 0
+    
+    def _get_candidates(self, message: Dict) -> list:
+        """获取候选动作"""
+        action_list = message.get("actionList", [])
+        return [a for a in action_list if a[0] == "ThreeWithTwo" and a[0] != "PASS"]
 
 
 class ThreePairHandler(CardTypeHandler):
     """三连对处理器"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理三连对被动出牌"""
-        # TODO: 实现三连对被动出牌逻辑
+        """处理三连对被动出牌（提升：集成策略引擎）"""
         action_list = message.get("actionList", [])
+        cur_action = message.get("curAction")
+        
+        if not action_list or not cur_action:
+            return 0
+        
+        # ⭐ 1. 手牌结构分析
+        hand_structure = {}
+        if self.hand_analyzer:
+            handcards = message.get("handCards", [])
+            rank = message.get("curRank", "2")
+            hand_structure = self.hand_analyzer.analyze(handcards, rank)
+        
+        # ⭐ 2. 队友保护判断
+        if self.teammate_protection:
+            protection_action = self.teammate_protection.get_protection_action(message, context)
+            if protection_action is not None:
+                return protection_action
+        
+        # ⭐ 3. 优先级选择
+        candidates = self._get_candidates(message)
+        if self.priority_system and candidates:
+            return self.priority_system.select(candidates, hand_structure, context)
+        
+        # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
             if action[0] != "PASS" and action[0] == "ThreePair":
                 return i
         return 0
+    
+    def _get_candidates(self, message: Dict) -> list:
+        """获取候选动作"""
+        action_list = message.get("actionList", [])
+        return [a for a in action_list if a[0] == "ThreePair" and a[0] != "PASS"]
 
 
 class StraightHandler(CardTypeHandler):
     """顺子处理器"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理顺子被动出牌"""
-        # TODO: 实现顺子被动出牌逻辑
+        """处理顺子被动出牌（提升：集成策略引擎）"""
         action_list = message.get("actionList", [])
+        cur_action = message.get("curAction")
+        
+        if not action_list or not cur_action:
+            return 0
+        
+        # ⭐ 1. 手牌结构分析
+        hand_structure = {}
+        if self.hand_analyzer:
+            handcards = message.get("handCards", [])
+            rank = message.get("curRank", "2")
+            hand_structure = self.hand_analyzer.analyze(handcards, rank)
+        
+        # ⭐ 2. 队友保护判断
+        if self.teammate_protection:
+            protection_action = self.teammate_protection.get_protection_action(message, context)
+            if protection_action is not None:
+                return protection_action
+        
+        # ⭐ 3. 优先级选择
+        candidates = self._get_candidates(message)
+        if self.priority_system and candidates:
+            return self.priority_system.select(candidates, hand_structure, context)
+        
+        # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
             if action[0] != "PASS" and action[0] == "Straight":
                 return i
         return 0
+    
+    def _get_candidates(self, message: Dict) -> list:
+        """获取候选动作"""
+        action_list = message.get("actionList", [])
+        return [a for a in action_list if a[0] == "Straight" and a[0] != "PASS"]
 
 
 class TwoTripsHandler(CardTypeHandler):
     """钢板处理器"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理钢板被动出牌"""
-        # TODO: 实现钢板被动出牌逻辑
+        """处理钢板被动出牌（提升：集成策略引擎）"""
         action_list = message.get("actionList", [])
+        cur_action = message.get("curAction")
+        
+        if not action_list or not cur_action:
+            return 0
+        
+        # ⭐ 1. 手牌结构分析
+        hand_structure = {}
+        if self.hand_analyzer:
+            handcards = message.get("handCards", [])
+            rank = message.get("curRank", "2")
+            hand_structure = self.hand_analyzer.analyze(handcards, rank)
+        
+        # ⭐ 2. 队友保护判断
+        if self.teammate_protection:
+            protection_action = self.teammate_protection.get_protection_action(message, context)
+            if protection_action is not None:
+                return protection_action
+        
+        # ⭐ 3. 优先级选择
+        candidates = self._get_candidates(message)
+        if self.priority_system and candidates:
+            return self.priority_system.select(candidates, hand_structure, context)
+        
+        # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
             if action[0] != "PASS" and action[0] == "TwoTrips":
                 return i
         return 0
+    
+    def _get_candidates(self, message: Dict) -> list:
+        """获取候选动作"""
+        action_list = message.get("actionList", [])
+        return [a for a in action_list if a[0] == "TwoTrips" and a[0] != "PASS"]
 
 
 class BombHandler(CardTypeHandler):
     """炸弹处理器"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理炸弹被动出牌"""
-        # TODO: 实现炸弹被动出牌逻辑
+        """处理炸弹被动出牌（提升：集成策略引擎，炸弹需要谨慎使用）"""
         action_list = message.get("actionList", [])
-        for i, action in enumerate(action_list):
-            if action[0] != "PASS" and action[0] == "Bomb":
-                return i
+        cur_action = message.get("curAction")
+        
+        if not action_list or not cur_action:
+            return 0
+        
+        # ⭐ 1. 手牌结构分析
+        hand_structure = {}
+        if self.hand_analyzer:
+            handcards = message.get("handCards", [])
+            rank = message.get("curRank", "2")
+            hand_structure = self.hand_analyzer.analyze(handcards, rank)
+        
+        # ⭐ 2. 队友保护判断（炸弹更谨慎）
+        if self.teammate_protection:
+            protection_action = self.teammate_protection.get_protection_action(message, context)
+            if protection_action is not None:
+                return protection_action
+        
+        # ⭐ 3. 炸弹特殊处理：只在关键时刻使用
+        # 如果对手牌数很少，或者队友需要保护，才使用炸弹
+        cards_left = context.get("cards_left", {})
+        my_pos = message.get("myPos", 0)
+        opponents_remain = [cards_left.get(i, 27) for i in range(4) if i != my_pos and (my_pos + 2) % 4 != i]
+        min_opponent_remain = min(opponents_remain) if opponents_remain else 27
+        
+        # 对手牌数很少，需要压制，可以使用炸弹
+        if min_opponent_remain <= 3:
+            candidates = self._get_candidates(message)
+            if candidates:
+                return candidates[0]  # 使用第一个炸弹
+        
+        # 否则，优先PASS，保留炸弹
         return 0
+    
+    def _get_candidates(self, message: Dict) -> list:
+        """获取候选动作"""
+        action_list = message.get("actionList", [])
+        return [a for a in action_list if a[0] == "Bomb" and a[0] != "PASS"]
 
 
 class CardTypeHandlerFactory:

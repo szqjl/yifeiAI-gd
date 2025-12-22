@@ -28,16 +28,19 @@ class BasePhaseHandler(ABC):
                 PrioritySystem,
                 CardValueSystem
             )
+            from .hand_structure_analyzer import HandStructureAnalyzer
             self.teammate_protection = TeammateProtectionStrategy(self.config)
             self.priority_system = PrioritySystem(self.config)
             self.card_value_system = CardValueSystem(
                 self.config.get("curRank", "2")
             )
+            self.hand_analyzer = HandStructureAnalyzer()
         except ImportError as e:
             # 如果导入失败，设置为None，后续可以优雅降级
             self.teammate_protection = None
             self.priority_system = None
             self.card_value_system = None
+            self.hand_analyzer = None
     
     @abstractmethod
     def handle(self, message: Dict) -> int:

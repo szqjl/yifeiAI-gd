@@ -122,8 +122,12 @@ class OpeningActiveHandler(BasePhaseHandler):
         
         # ⭐ 使用优先级系统（提升：动态优先级）
         if self.priority_system:
-            # 获取手牌结构（简化实现）
+            # 获取手牌结构（使用HandStructureAnalyzer）
             hand_structure = {}
+            if hasattr(self, 'hand_analyzer') and self.hand_analyzer:
+                handcards = message.get("handCards", [])
+                rank = message.get("curRank", "2")
+                hand_structure = self.hand_analyzer.analyze(handcards, rank)
             # 过滤PASS动作，同时记录原始索引
             candidates = []
             candidate_indices = []
@@ -632,8 +636,12 @@ class MidEarlyActiveHandler(BasePhaseHandler):
         # ⭐ 使用优先级系统（提升：动态优先级）
         context = self._build_context(message)
         if self.priority_system:
-            # 获取手牌结构（简化实现）
+            # 获取手牌结构（使用HandStructureAnalyzer）
             hand_structure = {}
+            if hasattr(self, 'hand_analyzer') and self.hand_analyzer:
+                handcards = message.get("handCards", [])
+                rank = message.get("curRank", "2")
+                hand_structure = self.hand_analyzer.analyze(handcards, rank)
             # 过滤PASS动作，同时记录原始索引
             candidates = []
             candidate_indices = []
@@ -969,8 +977,12 @@ class MidLateActiveHandler(BasePhaseHandler):
         # ⭐ 使用优先级系统（提升：动态优先级）
         context = self._build_context(message)
         if self.priority_system:
-            # 获取手牌结构（简化实现）
+            # 获取手牌结构（使用HandStructureAnalyzer）
             hand_structure = {}
+            if hasattr(self, 'hand_analyzer') and self.hand_analyzer:
+                handcards = message.get("handCards", [])
+                rank = message.get("curRank", "2")
+                hand_structure = self.hand_analyzer.analyze(handcards, rank)
             # 过滤PASS动作，同时记录原始索引
             candidates = []
             candidate_indices = []
@@ -1188,8 +1200,12 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
         # ⭐ 使用优先级系统（提升：动态优先级，残局阶段）
         context = self._build_context(message)
         if self.priority_system:
-            # 获取手牌结构（简化实现）
+            # 获取手牌结构（使用HandStructureAnalyzer）
             hand_structure = {}
+            if hasattr(self, 'hand_analyzer') and self.hand_analyzer:
+                handcards = message.get("handCards", [])
+                rank = message.get("curRank", "2")
+                hand_structure = self.hand_analyzer.analyze(handcards, rank)
             candidates = [a for a in action_list if a[0] != "PASS"]
             if candidates:
                 return self.priority_system.select(candidates, hand_structure, context)
