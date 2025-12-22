@@ -22,6 +22,7 @@ from .single_card_strategy import single_card_strategy
 from .pair_strategy import pair_strategy
 from .endgame_strategy import endgame_strategy, check_one_hand_finish
 from .cooperation import CooperationStrategy
+from .optimal_combination_scanner import OptimalCombinationScanner, find_excess_singles_for_passive_play
 
 
 class OpeningActiveHandler(BasePhaseHandler):
@@ -504,11 +505,35 @@ class OpeningPassiveHandler(BasePhaseHandler):
             logger.info("Strategy suggests not playing single, passing")
             return 0
         
+        # ⚠️ 优先顺走多余单张（出牌前扫描手牌最优组合）
+        handcards = message.get("handCards", [])
+        rank = message.get("curRank", "2")
+        cur_action_rank = action_rank if action_rank else ""
+        
+        if cur_action_rank and hasattr(self, 'combination_scanner') and self.combination_scanner:
+            try:
+                excess_singles = find_excess_singles_for_passive_play(handcards, rank, cur_action_rank)
+                if excess_singles:
+                    logger.info(f"发现多余单张，可以顺走: {excess_singles}")
+                    # 在actionList中查找这些多余单张
+                    for excess_card in excess_singles:
+                        for i, action in enumerate(action_list):
+                            if isinstance(action, list) and len(action) > 0:
+                                if action[0] == 'Single':
+                                    # 检查是否是多余单张
+                                    if len(action) >= 3 and isinstance(action[2], list):
+                                        if excess_card in action[2]:
+                                            # 验证卡牌一致性
+                                            if self._validate_action_cards(action, handcards):
+                                                logger.info(f"选择多余单张 {excess_card} 顺走: action={action}")
+                                                return i
+            except Exception as e:
+                logger.warning(f"扫描多余单张时出错: {e}")
+        
         # 选择能压制的最小单张（简化：只要找到Single就出，不比较rank）
         # ⚠️ 卡牌一致性检查：验证动作中的卡牌是否在手牌中
         logger.info("Searching for Single actions in actionList")
         single_count = 0
-        handcards = message.get("handCards", [])
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0:
                 if action[0] == 'Single':
