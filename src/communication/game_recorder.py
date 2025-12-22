@@ -191,6 +191,17 @@ class GameRecorder:
         import logging
         logger = logging.getLogger(f"GameRecorder.{self.player_name}")
         
+        # ⚠️ 重要：如果已经有游戏记录在进行，先保存它（防止多局游戏时丢失记录）
+        if self.current_game:
+            logger.warning(f"⚠ 新游戏开始，但当前游戏记录未结束，先保存当前游戏记录")
+            # 使用临时结果保存当前游戏
+            temp_result = {
+                "reason": "new_game_started_before_end",
+                "saved_at": datetime.now().isoformat(),
+                "game_counter": self.game_counter
+            }
+            self.end_game(temp_result)
+        
         self.game_start_time = datetime.now()
         
         # 递增游戏计数器

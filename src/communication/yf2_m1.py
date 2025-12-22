@@ -406,11 +406,7 @@ class YF2_M1_Client:
             "curRank": cur_rank if cur_rank != "?" else None
         }
         
-        # 如果已经有游戏记录在进行，先结束它（防止重复开始）
-        if self.game_recorder.current_game:
-            self.logger.warning(f"⚠ 检测到新游戏开始，但当前游戏记录未结束，先结束当前游戏")
-            self.game_recorder.end_game({"reason": "new_game_started"})
-        
+        # start_game() 内部已经处理了当前游戏记录的保存，这里不需要重复处理
         self.game_recorder.start_game(hand_cards, my_pos, game_info)
         self.game_count += 1
         self.logger.info(f"✓ 游戏记录已开始: game_count={self.game_count}, current_game={self.game_recorder.current_game is not None}")
