@@ -26,10 +26,29 @@ class CardTypeHandler(ABC):
     
     def __init__(self, config: Dict):
         self.config = config
-        # 这些将在后续实现
-        # self.teammate_protection = TeammateProtectionStrategy(config)
-        # self.hand_analyzer = HandStructureAnalyzer()
-        # self.priority_system = PrioritySystem(config)
+        # ⭐ 初始化策略引擎（延迟导入，避免循环依赖）
+        self._init_strategy_engine()
+    
+    def _init_strategy_engine(self):
+        """初始化策略引擎"""
+        try:
+            from .strategy_engine import (
+                TeammateProtectionStrategy,
+                PrioritySystem,
+                CardValueSystem
+            )
+            self.teammate_protection = TeammateProtectionStrategy(self.config)
+            self.priority_system = PrioritySystem(self.config)
+            self.card_value_system = CardValueSystem(
+                self.config.get("curRank", "2")
+            )
+            self.hand_analyzer = HandStructureAnalyzer()
+        except ImportError as e:
+            # 如果导入失败，设置为None，后续可以优雅降级
+            self.teammate_protection = None
+            self.priority_system = None
+            self.card_value_system = None
+            self.hand_analyzer = None
     
     @abstractmethod
     def handle_passive(self, message: Dict, context: Dict) -> int:
@@ -49,13 +68,6 @@ class CardTypeHandler(ABC):
 class SingleHandler(CardTypeHandler):
     """单张处理器（学习lalala，但增强）"""
     
-    def __init__(self, config: Dict):
-        super().__init__(config)
-        # TODO: 初始化策略
-        # self.teammate_protection = TeammateProtectionStrategy(config)
-        # self.hand_analyzer = HandStructureAnalyzer()
-        # self.priority_system = PrioritySystem(config)
-    
     def handle_passive(self, message: Dict, context: Dict) -> int:
         """处理单张被动出牌（提升：更完善的逻辑）"""
         action_list = message.get("actionList", [])
@@ -64,18 +76,25 @@ class SingleHandler(CardTypeHandler):
         if not action_list or not cur_action:
             return 0
         
-        # TODO: 1. 手牌结构分析（lalala有，YF增强：更详细）
-        # hand_structure = self.hand_analyzer.analyze(...)
+        # ⭐ 1. 手牌结构分析（lalala有，YF增强：更详细）
+        hand_structure = {}
+        if self.hand_analyzer:
+            handcards = message.get("handCards", [])
+            rank = message.get("curRank", "2")
+            hand_structure = self.hand_analyzer.analyze(handcards, rank)
         
-        # TODO: 2. 队友保护判断（lalala有，YF增强：多策略）
-        # if self.teammate_protection.should_protect(message, context):
-        #     return 0  # PASS
+        # ⭐ 2. 队友保护判断（lalala有，YF增强：多策略）
+        if self.teammate_protection:
+            protection_action = self.teammate_protection.get_protection_action(message, context)
+            if protection_action is not None:
+                return protection_action
         
-        # TODO: 3. 优先级选择（lalala有，YF提升：动态优先级）
-        # candidates = self._get_candidates(message)
-        # return self.priority_system.select(candidates, hand_structure, context)
+        # ⭐ 3. 优先级选择（lalala有，YF提升：动态优先级）
+        candidates = self._get_candidates(message)
+        if self.priority_system and candidates:
+            return self.priority_system.select(candidates, hand_structure, context)
         
-        # 临时实现：选择第一个非PASS动作
+        # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
             if action[0] != "PASS" and action[0] == "Single":
                 return i

@@ -255,7 +255,7 @@ class YF1_M1_Client:
         """Send action to server"""
         try:
             message = {"type": "act", "actIndex": action_idx}
-            await self.ws_manager.send_message(message)
+            await self.ws_manager.send_json(message)  # 修复：使用 send_json 而不是 send_message
             self.logger.debug(f"Sent action: {action_idx}")
         except Exception as e:
             self.logger.error(f"Failed to send action: {e}", exc_info=True)
