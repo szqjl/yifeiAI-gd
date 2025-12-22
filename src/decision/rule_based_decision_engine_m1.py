@@ -81,11 +81,37 @@ class RuleBasedDecisionEngineM1:
             back_handler=self.back_handler
         )
         
+        # 验证策略引擎是否正常初始化
+        strategy_engine_status = self._check_strategy_engine_status()
+        
         self.logger.info("✓ RuleBasedDecisionEngineM1 initialized")
         self.logger.info(f"  - Player ID: {player_id}")
         self.logger.info(f"  - Phase Handlers: {len(self.handlers)}")
         self.logger.info(f"  - Special Handlers: Tribute, Back")
         self.logger.info(f"  - Series: M (Hardcoded Rules)")
+        self.logger.info(f"  - Strategy Engine: {strategy_engine_status}")
+    
+    def _check_strategy_engine_status(self) -> str:
+        """检查策略引擎状态"""
+        # 检查第一个处理器（作为代表）的策略引擎状态
+        first_handler = list(self.handlers.values())[0] if self.handlers else None
+        if first_handler:
+            has_protection = first_handler.teammate_protection is not None
+            has_priority = first_handler.priority_system is not None
+            has_card_value = first_handler.card_value_system is not None
+            
+            if has_protection and has_priority and has_card_value:
+                return "✓ All strategies loaded (TeammateProtection, PrioritySystem, CardValueSystem)"
+            else:
+                missing = []
+                if not has_protection:
+                    missing.append("TeammateProtection")
+                if not has_priority:
+                    missing.append("PrioritySystem")
+                if not has_card_value:
+                    missing.append("CardValueSystem")
+                return f"⚠️ Missing: {', '.join(missing)}"
+        return "⚠️ No handlers available"
     
     def decide(self, message: Dict) -> int:
         """

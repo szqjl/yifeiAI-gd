@@ -202,6 +202,17 @@ class YF2_M1_Client:
         
         action_list = data.get("actionList", [])
         
+        # 调试：打印actionList信息
+        if action_list:
+            self.logger.info(f"actionList size: {len(action_list)}, first 3: {action_list[:3]}")
+            # 统计actionList中的动作类型
+            action_types = {}
+            for action in action_list[:10]:
+                if isinstance(action, list) and len(action) > 0:
+                    action_type = action[0]
+                    action_types[action_type] = action_types.get(action_type, 0) + 1
+            self.logger.info(f"Action types in first 10: {action_types}")
+        
         if not action_list:
             self.logger.warning("Empty action list, sending 0")
             await self.send_action(0)
@@ -236,6 +247,7 @@ class YF2_M1_Client:
             
             # M1硬编码决策：直接使用RuleBasedDecisionEngineM1
             act_index = self.decision_engine.decide(data)
+            self.logger.info(f"Decision engine returned action index: {act_index}, action: {action_list[act_index] if act_index < len(action_list) else 'INVALID'}")
             
             # 获取阶段信息（用于日志）
             phase_info = self.decision_engine.get_phase_info(data)
@@ -290,7 +302,7 @@ class YF2_M1_Client:
         """Send action to server"""
         try:
             message = {"type": "act", "actIndex": action_idx}
-            await self.ws_manager.send_json(message)
+            await self.ws_manager.send_json(message)  # 修复：使用 send_json 而不是 send_message
             self.logger.debug(f"Sent action: {action_idx}")
         except Exception as e:
             self.logger.error(f"Failed to send action: {e}", exc_info=True)

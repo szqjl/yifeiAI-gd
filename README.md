@@ -63,8 +63,10 @@ pip install -r requirements.txt
    - 最终模型文件已推送到Git（约88MB）
    - 训练过程中的中间检查点不推送（避免仓库过大）
    - 训练时模型会自动保存到 `models/` 目录
+   
+   **注意**：M1 系列是硬编码规则引擎，不是机器学习模型，无需模型文件。
 
-3. **配置设置**
+4. **配置设置**
 ```bash
 # 复制配置文件模板
 cp config.yaml.example config.yaml
@@ -213,7 +215,87 @@ git checkout main
 - 测试 M1：必须在 `m1-dev` 分支运行 `yf1_m1.py`
 - 测试 V6：必须在 `v6-dev` 分支运行 `yf1_v6.py`
 
-详细说明请参考 [分支开发指南](docs/development/分支开发指南.md)
+### M1 系列使用说明
+
+**M1 不是机器学习模型，而是硬编码规则引擎**，基于阶段细分路由的决策系统。
+
+#### M1 文件结构
+- `src/decision/rule_based_decision_engine_m1.py` - M1决策引擎（主入口）
+- `src/communication/yf1_m1.py` - M1客户端1（Player 0）
+- `src/communication/yf2_m1.py` - M1客户端2（Player 2）
+
+#### 运行 M1
+
+1. **切换到 M1 分支**
+```bash
+git checkout m1-dev
+```
+
+2. **运行 M1 客户端**
+```bash
+# 运行客户端1（Player 0）
+python src/communication/yf1_m1.py
+
+# 运行客户端2（Player 2，需要新开终端）
+python src/communication/yf2_m1.py
+```
+
+3. **M1 特性**
+- ✅ 5阶段细分路由（开局、中局前期、中局后期、残局前期、残局后期）
+- ✅ 主动/被动出牌分离
+- ✅ 策略引擎集成（队友保护、优先级系统、牌值系统）
+- ✅ 手牌结构分析器增强
+- ✅ 残局策略类（RushStrategy, DefendStrategy等）
+
+#### M1 架构说明
+
+M1 采用分层架构：
+```
+RuleBasedDecisionEngineM1 (主入口)
+  ├── StageRouter (阶段路由器)
+  │   ├── OpeningActiveHandler / OpeningPassiveHandler
+  │   ├── MidEarlyActiveHandler / MidEarlyPassiveHandler
+  │   ├── MidLateActiveHandler / MidLatePassiveHandler
+  │   ├── EndgameEarlyActiveHandler / EndgameEarlyPassiveHandler
+  │   └── EndgameLateActiveHandler / EndgameLatePassiveHandler
+  ├── StrategyEngine (策略引擎)
+  │   ├── TeammateProtectionStrategy (队友保护)
+  │   ├── PrioritySystem (优先级系统)
+  │   └── CardValueSystem (牌值系统)
+  └── HandStructureAnalyzer (手牌结构分析器)
+```
+
+### 测试 M1
+
+详细测试步骤请参考 [M1测试指南](docs/development/M1测试指南.md)
+
+**方式1：GUI批量测试（推荐，最简单）**：
+```bash
+# 1. 切换到 M1 分支
+git checkout m1-dev
+
+# 2. 启动M1测试GUI
+START_M1_GUI.bat
+
+# 3. 在GUI中配置参数并开始测试
+```
+
+**方式2：手动测试**：
+```bash
+# 1. 切换到 M1 分支
+git checkout m1-dev
+
+# 2. 启动第一个客户端（Player 0）
+python src/communication/yf1_m1.py
+
+# 3. 新开终端，启动第二个客户端（Player 2）
+python src/communication/yf2_m1.py
+```
+
+详细说明请参考：
+- [分支开发指南](docs/development/分支开发指南.md) - M1/V6分支使用说明
+- [M1测试指南](docs/development/M1测试指南.md) - M1详细测试步骤
+- [YF硬编码完整提升计划优化版](docs/training/YF硬编码完整提升计划优化版.md) - M1实施计划
 
 ---
 

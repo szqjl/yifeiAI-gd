@@ -17,6 +17,27 @@ class BasePhaseHandler(ABC):
     
     def __init__(self, config: Dict):
         self.config = config
+        # 初始化策略引擎（延迟导入，避免循环依赖）
+        self._init_strategy_engine()
+    
+    def _init_strategy_engine(self):
+        """初始化策略引擎"""
+        try:
+            from .strategy_engine import (
+                TeammateProtectionStrategy,
+                PrioritySystem,
+                CardValueSystem
+            )
+            self.teammate_protection = TeammateProtectionStrategy(self.config)
+            self.priority_system = PrioritySystem(self.config)
+            self.card_value_system = CardValueSystem(
+                self.config.get("curRank", "2")
+            )
+        except ImportError as e:
+            # 如果导入失败，设置为None，后续可以优雅降级
+            self.teammate_protection = None
+            self.priority_system = None
+            self.card_value_system = None
     
     @abstractmethod
     def handle(self, message: Dict) -> int:
@@ -29,6 +50,61 @@ class BasePhaseHandler(ABC):
             if len(action) > 2 and len(action[2]) == len(handcards):
                 return i
         return None
+    
+    def _build_context(self, message: Dict) -> Dict:
+        """构建上下文信息（供策略引擎使用）"""
+        handcards = message.get("handCards", [])
+        public_info = message.get("publicInfo", [])
+        my_pos = message.get("myPos", 0)
+        cur_rank = message.get("curRank", "2")
+        
+        # 计算剩余牌数
+        my_remain = len(handcards) if handcards else 27
+        cards_left = {}
+        opponent_rest_cards_list = []
+        teammate_rest_cards = 27
+        
+        if public_info and len(public_info) == 4:
+            for i, info in enumerate(public_info):
+                rest = info.get("rest", 27)
+                cards_left[i] = rest
+                if i != my_pos:
+                    opponent_rest_cards_list.append(rest)
+                    # 队友位置：第1个和第3个为一队，第2个和第4个为一队
+                    if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
+                        teammate_rest_cards = rest
+        
+        # 判断游戏阶段
+        game_phase = "opening"
+        if my_remain > 20:
+            game_phase = "opening"
+        elif my_remain > 15:
+            game_phase = "mid_early"
+        elif my_remain > 10:
+            game_phase = "mid_late"
+        elif my_remain > 5:
+            game_phase = "endgame_early"
+        else:
+            game_phase = "endgame_late"
+        
+        # 判断是否被动出牌
+        is_passive = message.get("curAction") is not None and len(message.get("curAction", [])) > 0
+        
+        return {
+            'my_remain': my_remain,
+            'cards_left': cards_left,
+            'opponent_rest_cards_list': opponent_rest_cards_list,
+            'teammate_rest_cards': teammate_rest_cards,
+            'cur_rank': cur_rank,
+            'my_pos': my_pos,
+            'game_phase': game_phase,
+            'is_endgame': game_phase in ["endgame_early", "endgame_late"],
+            'is_active': not is_passive,
+            'handcards': handcards,
+            'max_remain_value': max(opponent_rest_cards_list) if opponent_rest_cards_list else 15,
+            'next_player_remain': cards_left.get((my_pos + 1) % 4, 27),
+            'pass_count': message.get("pass_count", 0),
+        }
 
 
 class StageRouter:
@@ -118,5 +194,41 @@ class StageRouter:
     def _is_passive_play(self, message: Dict) -> bool:
         """判断是否为被动出牌"""
         cur_action = message.get("curAction")
-        return cur_action is not None and len(cur_action) > 0
+        cur_pos = message.get("curPos", -1)
+        greater_pos = message.get("greaterPos", -1)
+        
+        # 如果curAction是None或空，肯定是主动出牌
+        if not cur_action:
+            return False
+        
+        # 如果curAction是字符串，尝试解析
+        if isinstance(cur_action, str):
+            try:
+                import ast
+                cur_action = ast.literal_eval(cur_action)
+            except (ValueError, SyntaxError):
+                # 解析失败，可能是主动出牌
+                return False
+        
+        # 如果curAction是列表，检查第一个元素
+        if isinstance(cur_action, list) and len(cur_action) > 0:
+            first_elem = cur_action[0]
+            # 如果第一个元素是None或"PASS"，可能是主动出牌
+            if first_elem is None or first_elem == "PASS":
+                # 进一步检查：如果curPos=-1或greaterPos=-1，说明是主动出牌
+                if cur_pos == -1 or greater_pos == -1:
+                    return False
+                # 如果actionList的第一个动作不是PASS，说明是主动出牌
+                action_list = message.get("actionList", [])
+                if action_list and len(action_list) > 0:
+                    first_action = action_list[0]
+                    if isinstance(first_action, list) and len(first_action) > 0:
+                        if first_action[0] != "PASS":
+                            return False
+            # 如果第一个元素是有效的动作类型，说明是被动出牌
+            elif isinstance(first_elem, str) and first_elem in ["Single", "Pair", "Trips", "ThreeWithTwo", "ThreePair", "TwoTrips", "Straight", "StraightFlush", "Bomb"]:
+                return True
+        
+        # 默认：如果curPos != -1 且 greaterPos != -1，说明是被动出牌
+        return cur_pos != -1 and greater_pos != -1
 
