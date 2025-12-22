@@ -355,13 +355,14 @@ class PrioritySystem:
                 'trips': 400,
                 'pair': 300,
                 'single': 200,
+                'bomb_active': 50,  # ⚠️ 开局主动出牌时，炸弹优先级很低（应该保留到关键时刻）
             },
             'passive': {
                 'single_member_large': 1000,
                 'non_bomb_large': 900,
                 'relaxed_condition': 800,
                 'use_level_card': 700,
-                'use_bomb': 600,
+                'use_bomb': 600,  # 被动出牌时，炸弹优先级较高（关键时刻使用）
             }
         })
     
@@ -381,7 +382,7 @@ class PrioritySystem:
             'twotrips': 'threepair',  # 钢板和三连对优先级相同
             'straight': 'straight',
             'straightflush': 'straight',
-            'bomb': 'use_bomb' if not is_active else 1000,  # 炸弹优先级最高
+            'bomb': 'use_bomb' if not is_active else 'bomb_active',  # 主动出牌时使用特殊键
         }
         
         for candidate in candidates:
@@ -408,6 +409,22 @@ class PrioritySystem:
             # 根据动作类型获取优先级
             priority_key = action_type_mapping.get(action_type_lower, action_type_lower)
             score = priority_map.get(priority_key, 100)
+            
+            # ⚠️ 特殊处理：开局阶段禁止主动出炸弹
+            if action_type_lower == 'bomb' and is_active:
+                game_phase = context.get("game_phase", "opening")
+                # 兼容两种字段名：my_rest 和 my_remain
+                my_rest = context.get("my_rest", context.get("my_remain", 27))
+                # 开局阶段（剩余牌数>20）或中局前期（剩余牌数>15），禁止主动出炸弹
+                if my_rest > 15:
+                    score = 0  # 开局和中局前期，炸弹优先级为0（禁止使用）
+                    self.logger.debug(f"开局/中局前期禁止主动出炸弹: game_phase={game_phase}, my_rest={my_rest}")
+                # 中局后期（剩余牌数10-15），炸弹优先级很低
+                elif my_rest > 10:
+                    score = 20  # 中局后期，炸弹优先级很低
+                # 残局阶段才允许使用炸弹
+                else:
+                    score = priority_map.get('bomb_active', 50)  # 残局可以使用，但优先级仍然较低
             
             # 特殊处理：单张的优先级根据牌值调整
             if action_type_lower == 'single' and is_active:
