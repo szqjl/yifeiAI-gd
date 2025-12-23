@@ -563,6 +563,14 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 - JSON格式规范
 - Python官方文档
 
+### 智能体设计模式参考
+- **[Agentic Design Patterns 中文版](https://github.com/ginobefun/agentic-design-patterns-cn)** - 《Agentic Design Patterns》中文翻译版，智能体设计模式实践指南
+  - 包含21个核心设计模式的完整文档和代码示例
+  - 核心章节：路由(Routing)、规划(Planning)、多智能体协作(Multi-Agent Collaboration)、优先级排序(Prioritization)等
+  - 与M1掼蛋AI项目相关：可用于参考智能体架构设计、决策路由、多智能体协作等模式
+  - 在线阅读：https://adp.xindoo.xyz/
+  - 原书作者：Antonio Gulli
+
 ---
 
 ## 📄 许可证
