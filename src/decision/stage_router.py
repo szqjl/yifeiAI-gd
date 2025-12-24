@@ -8,7 +8,7 @@
 - 支持特殊阶段处理（进贡/还贡）
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Tuple
 from abc import ABC, abstractmethod
 
 
@@ -28,10 +28,45 @@ class BasePhaseHandler(ABC):
                 PrioritySystem,
                 CardValueSystem
             )
+            
+            # 根据配置选择使用基础协作策略还是增强协作策略
+            use_enhanced_collaboration = self.config.get('use_enhanced_collaboration', False)
+            base_protection_strategy = TeammateProtectionStrategy(self.config)
+            
+            if use_enhanced_collaboration:
+                try:
+                    from .enhanced_collaboration import EnhancedCollaborationStrategy
+                    self.teammate_protection = EnhancedCollaborationStrategy(
+                        self.config,
+                        base_protection_strategy=base_protection_strategy
+                    )
+                except ImportError:
+                    # 如果导入失败，使用基础协作策略
+                    self.teammate_protection = base_protection_strategy
+            else:
+                self.teammate_protection = base_protection_strategy
             from .hand_structure_analyzer import HandStructureAnalyzer
             from .optimal_combination_scanner import OptimalCombinationScanner
-            self.teammate_protection = TeammateProtectionStrategy(self.config)
-            self.priority_system = PrioritySystem(self.config)
+            
+            # 根据配置选择使用基础协作策略还是增强协作策略（已在上面处理）
+            
+            # 根据配置选择使用基础优先级系统还是增强优先级系统
+            use_enhanced_priority = self.config.get('use_enhanced_priority', False)
+            base_priority_system = PrioritySystem(self.config)
+            
+            if use_enhanced_priority:
+                try:
+                    from .enhanced_priority_system import EnhancedPrioritySystem
+                    self.priority_system = EnhancedPrioritySystem(
+                        self.config, 
+                        base_priority_system=base_priority_system
+                    )
+                except ImportError:
+                    # 如果导入失败，使用基础优先级系统
+                    self.priority_system = base_priority_system
+            else:
+                self.priority_system = base_priority_system
+            
             self.card_value_system = CardValueSystem(
                 self.config.get("curRank", "2")
             )
@@ -56,6 +91,108 @@ class BasePhaseHandler(ABC):
             if len(action) > 2 and len(action[2]) == len(handcards):
                 return i
         return None
+    
+    def _scan_hand_combination(self, message: Dict, context: Dict = None) -> Dict:
+        """
+        扫描手牌最优组合（通用方法，供各阶段使用）
+        
+        ⚠️ 优化：优先使用context中的手牌信息（如果已构建），确保手牌信息的一致性
+        
+        Args:
+            message: 游戏状态消息
+            context: 上下文信息（可选，如果提供则优先使用其中的手牌信息）
+            
+        Returns:
+            扫描结果字典，包含：
+            - optimal_combination: 最优组合方案
+            - excess_singles: 多余单张列表
+            - combination_score: 组合评分
+        """
+        import logging
+        logger = logging.getLogger("BasePhaseHandler")
+        
+        # ⚠️ 优先使用context中的手牌信息（如果已构建）
+        if context and 'handcards' in context:
+            handcards = context['handcards']
+            rank = context.get('cur_rank', message.get("curRank", "2"))
+            logger.debug("使用context中的手牌信息进行扫描")
+        else:
+            # 降级：从message中获取
+            handcards = message.get("handCards", [])
+            rank = message.get("curRank", "2")
+            logger.debug("从message中获取手牌信息进行扫描")
+        
+        if not handcards or not hasattr(self, 'combination_scanner') or not self.combination_scanner:
+            return {
+                'optimal_combination': {},
+                'excess_singles': [],
+                'combination_score': 0.0,
+                'complex_types': {},  # 新增
+                'protected_combinations': []  # 新增
+            }
+        
+        try:
+            # 构建游戏状态（用于动态调整）
+            game_state = {}
+            if context:
+                game_state = {
+                    'opponent_rest_cards': context.get('opponent_rest_cards', 27),
+                    'greater_action': context.get('greater_action', []),
+                    'game_phase': context.get('game_phase', 'opening')
+                }
+            
+            # 获取动作列表（用于实际动作评估）
+            action_list = message.get("actionList", [])
+            
+            scan_result = self.combination_scanner.scan_optimal_combination(
+                handcards, rank, game_state=game_state, action_list=action_list
+            )
+            logger.debug(f"手牌最优组合扫描: 评分={scan_result.get('combination_score', 0):.1f}, "
+                        f"多余单张={len(scan_result.get('excess_singles', []))}张, "
+                        f"复杂牌型={len(scan_result.get('complex_types', {}))}种, "
+                        f"受保护组合={len(scan_result.get('protected_combinations', []))}个, "
+                        f"动作评估={len(scan_result.get('action_evaluations', {}))}个")
+            return scan_result
+        except Exception as e:
+            logger.warning(f"扫描手牌最优组合时出错: {e}")
+            return {
+                'optimal_combination': {},
+                'excess_singles': [],
+                'combination_score': 0.0,
+                'complex_types': {},  # 新增
+                'protected_combinations': []  # 新增
+            }
+    
+    def _find_excess_singles_for_action(self, message: Dict, cur_action_rank: str) -> List[str]:
+        """
+        找出可以顺走的多余单张（被动出牌时使用）
+        
+        Args:
+            message: 游戏状态消息
+            cur_action_rank: 当前动作的牌值
+            
+        Returns:
+            可以顺走的多余单张列表（牌值大于cur_action_rank的单张）
+        """
+        if not cur_action_rank:
+            return []
+        
+        scan_result = self._scan_hand_combination(message)
+        excess_singles = scan_result.get('excess_singles', [])
+        
+        if not excess_singles:
+            return []
+        
+        # 过滤出牌值大于cur_action_rank的单张
+        cur_rank_val = self._get_rank_value(cur_action_rank) if hasattr(self, '_get_rank_value') else 0
+        suitable_singles = []
+        
+        for card in excess_singles:
+            card_rank_val = self._get_rank_value(card) if hasattr(self, '_get_rank_value') else 0
+            if card_rank_val > cur_rank_val:
+                suitable_singles.append(card)
+        
+        return suitable_singles
     
     def _validate_action_cards(self, action: List, handcards: List) -> bool:
         """
@@ -107,6 +244,117 @@ class BasePhaseHandler(ABC):
         
         return True
     
+    def _filter_valid_actions(self, action_list: List, handcards: List, logger=None) -> Tuple[List, List]:
+        """
+        过滤有效的动作（验证卡牌一致性）
+        
+        Args:
+            action_list: 原始动作列表
+            handcards: 当前手牌
+            logger: 日志记录器
+            
+        Returns:
+            (valid_actions, valid_indices) - 有效动作列表和对应的原始索引
+        """
+        if logger is None:
+            import logging
+            logger = logging.getLogger("BasePhaseHandler")
+        
+        valid_actions = []
+        valid_indices = []
+        
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0:
+                if action[0] != "PASS":
+                    # ⚠️ 卡牌一致性检查：验证动作中的卡牌是否在手牌中
+                    if self._validate_action_cards(action, handcards):
+                        valid_actions.append(action)
+                        valid_indices.append(i)
+                    else:
+                        logger.warning(f"Action {i} contains cards not in handcards, skipping: {action}")
+                else:
+                    # PASS动作也保留
+                    valid_actions.append(action)
+                    valid_indices.append(i)
+            elif action != "PASS":
+                valid_actions.append(action)
+                valid_indices.append(i)
+            else:
+                # PASS动作也保留
+                valid_actions.append(action)
+                valid_indices.append(i)
+        
+        return valid_actions, valid_indices
+    
+    def _evaluate_split_impact(self, action: List, handcards: List, rank: str) -> Dict:
+        """
+        评估拆牌影响
+        
+        Args:
+            action: 动作列表
+            handcards: 当前手牌
+            rank: 级牌
+            
+        Returns:
+            评估结果字典，包含：
+            - is_split: 是否拆牌
+            - split_type: 拆牌类型（'pair', 'trips', 'bomb', 'straight'等）
+            - impact_score: 影响评分（负数表示负面影响）
+        """
+        import logging
+        logger = logging.getLogger("BasePhaseHandler")
+        
+        result = {
+            'is_split': False,
+            'split_type': None,
+            'impact_score': 0.0
+        }
+        
+        if not action or not isinstance(action, list) or len(action) < 3:
+            return result
+        
+        action_type = action[0]
+        action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+        
+        if not action_cards:
+            return result
+        
+        # 统计手牌中每张牌的数量
+        from collections import Counter
+        handcard_counts = Counter(handcards)
+        
+        # 检查是否是拆牌
+        for card in action_cards:
+            if len(card) >= 2:
+                card_rank = card[1] if len(card) == 2 else card[1:]
+                card_count = handcard_counts.get(card, 0)
+                
+                # 如果手牌中有2张或更多相同点数的牌，出单张就是拆对
+                if action_type == 'Single' and card_count >= 2:
+                    result['is_split'] = True
+                    result['split_type'] = 'pair'
+                    result['impact_score'] = -30.0  # 拆对子负面影响
+                    logger.debug(f"检测到拆对子: {card}")
+                    break
+                
+                # 如果手牌中有3张或更多相同点数的牌，出单张就是拆三张
+                if action_type == 'Single' and card_count >= 3:
+                    result['is_split'] = True
+                    result['split_type'] = 'trips'
+                    result['impact_score'] = -50.0  # 拆三张负面影响更大
+                    logger.debug(f"检测到拆三张: {card}")
+                    break
+                
+                # 如果手牌中有4张或更多相同点数的牌，出单张就是拆炸弹
+                if action_type == 'Single' and card_count >= 4:
+                    result['is_split'] = True
+                    result['split_type'] = 'bomb'
+                    result['impact_score'] = -80.0  # 拆炸弹负面影响最大
+                    logger.debug(f"检测到拆炸弹: {card}")
+                    break
+        
+        return result
+    
     def _build_context(self, message: Dict) -> Dict:
         """构建上下文信息（供策略引擎使用）"""
         handcards = message.get("handCards", [])
@@ -156,7 +404,7 @@ class BasePhaseHandler(ABC):
             'game_phase': game_phase,
             'is_endgame': game_phase in ["endgame_early", "endgame_late"],
             'is_active': not is_passive,
-            'handcards': handcards,
+            'handcards': handcards,  # ⚠️ 手牌信息（供优先级系统使用）
             'max_remain_value': max(opponent_rest_cards_list) if opponent_rest_cards_list else 15,
             'next_player_remain': cards_left.get((my_pos + 1) % 4, 27),
             'pass_count': message.get("pass_count", 0),

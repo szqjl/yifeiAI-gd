@@ -74,12 +74,26 @@ class RuleBasedDecisionEngineM1:
         self.back_handler = BackHandler(self.config)
         
         # 创建阶段路由器并设置处理器
-        self.router = StageRouter(self.config)
-        self.router.set_handlers(self.handlers)
-        self.router.set_special_handlers(
+        base_router = StageRouter(self.config)
+        base_router.set_handlers(self.handlers)
+        base_router.set_special_handlers(
             tribute_handler=self.tribute_handler,
             back_handler=self.back_handler
         )
+        
+        # 根据配置选择使用基础路由器还是智能路由器
+        use_intelligent_router = self.config.get('use_intelligent_router', False)
+        if use_intelligent_router:
+            try:
+                from .intelligent_router import IntelligentStageRouter
+                self.router = IntelligentStageRouter(self.config, base_router=base_router)
+                self.logger.info("  - Router: Intelligent Router (with cache)")
+            except ImportError as e:
+                self.logger.warning(f"Failed to import IntelligentStageRouter: {e}, using base router")
+                self.router = base_router
+        else:
+            self.router = base_router
+            self.logger.info("  - Router: Base Router")
         
         # 验证策略引擎是否正常初始化
         strategy_engine_status = self._check_strategy_engine_status()
@@ -131,6 +145,16 @@ class RuleBasedDecisionEngineM1:
         try:
             action_list = message.get("actionList", [])
             
+            # ⚠️ 增强手牌更新机制：优先使用服务器发送的最新handCards
+            server_hand_cards = message.get("handCards", [])
+            if server_hand_cards:
+                # 服务器发送了最新手牌，使用服务器的（更准确）
+                message['handCards'] = server_hand_cards
+                self.logger.debug(f"Using server handCards: {len(server_hand_cards)} cards")
+            else:
+                # 如果没有服务器手牌，记录警告
+                self.logger.warning("No handCards in message, using cached handCards if available")
+            
             # 基本验证
             if not action_list:
                 self.logger.warning("Empty action list, returning 0")
@@ -146,6 +170,29 @@ class RuleBasedDecisionEngineM1:
             if action_idx < 0 or action_idx >= len(action_list):
                 self.logger.warning(f"Invalid action index {action_idx}, using 0")
                 return 0
+            
+            # ⚠️ 最终验证：确保选择的动作中的卡牌在手牌中
+            selected_action = action_list[action_idx] if action_idx < len(action_list) else None
+            handcards = message.get("handCards", [])
+            if selected_action and handcards:
+                # 使用BasePhaseHandler的验证方法
+                from .stage_router import BasePhaseHandler
+                # 创建一个临时实例用于验证（或者直接调用静态方法）
+                if isinstance(selected_action, list) and len(selected_action) > 0 and selected_action[0] != "PASS":
+                    # 简单验证：检查动作中的卡牌是否在手牌中
+                    action_cards = []
+                    if len(selected_action) >= 3 and isinstance(selected_action[2], list):
+                        action_cards = selected_action[2]
+                    
+                    if action_cards:
+                        from collections import Counter
+                        handcard_counts = Counter(handcards)
+                        action_card_counts = Counter(action_cards)
+                        
+                        for card, count in action_card_counts.items():
+                            if card not in handcard_counts or handcard_counts[card] < count:
+                                self.logger.warning(f"Selected action {action_idx} contains cards not in handcards: {card}, falling back to PASS")
+                                return 0  # 如果验证失败，返回PASS
             
             return action_idx
             

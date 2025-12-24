@@ -211,8 +211,34 @@ class GameRecorder:
         game_id = self.game_start_time.strftime('%Y%m%d%H%M%S%f')
         
         # 构建所有玩家的手牌信息
-        all_hands = all_players_hands or {}
-        all_hands[my_pos] = hand_cards  # 确保自己的手牌被记录
+        # ⚠️ 重要：统一使用字符串键，确保与验证逻辑一致
+        all_hands = {}
+        if all_players_hands:
+            # 深拷贝所有玩家的手牌，确保数据独立性
+            for pos, cards in all_players_hands.items():
+                pos_str = str(pos)  # 统一转换为字符串
+                if isinstance(cards, list):
+                    all_hands[pos_str] = cards.copy()
+                else:
+                    all_hands[pos_str] = []
+        # 确保自己的手牌被记录（如果还没有）
+        my_pos_str = str(my_pos)
+        if my_pos_str not in all_hands:
+            all_hands[my_pos_str] = hand_cards.copy() if isinstance(hand_cards, list) else []
+        
+        # 验证手牌格式
+        for pos, cards in all_hands.items():
+            if not isinstance(cards, list):
+                logger.warning(f"⚠ 玩家{pos}的手牌格式不正确: {type(cards)}，已转换为空列表")
+                all_hands[pos] = []
+            # 验证卡牌格式（应该是字符串列表，如["C8", "D4"]）
+            valid_cards = []
+            for card in cards:
+                if isinstance(card, str) and len(card) >= 2:
+                    valid_cards.append(card)
+                else:
+                    logger.warning(f"⚠ 玩家{pos}的手牌中包含无效卡牌: {card}，已忽略")
+            all_hands[pos] = valid_cards
         
         self.current_game = {
             "game_id": game_id,
@@ -228,7 +254,7 @@ class GameRecorder:
             "game_round": self.game_counter  # 新增：游戏轮次计数
         }
         
-        logger.info(f"✓ 开始记录游戏 #{self.game_counter}: game_id={game_id}, my_pos={my_pos}, hand_cards={len(hand_cards)}")
+        logger.info(f"✓ 开始记录游戏 #{self.game_counter}: game_id={game_id}, my_pos={my_pos}, hand_cards={len(hand_cards)}, all_players_hands={len(all_hands)}个玩家")
         
     def record_action(self, cur_pos: int, cur_action: List, 
                      greater_pos: int = -1, greater_action: List = None,
@@ -250,6 +276,13 @@ class GameRecorder:
         # 只保留原始的all_players_hands，确保它只包含手牌列表，不包含剩余牌数
         pass
         
+        # ⚠️ 重要：规范化cur_action格式，确保卡牌信息正确
+        normalized_action = self._normalize_action(cur_action)
+        if normalized_action != cur_action:
+            logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+            logger.debug(f"规范化动作: {cur_action} -> {normalized_action}")
+            cur_action = normalized_action
+        
         # 验证卡牌合法性（检测服务器发牌错误）
         self._validate_action_cards(cur_pos, cur_action)
         
@@ -264,6 +297,47 @@ class GameRecorder:
         
         self.current_game["actions"].append(action_record)
     
+    def _normalize_action(self, cur_action: List) -> List:
+        """
+        规范化动作格式，确保卡牌信息正确
+        
+        Args:
+            cur_action: 原始动作
+            
+        Returns:
+            规范化后的动作
+        """
+        if not isinstance(cur_action, list):
+            return cur_action
+        
+        # 如果是PASS，直接返回
+        if len(cur_action) > 0 and cur_action[0] == "PASS":
+            return cur_action
+        
+        # 标准格式：[action_type, rank, cards]
+        if len(cur_action) >= 3 and isinstance(cur_action[2], list):
+            # 规范化卡牌列表
+            normalized_cards = []
+            for card in cur_action[2]:
+                if isinstance(card, str) and len(card) >= 2:
+                    # 确保卡牌格式正确（如"C8"而不是其他格式）
+                    normalized_cards.append(card)
+                elif isinstance(card, list) and len(card) >= 2:
+                    # 处理["C", "8"]格式，转换为"C8"
+                    suit = str(card[0])
+                    rank = str(card[1])
+                    normalized_cards.append(f"{suit}{rank}")
+                else:
+                    # 无效卡牌，记录警告但保留
+                    import logging
+                    logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+                    logger.warning(f"⚠ 发现无效卡牌格式: {card}，已忽略")
+            
+            # 返回规范化后的动作
+            return [cur_action[0], cur_action[1], normalized_cards]
+        
+        return cur_action
+    
     def _validate_action_cards(self, cur_pos: int, cur_action: List):
         """
         验证动作中的卡牌是否合法（检测服务器发牌错误）
@@ -276,12 +350,22 @@ class GameRecorder:
         logger = logging.getLogger(f"GameRecorder.{self.player_name}")
         
         try:
+            # ⚠️ 重要：PASS不是卡牌，只是动作，不需要验证
+            if isinstance(cur_action, list) and len(cur_action) > 0:
+                if cur_action[0] == "PASS":
+                    return  # PASS动作不需要验证卡牌
+            elif isinstance(cur_action, str) and cur_action.upper() == "PASS":
+                return  # PASS字符串不需要验证卡牌
+            
             # 提取动作中的卡牌
             action_cards = []
             if isinstance(cur_action, list):
                 if len(cur_action) >= 3 and isinstance(cur_action[2], list):
                     action_cards = cur_action[2]
                 elif all(isinstance(card, str) for card in cur_action):
+                    # 检查是否是PASS格式（如["PASS", "PASS", "PASS"]）
+                    if len(cur_action) >= 1 and cur_action[0] == "PASS":
+                        return  # PASS格式不需要验证
                     action_cards = cur_action
             
             if not action_cards:
@@ -289,15 +373,26 @@ class GameRecorder:
             
             # 检查初始手牌（如果可用）
             all_hands = self.current_game.get("all_players_hands", {})
-            initial_hand = all_hands.get(str(cur_pos), [])
+            # ⚠️ 重要：统一使用字符串键
+            cur_pos_str = str(cur_pos)
+            initial_hand = all_hands.get(cur_pos_str, [])
             
             if not initial_hand:
                 # 如果没有初始手牌信息，无法验证
                 return
             
+            # ⚠️ 重要：过滤掉PASS字符串（PASS不是卡牌，只是动作）
+            valid_action_cards = [card for card in action_cards 
+                                 if card != "PASS" and card.upper() != "PASS" 
+                                 and isinstance(card, str) and len(card) >= 2]
+            
+            if not valid_action_cards:
+                # 如果过滤后没有有效卡牌，可能是PASS动作，不需要验证
+                return
+            
             # 统计卡牌出现次数
             from collections import Counter
-            action_card_counts = Counter(action_cards)
+            action_card_counts = Counter(valid_action_cards)
             initial_card_counts = Counter(initial_hand)
             
             # 检查是否有卡牌在动作中出现次数超过初始手牌

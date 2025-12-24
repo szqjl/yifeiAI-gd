@@ -70,7 +70,7 @@ class SingleHandler(CardTypeHandler):
     """单张处理器（学习lalala，但增强）"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理单张被动出牌（提升：更完善的逻辑）"""
+        """处理单张被动出牌（提升：更完善的逻辑，利用扫描结果）"""
         action_list = message.get("actionList", [])
         cur_action = message.get("curAction")
         
@@ -90,10 +90,13 @@ class SingleHandler(CardTypeHandler):
             if protection_action is not None:
                 return protection_action
         
-        # ⭐ 3. 优先级选择（lalala有，YF提升：动态优先级）
+        # ⭐ 3. 利用扫描结果优化候选动作（新增：优先多余单张，避免破坏受保护组合）
         candidates = self._get_candidates(message)
-        if self.priority_system and candidates:
-            return self.priority_system.select(candidates, hand_structure, context)
+        filtered_candidates = self._filter_by_scan_result(candidates, context)
+        
+        # ⭐ 4. 优先级选择（lalala有，YF提升：动态优先级）
+        if self.priority_system and filtered_candidates:
+            return self.priority_system.select(filtered_candidates, hand_structure, context)
         
         # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
@@ -101,6 +104,76 @@ class SingleHandler(CardTypeHandler):
                 return i
         
         return 0
+    
+    def _filter_by_scan_result(self, candidates: List, context: Dict) -> List:
+        """
+        根据扫描结果过滤候选动作（新增：优先多余单张，避免破坏受保护组合）
+        
+        Args:
+            candidates: 候选动作列表
+            context: 上下文信息（包含扫描结果）
+            
+        Returns:
+            过滤后的候选动作列表（优先多余单张）
+        """
+        if not candidates:
+            return candidates
+        
+        scan_result = context.get('scan_result', {})
+        excess_singles = context.get('excess_singles', [])
+        protected_combinations = scan_result.get('protected_combinations', [])
+        
+        # 如果没有扫描结果，返回原候选列表
+        if not excess_singles and not protected_combinations:
+            return candidates
+        
+        # 提取动作中的卡牌
+        def get_action_cards(action):
+            """从动作中提取卡牌列表"""
+            if isinstance(action, list) and len(action) > 2:
+                if isinstance(action[2], list):
+                    return action[2]
+            return []
+        
+        # 检查动作是否会破坏受保护组合
+        def would_break_protected(action_cards, protected_combinations):
+            """检查动作是否会破坏受保护组合"""
+            if not action_cards or not protected_combinations:
+                return False
+            action_cards_set = set(action_cards)
+            for protected in protected_combinations:
+                protected_set = set(protected)
+                # 如果动作中的卡牌与受保护组合有交集，可能破坏组合
+                if action_cards_set & protected_set:
+                    # 检查是否是完整使用（不是破坏）
+                    if not action_cards_set.issubset(protected_set):
+                        return True
+            return False
+        
+        # 分离多余单张和其他动作
+        excess_candidates = []
+        other_candidates = []
+        
+        for candidate in candidates:
+            action_cards = get_action_cards(candidate)
+            if not action_cards:
+                other_candidates.append(candidate)
+                continue
+            
+            # 检查是否是多余单张
+            is_excess_single = len(action_cards) == 1 and action_cards[0] in excess_singles
+            
+            # 检查是否会破坏受保护组合
+            would_break = would_break_protected(action_cards, protected_combinations)
+            
+            if is_excess_single and not would_break:
+                excess_candidates.append(candidate)
+            elif not would_break:
+                other_candidates.append(candidate)
+            # 如果会破坏受保护组合，跳过该候选动作
+        
+        # 优先返回多余单张，然后是其他不破坏组合的动作
+        return excess_candidates + other_candidates
     
     def _get_candidates(self, message: Dict) -> list:
         """获取候选动作"""
@@ -112,7 +185,7 @@ class PairHandler(CardTypeHandler):
     """对子处理器"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理对子被动出牌（提升：集成策略引擎）"""
+        """处理对子被动出牌（提升：集成策略引擎，利用扫描结果）"""
         action_list = message.get("actionList", [])
         cur_action = message.get("curAction")
         
@@ -132,16 +205,23 @@ class PairHandler(CardTypeHandler):
             if protection_action is not None:
                 return protection_action
         
-        # ⭐ 3. 优先级选择
+        # ⭐ 3. 利用扫描结果优化候选动作（新增：避免破坏受保护组合）
         candidates = self._get_candidates(message)
-        if self.priority_system and candidates:
-            return self.priority_system.select(candidates, hand_structure, context)
+        filtered_candidates = self._filter_by_scan_result(candidates, context)
+        
+        # ⭐ 4. 优先级选择
+        if self.priority_system and filtered_candidates:
+            return self.priority_system.select(filtered_candidates, hand_structure, context)
         
         # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
             if action[0] != "PASS" and action[0] == "Pair":
                 return i
         return 0
+    
+    def _filter_by_scan_result(self, candidates: List, context: Dict) -> List:
+        """根据扫描结果过滤候选动作（复用SingleHandler的逻辑）"""
+        return SingleHandler._filter_by_scan_result(self, candidates, context)
     
     def _get_candidates(self, message: Dict) -> list:
         """获取候选动作"""
@@ -194,7 +274,7 @@ class ThreeWithTwoHandler(CardTypeHandler):
     """三带二处理器"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理三带二被动出牌（提升：集成策略引擎）"""
+        """处理三带二被动出牌（提升：集成策略引擎，优先选择复杂牌型）"""
         action_list = message.get("actionList", [])
         cur_action = message.get("curAction")
         
@@ -214,16 +294,23 @@ class ThreeWithTwoHandler(CardTypeHandler):
             if protection_action is not None:
                 return protection_action
         
-        # ⭐ 3. 优先级选择
+        # ⭐ 3. 利用扫描结果优化候选动作（新增：优先复杂牌型）
         candidates = self._get_candidates(message)
-        if self.priority_system and candidates:
-            return self.priority_system.select(candidates, hand_structure, context)
+        filtered_candidates = self._filter_by_scan_result(candidates, context, card_type='ThreeWithTwo')
+        
+        # ⭐ 4. 优先级选择
+        if self.priority_system and filtered_candidates:
+            return self.priority_system.select(filtered_candidates, hand_structure, context)
         
         # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
             if action[0] != "PASS" and action[0] == "ThreeWithTwo":
                 return i
         return 0
+    
+    def _filter_by_scan_result(self, candidates: List, context: Dict, card_type: str = None) -> List:
+        """根据扫描结果过滤候选动作（优先复杂牌型，复用TwoTripsHandler的逻辑）"""
+        return TwoTripsHandler._filter_by_scan_result(self, candidates, context, card_type)
     
     def _get_candidates(self, message: Dict) -> list:
         """获取候选动作"""
@@ -235,7 +322,7 @@ class ThreePairHandler(CardTypeHandler):
     """三连对处理器"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理三连对被动出牌（提升：集成策略引擎）"""
+        """处理三连对被动出牌（提升：集成策略引擎，优先选择复杂牌型）"""
         action_list = message.get("actionList", [])
         cur_action = message.get("curAction")
         
@@ -255,16 +342,23 @@ class ThreePairHandler(CardTypeHandler):
             if protection_action is not None:
                 return protection_action
         
-        # ⭐ 3. 优先级选择
+        # ⭐ 3. 利用扫描结果优化候选动作（新增：优先复杂牌型）
         candidates = self._get_candidates(message)
-        if self.priority_system and candidates:
-            return self.priority_system.select(candidates, hand_structure, context)
+        filtered_candidates = self._filter_by_scan_result(candidates, context, card_type='ThreePair')
+        
+        # ⭐ 4. 优先级选择
+        if self.priority_system and filtered_candidates:
+            return self.priority_system.select(filtered_candidates, hand_structure, context)
         
         # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
             if action[0] != "PASS" and action[0] == "ThreePair":
                 return i
         return 0
+    
+    def _filter_by_scan_result(self, candidates: List, context: Dict, card_type: str = None) -> List:
+        """根据扫描结果过滤候选动作（优先复杂牌型，复用TwoTripsHandler的逻辑）"""
+        return TwoTripsHandler._filter_by_scan_result(self, candidates, context, card_type)
     
     def _get_candidates(self, message: Dict) -> list:
         """获取候选动作"""
@@ -317,7 +411,7 @@ class TwoTripsHandler(CardTypeHandler):
     """钢板处理器"""
     
     def handle_passive(self, message: Dict, context: Dict) -> int:
-        """处理钢板被动出牌（提升：集成策略引擎）"""
+        """处理钢板被动出牌（提升：集成策略引擎，优先选择复杂牌型）"""
         action_list = message.get("actionList", [])
         cur_action = message.get("curAction")
         
@@ -337,16 +431,62 @@ class TwoTripsHandler(CardTypeHandler):
             if protection_action is not None:
                 return protection_action
         
-        # ⭐ 3. 优先级选择
+        # ⭐ 3. 利用扫描结果优化候选动作（新增：优先复杂牌型）
         candidates = self._get_candidates(message)
-        if self.priority_system and candidates:
-            return self.priority_system.select(candidates, hand_structure, context)
+        filtered_candidates = self._filter_by_scan_result(candidates, context, card_type='TwoTrips')
+        
+        # ⭐ 4. 优先级选择
+        if self.priority_system and filtered_candidates:
+            return self.priority_system.select(filtered_candidates, hand_structure, context)
         
         # 降级方案：选择第一个非PASS动作
         for i, action in enumerate(action_list):
             if action[0] != "PASS" and action[0] == "TwoTrips":
                 return i
         return 0
+    
+    def _filter_by_scan_result(self, candidates: List, context: Dict, card_type: str = None) -> List:
+        """根据扫描结果过滤候选动作（优先复杂牌型）"""
+        if not candidates:
+            return candidates
+        
+        scan_result = context.get('scan_result', {})
+        complex_types = scan_result.get('complex_types', {})
+        
+        # 如果当前牌型是复杂牌型，优先选择在扫描结果中的动作
+        if card_type and card_type in complex_types:
+            available_complex = complex_types[card_type]
+            
+            # 提取动作中的卡牌
+            def get_action_cards(action):
+                if isinstance(action, list) and len(action) > 2:
+                    if isinstance(action[2], list):
+                        return set(action[2])
+                return set()
+            
+            # 分离复杂牌型和其他动作
+            complex_candidates = []
+            other_candidates = []
+            
+            for candidate in candidates:
+                action_cards = get_action_cards(candidate)
+                # 检查是否匹配扫描结果中的复杂牌型
+                is_complex = False
+                for complex_cards in available_complex:
+                    complex_set = set(complex_cards)
+                    if action_cards == complex_set:
+                        is_complex = True
+                        break
+                
+                if is_complex:
+                    complex_candidates.append(candidate)
+                else:
+                    other_candidates.append(candidate)
+            
+            # 优先返回复杂牌型
+            return complex_candidates + other_candidates
+        
+        return candidates
     
     def _get_candidates(self, message: Dict) -> list:
         """获取候选动作"""

@@ -349,14 +349,23 @@ class YiFeiReplayGUI:
                 parser = ServerLogParser()
                 server_data = parser.parse_log_file(str(server_log_path))
                 
-                # 补充缺失的玩家手牌，但只在没有初始手牌时才使用，并且忽略不正确的初始手牌数量
+                # ⚠️ 重要：只在游戏记录中完全没有该玩家手牌时才使用服务器日志补充
+                # 优先使用游戏记录中的手牌（更准确），避免服务器日志解析错误导致显示错误
                 if 'initial_hands' in server_data:
                     for pos, cards in server_data['initial_hands'].items():
                         pos_str = str(pos)
+                        # 只有在游戏记录中完全没有该玩家手牌时才补充
                         if pos_str not in self.initial_hands or not self.initial_hands[pos_str]:
                             # 只接受合理数量的初始手牌（27张左右）
-                            if isinstance(cards, list) and len(cards) > 10:  # 只接受10张以上的初始手牌
-                                self.initial_hands[pos_str] = cards.copy()
+                            if isinstance(cards, list) and len(cards) > 10 and len(cards) <= 27:
+                                # 验证卡牌格式
+                                valid_cards = []
+                                for card in cards:
+                                    if isinstance(card, str) and len(card) >= 2:
+                                        valid_cards.append(card)
+                                if len(valid_cards) > 10:
+                                    self.initial_hands[pos_str] = valid_cards
+                                    self.status_bar.config(text=f"从服务器日志补充玩家{pos_str}的手牌: {len(valid_cards)}张")
         except Exception as e:
             self.status_bar.config(text=f"补充初始手牌失败: {e}")
         
@@ -418,11 +427,31 @@ class YiFeiReplayGUI:
                 if pos_str in current_hands:
                     player_cards = current_hands[pos_str]
                     
-                    # 移除打出的牌
+                    # ⚠️ 重要：规范化卡牌格式，确保正确移除
+                    normalized_played_cards = []
                     for card in played_cards:
+                        if isinstance(card, str) and len(card) >= 2:
+                            normalized_played_cards.append(card)
+                        elif isinstance(card, list) and len(card) >= 2:
+                            # 处理["C", "8"]格式，转换为"C8"
+                            suit = str(card[0])
+                            rank = str(card[1])
+                            normalized_played_cards.append(f"{suit}{rank}")
+                    
+                    # 移除打出的牌
+                    removed_count = 0
+                    for card in normalized_played_cards:
                         if card in player_cards:
                             player_cards.remove(card)
+                            removed_count += 1
+                    
                     current_hands[pos_str] = player_cards
+                    
+                    # 验证移除数量（仅在调试模式下）
+                    if removed_count != len(normalized_played_cards):
+                        import logging
+                        logger = logging.getLogger("YiFeiReplayGUI")
+                        logger.debug(f"回放系统：卡牌移除数量不匹配，期望移除{len(normalized_played_cards)}张，实际移除{removed_count}张，玩家{pos_str}")
         
         # 确保每个玩家的手牌数量不会变为负数
         for pos_str in current_hands:

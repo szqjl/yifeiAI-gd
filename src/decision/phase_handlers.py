@@ -118,20 +118,21 @@ class OpeningActiveHandler(BasePhaseHandler):
         import logging
         logger = logging.getLogger("OpeningActiveHandler")
         
-        # ⚠️ 出牌前扫描手牌最优组合
-        rank = message.get("curRank", "2")
-        if hasattr(self, 'combination_scanner') and self.combination_scanner:
-            try:
-                scan_result = self.combination_scanner.scan_optimal_combination(handcards, rank)
-                logger.info(f"手牌最优组合扫描结果: 评分={scan_result.get('combination_score', 0):.1f}, "
-                          f"多余单张={len(scan_result.get('excess_singles', []))}张")
-                if scan_result.get('excess_singles'):
-                    logger.debug(f"多余单张列表: {scan_result.get('excess_singles')}")
-            except Exception as e:
-                logger.warning(f"扫描手牌最优组合时出错: {e}")
-        
-        # 构建上下文信息
+        # ⚠️ 先构建上下文信息（包含手牌信息）
         context = self._build_context(message)
+        
+        # ⚠️ 出牌前扫描手牌最优组合 - 使用context中的手牌信息
+        scan_result = self._scan_hand_combination(message, context)
+        excess_singles = scan_result.get('excess_singles', [])
+        combination_score = scan_result.get('combination_score', 0.0)
+        
+        # 将扫描结果添加到context中，供优先级系统使用
+        context['scan_result'] = scan_result
+        context['excess_singles'] = excess_singles
+        context['combination_score'] = combination_score
+        
+        if excess_singles:
+            logger.debug(f"多余单张列表: {excess_singles}")
         
         # ⭐ 使用优先级系统（提升：动态优先级）
         if self.priority_system:
@@ -512,12 +513,13 @@ class OpeningPassiveHandler(BasePhaseHandler):
         
         logger.info(f"single_strategy suggestion: {single_sugg}")
         
-        # 如果策略建议不出单，则PASS
-        if '不出单' in single_sugg.get('action', ''):
-            logger.info("Strategy suggests not playing single, passing")
-            return 0
+        # ⚠️ 修复：即使策略建议"不出单"，也应该尝试找能压制的单张
+        # 策略建议只是参考，实际决策应该基于手牌和actionList
+        strategy_suggests_no_single = '不出单' in single_sugg.get('action', '')
+        if strategy_suggests_no_single:
+            logger.info("Strategy suggests not playing single, but will still try to find valid actions")
         
-        # ⚠️ 优先顺走多余单张（出牌前扫描手牌最优组合）
+        # ⚠️ 优先级1：使用多余单张（最高优先级）
         handcards = message.get("handCards", [])
         rank = message.get("curRank", "2")
         cur_action_rank = action_rank if action_rank else ""
@@ -542,8 +544,71 @@ class OpeningPassiveHandler(BasePhaseHandler):
             except Exception as e:
                 logger.warning(f"扫描多余单张时出错: {e}")
         
-        # 选择能压制的最小单张（简化：只要找到Single就出，不比较rank）
-        # ⚠️ 卡牌一致性检查：验证动作中的卡牌是否在手牌中
+        # ⚠️ 优先级2：如果10以上没有极差的对子较多，则拆对子，压制对手的单张
+        # 检查手牌中是否有10以上的对子（T=10, J, Q, K, A）
+        from collections import Counter
+        handcard_counts = Counter(handcards)
+        
+        # 10以上的牌值：T(10), J(11), Q(12), K(13), A(14)
+        high_ranks = ['T', 'J', 'Q', 'K', 'A']
+        high_pairs = []  # 存储10以上的对子
+        
+        for rank_char in high_ranks:
+            # 统计该点数的牌数
+            rank_count = sum(1 for card in handcards if len(card) >= 2 and card[1] == rank_char)
+            if rank_count >= 2:  # 有对子
+                high_pairs.append(rank_char)
+        
+        # 如果有10以上的对子，可以拆对子来压制
+        if high_pairs:
+            logger.info(f"发现10以上的对子: {high_pairs}")
+            # 优先拆J、K对子（中等大小，不会太浪费）
+            preferred_ranks = ['J', 'K', 'Q', 'T', 'A']  # 优先级：J > K > Q > T > A
+            
+            for preferred_rank in preferred_ranks:
+                if preferred_rank in high_pairs:
+                    # 在actionList中查找拆该对子的单张动作，并确保能压制对手
+                    for i, action in enumerate(action_list):
+                        if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                            if len(action) > 1:
+                                action_rank_str = action[1]
+                                # 检查是否是拆该对子的单张，并且能压制对手
+                                if action_rank_str == preferred_rank:
+                                    # 验证卡牌一致性
+                                    if self._validate_action_cards(action, handcards):
+                                        # 确保能压制对手的牌
+                                        if cur_action_rank:
+                                            cur_rank_value = self._get_rank_value(cur_action_rank, state['cur_rank'])
+                                            action_rank_value = self._get_rank_value(action_rank_str, state['cur_rank'])
+                                            if action_rank_value > cur_rank_value:
+                                                logger.info(f"拆{preferred_rank}对子压制: {action_rank_str} > {cur_action_rank}")
+                                                return i
+                                        else:
+                                            logger.info(f"拆{preferred_rank}对子压制: {action_rank_str}")
+                                            return i
+        
+        # ⚠️ 优先级3：使用级牌/王压制（后期阻击对手或者自己冲刺）
+        # 只在后期阶段（endgame）使用级牌/王
+        my_rest = len(handcards) if handcards else 27
+        is_endgame = my_rest <= 10  # 剩余牌数≤10认为是后期
+        
+        if is_endgame:
+            level_card_rank = rank
+            joker_small = 'B'
+            joker_big = 'R'
+            
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    if len(action) > 1:
+                        action_rank_str = action[1]
+                        # 检查是否是级牌、小王、大王
+                        if action_rank_str == level_card_rank or action_rank_str == joker_small or action_rank_str == joker_big:
+                            # 验证卡牌一致性
+                            if self._validate_action_cards(action, handcards):
+                                logger.info(f"后期使用级牌/王压制: {action_rank_str}")
+                                return i
+        
+        # ⚠️ 优先级4：其他能压制的单张（避免拆三张或拆炸弹）
         logger.info("Searching for Single actions in actionList")
         single_count = 0
         for i, action in enumerate(action_list):
@@ -551,19 +616,70 @@ class OpeningPassiveHandler(BasePhaseHandler):
                 if action[0] == 'Single':
                     single_count += 1
                     # 验证卡牌一致性
-                    if self._validate_action_cards(action, handcards):
-                        logger.info(f"Found valid Single action at index {i}: {action}")
-                        # 选择第一个能管上的Single动作（actionList中的动作都是能管上的）
-                        return i
-                    else:
+                    if not self._validate_action_cards(action, handcards):
                         logger.warning(f"Single action at index {i} failed card validation: {action}")
+                        continue
+                    
+                    # ⚠️ 检查是否是拆牌（如果是拆三张或拆炸弹，跳过）
+                    action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+                    is_split = False
+                    for card in action_cards:
+                        if len(card) >= 2:
+                            # 统计该点数（rank）的牌数，而不是单张卡牌的数量
+                            card_rank = card[1] if len(card) == 2 else card[1:]
+                            # 统计手牌中该点数的牌数
+                            rank_count = sum(1 for hc in handcards if len(hc) >= 2 and hc[1] == card_rank)
+                            if rank_count >= 3:  # 拆三张或拆炸弹
+                                is_split = True
+                                logger.warning(f"Single action at index {i} would split trips/bomb (rank {card_rank} has {rank_count} cards): {action}")
+                                break
+                    
+                    if not is_split:  # 不是拆三张或拆炸弹，可以使用
+                        # ⚠️ 额外检查：确保能压制对手的牌
+                        if cur_action_rank:
+                            action_rank = action[1] if len(action) > 1 else ""
+                            if action_rank:
+                                cur_rank_value = self._get_rank_value(cur_action_rank, state['cur_rank'])
+                                action_rank_value = self._get_rank_value(action_rank, state['cur_rank'])
+                                if action_rank_value > cur_rank_value:
+                                    logger.info(f"Found valid Single action to beat opponent: index={i}, action={action}, rank={action_rank} > {cur_action_rank}")
+                                    return i
+                                else:
+                                    logger.debug(f"Single action at index {i} cannot beat opponent: {action_rank} <= {cur_action_rank}")
+                        else:
+                            # 如果没有cur_action_rank，直接返回（可能是主动出牌场景）
+                            logger.info(f"Found valid Single action at index {i}: {action}")
+                            return i
             elif isinstance(action, str) and action == 'Single':
                 single_count += 1
                 logger.info(f"Found Single action (string) at index {i}")
                 return i
         
-        logger.warning(f"No Single action found in actionList (checked {len(action_list)} actions, found {single_count} Single actions), returning default")
-        logger.info(f"First 5 actions in actionList: {action_list[:5] if len(action_list) >= 5 else action_list}")
+        logger.warning(f"No valid Single action found in actionList (checked {len(action_list)} actions, found {single_count} Single actions)")
+        logger.info(f"First 10 actions in actionList: {action_list[:10] if len(action_list) >= 10 else action_list}")
+        
+        # ⚠️ 修复：即使找不到合适的单张，也应该尝试其他能压制的牌型，而不是直接PASS
+        # 检查是否有其他能压制的牌型（对子、三张等）
+        cur_action = message.get("curAction", [])
+        cur_type = cur_action[0] if isinstance(cur_action, list) and len(cur_action) > 0 else ""
+        cur_rank = cur_action[1] if isinstance(cur_action, list) and len(cur_action) > 1 else ""
+        
+        # 尝试找能压制的其他牌型（同类型但更大的牌）
+        if cur_type and cur_rank and cur_type != "PASS":
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0:
+                    if action[0] == cur_type and action[0] != "PASS":
+                        if len(action) > 1:
+                            action_rank = action[1]
+                            # 使用_get_rank_value比较牌点大小
+                            cur_rank_value = self._get_rank_value(cur_rank, state['cur_rank'])
+                            action_rank_value = self._get_rank_value(action_rank, state['cur_rank'])
+                            if action_rank_value > cur_rank_value:
+                                if self._validate_action_cards(action, handcards):
+                                    logger.info(f"Found valid {cur_type} action to beat opponent: index={i}, action={action}")
+                                    return i
+        
+        # 最后尝试默认动作（选择第一个非PASS动作）
         result = self._default_passive_action(action_list)
         logger.info(f"_default_passive_action returned: {result}")
         return result
@@ -675,13 +791,41 @@ class MidEarlyActiveHandler(BasePhaseHandler):
         if not action_list:
             return 0
         
+        # ⚠️ 先构建上下文信息（包含手牌信息）
+        context = self._build_context(message)
+        
+        # ⚠️ 出牌前扫描手牌最优组合（中期阶段）- 使用context中的手牌信息
+        scan_result = self._scan_hand_combination(message, context)
+        excess_singles = scan_result.get('excess_singles', [])
+        combination_score = scan_result.get('combination_score', 0.0)
+        
+        # 将扫描结果添加到context中，供优先级系统使用
+        context['scan_result'] = scan_result
+        context['excess_singles'] = excess_singles
+        context['combination_score'] = combination_score
+        
         # 检查两手出完
         two_hand_idx = self._check_two_hand_complete(action_list, handcards)
         if two_hand_idx is not None:
             return two_hand_idx
         
+        # 如果有多余单张，优先考虑出单张（顺走多余单张）
+        if excess_singles:
+            import logging
+            logger = logging.getLogger("MidEarlyActiveHandler")
+            logger.debug(f"检测到{len(excess_singles)}张多余单张，优先考虑出单张: {excess_singles}")
+            # 优先选择单张动作
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    if len(action) > 1 and action[1] in excess_singles:
+                        logger.debug(f"选择多余单张: {action[1]}")
+                        return i
+            # 如果没有匹配的多余单张，至少优先出单张
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    return i
+        
         # ⭐ 使用优先级系统（提升：动态优先级）
-        context = self._build_context(message)
         if self.priority_system:
             # 获取手牌结构（使用HandStructureAnalyzer）
             hand_structure = {}
@@ -689,14 +833,18 @@ class MidEarlyActiveHandler(BasePhaseHandler):
                 handcards = message.get("handCards", [])
                 rank = message.get("curRank", "2")
                 hand_structure = self.hand_analyzer.analyze(handcards, rank)
-            # 过滤PASS动作，同时记录原始索引
+            # 过滤PASS动作，同时记录原始索引，并验证卡牌一致性
             candidates = []
             candidate_indices = []
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0:
                     if action[0] != "PASS":
-                        candidates.append(action)
-                        candidate_indices.append(i)
+                        # ⚠️ 卡牌一致性检查：验证动作中的卡牌是否在手牌中
+                        if self._validate_action_cards(action, handcards):
+                            candidates.append(action)
+                            candidate_indices.append(i)
+                        else:
+                            logger.warning(f"Action {i} contains cards not in handcards, skipping: {action}")
                 elif action != "PASS":
                     candidates.append(action)
                     candidate_indices.append(i)
@@ -721,7 +869,9 @@ class MidEarlyActiveHandler(BasePhaseHandler):
             if '出对' in pair_sugg.get('action', ''):
                 for i, action in enumerate(action_list):
                     if isinstance(action, list) and len(action) > 0 and action[0] == 'Pair':
-                        return i
+                        # ⚠️ 验证卡牌一致性
+                        if self._validate_action_cards(action, handcards):
+                            return i
         
         # 常规优先级：对子 → 三张 → 单张 → 其他
         priority_order = ['Pair', 'Trips', 'Single', 'ThreeWithTwo', 
@@ -730,7 +880,9 @@ class MidEarlyActiveHandler(BasePhaseHandler):
         for card_type in priority_order:
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0 and action[0] == card_type:
-                    return i
+                    # ⚠️ 验证卡牌一致性
+                    if self._validate_action_cards(action, handcards):
+                        return i
         
         return 0
     
@@ -905,83 +1057,279 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         return (my_pos in [0, 2] and pos in [0, 2]) or (my_pos in [1, 3] and pos in [1, 3])
     
     def _handle_single_passive(self, message: Dict, action_list: List, state: Dict, greater_pos: int, my_pos: int) -> int:
-        """处理单张被动出牌"""
-        if not self.single_strategy:
-            return self._default_passive_action(action_list)
+        """处理单张被动出牌（中期：更积极压制对手）"""
+        import logging
+        logger = logging.getLogger("MidEarlyPassiveHandler")
         
         cur_action = message.get("curAction", [])
         action_rank = cur_action[1] if len(cur_action) > 1 else ""
-        is_upper_hand = (greater_pos == (my_pos - 1) % 4) or (greater_pos == (my_pos + 3) % 4)
         
-        single_sugg = self.single_strategy(
-            game_phase='mid',
-            power=state['power'],
-            opponent_rest_cards=min(state['opponent_rest_cards_list']),
-            is_active=False,
-            is_upper_hand=is_upper_hand,
-            my_rest_cards=state['my_rest']
-        )
+        # 获取当前级牌
+        cur_rank = message.get("curRank", "2")
+        handcards = message.get("handCards", [])
         
-        if '不出单' in single_sugg.get('action', ''):
-            return 0
+        # ⚠️ 优先级1：使用多余单张（最高优先级）
+        suitable_singles = self._find_excess_singles_for_action(message, action_rank)
+        if suitable_singles:
+            logger.debug(f"找到{len(suitable_singles)}张可顺走的多余单张: {suitable_singles}")
+            # 优先选择多余单张中能压制的
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    if len(action) > 1 and action[1] in suitable_singles:
+                        # 验证卡牌一致性
+                        if self._validate_action_cards(action, handcards):
+                            logger.debug(f"选择多余单张压制: {action[1]}")
+                            return i
         
+        # ⚠️ 优先级2：如果10以上没有极差的对子较多，则拆对子，压制对手的单张
+        # 检查手牌中是否有10以上的对子（T=10, J, Q, K, A）
+        from collections import Counter
+        handcard_counts = Counter(handcards)
+        
+        # 10以上的牌值：T(10), J(11), Q(12), K(13), A(14)
+        high_ranks = ['T', 'J', 'Q', 'K', 'A']
+        high_pairs = []  # 存储10以上的对子
+        
+        for rank_char in high_ranks:
+            # 统计该点数的牌数
+            rank_count = sum(1 for card in handcards if len(card) >= 2 and card[1] == rank_char)
+            if rank_count >= 2:  # 有对子
+                high_pairs.append(rank_char)
+        
+        # 如果有10以上的对子，可以拆对子来压制
+        if high_pairs:
+            logger.debug(f"发现10以上的对子: {high_pairs}")
+            # 优先拆J、K对子（中等大小，不会太浪费）
+            preferred_ranks = ['J', 'K', 'Q', 'T', 'A']  # 优先级：J > K > Q > T > A
+            
+            for preferred_rank in preferred_ranks:
+                if preferred_rank in high_pairs:
+                    # 在actionList中查找拆该对子的单张动作
+                    for i, action in enumerate(action_list):
+                        if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                            if len(action) > 1:
+                                action_rank_str = action[1]
+                                # 检查是否是拆该对子的单张
+                                if action_rank_str == preferred_rank:
+                                    # 验证是否能压制
+                                    action_rank_val = self._get_rank_value(action_rank_str, cur_rank)
+                                    cur_rank_val = self._get_rank_value(action_rank, cur_rank)
+                                    if action_rank_val > cur_rank_val:
+                                        # 验证卡牌一致性
+                                        if self._validate_action_cards(action, handcards):
+                                            logger.debug(f"拆{preferred_rank}对子压制: {action_rank_str}")
+                                            return i
+        
+        # ⚠️ 优先级3：使用级牌/王压制（后期阻击对手或者自己冲刺）
+        # 只在后期阶段（endgame）使用级牌/王
+        my_rest = len(handcards) if handcards else 27
+        is_endgame = my_rest <= 10  # 剩余牌数≤10认为是后期
+        
+        if is_endgame:
+            level_card_rank = cur_rank
+            joker_small = 'B'
+            joker_big = 'R'
+            
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    if len(action) > 1:
+                        action_rank_str = action[1]
+                        # 检查是否是级牌、小王、大王
+                        if action_rank_str == level_card_rank or action_rank_str == joker_small or action_rank_str == joker_big:
+                            # 验证是否能压制
+                            action_rank_val = self._get_rank_value(action_rank_str, cur_rank)
+                            cur_rank_val = self._get_rank_value(action_rank, cur_rank)
+                            if action_rank_val > cur_rank_val:
+                                # 验证卡牌一致性
+                                if self._validate_action_cards(action, handcards):
+                                    logger.debug(f"后期使用级牌/王压制: {action_rank_str}")
+                                    return i
+        
+        # ⚠️ 优先级4：其他能压制的单张（避免拆三张或拆炸弹）
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
-                if len(action) > 1 and action[1] > action_rank:
-                    return i
+                if len(action) > 1:
+                    # 验证卡牌一致性
+                    if not self._validate_action_cards(action, handcards):
+                        continue
+                    # 比较牌值（支持字符串和数字比较，考虑级牌）
+                    action_rank_val = self._get_rank_value(action[1], cur_rank)
+                    cur_rank_val = self._get_rank_value(action_rank, cur_rank)
+                    if action_rank_val > cur_rank_val:
+                        # ⚠️ 检查是否是拆牌（如果是拆三张或拆炸弹，降低优先级）
+                        action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+                        is_split = False
+                        for card in action_cards:
+                            if len(card) >= 2:
+                                card_rank = card[1] if len(card) == 2 else card[1:]
+                                card_count = handcard_counts.get(card, 0)
+                                if card_count >= 3:  # 拆三张或拆炸弹
+                                    is_split = True
+                                    logger.warning(f"Single action at index {i} would split trips/bomb: {action}")
+                                    break
+                        
+                        if not is_split:  # 不是拆三张或拆炸弹，可以使用
+                            return i
         
-        return 0
+        # 如果没有能压制的单张，再考虑策略建议
+        if self.single_strategy:
+            is_upper_hand = (greater_pos == (my_pos - 1) % 4) or (greater_pos == (my_pos + 3) % 4)
+            single_sugg = self.single_strategy(
+                game_phase='mid',
+                power=state['power'],
+                opponent_rest_cards=min(state['opponent_rest_cards_list']),
+                is_active=False,
+                is_upper_hand=is_upper_hand,
+                my_rest_cards=state['my_rest']
+            )
+            
+            # 如果策略明确建议不出单，且没有能压制的动作，才PASS
+            if '不出单' in single_sugg.get('action', '') and '主动时不出小单' in single_sugg.get('action', ''):
+                return 0
+        
+        # 降级：选择第一个能压制的动作（即使不是最优）
+        return self._default_passive_action(action_list)
+    
+    def _get_rank_value(self, rank: str, cur_rank: str = None) -> int:
+        """
+        获取牌值（用于比较）
+        
+        牌值大小关系：
+        - 3-9, T, J, Q, K, A: 3-14
+        - 级牌: 15 (可压制A及以下)
+        - 小王(B): 16 (可压制级牌及以下)
+        - 大王(R): 17 (可压制小王及以下)
+        
+        Args:
+            rank: 牌值字符串（如"A"、"9"、"B"、"R"等，或带花色的如"S9"、"HA"等）
+            cur_rank: 当前级牌（如"2"、"9"等），如果提供则用于识别级牌
+        """
+        rank_map = {
+            '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
+            '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
+            'B': 16,  # 小王（可压制级牌及以下）
+            'R': 17   # 大王（可压制小王及以下）
+        }
+        if isinstance(rank, str):
+            # 提取最后一位字符（去掉花色）
+            rank_char = rank[-1] if len(rank) > 1 else rank
+            
+            # 如果提供了cur_rank，检查是否是级牌
+            if cur_rank and rank_char == cur_rank:
+                return 15  # 级牌值（可压制A及以下）
+            
+            # 检查是否在映射中
+            if rank_char in rank_map:
+                return rank_map[rank_char]
+            
+            # 如果不在映射中，可能是级牌（但cur_rank未提供），默认返回15
+            # 注意：这里假设如果cur_rank未提供，可能是级牌2
+            if not cur_rank and rank_char == '2':
+                return 15
+            
+            return 0
+        return int(rank) if isinstance(rank, (int, float)) else 0
     
     def _handle_pair_passive(self, message: Dict, action_list: List, state: Dict, greater_pos: int, my_pos: int) -> int:
-        """处理对子被动出牌"""
-        if not self.pair_strategy:
-            return self._default_passive_action(action_list)
-        
+        """处理对子被动出牌（中期：对手出牌时积极压制）"""
         cur_action = message.get("curAction", [])
         action_rank = cur_action[1] if len(cur_action) > 1 else ""
         is_teammate = self._is_teammate(greater_pos, my_pos)
         
-        pair_sugg = self.pair_strategy(
-            game_phase='mid',
-            power=state['power'],
-            opponent_rest_cards=min(state['opponent_rest_cards_list']),
-            is_active=False,
-            is_teammate_action=is_teammate,
-            action_type='Pair',
-            action_rank=action_rank
-        )
-        
-        if '让对子' in pair_sugg.get('action', ''):
+        # 如果是队友出对子，让过
+        if is_teammate:
             return 0
         
+        # 获取当前级牌
+        cur_rank = message.get("curRank", "2")
+        
+        # 对手出对子：中期阶段应该积极压制
+        # 先检查是否有能压制的对子
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0 and action[0] == 'Pair':
-                if len(action) > 1 and action[1] > action_rank:
-                    return i
+                if len(action) > 1:
+                    # 比较牌值（考虑级牌）
+                    action_rank_val = self._get_rank_value(action[1], cur_rank)
+                    cur_rank_val = self._get_rank_value(action_rank, cur_rank)
+                    if action_rank_val > cur_rank_val:
+                        # 中期阶段：有能压制的对子就压制
+                        return i
         
-        return 0
+        # 如果没有能压制的对子，再考虑策略建议
+        if self.pair_strategy:
+            pair_sugg = self.pair_strategy(
+                game_phase='mid',
+                power=state['power'],
+                opponent_rest_cards=min(state['opponent_rest_cards_list']),
+                is_active=False,
+                is_teammate_action=is_teammate,
+                action_type='Pair',
+                action_rank=action_rank
+            )
+            
+            # 策略建议"封对手对子"时，即使没有能压制的对子，也要尝试其他方式
+            if '封对手对子' in pair_sugg.get('action', ''):
+                # 尝试使用炸弹或其他方式压制
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0:
+                        if action[0] == 'Bomb':
+                            # 中期阶段谨慎使用炸弹，但必要时可以使用
+                            if state['power'] >= 6:
+                                return i
+        
+        # 降级：选择第一个非PASS动作
+        return self._default_passive_action(action_list)
     
     def _handle_other_passive(self, message: Dict, action_list: List, state: Dict) -> int:
-        """处理其他牌型被动出牌"""
-        if state['power'] < 5:
-            return 0
-        
+        """处理其他牌型被动出牌（中期：更积极压制）"""
         cur_action = message.get("curAction", [])
         cur_type = cur_action[0] if len(cur_action) > 0 else ""
         cur_rank = cur_action[1] if len(cur_action) > 1 else ""
         
+        # 中期阶段：降低牌力阈值，更积极压制
+        # 如果牌力非常弱（< 3），才考虑PASS
+        if state['power'] < 3:
+            return 0
+        
+        # 获取当前级牌
+        cur_rank_param = message.get("curRank", "2")
+        
+        # 优先寻找能压制的同类型动作
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0 and action[0] == cur_type:
-                if len(action) > 1 and action[1] > cur_rank:
+                if len(action) > 1:
+                    # 比较牌值（考虑级牌）
+                    action_rank_val = self._get_rank_value(action[1], cur_rank_param)
+                    cur_rank_val = self._get_rank_value(cur_rank, cur_rank_param)
+                    if action_rank_val > cur_rank_val:
+                        return i
+        
+        # 如果没有同类型能压制的，考虑使用炸弹（中期谨慎使用）
+        if state['power'] >= 6:
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Bomb':
+                    # 中期阶段：只有在牌力较强且对手威胁大时才用炸弹
                     return i
         
-        return 0
+        # 降级：选择第一个非PASS动作
+        return self._default_passive_action(action_list)
     
     def _default_passive_action(self, action_list: List) -> int:
-        """默认被动动作选择"""
+        """默认被动动作选择（选择第一个非PASS动作）"""
+        import logging
+        logger = logging.getLogger("MidEarlyPassiveHandler")
+        
+        # 选择第一个非PASS动作（中期阶段应该更积极）
         for i, action in enumerate(action_list):
-            if action[0] != "PASS":
+            if isinstance(action, list) and len(action) > 0:
+                if action[0] != "PASS":
+                    logger.debug(f"Found non-PASS action at index {i}: {action[0]}")
+                    return i
+            elif action != "PASS":
+                logger.debug(f"Found non-PASS action at index {i}: {action}")
                 return i
+        
+        logger.warning(f"No non-PASS actions found, returning 0 (PASS)")
         return 0
 
 
@@ -1011,6 +1359,19 @@ class MidLateActiveHandler(BasePhaseHandler):
         if not action_list:
             return 0
         
+        # ⚠️ 先构建上下文信息（包含手牌信息）
+        context = self._build_context(message)
+        
+        # ⚠️ 出牌前扫描手牌最优组合（中期后期阶段）- 使用context中的手牌信息
+        scan_result = self._scan_hand_combination(message, context)
+        excess_singles = scan_result.get('excess_singles', [])
+        combination_score = scan_result.get('combination_score', 0.0)
+        
+        # 将扫描结果添加到context中，供优先级系统使用
+        context['scan_result'] = scan_result
+        context['excess_singles'] = excess_singles
+        context['combination_score'] = combination_score
+        
         # 检查一手出完
         one_hand_idx = self._check_one_hand_complete(action_list, handcards)
         if one_hand_idx is not None:
@@ -1021,8 +1382,23 @@ class MidLateActiveHandler(BasePhaseHandler):
         if two_hand_idx is not None:
             return two_hand_idx
         
+        # 如果有多余单张，优先考虑出单张（顺走多余单张）
+        if excess_singles:
+            import logging
+            logger = logging.getLogger("MidLateActiveHandler")
+            logger.debug(f"检测到{len(excess_singles)}张多余单张，优先考虑出单张: {excess_singles}")
+            # 优先选择单张动作
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    if len(action) > 1 and action[1] in excess_singles:
+                        logger.debug(f"选择多余单张: {action[1]}")
+                        return i
+            # 如果没有匹配的多余单张，至少优先出单张
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    return i
+        
         # ⭐ 使用优先级系统（提升：动态优先级）
-        context = self._build_context(message)
         if self.priority_system:
             # 获取手牌结构（使用HandStructureAnalyzer）
             hand_structure = {}
@@ -1030,14 +1406,18 @@ class MidLateActiveHandler(BasePhaseHandler):
                 handcards = message.get("handCards", [])
                 rank = message.get("curRank", "2")
                 hand_structure = self.hand_analyzer.analyze(handcards, rank)
-            # 过滤PASS动作，同时记录原始索引
+            # 过滤PASS动作，同时记录原始索引，并验证卡牌一致性
             candidates = []
             candidate_indices = []
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0:
                     if action[0] != "PASS":
-                        candidates.append(action)
-                        candidate_indices.append(i)
+                        # ⚠️ 卡牌一致性检查：验证动作中的卡牌是否在手牌中
+                        if self._validate_action_cards(action, handcards):
+                            candidates.append(action)
+                            candidate_indices.append(i)
+                        else:
+                            logger.warning(f"Action {i} contains cards not in handcards, skipping: {action}")
                 elif action != "PASS":
                     candidates.append(action)
                     candidate_indices.append(i)
@@ -1181,12 +1561,13 @@ class MidLatePassiveHandler(MidEarlyPassiveHandler):
         if is_teammate:
             return 0
         
-        # 中局后期更积极，牌力足够时压制
-        if state['power'] >= 5:
+        # 中局后期更积极：降低牌力阈值，更倾向于压制
+        # 牌力阈值从5降低到3，更积极压制对手
+        if state['power'] >= 3:
             # 调用父类方法，但更倾向于压制
             return super().handle(message)
         else:
-            # 牌力弱，让过
+            # 牌力非常弱（< 3），才让过
             return 0
 
 
@@ -1227,6 +1608,19 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
         if not action_list:
             return 0
         
+        # ⚠️ 先构建上下文信息（包含手牌信息）
+        context = self._build_context(message)
+        
+        # ⚠️ 出牌前扫描手牌最优组合（残局前期阶段）- 使用context中的手牌信息
+        scan_result = self._scan_hand_combination(message, context)
+        excess_singles = scan_result.get('excess_singles', [])
+        combination_score = scan_result.get('combination_score', 0.0)
+        
+        # 将扫描结果添加到context中，供优先级系统使用
+        context['scan_result'] = scan_result
+        context['excess_singles'] = excess_singles
+        context['combination_score'] = combination_score
+        
         my_rest = len(handcards) if handcards else 27
         
         # 优先级1: 一手出完（使用endgame_strategy的check_one_hand_finish）
@@ -1238,6 +1632,22 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
             )
             if one_hand_result.get('can_finish', False):
                 return one_hand_result.get('best_action_index', 0)
+        
+        # 如果有多余单张，优先考虑出单张（残局阶段快速减少牌数）
+        if excess_singles:
+            import logging
+            logger = logging.getLogger("EndgameEarlyActiveHandler")
+            logger.debug(f"检测到{len(excess_singles)}张多余单张，优先考虑出单张: {excess_singles}")
+            # 优先选择单张动作
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    if len(action) > 1 and action[1] in excess_singles:
+                        logger.debug(f"选择多余单张: {action[1]}")
+                        return i
+            # 如果没有匹配的多余单张，至少优先出单张
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    return i
         else:
             # 回退到基类方法
             one_hand_idx = self._check_one_hand_complete(action_list, handcards)
@@ -1362,6 +1772,71 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
         if not action_list or not cur_action:
             return 0
         
+        # ⚠️ 如果是单张，按照新的优先级顺序处理
+        cur_action_type = cur_action[0] if isinstance(cur_action, list) and len(cur_action) > 0 else ""
+        cur_rank = cur_action[1] if len(cur_action) > 1 else ""
+        
+        if cur_action_type == 'Single':
+            import logging
+            logger = logging.getLogger("EndgameEarlyPassiveHandler")
+            cur_rank_val = self._get_rank_value(cur_rank, message.get("curRank", "2")) if hasattr(self, '_get_rank_value') else 0
+            
+            # ⚠️ 优先级1：使用多余单张（最高优先级）
+            suitable_singles = self._find_excess_singles_for_action(message, cur_rank)
+            if suitable_singles:
+                logger.debug(f"找到{len(suitable_singles)}张可顺走的多余单张: {suitable_singles}")
+                # 优先选择多余单张中能压制的
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                        if len(action) > 1 and action[1] in suitable_singles:
+                            if self._validate_action_cards(action, handcards):
+                                logger.debug(f"选择多余单张压制: {action[1]}")
+                                return i
+            
+            # ⚠️ 优先级2：如果10以上没有极差的对子较多，则拆对子，压制对手的单张
+            from collections import Counter
+            handcard_counts = Counter(handcards)
+            high_ranks = ['T', 'J', 'Q', 'K', 'A']
+            high_pairs = []
+            
+            for rank_char in high_ranks:
+                rank_count = sum(1 for card in handcards if len(card) >= 2 and card[1] == rank_char)
+                if rank_count >= 2:
+                    high_pairs.append(rank_char)
+            
+            if high_pairs:
+                logger.debug(f"发现10以上的对子: {high_pairs}")
+                preferred_ranks = ['J', 'K', 'Q', 'T', 'A']
+                
+                for preferred_rank in preferred_ranks:
+                    if preferred_rank in high_pairs:
+                        for i, action in enumerate(action_list):
+                            if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                                if len(action) > 1:
+                                    action_rank_str = action[1]
+                                    if action_rank_str == preferred_rank:
+                                        action_rank_val = self._get_rank_value(action_rank_str, message.get("curRank", "2")) if hasattr(self, '_get_rank_value') else 0
+                                        if action_rank_val > cur_rank_val:
+                                            if self._validate_action_cards(action, handcards):
+                                                logger.debug(f"拆{preferred_rank}对子压制: {action_rank_str}")
+                                                return i
+            
+            # ⚠️ 优先级3：使用级牌/王压制（残局阶段，可以直接用级牌或王压制）
+            level_card_rank = message.get("curRank", "2")
+            joker_small = 'B'
+            joker_big = 'R'
+            
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    if len(action) > 1:
+                        action_rank_str = action[1]
+                        if action_rank_str == level_card_rank or action_rank_str == joker_small or action_rank_str == joker_big:
+                            action_rank_val = self._get_rank_value(action_rank_str, level_card_rank) if hasattr(self, '_get_rank_value') else 0
+                            if action_rank_val > cur_rank_val:
+                                if self._validate_action_cards(action, handcards):
+                                    logger.debug(f"残局使用级牌/王压制: {action_rank_str}")
+                                    return i
+        
         # 构建上下文信息
         context = self._build_context(message)
         
@@ -1386,9 +1861,6 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
             return one_hand_idx
         
         # 选择能压制的最小动作
-        cur_action_type = cur_action[0] if isinstance(cur_action, list) and len(cur_action) > 0 else ""
-        cur_rank = cur_action[1] if len(cur_action) > 1 else ""
-        
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0 and action[0] == cur_action_type:
                 if len(action) > 1 and action[1] > cur_rank:
@@ -1440,6 +1912,19 @@ class EndgameLateActiveHandler(BasePhaseHandler):
         if not action_list:
             return 0
         
+        # ⚠️ 先构建上下文信息（包含手牌信息）
+        context = self._build_context(message)
+        
+        # ⚠️ 出牌前扫描手牌最优组合（残局后期阶段）- 使用context中的手牌信息
+        scan_result = self._scan_hand_combination(message, context)
+        excess_singles = scan_result.get('excess_singles', [])
+        combination_score = scan_result.get('combination_score', 0.0)
+        
+        # 将扫描结果添加到context中，供优先级系统使用
+        context['scan_result'] = scan_result
+        context['excess_singles'] = excess_singles
+        context['combination_score'] = combination_score
+        
         my_rest = len(handcards) if handcards else 27
         
         # 优先级1: 一手出完（残局最重要）
@@ -1447,8 +1932,23 @@ class EndgameLateActiveHandler(BasePhaseHandler):
         if one_hand_idx is not None:
             return one_hand_idx
         
+        # 如果有多余单张，优先考虑出单张（残局后期快速减少牌数）
+        if excess_singles:
+            import logging
+            logger = logging.getLogger("EndgameLateActiveHandler")
+            logger.debug(f"检测到{len(excess_singles)}张多余单张，优先考虑出单张: {excess_singles}")
+            # 优先选择单张动作
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    if len(action) > 1 and action[1] in excess_singles:
+                        logger.debug(f"选择多余单张: {action[1]}")
+                        return i
+            # 如果没有匹配的多余单张，至少优先出单张
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    return i
+        
         # ⭐ 使用优先级系统（提升：动态优先级，残局后期优先一手出完）
-        context = self._build_context(message)
         if self.priority_system:
             # 获取手牌结构（简化实现）
             hand_structure = {}

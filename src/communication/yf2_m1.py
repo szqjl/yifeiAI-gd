@@ -79,6 +79,13 @@ class YF2_M1_Client:
         config = {
             "max_decision_time": 0.8,  # 最大决策时间（秒）
             "enable_logging": True,     # 启用日志
+            
+            # 第一阶段优化功能开关（基于 Agentic Design Patterns）
+            "use_intelligent_router": True,      # 启用智能路由器（路由优化）
+            "route_cache_size": 1000,            # 路由缓存大小
+            "use_enhanced_priority": True,        # 启用增强优先级系统（优先级系统增强）
+            "priority_history_size": 1000,        # 优先级历史记录大小
+            "use_enhanced_collaboration": True,   # 启用增强协作策略（协作策略优化）
         }
         self.decision_engine = RuleBasedDecisionEngineM1(player_id, config)
         
@@ -291,6 +298,21 @@ class YF2_M1_Client:
                 "phase": phase_info.get("game_phase", "unknown"),
             }
             
+            # ⚠️ 重要：更新手牌（如果出牌）
+            if selected_action and len(selected_action) >= 3 and isinstance(selected_action[2], list):
+                played_cards = selected_action[2]
+                old_hand_size = len(self.hand_cards)
+                for card in played_cards:
+                    if card in self.hand_cards:
+                        self.hand_cards.remove(card)
+                    else:
+                        self.logger.warning(f"⚠ 尝试移除不存在的卡牌: {card}，当前手牌: {self.hand_cards}")
+                new_hand_size = len(self.hand_cards)
+                if old_hand_size != new_hand_size + len(played_cards):
+                    self.logger.warning(f"⚠ 手牌数量不匹配: 移除了{len(played_cards)}张牌，手牌从{old_hand_size}变为{new_hand_size}")
+                else:
+                    self.logger.debug(f"✓ 手牌更新成功: 移除了{len(played_cards)}张牌，剩余{new_hand_size}张")
+            
             # Record decision
             self.game_recorder.record_decision(
                 act_index, 
@@ -346,8 +368,8 @@ class YF2_M1_Client:
         if notification_key in ["gameStart", "beginning"]:
             self.logger.info(f"✓ 识别到游戏开始通知: notification_key={notification_key}")
             self._handle_game_start(data)
-        # 处理游戏结束
-        elif notification_key in ["gameOver", "gameResult"]:
+        # 处理游戏结束（兼容多种格式：gameOver, gameResult, episodeOver）
+        elif notification_key in ["gameOver", "gameResult", "episodeOver"]:
             self.logger.info(f"✓ 识别到游戏结束通知: notification_key={notification_key}")
             self._handle_game_over(data)
         # 处理进贡
@@ -361,12 +383,18 @@ class YF2_M1_Client:
             # 记录其他玩家的出牌
             self._handle_act_notification(data)
         else:
-            # 如果都没有匹配，记录警告
-            self.logger.warning(f"⚠ 未识别的通知类型: notifyType={notify_type}, stage={stage}, notification_key={notification_key}")
+            # 如果都没有匹配，检查是否有其他游戏结束相关的字段
+            # 有些服务器可能使用不同的字段名（如episodeOver在stage中，但notifyType为空）
+            if "gameOver" in data or "gameResult" in data or "episodeOver" in data or data.get("result"):
+                self.logger.info(f"✓ 从其他字段识别到游戏结束: notifyType={notify_type}, stage={stage}")
+                self._handle_game_over(data)
             # 特殊处理：如果消息中有handCards但没有stage，可能是游戏开始
-            if "handCards" in data and not self.game_recorder.current_game:
+            elif "handCards" in data and not self.game_recorder.current_game:
                 self.logger.info("检测到handCards但无stage，尝试作为游戏开始处理")
                 self._handle_game_start(data)
+            else:
+                # 如果都没有匹配，记录警告
+                self.logger.warning(f"⚠ 未识别的通知类型: notifyType={notify_type}, stage={stage}, notification_key={notification_key}")
     
     def _handle_game_start(self, data: dict):
         """处理游戏开始通知（兼容多种格式）"""
@@ -386,7 +414,17 @@ class YF2_M1_Client:
             self.logger.info(f"Position updated: {self.player_id} -> {my_pos}")
             self.player_id = my_pos
             # 重新初始化决策引擎（使用新的 player_id）
-            config = {"max_decision_time": 0.8, "enable_logging": True, "curRank": data.get("curRank", "2")}
+            config = {
+                "max_decision_time": 0.8,
+                "enable_logging": True,
+                "curRank": data.get("curRank", "2"),
+                # 第一阶段优化功能开关（基于 Agentic Design Patterns）
+                "use_intelligent_router": True,      # 启用智能路由器（路由优化）
+                "route_cache_size": 1000,            # 路由缓存大小
+                "use_enhanced_priority": True,        # 启用增强优先级系统（优先级系统增强）
+                "priority_history_size": 1000,        # 优先级历史记录大小
+                "use_enhanced_collaboration": True,   # 启用增强协作策略（协作策略优化）
+            }
             self.decision_engine = RuleBasedDecisionEngineM1(my_pos, config)
         
         self.hand_cards = hand_cards
@@ -442,10 +480,30 @@ class YF2_M1_Client:
     
     def _handle_act_notification(self, data: dict):
         """处理其他玩家出牌通知"""
-        # 更新手牌（如果有）
+        # ⚠️ 重要：优先使用服务器发送的最新handCards（服务器的手牌信息最准确）
         hand_cards = data.get("handCards", [])
         if hand_cards:
-            self.hand_cards = hand_cards
+            # 验证手牌数量合理性
+            if len(hand_cards) <= 27:
+                # 验证卡牌格式
+                valid_cards = []
+                for card in hand_cards:
+                    if isinstance(card, str) and len(card) >= 2:
+                        valid_cards.append(card)
+                    elif isinstance(card, list) and len(card) >= 2:
+                        # 处理["C", "8"]格式，转换为"C8"
+                        suit = str(card[0])
+                        rank = str(card[1])
+                        valid_cards.append(f"{suit}{rank}")
+                
+                if len(valid_cards) != len(hand_cards):
+                    self.logger.warning(f"⚠ 手牌格式验证：原始{len(hand_cards)}张，有效{len(valid_cards)}张")
+                
+                old_hand_size = len(self.hand_cards)
+                self.hand_cards = valid_cards
+                self.logger.debug(f"✓ 从服务器更新手牌: {old_hand_size} -> {len(valid_cards)}张")
+            else:
+                self.logger.warning(f"⚠ 服务器发送的手牌数量异常: {len(hand_cards)}张，忽略更新")
         
         # 显示其他玩家出牌信息（类似lalala客户端）
         cur_pos = data.get("curPos", -1)
