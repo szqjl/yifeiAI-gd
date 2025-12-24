@@ -120,6 +120,7 @@ class OpeningActiveHandler(BasePhaseHandler):
         
         # ⚠️ 先构建上下文信息（包含手牌信息）
         context = self._build_context(message)
+        context['is_passive'] = False  # 主动出牌
         
         # ⚠️ 出牌前扫描手牌最优组合 - 使用context中的手牌信息
         scan_result = self._scan_hand_combination(message, context)
@@ -142,23 +143,70 @@ class OpeningActiveHandler(BasePhaseHandler):
                 handcards = message.get("handCards", [])
                 rank = message.get("curRank", "2")
                 hand_structure = self.hand_analyzer.analyze(handcards, rank)
+            # ⚠️ 关键修复：先获取扫描结果，作为硬约束
+            scan_result = context.get('scan_result', {})
+            protected_combinations = scan_result.get('protected_combinations', [])
+            excess_singles = context.get('excess_singles', [])
+            
             # 过滤PASS动作，同时记录原始索引，并验证卡牌一致性
+            # ⚠️ 硬约束：禁止破坏受保护组合
             candidates = []
             candidate_indices = []
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0:
                     if action[0] != "PASS":
-                        # ⚠️ 卡牌一致性检查：验证动作中的卡牌是否在手牌中
-                        if self._validate_action_cards(action, handcards):
-                            candidates.append(action)
-                            candidate_indices.append(i)
-                        else:
-                            logger.warning(f"Action {i} contains cards not in handcards, skipping: {action}")
+                        # 1. 卡牌一致性检查（opening阶段：即使验证失败也保留，让路由层做最终决定）
+                        validation_passed = self._validate_action_cards(action, handcards)
+                        if not validation_passed:
+                            logger.warning(f"Action {i} failed card validation, but in opening phase, will still consider it: {action}")
+                            # ⚠️ opening阶段：放宽验证，避免过度过滤导致所有动作被拒绝
+                        
+                        # 2. ⚠️ 硬约束：检查是否会破坏受保护组合（但只在验证通过时检查）
+                        action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+                        if action_cards and protected_combinations and validation_passed:
+                            action_cards_set = set(action_cards)
+                            would_break = False
+                            for protected in protected_combinations:
+                                protected_set = set(protected)
+                                # 如果动作中的卡牌与受保护组合有交集，且不是完整使用，就是破坏
+                                if action_cards_set & protected_set:
+                                    if not action_cards_set.issubset(protected_set):
+                                        would_break = True
+                                        logger.warning(f"Action {i} would break protected combination, skipping: {action}")
+                                        break
+                            if would_break:
+                                continue
+                        
+                        # ⚠️ 即使验证失败，也添加到候选列表（opening阶段更宽松）
+                        candidates.append(action)
+                        candidate_indices.append(i)
                 elif action != "PASS":
                     candidates.append(action)
                     candidate_indices.append(i)
             
-            logger.debug(f"Filtered {len(candidates)} candidates from {len(action_list)} actions (after card validation)")
+            logger.debug(f"Filtered {len(candidates)} candidates from {len(action_list)} actions (opening phase: relaxed validation)")
+            
+            # ⚠️ 关键修复：如果有excess_singles，优先选择它们
+            if excess_singles and candidates:
+                excess_candidates = []
+                excess_indices = []
+                other_candidates = []
+                other_indices = []
+                
+                for idx, candidate in enumerate(candidates):
+                    action_cards = candidate[2] if isinstance(candidate, list) and len(candidate) > 2 and isinstance(candidate[2], list) else []
+                    if action_cards and len(action_cards) == 1 and action_cards[0] in excess_singles:
+                        excess_candidates.append(candidate)
+                        excess_indices.append(candidate_indices[idx])
+                    else:
+                        other_candidates.append(candidate)
+                        other_indices.append(candidate_indices[idx])
+                
+                # 优先使用excess_singles
+                if excess_candidates:
+                    candidates = excess_candidates + other_candidates
+                    candidate_indices = excess_indices + other_indices
+                    logger.info(f"Prioritized {len(excess_candidates)} excess_singles candidates")
             
             if candidates:
                 try:
@@ -168,15 +216,46 @@ class OpeningActiveHandler(BasePhaseHandler):
                         logger.info(f"PrioritySystem selected: candidate_idx={selected_candidate_idx}, original_idx={original_idx}, action={candidates[selected_candidate_idx]}")
                         return original_idx
                     else:
-                        logger.warning(f"PrioritySystem returned invalid index: {selected_candidate_idx}, max={len(candidate_indices)-1}")
+                        logger.warning(f"PrioritySystem returned invalid index: {selected_candidate_idx}, max={len(candidate_indices)-1}, falling back to first candidate")
+                        # 降级：返回第一个候选动作
+                        if candidate_indices:
+                            return candidate_indices[0]
                 except Exception as e:
                     logger.error(f"PrioritySystem.select() error: {e}", exc_info=True)
+                    # 降级：返回第一个候选动作
+                    if candidate_indices:
+                        logger.warning(f"Falling back to first candidate after PrioritySystem error")
+                        return candidate_indices[0]
             else:
-                logger.warning("No candidates after filtering PASS actions")
+                logger.warning(f"No candidates after filtering PASS actions (total actions: {len(action_list)})")
+                # ⚠️ 关键修复：即使candidates为空，也要尝试返回第一个非PASS动作
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                        logger.warning(f"Fallback: returning first non-PASS action at index {i} (card validation may have been too strict)")
+                        return i
+                    elif action != "PASS":
+                        logger.warning(f"Fallback: returning first non-PASS action at index {i} (card validation may have been too strict)")
+                        return i
+        
+        # ⚠️ 关键修复：在降级方案之前，再次尝试返回第一个非PASS动作
+        # 如果candidates为空，说明所有动作都被过滤了，但actionList中可能有非PASS动作
+        logger.warning(f"All candidates filtered, but actionList has {len(action_list)} actions, trying to return first non-PASS action before strategy fallback")
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                logger.warning(f"Pre-fallback: returning first non-PASS action at index {i} before strategy fallback: {action[0]}")
+                return i
+            elif action != "PASS":
+                logger.warning(f"Pre-fallback: returning first non-PASS action at index {i} before strategy fallback: {action}")
+                return i
         
         # 提取游戏状态（降级方案）
         state = self._extract_game_state(message)
         power = state['power']
+        
+        # ⚠️ 关键修复：确保scan_result和context在降级方案中也可用
+        scan_result = context.get('scan_result', {}) if 'context' in locals() else {}
+        protected_combinations = scan_result.get('protected_combinations', [])
+        excess_singles = context.get('excess_singles', []) if 'context' in locals() else []
         
         # 根据开局策略文档，优先级策略：
         # 1. 牌力强（有王/级牌）：优先出天然单张
@@ -202,11 +281,28 @@ class OpeningActiveHandler(BasePhaseHandler):
             )
             
             if '出单' in single_sugg.get('action', '') or '出天然单' in single_sugg.get('action', ''):
-                # 选择最小的单张（验证卡牌一致性）
+                # ⚠️ 优先选择excess_singles中的单张
+                
+                # 先找excess_singles
+                if excess_singles:
+                    for excess_card in excess_singles:
+                        for i, action in enumerate(action_list):
+                            if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                                action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+                                if action_cards and excess_card in action_cards:
+                                    if self._validate_action_cards(action, handcards):
+                                        # 检查是否破坏受保护组合
+                                        if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                                            return i
+                
+                # 降级：选择最小的单张（验证卡牌一致性，不破坏受保护组合）
                 for i, action in enumerate(action_list):
                     if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
                         if self._validate_action_cards(action, handcards):
-                            return i
+                            action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+                            # 检查是否破坏受保护组合
+                            if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                                return i
         
         # 策略2：牌力中下，情况不明对子先行
         if power < 6 and self.pair_strategy:
@@ -228,8 +324,8 @@ class OpeningActiveHandler(BasePhaseHandler):
         if power < 5:
             # 优先出三连对/钢板（对手难管）
             priority_order = ['TwoTrips', 'ThreePair', 'Straight', 'ThreeWithTwo', 'Trips']
-        for card_type in priority_order:
-            for i, action in enumerate(action_list):
+            for card_type in priority_order:
+                for i, action in enumerate(action_list):
                     if isinstance(action, list) and len(action) > 0 and action[0] == card_type:
                         return i
             # 如果没有组合牌型，再考虑对子
@@ -252,6 +348,17 @@ class OpeningActiveHandler(BasePhaseHandler):
                             return i
                         return i
         
+        # ⚠️ 关键修复：在返回0（PASS）之前，确保至少尝试返回第一个非PASS动作
+        # 这可以防止在有可选动作时仍然PASS的问题
+        import logging
+        logger = logging.getLogger("OpeningActiveHandler")
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                logger.warning(f"Final fallback: returning first non-PASS action at index {i} (all strategies failed to find suitable action)")
+                return i
+        
+        # 只有真的没有可选动作时才PASS
+        logger.warning(f"No non-PASS actions available, returning PASS (index 0)")
         return 0
 
 
@@ -334,15 +441,11 @@ class OpeningPassiveHandler(BasePhaseHandler):
             if cur_action[0] is None:
                 logger.warning(f"curAction first element is None: {cur_action}, this should be active play, returning 0")
                 return 0
-            # 如果第一个元素是"PASS"，检查actionList的第一个动作
+            # ⚠️ 关键修复：如果第一个元素是"PASS"，说明上家已经PASS，这是主动出牌，不应该走被动出牌逻辑
             if cur_action[0] == "PASS":
-                # 如果actionList的第一个动作不是PASS，说明是主动出牌
-                if action_list and len(action_list) > 0:
-                    first_action = action_list[0]
-                    if isinstance(first_action, list) and len(first_action) > 0:
-                        if first_action[0] != "PASS":
-                            logger.warning(f"curAction is PASS but actionList first action is {first_action[0]}, this should be active play, returning 0")
-                            return 0
+                logger.warning(f"curAction is PASS: {cur_action}, this should be active play, not passive. Returning _default_passive_action to find first non-PASS action")
+                # 即使curAction是PASS，如果actionList中有非PASS动作，也应该返回第一个非PASS动作
+                return self._default_passive_action(action_list, message)
         
         # 构建上下文信息
         context = self._build_context(message)
@@ -379,11 +482,28 @@ class OpeningPassiveHandler(BasePhaseHandler):
         is_teammate = self._is_teammate(greater_pos, my_pos)
         logger.info(f"is_teammate={is_teammate}")
         
-        # 开局被动策略：队友出牌让过，对手出牌根据位置决定
+        # ⚠️ 关键修复：开局被动策略：队友出牌让过，但必须确保actionList中只有PASS动作时才PASS
+        # 如果actionList中有非PASS动作，即使队友出牌，也应该考虑是否要出牌（比如队友出小牌，我们可以顺走）
         if is_teammate:
-            # 队友出牌，开局阶段让过
-            logger.info("Teammate played, passing in opening phase")
-            return 0  # PASS
+            # 检查actionList中是否有非PASS动作
+            has_non_pass = False
+            for action in action_list:
+                if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                    has_non_pass = True
+                    break
+                elif action != "PASS":
+                    has_non_pass = True
+                    break
+            
+            if not has_non_pass:
+                # 如果actionList中只有PASS，说明真的没有可选动作，让过
+                logger.info("Teammate played, and actionList has only PASS actions, passing in opening phase")
+                return 0  # PASS
+            else:
+                # 如果actionList中有非PASS动作，即使队友出牌，也应该考虑是否要出牌
+                # 但开局阶段，如果队友出牌，通常让过（除非是特殊情况）
+                logger.info(f"Teammate played, but actionList has {len(action_list)} actions (including non-PASS), will check if should play")
+                # 继续执行后续逻辑，但可以降低优先级
         
         # 对手出牌，根据位置决定策略
         # 如果curAction_type为空，尝试从curAction直接提取
@@ -471,7 +591,7 @@ class OpeningPassiveHandler(BasePhaseHandler):
         
         if not self.single_strategy:
             logger.warning("No single_strategy, using default")
-            return self._default_passive_action(action_list)
+            return self._default_passive_action(action_list, message)
         
         # 获取curAction，如果之前已经解析过，直接使用；否则重新获取并解析
         cur_action = message.get("curAction", [])
@@ -647,7 +767,7 @@ class OpeningPassiveHandler(BasePhaseHandler):
                                 else:
                                     logger.debug(f"Single action at index {i} cannot beat opponent: {action_rank} <= {cur_action_rank}")
                         else:
-                            # 如果没有cur_action_rank，直接返回（可能是主动出牌场景）
+                            # ⚠️ 修复：即使没有cur_action_rank，也应该返回（Opening阶段更积极）
                             logger.info(f"Found valid Single action at index {i}: {action}")
                             return i
             elif isinstance(action, str) and action == 'Single':
@@ -658,11 +778,25 @@ class OpeningPassiveHandler(BasePhaseHandler):
         logger.warning(f"No valid Single action found in actionList (checked {len(action_list)} actions, found {single_count} Single actions)")
         logger.info(f"First 10 actions in actionList: {action_list[:10] if len(action_list) >= 10 else action_list}")
         
-        # ⚠️ 修复：即使找不到合适的单张，也应该尝试其他能压制的牌型，而不是直接PASS
+        # ⚠️ 关键修复：即使找不到合适的单张，也应该尝试其他能压制的牌型，而不是直接PASS
         # 检查是否有其他能压制的牌型（对子、三张等）
         cur_action = message.get("curAction", [])
         cur_type = cur_action[0] if isinstance(cur_action, list) and len(cur_action) > 0 else ""
         cur_rank = cur_action[1] if isinstance(cur_action, list) and len(cur_action) > 1 else ""
+        
+        # ⚠️ 如果找不到单张，尝试找其他能压制的牌型
+        if cur_type == 'Single' and cur_rank:
+            cur_rank_value = self._get_rank_value(cur_rank, state['cur_rank'])
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                    if action[0] == cur_type:  # 同类型
+                        action_rank = action[1] if len(action) > 1 else ""
+                        if action_rank:
+                            action_rank_value = self._get_rank_value(action_rank, state['cur_rank'])
+                            if action_rank_value > cur_rank_value:
+                                if self._validate_action_cards(action, handcards):
+                                    logger.info(f"Found {action[0]} action to beat opponent: index={i}, rank={action_rank} > {cur_rank}")
+                                    return i
         
         # 尝试找能压制的其他牌型（同类型但更大的牌）
         if cur_type and cur_rank and cur_type != "PASS":
@@ -679,15 +813,30 @@ class OpeningPassiveHandler(BasePhaseHandler):
                                     logger.info(f"Found valid {cur_type} action to beat opponent: index={i}, action={action}")
                                     return i
         
-        # 最后尝试默认动作（选择第一个非PASS动作）
-        result = self._default_passive_action(action_list)
+        # ⚠️ 关键修复：Opening阶段，如果对手出高牌（R、B、A等）而我们只有小牌，也应该尝试出牌
+        # 检查对手是否出的是高牌（R、B、A、K等）
+        if cur_action_rank:
+            high_ranks = ['R', 'B', 'A', 'K', 'Q']
+            is_opponent_high_card = cur_action_rank in high_ranks
+            
+            if is_opponent_high_card:
+                logger.info(f"Opponent played high card {cur_action_rank}, trying to find any valid action")
+                # 尝试返回第一个有效的非PASS动作（即使不能压制）
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                        if self._validate_action_cards(action, handcards):
+                            logger.info(f"Opponent high card, returning first valid action at index {i}: {action[0]}")
+                            return i
+        
+        # 最后尝试默认动作（选择第一个有效的非PASS动作）
+        result = self._default_passive_action(action_list, message)
         logger.info(f"_default_passive_action returned: {result}")
         return result
     
     def _handle_pair_passive(self, message: Dict, action_list: List, state: Dict, greater_pos: int, my_pos: int) -> int:
         """处理对子被动出牌"""
         if not self.pair_strategy:
-            return self._default_passive_action(action_list)
+            return self._default_passive_action(action_list, message)
         
         cur_action = message.get("curAction", [])
         action_rank = cur_action[1] if len(cur_action) > 1 else ""
@@ -706,38 +855,99 @@ class OpeningPassiveHandler(BasePhaseHandler):
             action_rank=action_rank
         )
         
-        # 如果策略建议让对子，则PASS
+        # ⚠️ 修复：即使策略建议让对子，也应该尝试其他方式，而不是直接PASS
         if '让对子' in pair_sugg.get('action', ''):
+            import logging
+            logger = logging.getLogger("OpeningPassiveHandler")
+            handcards = message.get("handCards", [])
+            logger.debug(f"Strategy suggests letting pair, but trying fallback")
+            # 尝试返回第一个有效的非PASS动作（降级方案）
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                    # ⚠️ 修复：验证卡牌一致性，确保返回的动作是有效的
+                    if self._validate_action_cards(action, handcards):
+                        logger.debug(f"Strategy suggests letting but found valid non-PASS action at index {i}: {action[0]}")
+                        return i
+                    else:
+                        logger.debug(f"Strategy suggests letting but action at index {i} failed card validation: {action[0]}")
+            # 只有真的没有可选动作时才PASS
+            logger.warning(f"Strategy suggests letting and no valid non-PASS actions available, returning PASS")
             return 0
         
         # 选择能压制的最小对子
+        handcards = message.get("handCards", [])
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0 and action[0] == 'Pair':
                 if len(action) > 1 and action[1] > action_rank:
-                    return i
+                    # ⚠️ 验证卡牌一致性
+                    if self._validate_action_cards(action, handcards):
+                        return i
         
+        # ⚠️ 关键修复：在返回0（PASS）之前，确保至少尝试返回第一个有效的非PASS动作
+        import logging
+        logger = logging.getLogger("OpeningPassiveHandler")
+        logger.warning(f"Cannot suppress Pair {action_rank}, trying fallback")
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                # ⚠️ 修复：验证卡牌一致性，确保返回的动作是有效的
+                if self._validate_action_cards(action, handcards):
+                    logger.warning(f"_handle_pair_passive fallback: returning first valid non-PASS action at index {i}: {action[0]}")
+                    return i
+                else:
+                    logger.debug(f"_handle_pair_passive fallback: action at index {i} failed card validation: {action[0]}")
+        
+        # 只有真的没有可选动作时才PASS
+        logger.warning(f"_handle_pair_passive: No valid non-PASS actions available, returning PASS (index 0)")
         return 0
     
     def _handle_other_passive(self, message: Dict, action_list: List, state: Dict) -> int:
         """处理其他牌型被动出牌"""
-        # 开局阶段，牌力弱时让过，牌力强时压制
+        import logging
+        logger = logging.getLogger("OpeningPassiveHandler")
+        
+        # ⚠️ 修复：即使牌力弱，也应该尝试出牌，而不是直接PASS
+        # 开局阶段，牌力弱时仍然尝试出牌（降级方案）
         if state['power'] < 5:
-            return 0  # PASS
+            logger.debug(f"Power < 5, but still trying to find non-PASS action")
+            # 尝试返回第一个非PASS动作
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                    logger.debug(f"Power weak but found non-PASS action at index {i}: {action[0]}")
+                    return i
+            # 只有真的没有可选动作时才PASS
+            logger.warning(f"Power < 5 and no non-PASS actions available, returning PASS")
+            return 0
         
         # 选择能压制的最小动作
         cur_action = message.get("curAction", [])
         cur_type = cur_action[0] if len(cur_action) > 0 else ""
         cur_rank = cur_action[1] if len(cur_action) > 1 else ""
+        handcards = message.get("handCards", [])
         
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0 and action[0] == cur_type:
                 if len(action) > 1 and action[1] > cur_rank:
-                    return i
+                    # ⚠️ 验证卡牌一致性
+                    if self._validate_action_cards(action, handcards):
+                        return i
         
+        # ⚠️ 关键修复：在返回0（PASS）之前，确保至少尝试返回第一个有效的非PASS动作
+        logger.warning(f"Cannot suppress {cur_type} {cur_rank}, trying fallback")
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                # ⚠️ 修复：验证卡牌一致性，确保返回的动作是有效的
+                if self._validate_action_cards(action, handcards):
+                    logger.warning(f"_handle_other_passive fallback: returning first valid non-PASS action at index {i}: {action[0]}")
+                    return i
+                else:
+                    logger.debug(f"_handle_other_passive fallback: action at index {i} failed card validation: {action[0]}")
+        
+        # 只有真的没有可选动作时才PASS
+        logger.warning(f"_handle_other_passive: No valid non-PASS actions available, returning PASS (index 0)")
         return 0
     
-    def _default_passive_action(self, action_list: List) -> int:
-        """默认被动动作选择：选择第一个非PASS动作"""
+    def _default_passive_action(self, action_list: List, message: Dict = None) -> int:
+        """默认被动动作选择：选择第一个有效的非PASS动作"""
         import logging
         logger = logging.getLogger("OpeningPassiveHandler")
         
@@ -745,21 +955,48 @@ class OpeningPassiveHandler(BasePhaseHandler):
         if action_list:
             logger.info(f"First 5 actions: {action_list[:5]}")
         
-        # 选择第一个非PASS动作
+        # ⚠️ 修复：验证卡牌一致性，确保返回的动作是有效的
+        handcards = message.get("handCards", []) if message else []
+        
+        # 选择第一个有效的非PASS动作
         non_pass_count = 0
+        valid_count = 0
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0:
                 if action[0] != "PASS":
                     non_pass_count += 1
-                    logger.info(f"Found non-PASS action at index {i}: {action[0]} - {action}")
-                    # 选择第一个非PASS动作
-                    return i
+                    # ⚠️ 验证卡牌一致性
+                    if handcards and hasattr(self, '_validate_action_cards'):
+                        if self._validate_action_cards(action, handcards):
+                            valid_count += 1
+                            logger.info(f"Found valid non-PASS action at index {i}: {action[0]} - {action}")
+                            return i
+                        else:
+                            logger.debug(f"Non-PASS action at index {i} failed card validation: {action[0]}")
+                    else:
+                        # 如果没有handcards或没有验证方法，直接返回
+                        valid_count += 1
+                        logger.info(f"Found non-PASS action at index {i}: {action[0]} (no validation)")
+                        return i
             elif action != "PASS":
                 non_pass_count += 1
+                valid_count += 1
                 logger.info(f"Found non-PASS action at index {i}: {action}")
                 return i
         
-        logger.warning(f"No non-PASS actions found (checked {len(action_list)} actions, found {non_pass_count} non-PASS), returning 0 (PASS)")
+        # ⚠️ 关键修复：即使所有动作验证失败，也要返回第一个非PASS动作（而不是PASS）
+        if non_pass_count > 0:
+            logger.warning(f"No valid non-PASS actions found after validation (checked {len(action_list)} actions, found {non_pass_count} non-PASS, {valid_count} valid), but returning first non-PASS action anyway")
+            # 返回第一个非PASS动作（即使验证失败）
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                    logger.warning(f"Returning first non-PASS action at index {i} despite validation failure: {action}")
+                    return i
+                elif action != "PASS":
+                    logger.warning(f"Returning first non-PASS action at index {i} despite validation failure: {action}")
+                    return i
+        
+        logger.warning(f"No non-PASS actions found at all (checked {len(action_list)} actions), returning 0 (PASS)")
         if action_list:
             logger.warning(f"All actions in actionList: {action_list}")
         return 0
@@ -884,6 +1121,16 @@ class MidEarlyActiveHandler(BasePhaseHandler):
                     if self._validate_action_cards(action, handcards):
                         return i
         
+        # ⚠️ 关键修复：在返回0（PASS）之前，确保至少尝试返回第一个非PASS动作
+        import logging
+        logger = logging.getLogger("MidEarlyActiveHandler")
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                logger.warning(f"Final fallback: returning first non-PASS action at index {i} (all strategies failed to find suitable action)")
+                return i
+        
+        # 只有真的没有可选动作时才PASS
+        logger.warning(f"No non-PASS actions available, returning PASS (index 0)")
         return 0
     
     def _extract_game_state(self, message: Dict) -> Dict:
@@ -1188,7 +1435,7 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
                 return 0
         
         # 降级：选择第一个能压制的动作（即使不是最优）
-        return self._default_passive_action(action_list)
+        return self._default_passive_action(action_list, message)
     
     def _get_rank_value(self, rank: str, cur_rank: str = None) -> int:
         """
@@ -1278,7 +1525,7 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
                                 return i
         
         # 降级：选择第一个非PASS动作
-        return self._default_passive_action(action_list)
+        return self._default_passive_action(action_list, message)
     
     def _handle_other_passive(self, message: Dict, action_list: List, state: Dict) -> int:
         """处理其他牌型被动出牌（中期：更积极压制）"""
@@ -1287,12 +1534,24 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         cur_rank = cur_action[1] if len(cur_action) > 1 else ""
         
         # 中期阶段：降低牌力阈值，更积极压制
-        # 如果牌力非常弱（< 3），才考虑PASS
+        # ⚠️ 修复：即使牌力弱，也应该尝试出牌，而不是直接PASS
+        # 只有在真的没有可选动作时才PASS
         if state['power'] < 3:
+            # 牌力弱时，仍然尝试返回第一个非PASS动作（降级方案）
+            import logging
+            logger = logging.getLogger("MidEarlyPassiveHandler")
+            logger.debug(f"Power < 3, but still trying to find non-PASS action")
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                    logger.debug(f"Power weak but found non-PASS action at index {i}: {action[0]}")
+                    return i
+            # 只有真的没有可选动作时才PASS
+            logger.warning(f"Power < 3 and no non-PASS actions available, returning PASS")
             return 0
         
         # 获取当前级牌
         cur_rank_param = message.get("curRank", "2")
+        handcards = message.get("handCards", [])
         
         # 优先寻找能压制的同类型动作
         for i, action in enumerate(action_list):
@@ -1302,7 +1561,9 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
                     action_rank_val = self._get_rank_value(action[1], cur_rank_param)
                     cur_rank_val = self._get_rank_value(cur_rank, cur_rank_param)
                     if action_rank_val > cur_rank_val:
-                        return i
+                        # ⚠️ 验证卡牌一致性
+                        if self._validate_action_cards(action, handcards):
+                            return i
         
         # 如果没有同类型能压制的，考虑使用炸弹（中期谨慎使用）
         if state['power'] >= 6:
@@ -1312,24 +1573,61 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
                     return i
         
         # 降级：选择第一个非PASS动作
-        return self._default_passive_action(action_list)
+        return self._default_passive_action(action_list, message)
     
-    def _default_passive_action(self, action_list: List) -> int:
-        """默认被动动作选择（选择第一个非PASS动作）"""
+    def _default_passive_action(self, action_list: List, message: Dict = None) -> int:
+        """默认被动动作选择（选择第一个有效的非PASS动作）"""
         import logging
         logger = logging.getLogger("MidEarlyPassiveHandler")
         
-        # 选择第一个非PASS动作（中期阶段应该更积极）
+        logger.info(f"_default_passive_action: actionList size={len(action_list)}")
+        if action_list:
+            logger.info(f"First 5 actions: {action_list[:5]}")
+        
+        # ⚠️ 修复：验证卡牌一致性，确保返回的动作是有效的
+        handcards = message.get("handCards", []) if message else []
+        
+        # 选择第一个有效的非PASS动作（中期阶段应该更积极）
+        non_pass_count = 0
+        valid_count = 0
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0:
                 if action[0] != "PASS":
-                    logger.debug(f"Found non-PASS action at index {i}: {action[0]}")
-                    return i
+                    non_pass_count += 1
+                    # ⚠️ 验证卡牌一致性
+                    if handcards and hasattr(self, '_validate_action_cards'):
+                        if self._validate_action_cards(action, handcards):
+                            valid_count += 1
+                            logger.info(f"Found valid non-PASS action at index {i}: {action[0]} - {action}")
+                            return i
+                        else:
+                            logger.debug(f"Non-PASS action at index {i} failed card validation: {action[0]}")
+                    else:
+                        # 如果没有handcards或没有验证方法，直接返回
+                        valid_count += 1
+                        logger.info(f"Found non-PASS action at index {i}: {action[0]} (no validation)")
+                        return i
             elif action != "PASS":
-                logger.debug(f"Found non-PASS action at index {i}: {action}")
+                non_pass_count += 1
+                valid_count += 1
+                logger.info(f"Found non-PASS action at index {i}: {action}")
                 return i
         
-        logger.warning(f"No non-PASS actions found, returning 0 (PASS)")
+        # ⚠️ 关键修复：即使所有动作验证失败，也要返回第一个非PASS动作（而不是PASS）
+        if non_pass_count > 0:
+            logger.warning(f"No valid non-PASS actions found after validation (checked {len(action_list)} actions, found {non_pass_count} non-PASS, {valid_count} valid), but returning first non-PASS action anyway")
+            # 返回第一个非PASS动作（即使验证失败）
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                    logger.warning(f"Returning first non-PASS action at index {i} despite validation failure: {action}")
+                    return i
+                elif action != "PASS":
+                    logger.warning(f"Returning first non-PASS action at index {i} despite validation failure: {action}")
+                    return i
+        
+        logger.warning(f"No non-PASS actions found at all (checked {len(action_list)} actions), returning 0 (PASS)")
+        if action_list:
+            logger.warning(f"All actions in actionList: {action_list}")
         return 0
 
 
@@ -1423,9 +1721,26 @@ class MidLateActiveHandler(BasePhaseHandler):
                     candidate_indices.append(i)
             
             if candidates:
-                selected_candidate_idx = self.priority_system.select(candidates, hand_structure, context)
-                if 0 <= selected_candidate_idx < len(candidate_indices):
-                    return candidate_indices[selected_candidate_idx]
+                try:
+                    selected_candidate_idx = self.priority_system.select(candidates, hand_structure, context)
+                    if 0 <= selected_candidate_idx < len(candidate_indices):
+                        return candidate_indices[selected_candidate_idx]
+                    else:
+                        logger.warning(f"PrioritySystem returned invalid index: {selected_candidate_idx}, max={len(candidate_indices)-1}, falling back to first candidate")
+                        if candidate_indices:
+                            return candidate_indices[0]
+                except Exception as e:
+                    logger.error(f"PrioritySystem.select() error: {e}", exc_info=True)
+                    if candidate_indices:
+                        logger.warning(f"Falling back to first candidate after PrioritySystem error")
+                        return candidate_indices[0]
+            else:
+                logger.warning(f"No candidates after filtering PASS actions (total actions: {len(action_list)})")
+                # ⚠️ 关键修复：即使candidates为空，也要尝试返回第一个非PASS动作
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                        logger.warning(f"Fallback: returning first non-PASS action at index {i} (card validation may have been too strict)")
+                        return i
         
         # 降级方案：使用原有逻辑
         state = self._extract_game_state(message)
@@ -1454,6 +1769,16 @@ class MidLateActiveHandler(BasePhaseHandler):
                 if isinstance(action, list) and len(action) > 0 and action[0] == card_type:
                     return i
         
+        # ⚠️ 关键修复：在返回0（PASS）之前，确保至少尝试返回第一个非PASS动作
+        import logging
+        logger = logging.getLogger("MidLateActiveHandler")
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                logger.warning(f"Final fallback: returning first non-PASS action at index {i} (all strategies failed to find suitable action)")
+                return i
+        
+        # 只有真的没有可选动作时才PASS
+        logger.warning(f"No non-PASS actions available, returning PASS (index 0)")
         return 0
     
     def _extract_game_state(self, message: Dict) -> Dict:
@@ -1567,7 +1892,21 @@ class MidLatePassiveHandler(MidEarlyPassiveHandler):
             # 调用父类方法，但更倾向于压制
             return super().handle(message)
         else:
-            # 牌力非常弱（< 3），才让过
+            # ⚠️ 修复：即使牌力非常弱（< 3），也应该尝试返回第一个有效的非PASS动作
+            import logging
+            logger = logging.getLogger("MidLatePassiveHandler")
+            handcards = message.get("handCards", [])
+            logger.debug(f"Power < 3, but still trying to find valid non-PASS action")
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                    # ⚠️ 验证卡牌一致性，确保返回的动作是有效的
+                    if self._validate_action_cards(action, handcards):
+                        logger.debug(f"Power weak but found valid non-PASS action at index {i}: {action[0]}")
+                        return i
+                    else:
+                        logger.debug(f"Power weak but action at index {i} failed card validation: {action[0]}")
+            # 只有真的没有可选动作时才PASS
+            logger.warning(f"Power < 3 and no valid non-PASS actions available, returning PASS")
             return 0
 
 
@@ -1648,24 +1987,107 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
                     return i
-        else:
-            # 回退到基类方法
-            one_hand_idx = self._check_one_hand_complete(action_list, handcards)
+        # ⚠️ 修复：检查一手出完（无论是否有excess_singles）
+        one_hand_idx = self._check_one_hand_complete(action_list, handcards)
         if one_hand_idx is not None:
             return one_hand_idx
         
         # ⭐ 使用优先级系统（提升：动态优先级，残局阶段）
-        context = self._build_context(message)
         if self.priority_system:
+            import logging
+            logger = logging.getLogger("EndgameEarlyActiveHandler")
+            
             # 获取手牌结构（使用HandStructureAnalyzer）
             hand_structure = {}
             if hasattr(self, 'hand_analyzer') and self.hand_analyzer:
                 handcards = message.get("handCards", [])
                 rank = message.get("curRank", "2")
                 hand_structure = self.hand_analyzer.analyze(handcards, rank)
-            candidates = [a for a in action_list if a[0] != "PASS"]
+            
+            # ⚠️ 关键修复：过滤PASS动作，同时记录原始索引，并验证卡牌一致性
+            scan_result = context.get('scan_result', {})
+            protected_combinations = scan_result.get('protected_combinations', [])
+            
+            candidates = []
+            candidate_indices = []
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0:
+                    if action[0] != "PASS":
+                        # 1. 卡牌一致性检查（endgame阶段放宽验证）
+                        validation_passed = self._validate_action_cards(action, handcards)
+                        if not validation_passed:
+                            logger.warning(f"Action {i} failed card validation, but in endgame phase, will still consider it: {action}")
+                            # ⚠️ endgame阶段：放宽验证，避免过度过滤
+                        
+                        # 2. ⚠️ 硬约束：检查是否会破坏受保护组合（但只在验证通过时检查）
+                        action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+                        if action_cards and protected_combinations and validation_passed:
+                            action_cards_set = set(action_cards)
+                            would_break = False
+                            for protected in protected_combinations:
+                                protected_set = set(protected)
+                                if action_cards_set & protected_set:
+                                    if not action_cards_set.issubset(protected_set):
+                                        would_break = True
+                                        logger.warning(f"Action {i} would break protected combination, skipping: {action}")
+                                        break
+                            if would_break:
+                                continue
+                        
+                        # ⚠️ 即使验证失败，也添加到候选列表（endgame阶段更宽松）
+                        candidates.append(action)
+                        candidate_indices.append(i)
+                elif action != "PASS":
+                    candidates.append(action)
+                    candidate_indices.append(i)
+            
+            logger.debug(f"Filtered {len(candidates)} candidates from {len(action_list)} actions (endgame phase: relaxed validation)")
+            
+            # ⚠️ 关键修复：如果有excess_singles，优先选择它们
+            if excess_singles and candidates:
+                excess_candidates = []
+                excess_indices = []
+                other_candidates = []
+                other_indices = []
+                
+                for idx, candidate in enumerate(candidates):
+                    action_cards = candidate[2] if isinstance(candidate, list) and len(candidate) > 2 and isinstance(candidate[2], list) else []
+                    if action_cards and len(action_cards) == 1 and action_cards[0] in excess_singles:
+                        excess_candidates.append(candidate)
+                        excess_indices.append(candidate_indices[idx])
+                    else:
+                        other_candidates.append(candidate)
+                        other_indices.append(candidate_indices[idx])
+                
+                # 优先使用excess_singles
+                if excess_candidates:
+                    candidates = excess_candidates + other_candidates
+                    candidate_indices = excess_indices + other_indices
+                    logger.info(f"Prioritized {len(excess_candidates)} excess_singles candidates")
+            
             if candidates:
-                return self.priority_system.select(candidates, hand_structure, context)
+                try:
+                    selected_candidate_idx = self.priority_system.select(candidates, hand_structure, context)
+                    if 0 <= selected_candidate_idx < len(candidate_indices):
+                        original_idx = candidate_indices[selected_candidate_idx]
+                        logger.info(f"PrioritySystem selected: candidate_idx={selected_candidate_idx}, original_idx={original_idx}, action={candidates[selected_candidate_idx]}")
+                        return original_idx
+                    else:
+                        logger.warning(f"PrioritySystem returned invalid index: {selected_candidate_idx}, max={len(candidate_indices)-1}, falling back to first candidate")
+                        if candidate_indices:
+                            return candidate_indices[0]
+                except Exception as e:
+                    logger.error(f"PrioritySystem.select() error: {e}", exc_info=True)
+                    if candidate_indices:
+                        logger.warning(f"Falling back to first candidate after PrioritySystem error")
+                        return candidate_indices[0]
+            else:
+                logger.warning(f"No candidates after filtering PASS actions (total actions: {len(action_list)})")
+                # ⚠️ 关键修复：即使candidates为空，也要尝试返回第一个非PASS动作
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                        logger.warning(f"Fallback: returning first non-PASS action at index {i} (card validation may have been too strict)")
+                        return i
         
         # 优先级2: 使用残局策略类（提升：智能策略选择）
         context = self._build_context(message)
@@ -1736,14 +2158,24 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
         """选择最大牌型（残局专用）"""
         largest_idx = 0
         largest_size = 0
+        found_valid = False
         
         for i, action in enumerate(action_list):
-            if not action or action[0] == "PASS":
+            if not action or (isinstance(action, list) and len(action) > 0 and action[0] == "PASS"):
                 continue
-            action_size = len(action[2]) if len(action) > 2 else 1
+            action_size = len(action[2]) if isinstance(action, list) and len(action) > 2 else 1
             if action_size > largest_size:
                 largest_size = action_size
                 largest_idx = i
+                found_valid = True
+        
+        # ⚠️ 关键修复：如果没有找到有效动作，返回0（PASS）
+        if not found_valid:
+            return 0
+        
+        # ⚠️ 关键修复：确保返回的索引在有效范围内
+        if largest_idx < 0 or largest_idx >= len(action_list):
+            return 0
         
         return largest_idx
 
@@ -1836,6 +2268,30 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
                                 if self._validate_action_cards(action, handcards):
                                     logger.debug(f"残局使用级牌/王压制: {action_rank_str}")
                                     return i
+            
+            # ⚠️ 优先级4：其他能压制的单张（降级方案）
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    if len(action) > 1:
+                        action_rank_str = action[1]
+                        action_rank_val = self._get_rank_value(action_rank_str, message.get("curRank", "2")) if hasattr(self, '_get_rank_value') else 0
+                        if action_rank_val > cur_rank_val:
+                            if self._validate_action_cards(action, handcards):
+                                logger.debug(f"残局使用其他单张压制: {action_rank_str}")
+                                return i
+            
+            # ⚠️ 关键修复：如果所有优先级都失败，尝试返回第一个有效的非PASS动作
+            logger.warning(f"All Single priorities failed, trying fallback")
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                    validation_passed = self._validate_action_cards(action, handcards)
+                    if validation_passed:
+                        logger.warning(f"EndgameEarlyPassiveHandler Single fallback: returning first valid non-PASS action at index {i}")
+                        return i
+                    else:
+                        # ⚠️ endgame阶段：即使验证失败也返回（放宽验证）
+                        logger.warning(f"EndgameEarlyPassiveHandler Single fallback: returning first non-PASS action at index {i} despite validation failure (endgame phase)")
+                        return i
         
         # 构建上下文信息
         context = self._build_context(message)
@@ -1864,8 +2320,47 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0 and action[0] == cur_action_type:
                 if len(action) > 1 and action[1] > cur_rank:
+                    # ⚠️ 验证卡牌一致性
+                    if self._validate_action_cards(action, handcards):
+                        return i
+        
+        # ⚠️ 关键修复：在返回0（PASS）之前，确保至少尝试返回第一个非PASS动作
+        import logging
+        logger = logging.getLogger("EndgameEarlyPassiveHandler")
+        logger.warning(f"Cannot suppress {cur_action_type} {cur_rank}, trying fallback")
+        
+        # 先尝试找能压制的同类型动作
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0 and action[0] == cur_action_type:
+                if len(action) > 1:
+                    action_rank = action[1]
+                    # 使用_get_rank_value比较牌点大小
+                    cur_rank_value = self._get_rank_value(cur_rank, message.get("curRank", "2"))
+                    action_rank_value = self._get_rank_value(action_rank, message.get("curRank", "2"))
+                    if action_rank_value > cur_rank_value:
+                        validation_passed = self._validate_action_cards(action, handcards)
+                        if validation_passed:
+                            logger.warning(f"EndgameEarlyPassiveHandler fallback: returning suppressing action at index {i}: {action}")
+                            return i
+                        else:
+                            # ⚠️ endgame阶段：即使验证失败也返回（放宽验证）
+                            logger.warning(f"EndgameEarlyPassiveHandler fallback: returning suppressing action at index {i} despite validation failure (endgame phase): {action}")
+                            return i
+        
+        # 如果找不到能压制的，返回第一个有效的非PASS动作
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                # ⚠️ endgame阶段：即使验证失败也返回（放宽验证）
+                validation_passed = self._validate_action_cards(action, handcards)
+                if validation_passed:
+                    logger.warning(f"EndgameEarlyPassiveHandler fallback: returning first valid non-PASS action at index {i}")
+                    return i
+                else:
+                    logger.warning(f"EndgameEarlyPassiveHandler fallback: returning first non-PASS action at index {i} despite validation failure (endgame phase)")
                     return i
         
+        # 只有真的没有可选动作时才PASS
+        logger.warning(f"EndgameEarlyPassiveHandler: No non-PASS actions available, returning PASS (index 0)")
         return 0
     
     def _is_teammate(self, pos: int, my_pos: int) -> bool:
@@ -1937,24 +2432,122 @@ class EndgameLateActiveHandler(BasePhaseHandler):
             import logging
             logger = logging.getLogger("EndgameLateActiveHandler")
             logger.debug(f"检测到{len(excess_singles)}张多余单张，优先考虑出单张: {excess_singles}")
-            # 优先选择单张动作
+            protected_combinations = scan_result.get('protected_combinations', [])
+            
+            # 优先选择多余单张动作（不破坏受保护组合）
+            for excess_card in excess_singles:
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                        action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+                        if action_cards and excess_card in action_cards:
+                            if self._validate_action_cards(action, handcards):
+                                # 检查是否破坏受保护组合
+                                if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                                    logger.debug(f"选择多余单张: {excess_card}")
+                                    return i
+            
+            # 如果没有匹配的多余单张，至少优先出单张（不破坏受保护组合）
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
-                    if len(action) > 1 and action[1] in excess_singles:
-                        logger.debug(f"选择多余单张: {action[1]}")
-                        return i
-            # 如果没有匹配的多余单张，至少优先出单张
-            for i, action in enumerate(action_list):
-                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
-                    return i
+                    if self._validate_action_cards(action, handcards):
+                        action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+                        if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                            return i
         
         # ⭐ 使用优先级系统（提升：动态优先级，残局后期优先一手出完）
         if self.priority_system:
+            import logging
+            logger = logging.getLogger("EndgameLateActiveHandler")
+            
             # 获取手牌结构（简化实现）
             hand_structure = {}
-            candidates = [a for a in action_list if a[0] != "PASS"]
+            if hasattr(self, 'hand_analyzer') and self.hand_analyzer:
+                rank = message.get("curRank", "2")
+                hand_structure = self.hand_analyzer.analyze(handcards, rank)
+            
+            # ⚠️ 关键修复：过滤PASS动作，同时记录原始索引，并验证卡牌一致性
+            candidates = []
+            candidate_indices = []
+            scan_result = context.get('scan_result', {})
+            protected_combinations = scan_result.get('protected_combinations', [])
+            excess_singles = context.get('excess_singles', [])
+            
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0:
+                    if action[0] != "PASS":
+                        # 1. 卡牌一致性检查
+                        if not self._validate_action_cards(action, handcards):
+                            logger.debug(f"Action {i} failed card validation, skipping: {action}")
+                            continue
+                        
+                        # 2. ⚠️ 硬约束：检查是否会破坏受保护组合
+                        action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+                        if action_cards and protected_combinations:
+                            action_cards_set = set(action_cards)
+                            would_break = False
+                            for protected in protected_combinations:
+                                protected_set = set(protected)
+                                if action_cards_set & protected_set:
+                                    if not action_cards_set.issubset(protected_set):
+                                        would_break = True
+                                        logger.warning(f"Action {i} would break protected combination, skipping: {action}")
+                                        break
+                            if would_break:
+                                continue
+                        
+                        candidates.append(action)
+                        candidate_indices.append(i)
+                elif action != "PASS":
+                    candidates.append(action)
+                    candidate_indices.append(i)
+            
+            logger.debug(f"Filtered {len(candidates)} candidates from {len(action_list)} actions")
+            
+            # ⚠️ 关键修复：如果有excess_singles，优先选择它们
+            if excess_singles and candidates:
+                excess_candidates = []
+                excess_indices = []
+                other_candidates = []
+                other_indices = []
+                
+                for idx, candidate in enumerate(candidates):
+                    action_cards = candidate[2] if isinstance(candidate, list) and len(candidate) > 2 and isinstance(candidate[2], list) else []
+                    if action_cards and len(action_cards) == 1 and action_cards[0] in excess_singles:
+                        excess_candidates.append(candidate)
+                        excess_indices.append(candidate_indices[idx])
+                    else:
+                        other_candidates.append(candidate)
+                        other_indices.append(candidate_indices[idx])
+                
+                # 优先使用excess_singles
+                if excess_candidates:
+                    candidates = excess_candidates + other_candidates
+                    candidate_indices = excess_indices + other_indices
+                    logger.info(f"Prioritized {len(excess_candidates)} excess_singles candidates")
+            
             if candidates:
-                return self.priority_system.select(candidates, hand_structure, context)
+                try:
+                    selected_candidate_idx = self.priority_system.select(candidates, hand_structure, context)
+                    if 0 <= selected_candidate_idx < len(candidate_indices):
+                        original_idx = candidate_indices[selected_candidate_idx]
+                        logger.info(f"PrioritySystem selected: candidate_idx={selected_candidate_idx}, original_idx={original_idx}, action={candidates[selected_candidate_idx]}")
+                        return original_idx
+                    else:
+                        logger.warning(f"PrioritySystem returned invalid index: {selected_candidate_idx}, max={len(candidate_indices)-1}, falling back to first candidate")
+                        if candidate_indices:
+                            return candidate_indices[0]
+                except Exception as e:
+                    logger.error(f"PrioritySystem.select() error: {e}", exc_info=True)
+                    if candidate_indices:
+                        logger.warning(f"Falling back to first candidate after PrioritySystem error")
+                        return candidate_indices[0]
+            else:
+                logger.warning(f"No candidates after filtering PASS actions (total actions: {len(action_list)})")
+                # ⚠️ 关键修复：即使candidates为空，也要尝试返回第一个非PASS动作
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                        logger.warning(f"Fallback: returning first non-PASS action at index {i}")
+                        return i
         
         # 优先级2: 使用残局策略类（提升：智能策略选择，残局后期更激进）
         context = self._build_context(message)
@@ -2024,14 +2617,24 @@ class EndgameLateActiveHandler(BasePhaseHandler):
         """选择最大牌型（残局专用）"""
         largest_idx = 0
         largest_size = 0
+        found_valid = False
         
         for i, action in enumerate(action_list):
-            if not action or action[0] == "PASS":
+            if not action or (isinstance(action, list) and len(action) > 0 and action[0] == "PASS"):
                 continue
-            action_size = len(action[2]) if len(action) > 2 else 1
+            action_size = len(action[2]) if isinstance(action, list) and len(action) > 2 else 1
             if action_size > largest_size:
                 largest_size = action_size
                 largest_idx = i
+                found_valid = True
+        
+        # ⚠️ 关键修复：如果没有找到有效动作，返回0（PASS）
+        if not found_valid:
+            return 0
+        
+        # ⚠️ 关键修复：确保返回的索引在有效范围内
+        if largest_idx < 0 or largest_idx >= len(action_list):
+            return 0
         
         return largest_idx
 
@@ -2071,13 +2674,48 @@ class EndgameLatePassiveHandler(EndgameEarlyPassiveHandler):
         if one_hand_idx is not None:
             return one_hand_idx
         
-        # 选择能压制的最小动作（更激进）
+        # ⚠️ 关键修复：选择能压制的最小动作（更激进，但遵循扫描结果）
         cur_action_type = cur_action[0] if isinstance(cur_action, list) and len(cur_action) > 0 else ""
         cur_rank = cur_action[1] if len(cur_action) > 1 else ""
         
+        scan_result = context.get('scan_result', {})
+        protected_combinations = scan_result.get('protected_combinations', [])
+        excess_singles = context.get('excess_singles', [])
+        
+        # 优先使用excess_singles
+        if excess_singles and cur_action_type == 'Single':
+            for excess_card in excess_singles:
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                        action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+                        if action_cards and excess_card in action_cards:
+                            if self._validate_action_cards(action, handcards):
+                                # 检查是否破坏受保护组合
+                                if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                                    # 确保能压制
+                                    action_rank = action[1] if len(action) > 1 else ""
+                                    if action_rank and self._get_rank_value(action_rank, context.get('cur_rank', '2')) > self._get_rank_value(cur_rank, context.get('cur_rank', '2')):
+                                        return i
+        
+        # 选择能压制的最小动作（不破坏受保护组合）
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0 and action[0] == cur_action_type:
-                if len(action) > 1 and action[1] > cur_rank:
+                if len(action) > 1:
+                    action_rank = action[1]
+                    # 使用_get_rank_value比较牌点大小
+                    cur_rank_value = self._get_rank_value(cur_rank, context.get('cur_rank', '2'))
+                    action_rank_value = self._get_rank_value(action_rank, context.get('cur_rank', '2'))
+                    if action_rank_value > cur_rank_value:
+                        if self._validate_action_cards(action, handcards):
+                            action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+                            # ⚠️ 检查是否破坏受保护组合
+                            if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                                return i
+        
+        # ⚠️ 最后尝试：返回第一个有效的非PASS动作（即使不能压制）
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                if self._validate_action_cards(action, handcards):
                     return i
         
         return 0
