@@ -21,6 +21,9 @@ from typing import Dict, List, Tuple, Optional
 import time
 from datetime import datetime
 
+# 导入通用训练监控器
+from training_monitor import TrainingMonitor, create_monitor
+
 # 设置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -185,15 +188,51 @@ def train_stage7_optimized_model(
     epochs: int = 100,
     batch_size: int = 32,
     learning_rate: float = 0.00005,  # 降低学习率，更稳定的训练
-    device: str = "cpu"
+    device: str = "cpu",
+    monitor_backend: str = "tensorboard",  # tensorboard, mlflow, wandb, none
+    monitor_project: str = "yifei-ai-gd",  # 监控项目名称
+    monitor_name: str = None  # 监控运行名称（None 则自动生成）
 ):
     """
     Stage 7.1 优化训练
+    
+    Args:
+        monitor_backend: 监控后端类型 (tensorboard, mlflow, wandb, none)
+        monitor_project: 监控项目名称
+        monitor_name: 监控运行名称
     """
     
     logger.info("=" * 60)
     logger.info("Stage 7.1: 优化版鲁棒性增强训练")
     logger.info("=" * 60)
+    
+    # 初始化训练监控器
+    if monitor_name is None:
+        monitor_name = f"stage7_optimized_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    monitor = create_monitor(
+        backend=monitor_backend,
+        project_name=monitor_project,
+        run_name=monitor_name,
+        log_dir="logs"
+    )
+    
+    # 记录配置
+    config = {
+        "stage": "7.1",
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "device": device,
+        "data_dir": data_dir,
+        "model_save_path": model_save_path,
+        "loss_alpha": 0.05,
+        "loss_gamma": 4.0,
+        "over_prediction_penalty": 5.0,
+        "sparsity_reward": 2.0,
+        "weight_decay": 0.02,
+    }
+    monitor.log_config(config)
     
     # 加载数据
     logger.info("加载训练数据...")
@@ -339,6 +378,29 @@ def train_stage7_optimized_model(
         }
         training_history.append(epoch_info)
         
+        # 记录到监控器
+        monitor.log({
+            "epoch": epoch + 1,
+            "loss": {
+                "total": avg_loss,
+                "action": avg_action_loss,
+                "strategy": avg_strategy_loss,
+                "threshold": avg_threshold_loss,
+            },
+            "metrics": {
+                "predicted_cards": avg_predicted_cards,
+                "true_cards": avg_true_cards,
+                "prediction_ratio": avg_predicted_cards / avg_true_cards if avg_true_cards > 0 else 0,
+            },
+            "learning_rate": scheduler.get_last_lr()[0],
+            "time": {
+                "epoch_time": epoch_time,
+            },
+            "quality": {
+                "prediction_quality_score": prediction_quality_score,
+            },
+        }, step=epoch + 1)
+        
         # 打印进度（包含预测统计）
         if (epoch + 1) % 5 == 0 or epoch < 10:
             logger.info(
@@ -356,6 +418,14 @@ def train_stage7_optimized_model(
         prediction_quality_score = 1.0 / (1.0 + abs(avg_predicted_cards - avg_true_cards))
         combined_score = prediction_quality_score * (1.0 / (1.0 + avg_loss))
         
+        # 记录最佳分数
+        monitor.log({
+            "best": {
+                "combined_score": combined_score,
+                "prediction_quality_score": prediction_quality_score,
+            },
+        }, step=epoch + 1)
+        
         if combined_score > best_loss:
             best_loss = combined_score
             patience_counter = 0
@@ -370,6 +440,13 @@ def train_stage7_optimized_model(
                 'prediction_quality': prediction_quality_score,
                 'training_history': training_history
             }, model_save_path)
+            
+            # 保存模型到监控器
+            monitor.save_model(model_save_path, metadata={
+                'epoch': epoch + 1,
+                'loss': avg_loss,
+                'prediction_quality': prediction_quality_score,
+            })
             
         else:
             patience_counter += 1
@@ -390,13 +467,39 @@ def train_stage7_optimized_model(
     logger.info(f"训练历史保存至: {history_path}")
     logger.info("=" * 60)
     
+    # 完成监控
+    monitor.log({
+        "final": {
+            "best_score": best_loss,
+            "total_epochs": len(training_history),
+        },
+    })
+    monitor.finish()
+    
     return model, training_history
 
 
 if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Stage 7.1 优化训练")
+    parser.add_argument("--epochs", type=int, default=100, help="训练轮数")
+    parser.add_argument("--batch_size", type=int, default=32, help="批次大小")
+    parser.add_argument("--learning_rate", type=float, default=0.00005, help="学习率")
+    parser.add_argument("--monitor_backend", type=str, default="tensorboard", 
+                       choices=["tensorboard", "mlflow", "wandb", "none"],
+                       help="监控后端类型")
+    parser.add_argument("--monitor_project", type=str, default="yifei-ai-gd", help="监控项目名称")
+    parser.add_argument("--monitor_name", type=str, default=None, help="监控运行名称")
+    
+    args = parser.parse_args()
+    
     # 执行Stage 7.1优化训练
     model, history = train_stage7_optimized_model(
-        epochs=100,
-        batch_size=32,
-        learning_rate=0.00005
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        learning_rate=args.learning_rate,
+        monitor_backend=args.monitor_backend,
+        monitor_project=args.monitor_project,
+        monitor_name=args.monitor_name
     )
