@@ -602,7 +602,6 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
   - 在线阅读：https://adp.xindoo.xyz/
   - 原书作者：Antonio Gulli
 
----
 
 ## 📄 许可证
 

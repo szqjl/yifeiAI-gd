@@ -404,6 +404,7 @@ class BasePhaseHandler(ABC):
             'game_phase': game_phase,
             'is_endgame': game_phase in ["endgame_early", "endgame_late"],
             'is_active': not is_passive,
+            'is_passive': is_passive,  # ⚠️ 被动出牌标志（供优先级系统使用，允许合理拆牌压制）
             'handcards': handcards,  # ⚠️ 手牌信息（供优先级系统使用）
             'max_remain_value': max(opponent_rest_cards_list) if opponent_rest_cards_list else 15,
             'next_player_remain': cards_left.get((my_pos + 1) % 4, 27),
@@ -478,7 +479,50 @@ class StageRouter:
             handler = self.handlers.get(handler_key)
             
             if handler:
-                return handler.handle(message)
+                action_idx = handler.handle(message)
+                action_list = message.get("actionList", [])
+                
+                # ⚠️ 最终防线：无论handler返回什么，只要有非PASS动作就强制返回第一个非PASS动作
+                # 这是最后的保障，确保不会在有可选动作时PASS
+                if action_list and len(action_list) > 1:
+                    # 检查返回的动作是否是PASS
+                    selected_action = action_list[action_idx] if action_idx < len(action_list) else None
+                    is_pass = False
+                    if selected_action == "PASS":
+                        is_pass = True
+                    elif isinstance(selected_action, list) and len(selected_action) > 0:
+                        if selected_action[0] == "PASS":
+                            is_pass = True
+                    
+                    # 如果返回的是PASS，但actionList中有非PASS动作，强制返回第一个非PASS动作
+                    if is_pass:
+                        import logging
+                        logger = logging.getLogger("StageRouter")
+                        logger.warning(f"Handler returned PASS (index {action_idx}), but actionList has {len(action_list)} actions, forcing return first non-PASS action")
+                        
+                        # ⚠️ 关键修复：必须跳过index 0（因为它是PASS），从index 1开始查找
+                        for i in range(1, len(action_list)):
+                            action = action_list[i]
+                            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                                logger.warning(f"Forcing return non-PASS action at index {i}: {action[0]}")
+                                return i
+                            elif action != "PASS":
+                                logger.warning(f"Forcing return non-PASS action at index {i}: {action}")
+                                return i
+                        
+                        # 如果从index 1开始都没找到，再检查index 0（虽然它应该是PASS）
+                        # 但为了安全，还是检查一下
+                        first_action = action_list[0] if action_list else None
+                        if first_action and isinstance(first_action, list) and len(first_action) > 0 and first_action[0] != "PASS":
+                            logger.warning(f"Forcing return non-PASS action at index 0: {first_action[0]}")
+                            return 0
+                        elif first_action and first_action != "PASS":
+                            logger.warning(f"Forcing return non-PASS action at index 0: {first_action}")
+                            return 0
+                        
+                        logger.error(f"CRITICAL: Handler returned PASS, but no non-PASS action found in actionList of size {len(action_list)}")
+                
+                return action_idx
         
         return 0
     

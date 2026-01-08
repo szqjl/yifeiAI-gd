@@ -432,9 +432,9 @@ class OptimalCombinationScanner:
         """
         评估组合方案的优劣
         
-        评分标准：
-        1. 手数越少越好（减少轮次）
-        2. 单张越少越好
+        评分标准（优先级从高到低）：
+        1. 手数越少越好（减少轮次）- 最重要原则
+        2. 减少<10的单张（小单张）- 第二重要原则
         3. 炸弹越多越好
         4. 同花顺优先
         5. 顺子优先
@@ -445,7 +445,8 @@ class OptimalCombinationScanner:
         sorted_cards = combo['sorted_cards']
         score = 0.0
         
-        # 1. 计算手数（每种牌型算一手）
+        # ⚠️ 原则1：减少轮次（手数）- 最重要，权重最高
+        # 计算手数（每种牌型算一手）
         hand_count = 0
         for card_type in ['Single', 'Pair', 'Trips', 'ThreeWithTwo', 'ThreePair', 'TwoTrips', 'Straight', 'StraightFlush', 'Bomb']:
             cards = sorted_cards.get(card_type, [])
@@ -457,12 +458,40 @@ class OptimalCombinationScanner:
                 else:
                     hand_count += len(cards)
         
-        # 手数越少，评分越高（每减少一手+50分）
-        score += (27 - hand_count) * 50
+        # 手数越少，评分越高（每减少一手+100分，提高权重确保这是最重要的原则）
+        rounds_reduced = 27 - hand_count
+        score += rounds_reduced * 100
         
-        # 2. 单张越少越好（每个单张-10分）
+        # ⚠️ 原则2：减少<10的单张（小单张）- 第二重要原则
         singles = sorted_cards.get("Single", [])
-        score -= len(singles) * 10
+        small_singles_count = 0  # <10的单张数量
+        large_singles_count = 0   # >=10的单张数量
+        
+        # 小单张的牌值：3, 4, 5, 6, 7, 8, 9（对应牌值3-9）
+        small_ranks = ['3', '4', '5', '6', '7', '8', '9']
+        
+        for single in singles:
+            # 单张可能是字符串（如'S7'）或列表（如['S7']）
+            if isinstance(single, list):
+                # 如果是列表，取第一个元素
+                card = single[0] if single else ""
+            else:
+                card = single
+            
+            if card and isinstance(card, str) and len(card) >= 2:
+                card_rank = card[1:]  # 提取牌值（去掉花色，如'S7' -> '7'）
+                # 检查是否是级牌（级牌不算小单张）
+                if card_rank == rank:
+                    large_singles_count += 1  # 级牌不算小单张
+                elif card_rank in small_ranks:
+                    small_singles_count += 1
+                else:
+                    large_singles_count += 1
+        
+        # 小单张（<10）惩罚更重：每个-30分
+        score -= small_singles_count * 30
+        # 大单张（>=10）惩罚较轻：每个-10分
+        score -= large_singles_count * 10
         
         # 3. 炸弹越多越好（每个炸弹+100分）
         bombs = sorted_cards.get("Bomb", [])

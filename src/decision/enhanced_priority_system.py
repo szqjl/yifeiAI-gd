@@ -28,7 +28,7 @@ class DynamicWeightAdjuster:
             'teammate_cooperation': 0.08,
             'timing': 0.05,
             'risk': 0.05,
-            'split_impact': 0.1,  # 拆牌影响因素权重
+            'split_impact': 0.3,  # 拆牌影响因素权重（提高，确保不破坏受保护组合）
             'action_effect': 0.25,  # 实际动作效果权重（轮次减少、单牌减少等）- 提高权重以匹配client AI
         }
         
@@ -125,7 +125,12 @@ class EnhancedPrioritySystem:
             最佳动作索引
         """
         if not candidates:
-            return 0
+            # ⚠️ 修复：如果candidates为空，不应该返回0（这会导致PASS）
+            # 应该抛出异常或返回-1，让调用者处理
+            import logging
+            logger = logging.getLogger("EnhancedPrioritySystem")
+            logger.error("select() called with empty candidates list!")
+            raise ValueError("Cannot select from empty candidates list")
         
         # 1. 计算多因素优先级
         priority_factors = self._calculate_priority_factors(candidates, hand_structure, context)
@@ -232,7 +237,20 @@ class EnhancedPrioritySystem:
         return 0.5
     
     def _calculate_base_priority_factor(self, candidate: List, context: Dict) -> float:
-        """计算基础优先级因素"""
+        """
+        计算基础优先级因素
+        
+        ⚠️ 关键修复：优先使用excess_singles
+        """
+        # ⚠️ 优先使用excess_singles（最高优先级）
+        excess_singles = context.get('excess_singles', [])
+        if excess_singles:
+            action_type = candidate[0] if isinstance(candidate[0], str) else ""
+            action_cards = candidate[2] if len(candidate) > 2 and isinstance(candidate[2], list) else []
+            if action_type == 'Single' and action_cards and len(action_cards) == 1:
+                if action_cards[0] in excess_singles:
+                    return 1.0  # 是多余单张，最高优先级
+        
         if self.base_priority_system:
             # 使用基础优先级系统
             base_scores = self.base_priority_system._calculate_base_scores(
@@ -450,6 +468,30 @@ class EnhancedPrioritySystem:
         if not action_cards or not handcards:
             return 1.0
         
+        # ⚠️ 硬约束：检查是否会破坏受保护组合（区分主动/被动出牌）
+        scan_result = context.get('scan_result', {})
+        protected_combinations = scan_result.get('protected_combinations', [])
+        is_passive = context.get('is_passive', False)  # 是否是被动出牌
+        
+        if protected_combinations and action_cards:
+            action_cards_set = set(action_cards)
+            for protected in protected_combinations:
+                protected_set = set(protected)
+                # 如果动作中的卡牌与受保护组合有交集，且不是完整使用，就是破坏
+                if action_cards_set & protected_set:
+                    if not action_cards_set.issubset(protected_set):
+                        # 检查是否是炸弹（炸弹无论主动被动都严格保护）
+                        if len(protected) >= 4:  # 炸弹
+                            return 0.0  # 拆炸弹绝对禁止
+                        
+                        # 主动出牌：严格保护所有组合
+                        if not is_passive:
+                            return 0.0  # 主动出牌时，破坏任何组合都禁止
+                        
+                        # 被动出牌：允许拆对子/三张来压制，但需要后续评估
+                        # 这里不直接返回0.0，而是继续评估拆牌的影响
+                        # 如果是拆三张，影响更大；如果是拆对子，影响较小
+        
         # ⚠️ 检查是否是多余单张（如果是多余单张，不认为是拆牌）
         excess_singles = context.get('excess_singles', [])
         if action_type == 'Single' and len(action_cards) == 1:
@@ -475,14 +517,22 @@ class EnhancedPrioritySystem:
                 if action_type == 'Single' and card_count >= 2:
                     is_split = True
                     split_type = 'pair'
-                    impact_score = -0.3  # 拆对子负面影响
+                    # 被动出牌时，拆对子的惩罚可以减轻（因为需要压制对手）
+                    if is_passive:
+                        impact_score = -0.1  # 被动出牌时，拆对子惩罚很轻（可以接受）
+                    else:
+                        impact_score = -0.3  # 主动出牌时，拆对子惩罚更重
                     break
                 
                 # 如果手牌中有3张或更多相同点数的牌，出单张就是拆三张
                 if action_type == 'Single' and card_count >= 3:
                     is_split = True
                     split_type = 'trips'
-                    impact_score = -0.6  # 拆三张负面影响更大（从-0.5增加到-0.6）
+                    # 被动出牌时，拆三张的惩罚可以减轻（因为需要压制对手）
+                    if is_passive:
+                        impact_score = -0.4  # 被动出牌时，拆三张惩罚减轻
+                    else:
+                        impact_score = -0.6  # 主动出牌时，拆三张惩罚更重
                     break
                 
                 # 如果手牌中有4张或更多相同点数的牌，出单张就是拆炸弹
