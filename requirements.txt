@@ -20,3 +20,10 @@ torchvision>=0.15.0
 torchaudio>=2.0.0
 numpy>=1.21.0
 websockets>=10.0
+
+# 智能训练插件
+tensorboard>=2.14.0  # TensorBoard 训练监控（推荐，免费，本地）
+mlflow>=2.8.0  # MLflow 实验管理（推荐，免费，开源）
+wandb>=0.16.0  # Weights & Biases 训练监控（可选，需要登录）
+optuna>=3.5.0  # 超参数优化
+pytorch-lightning>=2.1.0  # 训练框架简化
