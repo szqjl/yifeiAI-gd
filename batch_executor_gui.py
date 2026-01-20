@@ -250,6 +250,22 @@ class BatchExecutorGUI:
         # 队伍A（您的队）：0号(Test_N1) + 2号(Test_N2)
         # 队伍B（对手队）：1号(client3) + 3号(client4)
         
+        # 选项2.5：使用V4混合决策系统（4层决策保护机制）
+        default_clients_v4 = [
+            "src/communication/yf1_v4.py",                   # 0号位 - YiFei V4
+            "src/communication/run_lalala_client3.py",       # 1号位 - 对手1
+            "src/communication/yf2_v4.py",                   # 2号位 - YiFei V4
+            "src/communication/run_lalala_client4.py"        # 3号位 - 对手2
+        ]
+        # 队伍分组：
+        # 队伍A（YiFei V4队）：0号(yf1_v4) + 2号(yf2_v4)
+        # 队伍B（对手队）：1号(client3) + 3号(client4)
+        # 注：V4版本使用4层决策保护机制，具有：
+        #     - Layer 1: lalala Strategy
+        #     - Layer 2: DecisionEngine
+        #     - Layer 3: Knowledge Enhanced
+        #     - Layer 4: Random (保底)
+        
         # 选项3：使用V5智能混合决策系统（RL+知识库+规则引擎）
         default_clients_v5 = [
             "src/communication/yf1_v5.py",                   # 0号位 - YiFei V5
@@ -298,13 +314,29 @@ class BatchExecutorGUI:
         #     - 完善的策略逻辑（整合策略函数和知识库文档）
         #     - 完全独立于V5/V6版本
         
-        # 默认使用M1（如果存在），否则使用V6，再否则使用V5
-        if all(os.path.exists(c) for c in default_clients_m1):
-            default_clients = default_clients_m1
-        elif all(os.path.exists(c) for c in default_clients_v6):
-            default_clients = default_clients_v6
-        else:
+        # 检查环境变量指定版本（优先级最高）
+        client_version = os.environ.get('CLIENT_VERSION', '').lower()
+        
+        if client_version == 'v4':
+            # 使用V4客户端
+            default_clients = default_clients_v4
+        elif client_version == 'v5':
+            # 使用V5客户端
             default_clients = default_clients_v5
+        elif client_version == 'v6':
+            # 使用V6客户端
+            default_clients = default_clients_v6
+        elif client_version == 'm1':
+            # 使用M1客户端
+            default_clients = default_clients_m1
+        else:
+            # 默认使用M1（如果存在），否则使用V6，再否则使用V5
+            if all(os.path.exists(c) for c in default_clients_m1):
+                default_clients = default_clients_m1
+            elif all(os.path.exists(c) for c in default_clients_v6):
+                default_clients = default_clients_v6
+            else:
+                default_clients = default_clients_v5
         
         # 检查哪些客户端存在
         existing_clients = [c for c in default_clients if os.path.exists(c)]

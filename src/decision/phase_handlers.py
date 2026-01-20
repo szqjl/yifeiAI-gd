@@ -164,16 +164,30 @@ class OpeningActiveHandler(BasePhaseHandler):
                         # 2. ⚠️ 硬约束：检查是否会破坏受保护组合（但只在验证通过时检查）
                         action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
                         if action_cards and protected_combinations and validation_passed:
-                            action_cards_set = set(action_cards)
+                            # ⚠️ 修复：展平嵌套列表，确保所有元素都是字符串（可哈希）
+                            def flatten_cards(cards):
+                                """展平卡牌列表，处理嵌套列表"""
+                                result = []
+                                for card in cards:
+                                    if isinstance(card, list):
+                                        result.extend(flatten_cards(card))
+                                    elif isinstance(card, str):
+                                        result.append(card)
+                                return result
+                            
+                            action_cards_flat = flatten_cards(action_cards)
+                            action_cards_set = set(action_cards_flat)
                             would_break = False
                             for protected in protected_combinations:
-                                protected_set = set(protected)
-                                # 如果动作中的卡牌与受保护组合有交集，且不是完整使用，就是破坏
-                                if action_cards_set & protected_set:
-                                    if not action_cards_set.issubset(protected_set):
-                                        would_break = True
-                                        logger.warning(f"Action {i} would break protected combination, skipping: {action}")
-                                        break
+                                if isinstance(protected, list):
+                                    protected_flat = flatten_cards(protected)
+                                    protected_set = set(protected_flat)
+                                    # 如果动作中的卡牌与受保护组合有交集，且不是完整使用，就是破坏
+                                    if action_cards_set & protected_set:
+                                        if not action_cards_set.issubset(protected_set):
+                                            would_break = True
+                                            logger.warning(f"Action {i} would break protected combination, skipping: {action}")
+                                            break
                             if would_break:
                                 continue
                         
@@ -291,8 +305,18 @@ class OpeningActiveHandler(BasePhaseHandler):
                                 action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
                                 if action_cards and excess_card in action_cards:
                                     if self._validate_action_cards(action, handcards):
-                                        # 检查是否破坏受保护组合
-                                        if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                                        # 检查是否破坏受保护组合（修复：展平嵌套列表）
+                                        action_cards_flat = self._flatten_cards(action_cards)
+                                        action_cards_set = set(action_cards_flat)
+                                        would_break = False
+                                        for prot in protected_combinations:
+                                            if isinstance(prot, list):
+                                                prot_flat = self._flatten_cards(prot)
+                                                prot_set = set(prot_flat)
+                                                if action_cards_set & prot_set and not action_cards_set.issubset(prot_set):
+                                                    would_break = True
+                                                    break
+                                        if not would_break:
                                             return i
                 
                 # 降级：选择最小的单张（验证卡牌一致性，不破坏受保护组合）
@@ -300,8 +324,18 @@ class OpeningActiveHandler(BasePhaseHandler):
                     if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
                         if self._validate_action_cards(action, handcards):
                             action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
-                            # 检查是否破坏受保护组合
-                            if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                            # 检查是否破坏受保护组合（修复：展平嵌套列表）
+                            action_cards_flat = self._flatten_cards(action_cards)
+                            action_cards_set = set(action_cards_flat)
+                            would_break = False
+                            for prot in protected_combinations:
+                                if isinstance(prot, list):
+                                    prot_flat = self._flatten_cards(prot)
+                                    prot_set = set(prot_flat)
+                                    if action_cards_set & prot_set and not action_cards_set.issubset(prot_set):
+                                        would_break = True
+                                        break
+                            if not would_break:
                                 return i
         
         # 策略2：牌力中下，情况不明对子先行
@@ -639,6 +673,12 @@ class OpeningPassiveHandler(BasePhaseHandler):
         if strategy_suggests_no_single:
             logger.info("Strategy suggests not playing single, but will still try to find valid actions")
         
+        # ⚠️ 关键修复：如果greater_pos是队友，不应该压制，直接PASS
+        is_teammate = self._is_teammate(greater_pos, my_pos)
+        if is_teammate:
+            logger.info(f"Teammate (pos {greater_pos}) played single, should not suppress, passing")
+            return 0  # PASS，不压制队友
+        
         # ⚠️ 优先级1：使用多余单张（最高优先级）
         handcards = message.get("handCards", [])
         rank = message.get("curRank", "2")
@@ -901,9 +941,65 @@ class OpeningPassiveHandler(BasePhaseHandler):
         return 0
     
     def _handle_other_passive(self, message: Dict, action_list: List, state: Dict) -> int:
-        """处理其他牌型被动出牌"""
+        """处理其他牌型被动出牌（优化：增强ThreeWithTwo和Bomb处理）"""
         import logging
         logger = logging.getLogger("OpeningPassiveHandler")
+        
+        cur_action = message.get("curAction", [])
+        cur_type = cur_action[0] if len(cur_action) > 0 else ""
+        cur_rank = cur_action[1] if len(cur_action) > 1 else ""
+        handcards = message.get("handCards", [])
+        cur_rank_param = message.get("curRank", "2")
+        
+        # ⚠️ 优化1：针对ThreeWithTwo的特殊处理
+        if cur_type == 'ThreeWithTwo':
+            logger.info(f"Handling ThreeWithTwo passive: cur_rank={cur_rank}")
+            # 优先寻找能压制的ThreeWithTwo
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'ThreeWithTwo':
+                    if len(action) > 1:
+                        # 比较牌值（考虑级牌）
+                        action_rank_val = self._get_rank_value(action[1], cur_rank_param) if hasattr(self, '_get_rank_value') else 0
+                        cur_rank_val = self._get_rank_value(cur_rank, cur_rank_param) if hasattr(self, '_get_rank_value') else 0
+                        if action_rank_val > cur_rank_val:
+                            if self._validate_action_cards(action, handcards):
+                                logger.info(f"Found suppressing ThreeWithTwo at index {i}: {action[1]}")
+                                return i
+            
+            # 如果找不到能压制的ThreeWithTwo，尝试其他牌型（降级方案）
+            logger.warning(f"Cannot suppress ThreeWithTwo {cur_rank}, trying other card types")
+            # 优先尝试其他复杂牌型
+            fallback_types = ['Trips', 'ThreePair', 'TwoTrips', 'Straight', 'Pair', 'Single']
+            for fallback_type in fallback_types:
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] == fallback_type:
+                        if self._validate_action_cards(action, handcards):
+                            logger.info(f"ThreeWithTwo fallback: using {fallback_type} at index {i}")
+                            return i
+        
+        # ⚠️ 优化2：针对Bomb的特殊处理
+        elif cur_type == 'Bomb':
+            logger.info(f"Handling Bomb passive: cur_rank={cur_rank}")
+            # 优先寻找更大的Bomb
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Bomb':
+                    if len(action) > 1:
+                        action_rank_val = self._get_rank_value(action[1], cur_rank_param) if hasattr(self, '_get_rank_value') else 0
+                        cur_rank_val = self._get_rank_value(cur_rank, cur_rank_param) if hasattr(self, '_get_rank_value') else 0
+                        if action_rank_val > cur_rank_val:
+                            if self._validate_action_cards(action, handcards):
+                                logger.info(f"Found larger Bomb at index {i}: {action[1]}")
+                                return i
+            
+            # 如果没有更大的Bomb，尝试其他牌型（降级方案）
+            logger.warning(f"No larger Bomb available, trying other card types")
+            fallback_types = ['ThreeWithTwo', 'Trips', 'ThreePair', 'TwoTrips', 'Straight', 'Pair', 'Single']
+            for fallback_type in fallback_types:
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] == fallback_type:
+                        if self._validate_action_cards(action, handcards):
+                            logger.info(f"Bomb fallback: using {fallback_type} at index {i}")
+                            return i
         
         # ⚠️ 修复：即使牌力弱，也应该尝试出牌，而不是直接PASS
         # 开局阶段，牌力弱时仍然尝试出牌（降级方案）
@@ -912,35 +1008,52 @@ class OpeningPassiveHandler(BasePhaseHandler):
             # 尝试返回第一个非PASS动作
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
-                    logger.debug(f"Power weak but found non-PASS action at index {i}: {action[0]}")
-                    return i
+                    if self._validate_action_cards(action, handcards):
+                        logger.debug(f"Power weak but found valid non-PASS action at index {i}: {action[0]}")
+                        return i
             # 只有真的没有可选动作时才PASS
-            logger.warning(f"Power < 5 and no non-PASS actions available, returning PASS")
+            logger.warning(f"Power < 5 and no valid non-PASS actions available, returning PASS")
             return 0
         
-        # 选择能压制的最小动作
-        cur_action = message.get("curAction", [])
-        cur_type = cur_action[0] if len(cur_action) > 0 else ""
-        cur_rank = cur_action[1] if len(cur_action) > 1 else ""
-        handcards = message.get("handCards", [])
-        
+        # 选择能压制的最小动作（通用处理）
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0 and action[0] == cur_type:
-                if len(action) > 1 and action[1] > cur_rank:
-                    # ⚠️ 验证卡牌一致性
-                    if self._validate_action_cards(action, handcards):
-                        return i
+                if len(action) > 1:
+                    # 比较牌值（考虑级牌）
+                    action_rank_val = self._get_rank_value(action[1], cur_rank_param) if hasattr(self, '_get_rank_value') else 0
+                    cur_rank_val = self._get_rank_value(cur_rank, cur_rank_param) if hasattr(self, '_get_rank_value') else 0
+                    if action_rank_val > cur_rank_val:
+                        # ⚠️ 验证卡牌一致性
+                        if self._validate_action_cards(action, handcards):
+                            logger.info(f"Found suppressing {cur_type} at index {i}: {action[1]}")
+                            return i
         
         # ⚠️ 关键修复：在返回0（PASS）之前，确保至少尝试返回第一个有效的非PASS动作
         logger.warning(f"Cannot suppress {cur_type} {cur_rank}, trying fallback")
+        # 降级方案：尝试所有其他牌型
+        fallback_types = ['Trips', 'ThreeWithTwo', 'ThreePair', 'TwoTrips', 'Straight', 'Pair', 'Single']
+        for fallback_type in fallback_types:
+            if fallback_type != cur_type:  # 跳过当前牌型
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] == fallback_type:
+                        if self._validate_action_cards(action, handcards):
+                            logger.warning(f"_handle_other_passive fallback: returning {fallback_type} at index {i}")
+                            return i
+                        else:
+                            # ⚠️ Opening阶段：即使验证失败也尝试（放宽验证）
+                            logger.warning(f"_handle_other_passive fallback: returning {fallback_type} at index {i} despite validation failure (opening phase)")
+                            return i
+        
+        # 最后降级：返回第一个有效的非PASS动作（即使验证失败也返回）
         for i, action in enumerate(action_list):
             if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
-                # ⚠️ 修复：验证卡牌一致性，确保返回的动作是有效的
                 if self._validate_action_cards(action, handcards):
-                    logger.warning(f"_handle_other_passive fallback: returning first valid non-PASS action at index {i}: {action[0]}")
+                    logger.warning(f"_handle_other_passive final fallback: returning first valid non-PASS action at index {i}: {action[0]}")
                     return i
                 else:
-                    logger.debug(f"_handle_other_passive fallback: action at index {i} failed card validation: {action[0]}")
+                    # ⚠️ Opening阶段：即使验证失败也返回（放宽验证）
+                    logger.warning(f"_handle_other_passive final fallback: returning first non-PASS action at index {i} despite validation failure (opening phase): {action[0]}")
+                    return i
         
         # 只有真的没有可选动作时才PASS
         logger.warning(f"_handle_other_passive: No valid non-PASS actions available, returning PASS (index 0)")
@@ -1304,18 +1417,190 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         return (my_pos in [0, 2] and pos in [0, 2]) or (my_pos in [1, 3] and pos in [1, 3])
     
     def _handle_single_passive(self, message: Dict, action_list: List, state: Dict, greater_pos: int, my_pos: int) -> int:
-        """处理单张被动出牌（中期：更积极压制对手）"""
+        """处理单张被动出牌（中期：更积极压制对手，集成lalala策略）"""
         import logging
         logger = logging.getLogger("MidEarlyPassiveHandler")
         
         cur_action = message.get("curAction", [])
         action_rank = cur_action[1] if len(cur_action) > 1 else ""
         
-        # 获取当前级牌
+        # 获取当前级牌和手牌
         cur_rank = message.get("curRank", "2")
         handcards = message.get("handCards", [])
+        rank_card = 'H' + cur_rank  # 等级牌（如'H2'）
         
-        # ⚠️ 优先级1：使用多余单张（最高优先级）
+        # 提取PASS次数（学习lalala）
+        pass_num = message.get("pass_num", 0)
+        my_pass_num = message.get("my_pass_num", 0)
+        
+        # 提取玩家剩余牌数信息（学习lalala）
+        public_info = message.get("publicInfo", [])
+        numofplayers = [27, 27, 27, 27]
+        if public_info and len(public_info) == 4:
+            for i, info in enumerate(public_info):
+                numofplayers[i] = info.get("rest", 27)
+        
+        numofnext = numofplayers[(my_pos + 1) % 4]  # 下家剩余牌数
+        numofpre = numofplayers[(my_pos - 1) % 4]  # 上家剩余牌数
+        numoffri = numofplayers[(my_pos + 2) % 4]  # 队友剩余牌数
+        numofgreaterPos = numofplayers[greater_pos] if greater_pos >= 0 else 27
+        
+        # 计算当前牌值和最大牌值（学习lalala）
+        cur_rank_val = self._get_rank_value(action_rank, cur_rank)
+        # 估算最大牌值（使用剩余牌库的最后一张，如果没有则使用A）
+        max_val = 14  # 默认A
+        rest_cards = message.get("remainCards", [])
+        if rest_cards and len(rest_cards) > 0:
+            last_card = rest_cards[-1] if isinstance(rest_cards[-1], list) else rest_cards[-1]
+            if isinstance(last_card, list) and len(last_card) > 0:
+                last_card_str = last_card[0] if isinstance(last_card[0], str) else str(last_card[0])
+                if len(last_card_str) >= 2:
+                    max_val = self._get_rank_value(last_card_str[1], cur_rank)
+        
+        # 构建牌值映射（学习lalala）
+        card_val = self._build_card_value_map(cur_rank)
+        
+        # 详细分析手牌结构（学习lalala）
+        hand_structure = self._analyze_hand_structure_detailed(handcards, cur_rank)
+        single_member = hand_structure['single_member']
+        pair_member = hand_structure['pair_member']
+        trip_member = hand_structure['trip_member']
+        bomb_member = hand_structure['bomb_member']
+        straight_member = hand_structure['straight_member']
+        sorted_cards = hand_structure['sorted_cards']
+        bomb_info = hand_structure['bomb_info']
+        
+        # 分离单张动作和炸弹动作（学习lalala）
+        single_action_list = []
+        bomb_action_list = []
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0:
+                if action[0] == 'Single':
+                    single_action_list.append((i, action))
+                elif action[0] == 'Bomb':
+                    bomb_action_list.append((i, action))
+        
+        # ⭐ 残局/关键阶段处理（下家≤4或上家≤3）（学习lalala）
+        if numofnext <= 4 or (numofpre <= 3 and numofpre >= 1):
+            # 5.1 保护队友（关键策略）
+            if (my_pos + 2) % 4 == greater_pos and cur_rank_val >= max_val:
+                logger.debug("残局保护队友：PASS")
+                return 0
+            if (my_pos + 2) % 4 == greater_pos and cur_rank_val >= 15 and numofnext != 1:
+                logger.debug("残局保护队友：PASS")
+                return 0
+            
+            # 5.2 优先选择：单张成员 + 大牌值 + 非等级牌
+            for i, action in single_action_list:
+                if len(action) > 1:
+                    action_rank_str = action[1]
+                    action_cards = action[2] if len(action) > 2 else []
+                    if action_cards and len(action_cards) > 0:
+                        first_card = action_cards[0] if isinstance(action_cards[0], str) else str(action_cards[0])
+                        action_rank_val = card_val.get(action_rank_str, 0)
+                        if action_rank_val >= max_val and first_card in single_member and rank_card not in action_cards:
+                            if self._validate_action_cards(action, handcards):
+                                logger.debug(f"残局选择单张成员+大牌值: {action_rank_str}")
+                                return i
+            
+            # 5.3 次优选择：非炸弹成员 + 大牌值 + 非等级牌 + 不在顺子中
+            for i, action in single_action_list:
+                if len(action) > 1:
+                    action_rank_str = action[1]
+                    action_cards = action[2] if len(action) > 2 else []
+                    if action_cards and len(action_cards) > 0:
+                        first_card = action_cards[0] if isinstance(action_cards[0], str) else str(action_cards[0])
+                        action_rank_val = card_val.get(action_rank_str, 0)
+                        if action_rank_val >= max_val and first_card not in bomb_member and rank_card not in action_cards:
+                            if not self._is_in_straight(action, straight_member):
+                                if self._validate_action_cards(action, handcards):
+                                    logger.debug(f"残局选择非炸弹成员+大牌值: {action_rank_str}")
+                                    return i
+            
+            # 5.4 考虑使用炸弹
+            bomb_index = self._choose_bomb(bomb_action_list, handcards, sorted_cards, bomb_info, rank_card, card_val, action_list)
+            if bomb_index != -1:
+                logger.debug(f"残局选择炸弹: index={bomb_index}")
+                return bomb_index
+            
+            # 5.5 放宽条件：牌值 >= max_val-2
+            for i, action in single_action_list:
+                if len(action) > 1:
+                    action_rank_str = action[1]
+                    action_cards = action[2] if len(action) > 2 else []
+                    if action_cards and len(action_cards) > 0:
+                        first_card = action_cards[0] if isinstance(action_cards[0], str) else str(action_cards[0])
+                        action_rank_val = card_val.get(action_rank_str, 0)
+                        if action_rank_val >= max_val - 2 and first_card not in bomb_member and rank_card not in action_cards:
+                            if not self._is_in_straight(action, straight_member):
+                                if self._validate_action_cards(action, handcards):
+                                    logger.debug(f"残局放宽条件选择: {action_rank_str}")
+                                    return i
+        
+        # ⭐ 队友是最大动作者的处理（学习lalala）
+        if (my_pos + 2) % 4 == greater_pos:
+            # 6.1 如果当前牌值很大，PASS
+            if cur_rank_val >= 14 or cur_rank_val >= max_val - 2:
+                logger.debug("队友出牌，当前牌值很大：PASS")
+                return 0
+            
+            # 6.2 如果队友剩余牌数≤4
+            if numoffri <= 4:
+                index = self._normal_strategy(single_action_list, single_member, rank_card, card_val, action_list)
+                if index == -1:
+                    return 0
+                if cur_rank_val <= 10:
+                    return index
+                else:
+                    # 只出比当前牌大1的牌
+                    selected_action = action_list[index] if index < len(action_list) else None
+                    if selected_action and len(selected_action) > 1:
+                        selected_rank_val = card_val.get(selected_action[1], 0)
+                        if selected_rank_val == cur_rank_val + 1:
+                            return index
+            
+            # 6.3 队友剩余牌数>4
+            else:
+                index = self._normal_strategy(single_action_list, single_member, rank_card, card_val, action_list)
+                if index != -1:
+                    return index
+                else:
+                    return 0
+        
+        # ⭐ 对手是最大动作者的处理（学习lalala）
+        else:
+            # 7.1 优先使用normal策略
+            index = self._normal_strategy(single_action_list, single_member, rank_card, card_val, action_list)
+            if index != -1:
+                logger.debug(f"normal策略选择: index={index}")
+                return index
+            
+            # 7.2 如果PASS次数过多，使用special策略
+            if pass_num >= 5 or my_pass_num >= 3:
+                index = self._special_strategy(single_action_list, bomb_member, straight_member, rank_card, card_val, action_list)
+                if index != -1:
+                    logger.debug(f"special策略选择: index={index}")
+                    return index
+            
+            # 7.3 考虑使用炸弹
+            cur_bomb_num = self._cal_bomb_num(sorted_cards, handcards, rank_card)
+            if cur_rank_val >= max_val and numofgreaterPos >= 15 and cur_bomb_num > 1:
+                import random
+                p = random.random()
+                bomb_index = self._choose_bomb(bomb_action_list, handcards, sorted_cards, bomb_info, rank_card, card_val, action_list)
+                if p > 0.5:  # 50%概率使用炸弹
+                    if bomb_index != -1:
+                        logger.debug(f"50%概率使用炸弹: index={bomb_index}")
+                        return bomb_index
+            elif ((cur_rank_val >= 15 or cur_rank_val >= max_val - 2) and numofgreaterPos <= 15) or pass_num >= 7 or my_pass_num >= 5:
+                bomb_index = self._choose_bomb(bomb_action_list, handcards, sorted_cards, bomb_info, rank_card, card_val, action_list)
+                if bomb_index != -1:
+                    logger.debug(f"强制使用炸弹: index={bomb_index}")
+                    return bomb_index
+                else:
+                    return 0
+        
+        # ⚠️ 优先级1：使用多余单张（最高优先级）（保留原有逻辑作为降级方案）
         suitable_singles = self._find_excess_singles_for_action(message, action_rank)
         if suitable_singles:
             logger.debug(f"找到{len(suitable_singles)}张可顺走的多余单张: {suitable_singles}")
@@ -1528,30 +1813,78 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         return self._default_passive_action(action_list, message)
     
     def _handle_other_passive(self, message: Dict, action_list: List, state: Dict) -> int:
-        """处理其他牌型被动出牌（中期：更积极压制）"""
+        """处理其他牌型被动出牌（中期：更积极压制，优化ThreeWithTwo和Bomb处理）"""
+        import logging
+        logger = logging.getLogger("MidEarlyPassiveHandler")
+        
         cur_action = message.get("curAction", [])
         cur_type = cur_action[0] if len(cur_action) > 0 else ""
         cur_rank = cur_action[1] if len(cur_action) > 1 else ""
+        cur_rank_param = message.get("curRank", "2")
+        handcards = message.get("handCards", [])
+        
+        # ⚠️ 优化1：针对ThreeWithTwo的特殊处理
+        if cur_type == 'ThreeWithTwo':
+            logger.info(f"Handling ThreeWithTwo passive: cur_rank={cur_rank}")
+            # 优先寻找能压制的ThreeWithTwo
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'ThreeWithTwo':
+                    if len(action) > 1:
+                        action_rank_val = self._get_rank_value(action[1], cur_rank_param)
+                        cur_rank_val = self._get_rank_value(cur_rank, cur_rank_param)
+                        if action_rank_val > cur_rank_val:
+                            if self._validate_action_cards(action, handcards):
+                                logger.info(f"Found suppressing ThreeWithTwo at index {i}: {action[1]}")
+                                return i
+            
+            # 如果找不到能压制的ThreeWithTwo，尝试其他牌型（降级方案）
+            logger.warning(f"Cannot suppress ThreeWithTwo {cur_rank}, trying other card types")
+            fallback_types = ['Trips', 'ThreePair', 'TwoTrips', 'Straight', 'Pair', 'Single']
+            for fallback_type in fallback_types:
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] == fallback_type:
+                        if self._validate_action_cards(action, handcards):
+                            logger.info(f"ThreeWithTwo fallback: using {fallback_type} at index {i}")
+                            return i
+        
+        # ⚠️ 优化2：针对Bomb的特殊处理
+        elif cur_type == 'Bomb':
+            logger.info(f"Handling Bomb passive: cur_rank={cur_rank}")
+            # 优先寻找更大的Bomb
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Bomb':
+                    if len(action) > 1:
+                        action_rank_val = self._get_rank_value(action[1], cur_rank_param)
+                        cur_rank_val = self._get_rank_value(cur_rank, cur_rank_param)
+                        if action_rank_val > cur_rank_val:
+                            if self._validate_action_cards(action, handcards):
+                                logger.info(f"Found larger Bomb at index {i}: {action[1]}")
+                                return i
+            
+            # 如果没有更大的Bomb，尝试其他牌型（降级方案）
+            logger.warning(f"No larger Bomb available, trying other card types")
+            fallback_types = ['ThreeWithTwo', 'Trips', 'ThreePair', 'TwoTrips', 'Straight', 'Pair', 'Single']
+            for fallback_type in fallback_types:
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] == fallback_type:
+                        if self._validate_action_cards(action, handcards):
+                            logger.info(f"Bomb fallback: using {fallback_type} at index {i}")
+                            return i
         
         # 中期阶段：降低牌力阈值，更积极压制
         # ⚠️ 修复：即使牌力弱，也应该尝试出牌，而不是直接PASS
         # 只有在真的没有可选动作时才PASS
         if state['power'] < 3:
             # 牌力弱时，仍然尝试返回第一个非PASS动作（降级方案）
-            import logging
-            logger = logging.getLogger("MidEarlyPassiveHandler")
             logger.debug(f"Power < 3, but still trying to find non-PASS action")
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
-                    logger.debug(f"Power weak but found non-PASS action at index {i}: {action[0]}")
-                    return i
+                    if self._validate_action_cards(action, handcards):
+                        logger.debug(f"Power weak but found valid non-PASS action at index {i}: {action[0]}")
+                        return i
             # 只有真的没有可选动作时才PASS
-            logger.warning(f"Power < 3 and no non-PASS actions available, returning PASS")
+            logger.warning(f"Power < 3 and no valid non-PASS actions available, returning PASS")
             return 0
-        
-        # 获取当前级牌
-        cur_rank_param = message.get("curRank", "2")
-        handcards = message.get("handCards", [])
         
         # 优先寻找能压制的同类型动作
         for i, action in enumerate(action_list):
@@ -1563,14 +1896,17 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
                     if action_rank_val > cur_rank_val:
                         # ⚠️ 验证卡牌一致性
                         if self._validate_action_cards(action, handcards):
+                            logger.info(f"Found suppressing {cur_type} at index {i}: {action[1]}")
                             return i
         
         # 如果没有同类型能压制的，考虑使用炸弹（中期谨慎使用）
         if state['power'] >= 6:
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0 and action[0] == 'Bomb':
-                    # 中期阶段：只有在牌力较强且对手威胁大时才用炸弹
-                    return i
+                    if self._validate_action_cards(action, handcards):
+                        # 中期阶段：只有在牌力较强且对手威胁大时才用炸弹
+                        logger.info(f"Using Bomb at index {i} (power >= 6)")
+                        return i
         
         # 降级：选择第一个非PASS动作
         return self._default_passive_action(action_list, message)
@@ -2022,15 +2358,20 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
                         # 2. ⚠️ 硬约束：检查是否会破坏受保护组合（但只在验证通过时检查）
                         action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
                         if action_cards and protected_combinations and validation_passed:
-                            action_cards_set = set(action_cards)
+                            # ⚠️ 修复：展平嵌套列表，确保所有元素都是字符串（可哈希）
+                            action_cards_flat = self._flatten_cards(action_cards)
+                            action_cards_set = set(action_cards_flat)
                             would_break = False
                             for protected in protected_combinations:
-                                protected_set = set(protected)
-                                if action_cards_set & protected_set:
-                                    if not action_cards_set.issubset(protected_set):
-                                        would_break = True
-                                        logger.warning(f"Action {i} would break protected combination, skipping: {action}")
-                                        break
+                                if isinstance(protected, list):
+                                    protected_flat = self._flatten_cards(protected)
+                                    protected_set = set(protected_flat)
+                                    # 如果动作中的卡牌与受保护组合有交集，且不是完整使用，就是破坏
+                                    if action_cards_set & protected_set:
+                                        if not action_cards_set.issubset(protected_set):
+                                            would_break = True
+                                            logger.warning(f"Action {i} would break protected combination, skipping: {action}")
+                                            break
                             if would_break:
                                 continue
                         
@@ -2213,7 +2554,156 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
             logger = logging.getLogger("EndgameEarlyPassiveHandler")
             cur_rank_val = self._get_rank_value(cur_rank, message.get("curRank", "2")) if hasattr(self, '_get_rank_value') else 0
             
-            # ⚠️ 优先级1：使用多余单张（最高优先级）
+            # ⭐ 集成lalala策略（残局阶段）
+            cur_rank_str = message.get("curRank", "2")
+            rank_card = 'H' + cur_rank_str
+            pass_num = message.get("pass_num", 0)
+            my_pass_num = message.get("my_pass_num", 0)
+            
+            # 提取玩家剩余牌数信息
+            public_info = message.get("publicInfo", [])
+            numofplayers = [27, 27, 27, 27]
+            if public_info and len(public_info) == 4:
+                for i, info in enumerate(public_info):
+                    numofplayers[i] = info.get("rest", 27)
+            
+            my_pos = message.get("myPos", 0)
+            greater_pos = message.get("greaterPos", -1)
+            numofnext = numofplayers[(my_pos + 1) % 4]
+            numofpre = numofplayers[(my_pos - 1) % 4]
+            numoffri = numofplayers[(my_pos + 2) % 4]
+            numofgreaterPos = numofplayers[greater_pos] if greater_pos >= 0 else 27
+            
+            # 计算最大牌值
+            max_val = 14
+            rest_cards = message.get("remainCards", [])
+            if rest_cards and len(rest_cards) > 0:
+                last_card = rest_cards[-1] if isinstance(rest_cards[-1], list) else rest_cards[-1]
+                if isinstance(last_card, list) and len(last_card) > 0:
+                    last_card_str = last_card[0] if isinstance(last_card[0], str) else str(last_card[0])
+                    if len(last_card_str) >= 2:
+                        max_val = self._get_rank_value(last_card_str[1], cur_rank_str)
+            
+            # 构建牌值映射和手牌结构
+            card_val = self._build_card_value_map(cur_rank_str)
+            hand_structure = self._analyze_hand_structure_detailed(handcards, cur_rank_str)
+            single_member = hand_structure['single_member']
+            bomb_member = hand_structure['bomb_member']
+            straight_member = hand_structure['straight_member']
+            sorted_cards = hand_structure['sorted_cards']
+            bomb_info = hand_structure['bomb_info']
+            
+            # 分离单张动作和炸弹动作
+            single_action_list = []
+            bomb_action_list = []
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0:
+                    if action[0] == 'Single':
+                        single_action_list.append((i, action))
+                    elif action[0] == 'Bomb':
+                        bomb_action_list.append((i, action))
+            
+            # ⭐ 残局/关键阶段处理（下家≤4或上家≤3）
+            if numofnext <= 4 or (numofpre <= 3 and numofpre >= 1):
+                # 保护队友
+                if (my_pos + 2) % 4 == greater_pos and cur_rank_val >= max_val:
+                    logger.debug("残局保护队友：PASS")
+                    return 0
+                if (my_pos + 2) % 4 == greater_pos and cur_rank_val >= 15 and numofnext != 1:
+                    logger.debug("残局保护队友：PASS")
+                    return 0
+                
+                # 优先选择：单张成员 + 大牌值 + 非等级牌
+                for i, action in single_action_list:
+                    if len(action) > 1:
+                        action_rank_str = action[1]
+                        action_cards = action[2] if len(action) > 2 else []
+                        if action_cards and len(action_cards) > 0:
+                            first_card = action_cards[0] if isinstance(action_cards[0], str) else str(action_cards[0])
+                            action_rank_val = card_val.get(action_rank_str, 0)
+                            if action_rank_val >= max_val and first_card in single_member and rank_card not in action_cards:
+                                if self._validate_action_cards(action, handcards):
+                                    logger.debug(f"残局选择单张成员+大牌值: {action_rank_str}")
+                                    return i
+                
+                # 次优选择：非炸弹成员 + 大牌值
+                for i, action in single_action_list:
+                    if len(action) > 1:
+                        action_rank_str = action[1]
+                        action_cards = action[2] if len(action) > 2 else []
+                        if action_cards and len(action_cards) > 0:
+                            first_card = action_cards[0] if isinstance(action_cards[0], str) else str(action_cards[0])
+                            action_rank_val = card_val.get(action_rank_str, 0)
+                            if action_rank_val >= max_val and first_card not in bomb_member and rank_card not in action_cards:
+                                if not self._is_in_straight(action, straight_member):
+                                    if self._validate_action_cards(action, handcards):
+                                        logger.debug(f"残局选择非炸弹成员+大牌值: {action_rank_str}")
+                                        return i
+                
+                # 考虑使用炸弹
+                bomb_index = self._choose_bomb(bomb_action_list, handcards, sorted_cards, bomb_info, rank_card, card_val, action_list)
+                if bomb_index != -1:
+                    logger.debug(f"残局选择炸弹: index={bomb_index}")
+                    return bomb_index
+            
+            # ⭐ 队友是最大动作者的处理
+            if (my_pos + 2) % 4 == greater_pos:
+                if cur_rank_val >= 14 or cur_rank_val >= max_val - 2:
+                    logger.debug("队友出牌，当前牌值很大：PASS")
+                    return 0
+                if numoffri <= 4:
+                    index = self._normal_strategy(single_action_list, single_member, rank_card, card_val, action_list)
+                    if index == -1:
+                        return 0
+                    if cur_rank_val <= 10:
+                        return index
+                    else:
+                        selected_action = action_list[index] if index < len(action_list) else None
+                        if selected_action and len(selected_action) > 1:
+                            selected_rank_val = card_val.get(selected_action[1], 0)
+                            if selected_rank_val == cur_rank_val + 1:
+                                return index
+                else:
+                    index = self._normal_strategy(single_action_list, single_member, rank_card, card_val, action_list)
+                    if index != -1:
+                        return index
+                    else:
+                        return 0
+            
+            # ⭐ 对手是最大动作者的处理
+            else:
+                # 优先使用normal策略
+                index = self._normal_strategy(single_action_list, single_member, rank_card, card_val, action_list)
+                if index != -1:
+                    logger.debug(f"normal策略选择: index={index}")
+                    return index
+                
+                # 如果PASS次数过多，使用special策略
+                if pass_num >= 5 or my_pass_num >= 3:
+                    index = self._special_strategy(single_action_list, bomb_member, straight_member, rank_card, card_val, action_list)
+                    if index != -1:
+                        logger.debug(f"special策略选择: index={index}")
+                        return index
+                
+                # 考虑使用炸弹
+                cur_bomb_num = self._cal_bomb_num(sorted_cards, handcards, rank_card)
+                if cur_rank_val >= max_val and numofgreaterPos >= 15 and cur_bomb_num > 1:
+                    import random
+                    p = random.random()
+                    bomb_index = self._choose_bomb(bomb_action_list, handcards, sorted_cards, bomb_info, rank_card, card_val, action_list)
+                    if p > 0.5:
+                        if bomb_index != -1:
+                            logger.debug(f"50%概率使用炸弹: index={bomb_index}")
+                            return bomb_index
+                elif ((cur_rank_val >= 15 or cur_rank_val >= max_val - 2) and numofgreaterPos <= 15) or pass_num >= 7 or my_pass_num >= 5:
+                    bomb_index = self._choose_bomb(bomb_action_list, handcards, sorted_cards, bomb_info, rank_card, card_val, action_list)
+                    if bomb_index != -1:
+                        logger.debug(f"强制使用炸弹: index={bomb_index}")
+                        return bomb_index
+                    else:
+                        return 0
+            
+            # ⚠️ 优先级1：使用多余单张（最高优先级）（保留原有逻辑作为降级方案）
             suitable_singles = self._find_excess_singles_for_action(message, cur_rank)
             if suitable_singles:
                 logger.debug(f"找到{len(suitable_singles)}张可顺走的多余单张: {suitable_singles}")
@@ -2280,8 +2770,30 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
                                 logger.debug(f"残局使用其他单张压制: {action_rank_str}")
                                 return i
             
+            # ⚠️ 优先级5：任何能压制的单张（进一步降级，放宽条件）
+            for i, action in enumerate(action_list):
+                if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    if len(action) > 1:
+                        action_rank_str = action[1]
+                        action_rank_val = self._get_rank_value(action_rank_str, message.get("curRank", "2")) if hasattr(self, '_get_rank_value') else 0
+                        # 即使不能压制，也尝试使用（残局阶段更积极）
+                        if self._validate_action_cards(action, handcards):
+                            logger.debug(f"残局使用单张（即使不能压制）: {action_rank_str}")
+                            return i
+            
             # ⚠️ 关键修复：如果所有优先级都失败，尝试返回第一个有效的非PASS动作
             logger.warning(f"All Single priorities failed, trying fallback")
+            # 先尝试其他牌型
+            fallback_types = ['Pair', 'Trips', 'ThreeWithTwo', 'ThreePair', 'TwoTrips', 'Straight']
+            for fallback_type in fallback_types:
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] == fallback_type:
+                        validation_passed = self._validate_action_cards(action, handcards)
+                        if validation_passed:
+                            logger.warning(f"EndgameEarlyPassiveHandler Single fallback: using {fallback_type} at index {i}")
+                            return i
+            
+            # 最后降级：返回第一个有效的非PASS动作
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
                     validation_passed = self._validate_action_cards(action, handcards)
@@ -2441,8 +2953,18 @@ class EndgameLateActiveHandler(BasePhaseHandler):
                         action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
                         if action_cards and excess_card in action_cards:
                             if self._validate_action_cards(action, handcards):
-                                # 检查是否破坏受保护组合
-                                if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                                # 检查是否破坏受保护组合（修复：展平嵌套列表）
+                                action_cards_flat = self._flatten_cards(action_cards)
+                                action_cards_set = set(action_cards_flat)
+                                would_break = False
+                                for prot in protected_combinations:
+                                    if isinstance(prot, list):
+                                        prot_flat = self._flatten_cards(prot)
+                                        prot_set = set(prot_flat)
+                                        if action_cards_set & prot_set and not action_cards_set.issubset(prot_set):
+                                            would_break = True
+                                            break
+                                if not would_break:
                                     logger.debug(f"选择多余单张: {excess_card}")
                                     return i
             
@@ -2451,7 +2973,18 @@ class EndgameLateActiveHandler(BasePhaseHandler):
                 if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
                     if self._validate_action_cards(action, handcards):
                         action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
-                        if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                        # 检查是否破坏受保护组合（修复：展平嵌套列表）
+                        action_cards_flat = self._flatten_cards(action_cards)
+                        action_cards_set = set(action_cards_flat)
+                        would_break = False
+                        for prot in protected_combinations:
+                            if isinstance(prot, list):
+                                prot_flat = self._flatten_cards(prot)
+                                prot_set = set(prot_flat)
+                                if action_cards_set & prot_set and not action_cards_set.issubset(prot_set):
+                                    would_break = True
+                                    break
+                        if not would_break:
                             return i
         
         # ⭐ 使用优先级系统（提升：动态优先级，残局后期优先一手出完）
@@ -2483,15 +3016,19 @@ class EndgameLateActiveHandler(BasePhaseHandler):
                         # 2. ⚠️ 硬约束：检查是否会破坏受保护组合
                         action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
                         if action_cards and protected_combinations:
-                            action_cards_set = set(action_cards)
+                            # ⚠️ 修复：展平嵌套列表，确保所有元素都是字符串（可哈希）
+                            action_cards_flat = self._flatten_cards(action_cards)
+                            action_cards_set = set(action_cards_flat)
                             would_break = False
                             for protected in protected_combinations:
-                                protected_set = set(protected)
-                                if action_cards_set & protected_set:
-                                    if not action_cards_set.issubset(protected_set):
-                                        would_break = True
-                                        logger.warning(f"Action {i} would break protected combination, skipping: {action}")
-                                        break
+                                if isinstance(protected, list):
+                                    protected_flat = self._flatten_cards(protected)
+                                    protected_set = set(protected_flat)
+                                    if action_cards_set & protected_set:
+                                        if not action_cards_set.issubset(protected_set):
+                                            would_break = True
+                                            logger.warning(f"Action {i} would break protected combination, skipping: {action}")
+                                            break
                             if would_break:
                                 continue
                         
@@ -2690,8 +3227,18 @@ class EndgameLatePassiveHandler(EndgameEarlyPassiveHandler):
                         action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
                         if action_cards and excess_card in action_cards:
                             if self._validate_action_cards(action, handcards):
-                                # 检查是否破坏受保护组合
-                                if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                                # 检查是否破坏受保护组合（修复：展平嵌套列表）
+                                action_cards_flat = self._flatten_cards(action_cards)
+                                action_cards_set = set(action_cards_flat)
+                                would_break = False
+                                for prot in protected_combinations:
+                                    if isinstance(prot, list):
+                                        prot_flat = self._flatten_cards(prot)
+                                        prot_set = set(prot_flat)
+                                        if action_cards_set & prot_set and not action_cards_set.issubset(prot_set):
+                                            would_break = True
+                                            break
+                                if not would_break:
                                     # 确保能压制
                                     action_rank = action[1] if len(action) > 1 else ""
                                     if action_rank and self._get_rank_value(action_rank, context.get('cur_rank', '2')) > self._get_rank_value(cur_rank, context.get('cur_rank', '2')):
@@ -2708,8 +3255,18 @@ class EndgameLatePassiveHandler(EndgameEarlyPassiveHandler):
                     if action_rank_value > cur_rank_value:
                         if self._validate_action_cards(action, handcards):
                             action_cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
-                            # ⚠️ 检查是否破坏受保护组合
-                            if not protected_combinations or not any(set(action_cards) & set(prot) and not set(action_cards).issubset(set(prot)) for prot in protected_combinations):
+                            # ⚠️ 检查是否破坏受保护组合（修复：展平嵌套列表）
+                            action_cards_flat = self._flatten_cards(action_cards)
+                            action_cards_set = set(action_cards_flat)
+                            would_break = False
+                            for prot in protected_combinations:
+                                if isinstance(prot, list):
+                                    prot_flat = self._flatten_cards(prot)
+                                    prot_set = set(prot_flat)
+                                    if action_cards_set & prot_set and not action_cards_set.issubset(prot_set):
+                                        would_break = True
+                                        break
+                            if not would_break:
                                 return i
         
         # ⚠️ 最后尝试：返回第一个有效的非PASS动作（即使不能压制）

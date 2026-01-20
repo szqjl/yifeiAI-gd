@@ -163,6 +163,49 @@ class BasePhaseHandler(ABC):
                 'protected_combinations': []  # 新增
             }
     
+    def _get_rank_value(self, rank: str, cur_rank: str = None) -> int:
+        """
+        获取牌值（用于比较）
+        
+        牌值大小关系：
+        - 3-9, T, J, Q, K, A: 3-14
+        - 级牌: 15 (可压制A及以下)
+        - 小王(B): 16 (可压制级牌及以下)
+        - 大王(R): 17 (可压制小王及以下)
+        
+        Args:
+            rank: 牌值字符串（如"A"、"9"、"B"、"R"等，或带花色的如"S9"、"HA"等）
+            cur_rank: 当前级牌（如"2"、"9"等），如果提供则用于识别级牌
+        
+        Returns:
+            int: 牌值（3-17）
+        """
+        rank_map = {
+            '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
+            '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
+            'B': 16,  # 小王（可压制级牌及以下）
+            'R': 17   # 大王（可压制小王及以下）
+        }
+        if isinstance(rank, str):
+            # 提取最后一位字符（去掉花色）
+            rank_char = rank[-1] if len(rank) > 1 else rank
+            
+            # 如果提供了cur_rank，检查是否是级牌
+            if cur_rank and rank_char == cur_rank:
+                return 15  # 级牌值（可压制A及以下）
+            
+            # 检查是否在映射中
+            if rank_char in rank_map:
+                return rank_map[rank_char]
+            
+            # 如果不在映射中，可能是级牌（但cur_rank未提供），默认返回15
+            # 注意：这里假设如果cur_rank未提供，可能是级牌2
+            if not cur_rank and rank_char == '2':
+                return 15
+            
+            return 0
+        return int(rank) if isinstance(rank, (int, float)) else 0
+    
     def _find_excess_singles_for_action(self, message: Dict, cur_action_rank: str) -> List[str]:
         """
         找出可以顺走的多余单张（被动出牌时使用）
@@ -184,11 +227,11 @@ class BasePhaseHandler(ABC):
             return []
         
         # 过滤出牌值大于cur_action_rank的单张
-        cur_rank_val = self._get_rank_value(cur_action_rank) if hasattr(self, '_get_rank_value') else 0
+        cur_rank_val = self._get_rank_value(cur_action_rank, message.get("curRank", "2"))
         suitable_singles = []
         
         for card in excess_singles:
-            card_rank_val = self._get_rank_value(card) if hasattr(self, '_get_rank_value') else 0
+            card_rank_val = self._get_rank_value(card, message.get("curRank", "2"))
             if card_rank_val > cur_rank_val:
                 suitable_singles.append(card)
         
@@ -354,6 +397,387 @@ class BasePhaseHandler(ABC):
                     break
         
         return result
+    
+    def _flatten_cards(self, cards) -> List[str]:
+        """
+        展平卡牌列表，处理嵌套列表（修复 unhashable type: 'list' 错误）
+        
+        Args:
+            cards: 卡牌列表，可能是嵌套的
+        
+        Returns:
+            展平后的字符串列表
+        """
+        result = []
+        if isinstance(cards, list):
+            for card in cards:
+                if isinstance(card, list):
+                    result.extend(self._flatten_cards(card))
+                elif isinstance(card, str):
+                    result.append(card)
+        elif isinstance(cards, str):
+            result.append(cards)
+        return result
+    
+    def _analyze_hand_structure_detailed(self, handcards: List[str], rank: str) -> Dict:
+        """
+        详细分析手牌结构，识别各种牌型成员（学习lalala）
+        
+        Args:
+            handcards: 手牌列表
+            rank: 级牌
+        
+        Returns:
+            手牌结构字典，包含：
+            - single_member: 单张成员列表
+            - pair_member: 对子成员列表
+            - trip_member: 三张成员列表
+            - bomb_member: 炸弹成员列表
+            - straight_member: 顺子成员列表
+            - sorted_cards: 分类后的牌型字典
+            - bomb_info: 炸弹信息
+        """
+        import logging
+        logger = logging.getLogger("BasePhaseHandler")
+        
+        if not handcards:
+            return {
+                'single_member': [],
+                'pair_member': [],
+                'trip_member': [],
+                'bomb_member': [],
+                'straight_member': [],
+                'sorted_cards': {},
+                'bomb_info': {}
+            }
+        
+        try:
+            # 构建牌值映射
+            card_val = self._build_card_value_map(rank)
+            
+            # 使用HandCombiner组合手牌
+            if hasattr(self, 'hand_analyzer') and self.hand_analyzer:
+                sorted_cards, bomb_info = self.hand_analyzer.combiner.combine_handcards(handcards, rank, card_val)
+            else:
+                # 降级：使用OptimalCombinationScanner
+                from .optimal_combination_scanner import OptimalCombinationScanner
+                scanner = OptimalCombinationScanner()
+                sorted_cards, bomb_info = scanner.combiner.combine_handcards(handcards, rank, card_val)
+            
+            # 提取各种牌型成员
+            single_member = sorted_cards.get("Single", [])
+            
+            # 对子成员：展平所有对子
+            pair_member = []
+            for pair in sorted_cards.get("Pair", []):
+                if isinstance(pair, list):
+                    pair_member.extend(self._flatten_cards(pair))
+                else:
+                    pair_member.append(pair)
+            
+            # 三张成员：展平所有三张
+            trip_member = []
+            for trip in sorted_cards.get("Trips", []):
+                if isinstance(trip, list):
+                    trip_member.extend(self._flatten_cards(trip))
+                else:
+                    trip_member.append(trip)
+            
+            # 炸弹成员：展平所有炸弹
+            bomb_member = []
+            for bomb in sorted_cards.get("Bomb", []):
+                if isinstance(bomb, list):
+                    bomb_member.extend(self._flatten_cards(bomb))
+                else:
+                    bomb_member.append(bomb)
+            
+            # 顺子成员：提取第一个顺子或同花顺
+            straight_member = []
+            if sorted_cards.get("Straight"):
+                straight_member = self._flatten_cards(sorted_cards["Straight"][0] if sorted_cards["Straight"] else [])
+            if sorted_cards.get("StraightFlush"):
+                straight_member.extend(self._flatten_cards(sorted_cards["StraightFlush"][0] if sorted_cards["StraightFlush"] else []))
+            
+            return {
+                'single_member': self._flatten_cards(single_member),
+                'pair_member': pair_member,
+                'trip_member': trip_member,
+                'bomb_member': bomb_member,
+                'straight_member': straight_member,
+                'sorted_cards': sorted_cards,
+                'bomb_info': bomb_info
+            }
+        except Exception as e:
+            logger.warning(f"分析手牌结构时出错: {e}")
+            return {
+                'single_member': [],
+                'pair_member': [],
+                'trip_member': [],
+                'bomb_member': [],
+                'straight_member': [],
+                'sorted_cards': {},
+                'bomb_info': {}
+            }
+    
+    def _build_card_value_map(self, rank: str) -> Dict[str, int]:
+        """
+        构建牌值映射（学习lalala）
+        
+        Args:
+            rank: 级牌
+        
+        Returns:
+            牌值映射字典
+        """
+        card_val = {
+            '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
+            '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
+            '2': 15, 'R': 17, 'B': 16  # R=大王, B=小王
+        }
+        # 等级牌特殊处理
+        if rank in card_val:
+            card_val[rank] = 15
+        return card_val
+    
+    def _normal_strategy(self, single_action_list: List, single_member: List[str], 
+                        rank_card: str, card_val: Dict[str, int], action_list: List) -> int:
+        """
+        正常策略：优先使用单张成员或大牌（≥15），避免使用等级牌（学习lalala）
+        
+        Args:
+            single_action_list: 单张动作列表（格式：[(index, action), ...]）
+            single_member: 单张成员列表
+            rank_card: 等级牌（如'H2'）
+            card_val: 牌值映射字典
+            action_list: 完整动作列表（用于返回原始索引）
+        
+        Returns:
+            动作索引，如果没有找到返回-1
+        """
+        import logging
+        logger = logging.getLogger("BasePhaseHandler")
+        
+        # 提取等级牌字符（去掉花色）
+        rank_char = rank_card[-1] if len(rank_card) > 1 else rank_card
+        
+        for action_tuple in single_action_list:
+            if isinstance(action_tuple, tuple) and len(action_tuple) >= 2:
+                original_index, action = action_tuple[0], action_tuple[1]
+            elif isinstance(action_tuple, list):
+                # 如果不是元组，尝试从action_list中找到索引
+                try:
+                    original_index = action_list.index(action_tuple)
+                    action = action_tuple
+                except ValueError:
+                    continue
+            else:
+                continue
+            
+            if not isinstance(action, list) or len(action) < 3:
+                continue
+            
+            action_rank = action[1] if len(action) > 1 else ""
+            action_cards = action[2] if len(action) > 2 else []
+            
+            if not action_cards or not isinstance(action_cards, list):
+                continue
+            
+            # 获取第一张牌
+            first_card = action_cards[0] if len(action_cards) > 0 else ""
+            if not first_card:
+                continue
+            
+            # 检查是否是单张成员
+            is_single_member = first_card in single_member
+            
+            # 检查是否是大牌（≥15）
+            action_rank_val = card_val.get(action_rank, 0)
+            is_large_value = action_rank_val >= 15
+            
+            # 检查是否包含等级牌
+            is_not_rank_card = rank_char not in action_cards
+            
+            # 如果满足条件（单张成员或大牌）且不包含等级牌，返回
+            if (is_single_member or is_large_value) and is_not_rank_card:
+                logger.debug(f"normal策略选择: index={original_index}, action={action}, "
+                           f"is_single_member={is_single_member}, is_large_value={is_large_value}")
+                return original_index
+        
+        return -1
+    
+    def _special_strategy(self, single_action_list: List, bomb_member: List[str], 
+                         straight_member: List[str], rank_card: str, 
+                         card_val: Dict[str, int], action_list: List) -> int:
+        """
+        特殊策略：从大到小选择，避免使用炸弹成员、等级牌和顺子成员（学习lalala）
+        
+        Args:
+            single_action_list: 单张动作列表（格式：[(index, action), ...]）
+            bomb_member: 炸弹成员列表
+            straight_member: 顺子成员列表
+            rank_card: 等级牌（如'H2'）
+            card_val: 牌值映射字典
+            action_list: 完整动作列表（用于返回原始索引）
+        
+        Returns:
+            动作索引，如果没有找到返回-1
+        """
+        import logging
+        logger = logging.getLogger("BasePhaseHandler")
+        
+        # 提取等级牌字符（去掉花色）
+        rank_char = rank_card[-1] if len(rank_card) > 1 else rank_card
+        
+        # 从大到小排序（按牌值）
+        sorted_actions = []
+        for action_tuple in single_action_list:
+            if isinstance(action_tuple, tuple) and len(action_tuple) >= 2:
+                original_index, action = action_tuple[0], action_tuple[1]
+            elif isinstance(action_tuple, list):
+                try:
+                    original_index = action_list.index(action_tuple)
+                    action = action_tuple
+                except ValueError:
+                    continue
+            else:
+                continue
+            
+            if not isinstance(action, list) or len(action) < 2:
+                continue
+            
+            action_rank = action[1] if len(action) > 1 else ""
+            action_rank_val = card_val.get(action_rank, 0)
+            sorted_actions.append((original_index, action, action_rank_val))
+        
+        # 按牌值从大到小排序
+        sorted_actions.sort(key=lambda x: x[2], reverse=True)
+        
+        # 从大到小选择
+        for original_index, action, _ in sorted_actions:
+            action_cards = action[2] if len(action) > 2 else []
+            if not action_cards or not isinstance(action_cards, list):
+                continue
+            
+            first_card = action_cards[0] if len(action_cards) > 0 else ""
+            if not first_card:
+                continue
+            
+            # 避免使用炸弹成员、等级牌和顺子成员
+            if first_card not in bomb_member and rank_char not in action_cards:
+                if not self._is_in_straight(action, straight_member):
+                    logger.debug(f"special策略选择: index={original_index}, action={action}")
+                    return original_index
+        
+        return -1
+    
+    def _is_in_straight(self, action: List, straight_member: List[str]) -> bool:
+        """
+        判断动作的牌是否在顺子中（学习lalala）
+        
+        Args:
+            action: 动作列表
+            straight_member: 顺子成员列表
+        
+        Returns:
+            True: 在顺子中
+            False: 不在顺子中
+        """
+        if not action or not isinstance(action, list) or len(action) < 3:
+            return False
+        
+        action_cards = action[2] if len(action) > 2 else []
+        if not action_cards or not isinstance(action_cards, list):
+            return False
+        
+        first_card = action_cards[0] if len(action_cards) > 0 else ""
+        if not first_card:
+            return False
+        
+        return first_card in straight_member
+    
+    def _cal_bomb_num(self, sorted_cards: Dict, handcards: List[str], rank_card: str) -> int:
+        """
+        计算炸弹数量（学习lalala）
+        
+        Args:
+            sorted_cards: 分类后的牌型字典
+            handcards: 手牌列表
+            rank_card: 等级牌（如'H2'）
+        
+        Returns:
+            炸弹数量
+        """
+        bomb_count = len(sorted_cards.get("Bomb", []))
+        
+        # 考虑等级牌炸弹（如果有4张等级牌）
+        rank_char = rank_card[-1] if len(rank_card) > 1 else rank_card
+        rank_count = sum(1 for card in handcards if len(card) >= 2 and card[1] == rank_char)
+        if rank_count >= 4:
+            bomb_count += 1
+        
+        return bomb_count
+    
+    def _choose_bomb(self, bomb_action_list: List, handcards: List[str], 
+                    sorted_cards: Dict, bomb_info: Dict, rank_card: str, 
+                    card_val: Dict[str, int], action_list: List) -> int:
+        """
+        选择炸弹的策略（学习lalala）
+        
+        Args:
+            bomb_action_list: 炸弹动作列表（格式：[(index, action), ...]）
+            handcards: 手牌列表
+            sorted_cards: 分类后的牌型字典
+            bomb_info: 炸弹信息
+            rank_card: 等级牌（如'H2'）
+            card_val: 牌值映射字典
+            action_list: 完整动作列表（用于返回原始索引）
+        
+        Returns:
+            动作索引，如果没有找到返回-1
+        """
+        import logging
+        logger = logging.getLogger("BasePhaseHandler")
+        
+        if not bomb_action_list:
+            return -1
+        
+        # 优先选择小炸弹，保留大炸弹
+        # 按炸弹大小排序（从小到大）
+        sorted_bombs = []
+        for action_tuple in bomb_action_list:
+            if isinstance(action_tuple, tuple) and len(action_tuple) >= 2:
+                original_index, action = action_tuple[0], action_tuple[1]
+            elif isinstance(action_tuple, list):
+                try:
+                    original_index = action_list.index(action_tuple)
+                    action = action_tuple
+                except ValueError:
+                    continue
+            else:
+                continue
+            
+            if not isinstance(action, list) or len(action) < 2:
+                continue
+            
+            action_rank = action[1] if len(action) > 1 else ""
+            action_rank_val = card_val.get(action_rank, 0)
+            
+            # 计算炸弹大小（牌数）
+            action_cards = action[2] if len(action) > 2 else []
+            bomb_size = len(action_cards) if isinstance(action_cards, list) else 0
+            
+            sorted_bombs.append((original_index, action, action_rank_val, bomb_size))
+        
+        # 按炸弹大小从小到大排序，然后按牌值从小到大排序
+        sorted_bombs.sort(key=lambda x: (x[3], x[2]))
+        
+        # 选择最小的炸弹
+        if sorted_bombs:
+            original_index, action, _, _ = sorted_bombs[0]
+            logger.debug(f"choose_bomb策略选择: index={original_index}, action={action}")
+            return original_index
+        
+        return -1
     
     def _build_context(self, message: Dict) -> Dict:
         """构建上下文信息（供策略引擎使用）"""

@@ -614,12 +614,128 @@ class OptimalCombinationScanner:
                 used_cards.add(trip)
         
         # 找出不在任何组合中的单张（多余单张）
+        # ⚠️ 关键修复：直接使用sorted_cards["Single"]中的单张，排除能组成顺子/同花顺的单张
         excess_singles = []
-        for card in handcards:
+        
+        # 获取sorted_cards中的单张列表（天然单张）
+        natural_singles = sorted_cards.get("Single", [])
+        
+        # 对于每个天然单张，检查它是否：
+        # 1. 不在used_cards中（没有被用于任何组合）
+        # 2. 不能与其他卡牌组成顺子/同花顺
+        for card in natural_singles:
+            # 如果单张不在used_cards中，说明它没有被用于任何组合
             if card not in used_cards:
-                excess_singles.append(card)
+                # 检查该卡牌是否能与其他卡牌组成顺子或同花顺
+                if not self._can_form_straight_or_straight_flush(card, handcards, rank, card_val, used_cards):
+                    excess_singles.append(card)
+        
+        # ⚠️ 额外检查：如果sorted_cards["Single"]为空，但手牌中有不在used_cards中的单张，也应该识别
+        # 这种情况可能发生在手牌扫描器没有正确识别单张时
+        if not natural_singles:
+            for card in handcards:
+                if card not in used_cards:
+                    # 检查是否是单张（某个rank只有1张）
+                    card_rank = card[1] if len(card) >= 2 else card[1:]
+                    rank_count = sum(1 for c in handcards if len(c) >= 2 and (c[1] if len(c) == 2 else c[1:]) == card_rank)
+                    if rank_count == 1:
+                        # 是单张，检查是否能组成顺子/同花顺
+                        if not self._can_form_straight_or_straight_flush(card, handcards, rank, card_val, used_cards):
+                            if card not in excess_singles:
+                                excess_singles.append(card)
         
         return excess_singles
+    
+    def _can_form_straight_or_straight_flush(self, card: str, handcards: List[str], rank: str, 
+                                            card_val: Dict[str, int], used_cards: Set[str]) -> bool:
+        """
+        检查卡牌是否能与其他卡牌组成顺子或同花顺
+        
+        Args:
+            card: 要检查的卡牌
+            handcards: 手牌列表
+            rank: 等级牌
+            card_val: 牌值映射
+            
+        Returns:
+            True if 能组成顺子或同花顺, False otherwise
+        """
+        if len(card) < 2:
+            return False
+        
+        card_rank = card[1] if len(card) == 2 else card[1:]
+        card_suit = card[0] if len(card) >= 2 else ''
+        card_value = card_val.get(card_rank, 0)
+        
+        if card_value == 0:
+            return False
+        
+        # 获取可用卡牌（排除已使用的卡牌）
+        available_cards = [c for c in handcards if c not in used_cards or c == card]
+        
+        # 按牌值分组统计
+        rank_count = {}
+        suit_rank_count = {}  # 按花色统计
+        
+        for c in available_cards:
+            if len(c) >= 2:
+                r = c[1] if len(c) == 2 else c[1:]
+                s = c[0]
+                if r in card_val and card_val[r] > 0:
+                    rank_count[r] = rank_count.get(r, 0) + 1
+                    if s not in suit_rank_count:
+                        suit_rank_count[s] = {}
+                    suit_rank_count[s][r] = suit_rank_count[s].get(r, 0) + 1
+        
+        # 检查是否能组成顺子（需要连续5个点数）
+        # 顺子范围：从 card_value-4 到 card_value+4
+        for start_val in range(max(2, card_value - 4), min(card_value + 1, 11)):
+            if start_val + 4 > 14:
+                continue
+            
+            # 检查连续5个点数是否都有牌
+            can_form_straight = True
+            for offset in range(5):
+                check_val = start_val + offset
+                check_rank = None
+                for r, v in card_val.items():
+                    if v == check_val:
+                        check_rank = r
+                        break
+                if check_rank and rank_count.get(check_rank, 0) >= 1:
+                    continue
+                else:
+                    can_form_straight = False
+                    break
+            
+            if can_form_straight:
+                return True
+        
+        # 检查是否能组成同花顺（需要同一花色的连续5个点数）
+        if card_suit in suit_rank_count:
+            suit_ranks = suit_rank_count[card_suit]
+            for start_val in range(max(2, card_value - 4), min(card_value + 1, 11)):
+                if start_val + 4 > 14:
+                    continue
+                
+                can_form_straight_flush = True
+                for offset in range(5):
+                    check_val = start_val + offset
+                    check_rank = None
+                    for r, v in card_val.items():
+                        if v == check_val:
+                            check_rank = r
+                            break
+                    if check_rank and suit_ranks.get(check_rank, 0) >= 1:
+                        continue
+                    else:
+                        can_form_straight_flush = False
+                        break
+                
+                if can_form_straight_flush:
+                    return True
+        
+        return False
     
     def _extract_complex_types(self, optimal_combo: Dict, handcards: List[str], rank: str, card_val: Dict[str, int]) -> Dict[str, List]:
         """

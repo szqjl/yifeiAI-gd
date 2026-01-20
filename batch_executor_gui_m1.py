@@ -299,21 +299,29 @@ class BatchExecutorGUIM1:
         if self.is_running and self.executor:
             try:
                 state = self.executor.get_state()
-                completed = state.get("completed_games", 0)
-                target = state.get("target_games", 1)
-                restarts = state.get("server_restarts", 0)
-                wins = state.get("wins", 0)
-                losses = state.get("losses", 0)
-                
-                # 更新进度条
-                if target > 0:
-                    progress = (completed / target) * 100
-                    self.progress_var.set(progress)
-                
-                # 更新标签
-                self.progress_label.config(text=f"{completed} / {target}")
-                self.restart_label.config(text=f"重启: {restarts}")
-                self.score_label.config(text=f"战绩: {wins}-{losses}")
+                if state:
+                    completed = state.completed_games
+                    target = state.target_games
+                    restarts = state.restart_count
+                    # 从tracker获取胜场和负场信息
+                    tracker = self.executor.tracker
+                    wins = tracker.team_a_wins if tracker else 0
+                    losses = tracker.team_b_wins if tracker else 0
+                    
+                    # 更新进度条
+                    if target > 0:
+                        progress = (completed / target) * 100
+                        self.progress_var.set(progress)
+                    
+                    # 更新标签
+                    self.progress_label.config(text=f"{completed} / {target}")
+                    self.restart_label.config(text=f"重启: {restarts}")
+                    self.score_label.config(text=f"战绩: {wins}-{losses}")
+                else:
+                    # 如果状态不可用，使用默认值
+                    self.progress_label.config(text="0 / 0")
+                    self.restart_label.config(text="重启: 0")
+                    self.score_label.config(text="战绩: 0-0")
                 
                 # 更新状态
                 if completed >= target:
@@ -487,16 +495,21 @@ class BatchExecutorGUIM1:
                 
                 # 显示结果
                 state = self.executor.get_state()
-                completed = state.get("completed_games", 0)
-                wins = state.get("wins", 0)
-                losses = state.get("losses", 0)
-                
-                self.log_message(f"\n完成场数: {completed}", "INFO")
-                self.log_message(f"胜场: {wins}", "SUCCESS")
-                self.log_message(f"负场: {losses}", "INFO")
-                if completed > 0:
-                    win_rate = (wins / completed) * 100
-                    self.log_message(f"胜率: {win_rate:.2f}%", "SUCCESS")
+                if state:
+                    completed = state.completed_games
+                    # 从tracker获取胜场和负场信息
+                    tracker = self.executor.tracker
+                    wins = tracker.team_a_wins if tracker else 0
+                    losses = tracker.team_b_wins if tracker else 0
+                    
+                    self.log_message(f"\n完成场数: {completed}", "INFO")
+                    self.log_message(f"Team A 胜场: {wins}", "SUCCESS")
+                    self.log_message(f"Team B 胜场: {losses}", "INFO")
+                    if completed > 0:
+                        win_rate = (wins / completed) * 100
+                        self.log_message(f"Team A 胜率: {win_rate:.2f}%", "SUCCESS")
+                else:
+                    self.log_message("\n无法获取执行状态", "WARNING")
         
         except Exception as e:
             self.log_message(f"执行错误: {e}", "ERROR")

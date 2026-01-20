@@ -240,16 +240,34 @@ class EnhancedPrioritySystem:
         """
         计算基础优先级因素
         
-        ⚠️ 关键修复：优先使用excess_singles
+        ⚠️ 关键修复：优先使用excess_singles，开局时优先小单张(3-7)
         """
-        # ⚠️ 优先使用excess_singles（最高优先级）
+        action_type = candidate[0] if isinstance(candidate[0], str) else ""
+        action_cards = candidate[2] if len(candidate) > 2 and isinstance(candidate[2], list) else []
+        
+        # ⚠️ 开局主动出牌时，优先小单张(3-7)
+        game_phase = context.get('game_phase', 'opening')
+        is_active = not context.get('is_passive', False)
+        if game_phase == 'opening' and is_active and action_type == 'Single' and action_cards and len(action_cards) == 1:
+            card = action_cards[0]
+            if len(card) >= 2:
+                card_rank = card[1] if len(card) == 2 else card[1:]
+                # 小单张：3-7
+                small_singles = ['3', '4', '5', '6', '7']
+                if card_rank in small_singles:
+                    # 检查是否是excess_singles
+                    excess_singles = context.get('excess_singles', [])
+                    if card in excess_singles:
+                        return 1.0  # 小单张且是多余单张，最高优先级
+                    else:
+                        return 0.9  # 小单张但不是多余单张，次高优先级
+        
+        # ⚠️ 优先使用excess_singles（非开局或被动出牌时）
         excess_singles = context.get('excess_singles', [])
         if excess_singles:
-            action_type = candidate[0] if isinstance(candidate[0], str) else ""
-            action_cards = candidate[2] if len(candidate) > 2 and isinstance(candidate[2], list) else []
             if action_type == 'Single' and action_cards and len(action_cards) == 1:
                 if action_cards[0] in excess_singles:
-                    return 1.0  # 是多余单张，最高优先级
+                    return 0.95  # 是多余单张，高优先级（但低于开局小单张）
         
         if self.base_priority_system:
             # 使用基础优先级系统

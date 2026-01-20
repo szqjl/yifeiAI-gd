@@ -79,6 +79,9 @@ echo 开始 Stage 7 训练...
 echo ========================================
 echo.
 
+REM 设置环境变量指定使用V6客户端（Stage 7对应V6版本）
+set CLIENT_VERSION=v6
+
 cd src\train
 python stage7_robust_training.py
 

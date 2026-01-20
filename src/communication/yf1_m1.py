@@ -17,12 +17,19 @@ import sys
 import logging
 from pathlib import Path
 import time
+from datetime import datetime
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from decision.rule_based_decision_engine_m1 import RuleBasedDecisionEngineM1
+# 优先使用MoE引擎，如果失败则回退到原始M1引擎
+try:
+    from moe_training.src.decision.moe_decision_engine_m1 import MoEDecisionEngineM1
+    USE_MOE_ENGINE = True
+except ImportError:
+    from decision.rule_based_decision_engine_m1 import RuleBasedDecisionEngineM1
+    USE_MOE_ENGINE = False
 from communication.game_recorder import GameRecorder
 from communication.websocket_manager import WebSocketManager
 
@@ -49,7 +56,7 @@ logging.basicConfig(
 )
 
 # 连接延迟
-DELAY_BEFORE_CONNECT = 3  # seconds, to ensure sequential connection order
+DELAY_BEFORE_CONNECT = 5  # seconds, to ensure sequential connection order (0号位)
 
 
 class YF1_M1_Client:
@@ -74,20 +81,62 @@ class YF1_M1_Client:
         self.ws_manager = WebSocketManager(self.user_info, use_local=use_local_websocket)
         self.websocket = None  # 保持向后兼容
         
-        # Initialize RuleBasedDecisionEngineM1 (M1硬编码决策引擎)
-        self.logger.info("🎯 Initializing RuleBasedDecisionEngineM1")
-        config = {
-            "max_decision_time": 0.8,  # 最大决策时间（秒）
-            "enable_logging": True,     # 启用日志
+        # 初始化决策引擎（优先使用MoE引擎）
+        if USE_MOE_ENGINE:
+            self.logger.info("🎯 Initializing MoEDecisionEngineM1 (MoE混合专家引擎)")
             
-            # 第一阶段优化功能开关（基于 Agentic Design Patterns）
-            "use_intelligent_router": True,      # 启用智能路由器（路由优化）
-            "route_cache_size": 1000,            # 路由缓存大小
-            "use_enhanced_priority": True,        # 启用增强优先级系统（优先级系统增强）
-            "priority_history_size": 1000,        # 优先级历史记录大小
-            "use_enhanced_collaboration": True,   # 启用增强协作策略（协作策略优化）
-        }
-        self.decision_engine = RuleBasedDecisionEngineM1(player_id, config)
+            # 尝试从训练系统加载优化后的配置
+            config_file = Path(__file__).parent.parent.parent / "moe_training" / "moe_optimization" / "current_config.json"
+            base_config = {
+                "max_decision_time": 0.8,  # 最大决策时间（秒）
+                "enable_logging": True,     # 启用日志
+                
+                # MoE默认配置
+                "expert_weights": {
+                    "opening": 1.0,
+                    "mid_early": 1.0,
+                    "mid_late": 1.0,
+                    "endgame_early": 1.0,
+                    "endgame_late": 1.0,
+                    "teammate": 0.8,
+                    "card_analysis": 0.9,
+                    "urgent": 1.2
+                },
+                "gating_config": {
+                    "top_k": 2  # 选择2个专家（类似Grok-1）
+                },
+                "use_learned_gating": False,
+                "enable_decision_cache": True
+            }
+            
+            # 如果存在优化后的配置，加载它
+            if config_file.exists():
+                try:
+                    with open(config_file, 'r', encoding='utf-8') as f:
+                        optimized_config = json.load(f)
+                    # 合并配置：优化后的配置覆盖默认配置
+                    base_config.update(optimized_config)
+                    self.logger.info(f"✅ 已加载优化后的MoE配置: {config_file}")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ 加载优化配置失败，使用默认配置: {e}")
+            else:
+                self.logger.info("ℹ️ 未找到优化配置，使用默认MoE配置")
+            
+            self.decision_engine = MoEDecisionEngineM1(player_id, base_config)
+        else:
+            self.logger.info("🎯 Initializing RuleBasedDecisionEngineM1 (原始M1引擎)")
+            config = {
+                "max_decision_time": 0.8,  # 最大决策时间（秒）
+                "enable_logging": True,     # 启用日志
+                
+                # 第一阶段优化功能开关（基于 Agentic Design Patterns）
+                "use_intelligent_router": True,      # 启用智能路由器（路由优化）
+                "route_cache_size": 1000,            # 路由缓存大小
+                "use_enhanced_priority": True,        # 启用增强优先级系统（优先级系统增强）
+                "priority_history_size": 1000,        # 优先级历史记录大小
+                "use_enhanced_collaboration": True,   # 启用增强协作策略（协作策略优化）
+            }
+            self.decision_engine = RuleBasedDecisionEngineM1(player_id, config)
         
         self.hand_cards = []  # Track current hand
         
@@ -99,7 +148,10 @@ class YF1_M1_Client:
         self.game_recorder = GameRecorder(player_id, "yf1_m1")
         
         self.logger.info(f"✓ yf1_m1 initialized (Player {player_id})")
-        self.logger.info(f"  - Decision Engine: RuleBasedDecisionEngineM1")
+        if USE_MOE_ENGINE:
+            self.logger.info(f"  - Decision Engine: MoEDecisionEngineM1 (MoE混合专家引擎)")
+        else:
+            self.logger.info(f"  - Decision Engine: RuleBasedDecisionEngineM1 (原始M1引擎)")
         self.logger.info(f"  - Version: M1 (Hardcoded Rules)")
         self.logger.info(f"  - Series: M (Hardcoded Rules Engine)")
         self.logger.info(f"  - Architecture: Stage Router with 5 Phases")
@@ -275,9 +327,15 @@ class YF1_M1_Client:
             # M1硬编码决策：直接使用RuleBasedDecisionEngineM1
             act_index = self.decision_engine.decide(data)
             
-            # 获取阶段信息（用于日志）
-            phase_info = self.decision_engine.get_phase_info(data)
-            self.logger.info(f"Phase: {phase_info['game_phase']}, Handler: {phase_info['handler_key']}, 剩余牌数: {phase_info['my_remain']}")
+            # 获取阶段信息（用于日志，如果引擎支持）
+            phase_info = {"game_phase": "unknown", "handler_key": "unknown", "my_remain": "unknown"}  # 默认值
+            if hasattr(self.decision_engine, 'get_phase_info'):
+                try:
+                    phase_info = self.decision_engine.get_phase_info(data)
+                    self.logger.info(f"Phase: {phase_info.get('game_phase', 'unknown')}, Handler: {phase_info.get('handler_key', 'unknown')}, 剩余牌数: {phase_info.get('my_remain', 'unknown')}")
+                except Exception as e:
+                    self.logger.warning(f"获取阶段信息失败: {e}")
+                    phase_info = {"game_phase": "unknown", "handler_key": "unknown", "my_remain": "unknown"}
             
             # 显示选择的动作（类似lalala客户端）
             selected_action = action_list[act_index] if act_index < len(action_list) else []
@@ -434,18 +492,38 @@ class YF1_M1_Client:
             self.logger.info(f"Position updated: {self.player_id} -> {my_pos}")
             self.player_id = my_pos
             # 重新初始化决策引擎（使用新的 player_id）
-            config = {
-                "max_decision_time": 0.8,
-                "enable_logging": True,
-                "curRank": data.get("curRank", "2"),
-                # 第一阶段优化功能开关（基于 Agentic Design Patterns）
-                "use_intelligent_router": True,      # 启用智能路由器（路由优化）
-                "route_cache_size": 1000,            # 路由缓存大小
-                "use_enhanced_priority": True,        # 启用增强优先级系统（优先级系统增强）
-                "priority_history_size": 1000,        # 优先级历史记录大小
-                "use_enhanced_collaboration": True,   # 启用增强协作策略（协作策略优化）
-            }
-            self.decision_engine = RuleBasedDecisionEngineM1(my_pos, config)
+            if USE_MOE_ENGINE:
+                config = {
+                    "max_decision_time": 0.8,
+                    "enable_logging": True,
+                    "curRank": data.get("curRank", "2"),
+                    "expert_weights": {
+                        "opening": 1.0,
+                        "mid_early": 1.0,
+                        "mid_late": 1.0,
+                        "endgame_early": 1.0,
+                        "endgame_late": 1.0,
+                        "teammate": 0.8,
+                        "card_analysis": 0.9,
+                        "urgent": 1.2
+                    },
+                    "gating_config": {"top_k": 2},
+                    "use_learned_gating": False,
+                    "enable_decision_cache": True
+                }
+                self.decision_engine = MoEDecisionEngineM1(my_pos, config)
+            else:
+                config = {
+                    "max_decision_time": 0.8,
+                    "enable_logging": True,
+                    "curRank": data.get("curRank", "2"),
+                    "use_intelligent_router": True,
+                    "route_cache_size": 1000,
+                    "use_enhanced_priority": True,
+                    "priority_history_size": 1000,
+                    "use_enhanced_collaboration": True,
+                }
+                self.decision_engine = RuleBasedDecisionEngineM1(my_pos, config)
         
         self.hand_cards = hand_cards
         print(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
@@ -489,13 +567,24 @@ class YF1_M1_Client:
         result = data.get("result", {})
         
         # 如果是gameResult格式，提取victoryNum和draws
-        if not result and data.get("stage") == "gameResult":
-            result = {
-                "victoryNum": data.get("victoryNum", []),
-                "draws": data.get("draws", []),
-                "total_decisions": self.decision_count,
-                "game_count": self.game_count
-            }
+        # gameResult 是累计结果，包含所有游戏的 victoryNum
+        if data.get("stage") == "gameResult" or "victoryNum" in data:
+            # 提取 victoryNum（可能在 data 中，也可能在 result 中）
+            victory_num = data.get("victoryNum") or result.get("victoryNum", [])
+            if victory_num:
+                result = {
+                    "victoryNum": victory_num,
+                    "draws": data.get("draws", result.get("draws", [])),
+                    "total_decisions": self.decision_count,
+                    "game_count": self.game_count
+                }
+            elif not result:
+                # 如果没有 victoryNum，至少保存其他信息
+                result = {
+                    "draws": data.get("draws", []),
+                    "total_decisions": self.decision_count,
+                    "game_count": self.game_count
+                }
         
         self.logger.info(f"游戏结束: {result}, current_game={self.game_recorder.current_game is not None}")
         print(f"游戏结束: {result}")
@@ -503,14 +592,43 @@ class YF1_M1_Client:
         # 检查是否已经有游戏记录
         if not self.game_recorder.current_game:
             self.logger.warning(f"⚠ 游戏结束通知收到，但current_game为None，可能已经保存过了")
+            # 即使没有 current_game，如果是 gameResult，也保存 victoryNum 到共享文件
+            if data.get("stage") == "gameResult" and "victoryNum" in data:
+                self._save_victory_num_to_shared_file(data.get("victoryNum", []))
             return
         
         # 记录游戏结束
         filepath = self.game_recorder.end_game(result)
         if filepath:
             self.logger.info(f"✓ 游戏记录已保存: {filepath}")
+            # 如果是 gameResult，也保存 victoryNum 到共享文件
+            if data.get("stage") == "gameResult" and "victoryNum" in data:
+                self._save_victory_num_to_shared_file(data.get("victoryNum", []))
         else:
             self.logger.warning(f"⚠ 游戏记录保存失败，可能原因：start_game()未被调用")
+    
+    def _save_victory_num_to_shared_file(self, victory_num: list):
+        """保存 victoryNum 到共享文件，供 batch_executor 读取"""
+        try:
+            import json
+            from pathlib import Path
+            
+            # 保存到项目根目录的临时文件
+            shared_file = Path(__file__).parent.parent.parent / "batch_executor" / "latest_victory_num.json"
+            shared_file.parent.mkdir(exist_ok=True)
+            
+            data = {
+                "victoryNum": victory_num,
+                "timestamp": datetime.now().isoformat(),
+                "player": "yf1_m1"
+            }
+            
+            with open(shared_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            
+            self.logger.info(f"✓ victoryNum 已保存到共享文件: {shared_file}")
+        except Exception as e:
+            self.logger.warning(f"保存 victoryNum 到共享文件失败: {e}")
     
     def _handle_act_notification(self, data: dict):
         """处理其他玩家出牌通知"""

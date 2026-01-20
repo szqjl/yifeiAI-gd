@@ -4,8 +4,8 @@ import logging
 
 # Add delay before connection
 logger = logging.getLogger("client4")
-logger.info("[client4] 等待连接延迟 18 秒，确保第四个位置...")
-time.sleep(18)
+logger.info("[client4] 等待连接延迟 20 秒，确保第四个位置(3号位)...")
+time.sleep(20)
 logger.info("[client4] 开始连接 ws://127.0.0.1:23456/game/client4")
 
 # Ensure URI is correct

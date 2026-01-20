@@ -385,9 +385,20 @@ class BatchExecutor:
         
         # 主执行循环
         try:
+            self.logger.info("=" * 80)
+            self.logger.info("🚀 开始批量执行循环")
+            self.logger.info(f"🎯 目标：{state.target_games} 场游戏")
+            self.logger.info(f"📏 单批次限制：{self.validator.single_run_limit} 场")
+            self.logger.info(f"🔢 预计批次数：{self.validator.calculate_restart_count(state.target_games) + 1}")
+            self.logger.info("=" * 80)
+
             while state.completed_games < state.target_games and self._running:
+                self.logger.info("=" * 80)
+                self.logger.info(f"🔄 循环检查：{state.completed_games} < {state.target_games} and {self._running}")
+                self.logger.info("=" * 80)
+
                 if self.signal_handler and self.signal_handler.is_shutdown_requested():
-                    self.logger.info("检测到关闭请求，停止执行")
+                    self.logger.info("🛑 检测到关闭请求，停止执行")
                     break
                 
                 # 显示进度
@@ -397,10 +408,18 @@ class BatchExecutor:
                 remaining = state.target_games - state.completed_games
                 batch_games = min(remaining, self.validator.single_run_limit)
                 
+                self.logger.info("=" * 60)
                 self.logger.info(f"开始批次 {state.current_batch}，执行 {batch_games} 场游戏")
+                self.logger.info("=" * 60)
                 
-                # 清理之前的进程
+                # 清理之前的进程（确保没有残留）
+                # 注意：第一轮时，这里会清理；后续轮次在上一轮结束时已清理
+                self.logger.info("清理之前的进程（确保没有残留）...")
                 self.restart_manager.cleanup()
+                # 等待一小段时间，确保清理完成
+                import time
+                time.sleep(1)
+                self.logger.info("✓ 清理完成")
                 
                 # 启动服务器
                 server_process = self.restart_manager.restart_server(
@@ -428,20 +447,27 @@ class BatchExecutor:
                 
                 self.logger.info("✓ 服务器端口就绪，开始启动客户端...")
                 
-                # 启动客户端
+                # 启动客户端（客户端内部有延迟：yf1_m1=5s, client3=10s, yf2_m1=15s, client4=20s）
+                # restart_clients 会根据每个客户端类型智能等待，确保连接顺序
+                self.logger.info("开始启动客户端（按顺序启动，智能等待确保连接顺序）...")
+                self.logger.info("客户端内部延迟：yf1_m1=5s(0号位), client3=10s(1号位), yf2_m1=15s(2号位), client4=20s(3号位)")
+                self.logger.info("启动策略：每个客户端启动后，等待其内部延迟完成后再启动下一个")
+                self.logger.info("预计总连接时间：约20秒（最后一个客户端client4需要20秒延迟）")
                 client_processes = self.restart_manager.restart_clients(
-                    self.client_scripts
+                    self.client_scripts,
+                    wait_between=8  # 默认等待时间（实际会根据客户端类型调整）
                 )
                 
                 if not client_processes:
                     self.logger.error("没有客户端成功启动，停止执行")
                     break
                 
-                # 等待所有客户端连接到服务器
+                # 等待所有客户端连接到服务器（增加超时时间，因为客户端需要启动和连接）
                 expected_client_count = len(self.client_scripts)
+                self.logger.info(f"等待所有客户端连接（最多等待30秒，因为client4需要20秒延迟）...")
                 clients_connected = self.restart_manager.wait_for_clients_connected(
                     expected_count=expected_client_count,
-                    timeout=30
+                    timeout=30  # 超时时间：20秒延迟 + 5秒启动间隔 + 5秒缓冲
                 )
                 
                 if not clients_connected:
@@ -453,10 +479,29 @@ class BatchExecutor:
                 else:
                     self.logger.info("✓ 所有客户端已连接")
                 
+                # 验证连接顺序和组队信息
+                self.logger.info("=" * 60)
+                self.logger.info("连接顺序验证")
+                self.logger.info("=" * 60)
+                self.logger.info("预期连接顺序:")
+                self.logger.info("  1. yf1_m1 → 0号位 (Team A)")
+                self.logger.info("  2. client3 → 1号位 (Team B)")
+                self.logger.info("  3. yf2_m1 → 2号位 (Team A)")
+                self.logger.info("  4. client4 → 3号位 (Team B)")
+                self.logger.info("")
+                self.logger.info("组队规则:")
+                self.logger.info("  Team A: 0号(yf1_m1) + 2号(yf2_m1)")
+                self.logger.info("  Team B: 1号(client3) + 3号(client4)")
+                self.logger.info("=" * 60)
+                
                 # 额外等待并检测游戏是否开始
-                self.logger.info("等待游戏开始（检测服务器输出）...")
+                # 所有客户端连接后，等待服务器输出比赛信息
+                self.logger.info("=" * 60)
+                self.logger.info("等待服务器输出比赛信息...")
+                self.logger.info("所有客户端已连接，等待服务器开始游戏...")
+                self.logger.info("=" * 60)
                 import time
-                game_start_timeout = 20  # 游戏开始超时时间
+                game_start_timeout = 30  # 游戏开始超时时间（增加等待时间）
                 start_check_time = time.time()
                 game_started = False
                 
@@ -525,62 +570,332 @@ class BatchExecutor:
                 # 等待服务器完成
                 server_name = os.path.basename(self.server_path)
                 self.logger.info(f"等待服务器完成 {batch_games} 场游戏...")
-                
+
+                # 检查是否使用无限运行模式（不传递游戏次数参数）
+                infinite_mode = (batch_games == self.validator.single_run_limit)
+                if infinite_mode:
+                    self.logger.info("使用无限运行模式：将通过游戏计数器监控进度")
+                    self.logger.info(f"目标：完成 {batch_games} 场游戏后停止服务器")
+                else:
+                    self.logger.info("等待服务器输出完成提示: '达到设定游戏次数，若想再次训练请按照使用说明重新运行'")
+
                 # 等待服务器进程结束并读取输出
                 server_output = []
+                game_completed = False
+                completion_message = "达到设定游戏次数，若想再次训练请按照使用说明重新运行"
+
+                # 记录初始游戏数量（用于无限模式下的进度监控）
+                initial_games = self.tracker.total_games
+                
                 try:
-                    # 读取输出
+                    # 尝试读取输出（即使服务器窗口可见，也尝试读取stdout）
+                    # 注意：使用CREATE_NEW_CONSOLE时，stdout可能仍然可用
                     if server_process.stdout:
-                        for line in server_process.stdout:
-                            server_output.append(line.strip())
-                            # 实时打印服务器输出
-                            if line.strip():
-                                self.logger.info(f"[服务器] {line.strip()}")
+                        self.logger.info("开始读取服务器输出（实时监控完成提示）...")
+                        try:
+                            for line in server_process.stdout:
+                                line_stripped = line.strip()
+                                server_output.append(line_stripped)
+                                # 实时打印服务器输出
+                                if line_stripped:
+                                    self.logger.info(f"[服务器] {line_stripped}")
+                                
+                                # 检测完成提示
+                                if completion_message in line_stripped or "达到设定游戏次数" in line_stripped:
+                                    self.logger.info("=" * 60)
+                                    self.logger.info("✓ 检测到服务器完成提示!")
+                                    self.logger.info(f"  提示内容: {line_stripped}")
+                                    self.logger.info("=" * 60)
+                                    game_completed = True
+                                    
+                                    # 检测到完成提示后，立即主动终止服务器进程
+                                    self.logger.info("主动终止服务器进程...")
+                                    try:
+                                        if server_process.poll() is None:
+                                            server_process.terminate()
+                                            self.logger.info("已发送终止信号，等待进程结束（最多5秒）...")
+                                            try:
+                                                server_process.wait(timeout=5)
+                                                self.logger.info("✓ 服务器进程已正常终止")
+                                            except subprocess.TimeoutExpired:
+                                                self.logger.warning("服务器进程未响应终止信号，强制结束")
+                                                server_process.kill()
+                                                server_process.wait(timeout=2)
+                                                self.logger.info("✓ 服务器进程已强制终止")
+                                    except Exception as e:
+                                        self.logger.error(f"终止服务器进程时出错: {e}")
+                                        try:
+                                            server_process.kill()
+                                            server_process.wait(timeout=2)
+                                        except:
+                                            pass
+                                    
+                                    # 退出读取循环，继续执行后续逻辑
+                                    break
+
+                                # 在无限运行模式下，通过游戏计数器检测完成
+                                if infinite_mode and not game_completed:
+                                    current_games = self.tracker.total_games
+                                    games_completed_this_batch = current_games - initial_games
+                                    if games_completed_this_batch >= batch_games:
+                                        self.logger.info("=" * 60)
+                                        self.logger.info("✓ 检测到无限运行模式下游戏完成!")
+                                        self.logger.info(f"  本批次已完成: {games_completed_this_batch}/{batch_games} 场")
+                                        self.logger.info(f"  累计游戏总数: {current_games} 场")
+                                        self.logger.info("主动终止服务器进程...")
+                                        self.logger.info("=" * 60)
+                                        game_completed = True
+
+                                        # 立即终止服务器进程
+                                        try:
+                                            if server_process.poll() is None:
+                                                server_process.terminate()
+                                                try:
+                                                    server_process.wait(timeout=5)
+                                                    self.logger.info("✓ 服务器进程已正常终止")
+                                                except subprocess.TimeoutExpired:
+                                                    self.logger.warning("服务器进程未响应终止信号，强制结束")
+                                                    server_process.kill()
+                                        except Exception as e:
+                                            self.logger.error(f"终止服务器进程时出错: {e}")
+                                            try:
+                                                server_process.kill()
+                                            except:
+                                                pass
+                        except Exception as read_error:
+                            # 如果无法读取stdout（例如CREATE_NEW_CONSOLE模式下），记录警告但继续
+                            self.logger.warning(f"无法从stdout读取服务器输出: {read_error}")
+                            self.logger.warning("将等待服务器进程结束（请检查服务器窗口确认完成提示）")
+                    else:
+                        self.logger.warning("服务器stdout不可用，无法读取输出")
                     
-                    server_process.wait(timeout=60)  # 等待进程结束
-                    self.logger.info("服务器进程已正常结束")
+                    # 如果已经检测到完成提示并已终止服务器，跳过等待
+                    if game_completed and server_process.poll() is not None:
+                        self.logger.info("✓ 服务器进程已终止，跳过等待")
+                    else:
+                        # 等待进程结束（增加超时时间，确保有足够时间完成所有游戏）
+                        # 每场游戏大约需要1-2分钟，3场游戏需要3-6分钟，加上缓冲时间，设置10分钟超时
+                        timeout_seconds = max(600, batch_games * 120)  # 至少10分钟，或每场游戏2分钟
+                        
+                        if self.visible_server:
+                            # 服务器窗口可见
+                            if game_completed:
+                                self.logger.info(f"已检测到完成提示，等待服务器进程结束（超时时间: {timeout_seconds}秒）...")
+                            else:
+                                self.logger.info(f"等待服务器进程结束（超时时间: {timeout_seconds}秒）...")
+                                self.logger.info("请检查服务器窗口，确认显示完成提示: '达到设定游戏次数，若想再次训练请按照使用说明重新运行'")
+                                self.logger.info("提示：如果服务器窗口显示完成提示，进程将自动结束")
+                        else:
+                            self.logger.info(f"等待服务器进程结束（超时时间: {timeout_seconds}秒）...")
+                        
+                        # 等待服务器进程结束
+                        try:
+                            server_process.wait(timeout=timeout_seconds)
+                            self.logger.info("✓ 服务器进程已正常结束")
+                            # 如果之前没有检测到完成提示，但进程已结束，认为已完成
+                            if not game_completed:
+                                self.logger.info("服务器进程已结束，认为本批次已完成")
+                                game_completed = True
+                        except subprocess.TimeoutExpired:
+                            # 如果超时，但已经检测到完成提示，继续执行
+                            if game_completed:
+                                self.logger.warning(f"服务器进程未在 {timeout_seconds} 秒内结束，但已检测到完成提示，继续执行")
+                                # 强制终止服务器进程
+                                try:
+                                    if server_process.poll() is None:
+                                        server_process.terminate()
+                                        server_process.wait(timeout=5)
+                                except:
+                                    server_process.kill()
+                            else:
+                                raise
                 except subprocess.TimeoutExpired:
-                    self.logger.warning("服务器未在预期时间内终止，强制结束")
-                    server_process.kill()
+                    self.logger.warning(f"⚠️ 服务器未在 {timeout_seconds} 秒内终止")
+                    # 检查是否已经检测到完成提示
+                    if game_completed:
+                        self.logger.info("但已检测到完成提示，继续执行")
+                    else:
+                        self.logger.warning("未检测到完成提示，强制结束服务器")
+                        server_process.kill()
                 except Exception as e:
                     self.logger.error(f"读取服务器输出时出错: {e}")
+                    # 如果已经检测到完成提示，继续执行
+                    if not game_completed:
+                        raise
+                
+                # 确保服务器进程已完全结束
+                self.logger.info("=" * 60)
+                self.logger.info("等待服务器进程完全结束...")
+                self.logger.info("=" * 60)
+                if server_process.poll() is None:
+                    self.logger.warning("服务器进程仍在运行，等待3秒...")
+                    import time
+                    time.sleep(3)
+                    if server_process.poll() is None:
+                        self.logger.warning("强制终止服务器进程...")
+                        server_process.kill()
+                        server_process.wait(timeout=5)
+                
+                self.logger.info("✓ 服务器进程已完全结束")
                 
                 # 更新状态
+                old_completed = state.completed_games
                 state.completed_games += batch_games
                 state.last_update = datetime.now()
+                self.logger.info("=" * 60)
+                self.logger.info(f"📊 状态更新：")
+                self.logger.info(f"  本批次游戏数: {batch_games}")
+                self.logger.info(f"  之前完成: {old_completed} 场")
+                self.logger.info(f"  现在完成: {state.completed_games} 场")
+                self.logger.info(f"  目标游戏: {state.target_games} 场")
+                self.logger.info(f"  剩余: {state.target_games - state.completed_games} 场")
+                self.logger.info("=" * 60)
                 
-                # 从服务器输出读取本批次战绩
-                # 服务器输出格式: "达到设定场次, 其中0号位胜利X次，1号位胜利Y次，2号位胜利Z次，3号位胜利W次"
+                # 从共享文件或游戏记录文件中读取本批次战绩
+                # victoryNum 格式: [0, 3, 0, 3]
+                # 表示: [0号位胜利次数, 1号位胜利次数, 2号位胜利次数, 3号位胜利次数]
                 try:
-                    import re
-                    # 从服务器输出中查找战绩
-                    for line in reversed(server_output):
-                        if "达到设定场次" in line or "其中" in line:
-                            # 提取各位置胜利次数
-                            matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
-                            if matches:
-                                wins = {int(pos): int(count) for pos, count in matches}
-                                # 0号和2号是team_a，1号和3号是team_b
-                                current_team_a = wins.get(0, 0) + wins.get(2, 0)
-                                current_team_b = wins.get(1, 0) + wins.get(3, 0)
-                                
-                                # 计算本批次的增量
-                                delta_a = current_team_a - initial_team_a
-                                delta_b = current_team_b - initial_team_b
-                                
-                                # 累加到tracker
-                                for _ in range(delta_a):
-                                    self.tracker.record_game("team_a")
-                                for _ in range(delta_b):
-                                    self.tracker.record_game("team_b")
-                                
-                                # 更新初始值
-                                initial_team_a = current_team_a
-                                initial_team_b = current_team_b
-                                
-                                self.logger.info(f"本批次增量: Team A +{delta_a}, Team B +{delta_b}")
-                                self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
-                                break
+                    import time
+                    # 等待游戏记录文件保存完成（客户端可能在游戏结束后才保存）
+                    time.sleep(2)
+                    
+                    victory_num = None
+                    latest_file = None
+                    data_source = None
+                    
+                    # 方法1: 优先从共享文件读取（客户端保存的 latest_victory_num.json）
+                    shared_file = self.project_root / "batch_executor" / "latest_victory_num.json"
+                    if shared_file.exists():
+                        try:
+                            with open(shared_file, 'r', encoding='utf-8') as f:
+                                shared_data = json.load(f)
+                            if "victoryNum" in shared_data and shared_data["victoryNum"]:
+                                victory_num = shared_data["victoryNum"]
+                                latest_file = shared_file
+                                data_source = "共享文件"
+                                self.logger.info(f"✓ 从共享文件读取 victoryNum: {shared_file}")
+                        except Exception as e:
+                            self.logger.debug(f"读取共享文件失败: {e}")
+                    
+                    # 方法2: 如果共享文件没有，从游戏记录文件中读取
+                    if not victory_num:
+                        game_records_dir = self.project_root / "game_records"
+                        if game_records_dir.exists():
+                            # 查找包含 victoryNum 的最新游戏记录文件
+                            record_files = list(game_records_dir.glob("*yf*m1*.json"))
+                            if not record_files:
+                                record_files = list(game_records_dir.glob("*.json"))
+                            
+                            # 按修改时间排序，最新的在前
+                            record_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+                            
+                            for record_file in record_files[:10]:  # 只检查最新的10个文件
+                                try:
+                                    with open(record_file, 'r', encoding='utf-8') as f:
+                                        record_data = json.load(f)
+                                    
+                                    # 检查是否有 result.victoryNum
+                                    result = record_data.get("result", {})
+                                    if isinstance(result, dict) and "victoryNum" in result:
+                                        victory_num = result.get("victoryNum", [])
+                                        latest_file = record_file
+                                        data_source = "游戏记录文件"
+                                        break
+                                    # 兼容直接包含 victoryNum 的情况
+                                    elif "victoryNum" in record_data:
+                                        victory_num = record_data.get("victoryNum", [])
+                                        latest_file = record_file
+                                        data_source = "游戏记录文件"
+                                        break
+                                except Exception as e:
+                                    self.logger.debug(f"读取游戏记录文件失败 {record_file}: {e}")
+                                    continue
+                        
+                        if victory_num and len(victory_num) >= 4:
+                            # victoryNum 格式: [0号位胜利, 1号位胜利, 2号位胜利, 3号位胜利]
+                            wins = {
+                                0: int(victory_num[0]) if victory_num[0] is not None else 0,
+                                1: int(victory_num[1]) if victory_num[1] is not None else 0,
+                                2: int(victory_num[2]) if victory_num[2] is not None else 0,
+                                3: int(victory_num[3]) if victory_num[3] is not None else 0
+                            }
+                            
+                            # 输出详细的胜负结果信息
+                            self.logger.info("=" * 60)
+                            self.logger.info(f"从{data_source or '游戏记录文件'}读取胜负结果")
+                            if latest_file:
+                                self.logger.info(f"  数据来源: {latest_file.name}")
+                            self.logger.info("=" * 60)
+                            self.logger.info(f"  0号位(yf1_m1)胜利: {wins[0]}次")
+                            self.logger.info(f"  1号位(client3)胜利: {wins[1]}次")
+                            self.logger.info(f"  2号位(yf2_m1)胜利: {wins[2]}次")
+                            self.logger.info(f"  3号位(client4)胜利: {wins[3]}次")
+                            self.logger.info("")
+                            
+                            # 0号和2号是team_a，1号和3号是team_b
+                            # 注意：victoryNum 是每个位置的累计胜利次数
+                            # 如果队友的胜利次数相同，说明他们作为一队共同获胜了这么多次
+                            # 如果不同，取较大值（因为每场游戏只有一方获胜）
+                            
+                            # Team A: 0号和2号是队友
+                            if wins[0] == wins[2]:
+                                # 队友胜利次数相同，说明他们共同获胜了 wins[0] 次
+                                current_team_a = wins[0]
+                            else:
+                                # 队友胜利次数不同，取较大值
+                                current_team_a = max(wins[0], wins[2])
+                            
+                            # Team B: 1号和3号是队友
+                            if wins[1] == wins[3]:
+                                # 队友胜利次数相同，说明他们共同获胜了 wins[1] 次
+                                current_team_b = wins[1]
+                            else:
+                                # 队友胜利次数不同，取较大值
+                                current_team_b = max(wins[1], wins[3])
+                            
+                            self.logger.info("组队胜负统计:")
+                            self.logger.info(f"  Team A (0号+2号): {current_team_a}胜 (0号位{wins[0]}次, 2号位{wins[2]}次)")
+                            self.logger.info(f"  Team B (1号+3号): {current_team_b}胜 (1号位{wins[1]}次, 3号位{wins[3]}次)")
+                            self.logger.info("=" * 60)
+                            
+                            # 计算本批次的增量
+                            # victoryNum 是累计的胜利次数，需要计算增量
+                            delta_a = current_team_a - initial_team_a
+                            delta_b = current_team_b - initial_team_b
+                            
+                            # 累加到tracker（每场游戏单独记录）
+                            for _ in range(delta_a):
+                                self.tracker.record_game("team_a")
+                            for _ in range(delta_b):
+                                self.tracker.record_game("team_b")
+                            
+                            # 更新初始值
+                            initial_team_a = current_team_a
+                            initial_team_b = current_team_b
+                            
+                            self.logger.info(f"本批次增量: Team A +{delta_a}, Team B +{delta_b}")
+                            self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
+                        else:
+                            self.logger.warning("⚠ 未能从游戏记录文件中读取 victoryNum 数据")
+                            # 尝试从服务器输出中解析（作为备用方案）
+                            import re
+                            for line in reversed(server_output):
+                                if "达到设定场次" in line or ("其中" in line and "胜利" in line):
+                                    matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
+                                    if matches:
+                                        wins = {int(pos): int(count) for pos, count in matches}
+                                        current_team_a = wins.get(0, 0) + wins.get(2, 0)
+                                        current_team_b = wins.get(1, 0) + wins.get(3, 0)
+                                        delta_a = current_team_a - initial_team_a
+                                        delta_b = current_team_b - initial_team_b
+                                        for _ in range(delta_a):
+                                            self.tracker.record_game("team_a")
+                                        for _ in range(delta_b):
+                                            self.tracker.record_game("team_b")
+                                        initial_team_a = current_team_a
+                                        initial_team_b = current_team_b
+                                        self.logger.info(f"从服务器输出解析: Team A +{delta_a}, Team B +{delta_b}")
+                                        break
                 except Exception as e:
                     self.logger.warning(f"读取战绩失败: {e}")
                     import traceback
@@ -593,13 +908,68 @@ class BatchExecutor:
                 except Exception as e:
                     self.logger.error(f"保存数据失败: {e}", exc_info=True)
                 
+                # 一次实战（3场比赛）结束后，等待15秒再清理进程
+                self.logger.info("=" * 60)
+                self.logger.info(f"⏳ 一次实战（{batch_games}场比赛）已结束，等待15秒后再清理进程...")
+                self.logger.info("=" * 60)
+                import time
+                time.sleep(15)
+                self.logger.info("✓ 等待完成，开始清理进程")
+                
                 # 检查是否需要重启
+                self.logger.info("=" * 80)
+                self.logger.info(f"🔍 检查循环条件：")
+                self.logger.info(f"  completed_games: {state.completed_games}")
+                self.logger.info(f"  target_games: {state.target_games}")
+                self.logger.info(f"  _running: {self._running}")
+                self.logger.info(f"  条件: {state.completed_games} < {state.target_games} and {self._running}")
+                self.logger.info("=" * 80)
+
                 if state.completed_games < state.target_games:
+                    self.logger.info("=" * 60)
+                    self.logger.info(f"✅ 本批次完成！已完成 {state.completed_games}/{state.target_games} 场")
+                    self.logger.info("🔄 准备启动下一批次...")
+                    self.logger.info("=" * 60)
+
                     state.restart_count += 1
                     state.current_batch += 1
-                    self.logger.info(f"准备重启，已完成 {state.completed_games}/{state.target_games} 场")
+
+                    # 重要：在启动下一轮之前，先清理所有进程
+                    # 这确保没有残留的客户端或服务器进程
+                    self.logger.info("🧹 清理所有进程，准备下一轮...")
+                    self.restart_manager.cleanup()
+                    # 额外等待2秒，确保所有进程完全清理
+                    time.sleep(2)
+                    self.logger.info("✅ 清理完成，准备启动下一轮")
+
+                    # 明确记录循环将继续
+                    self.logger.info("=" * 80)
+                    self.logger.info(f"🔄 循环将继续执行下一批次")
+                    self.logger.info(f"  已完成: {state.completed_games}/{state.target_games} 场")
+                    self.logger.info(f"  下一批次: batch {state.current_batch}")
+                    self.logger.info(f"  已重启: {state.restart_count} 次")
+                    self.logger.info("=" * 80)
+                    # 循环会继续，因为 while 条件仍然满足
                 else:
-                    self.logger.info("所有游戏已完成!")
+                    self.logger.info("=" * 60)
+                    self.logger.info("🎉 所有游戏已完成!")
+                    self.logger.info(f"📊 最终统计：{state.completed_games}/{state.target_games} 场游戏完成")
+                    self.logger.info("=" * 60)
+                    
+                    # 最后一次实战结束后，等待15秒再清理进程
+                    self.logger.info("=" * 60)
+                    self.logger.info(f"⏳ 最后一次实战（{batch_games}场比赛）已结束，等待15秒后再清理进程...")
+                    self.logger.info("=" * 60)
+                    import time
+                    time.sleep(15)
+                    self.logger.info("✓ 等待完成，开始清理进程")
+                    
+                    # 清理所有进程
+                    self.logger.info("🧹 清理所有进程...")
+                    self.restart_manager.cleanup()
+                    self.logger.info("✅ 清理完成")
+                    
+                    # 所有游戏完成，退出循环
             
             # 显示最终结果
             self.logger.info("\n" + "=" * 60)
