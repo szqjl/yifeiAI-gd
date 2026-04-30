@@ -323,6 +323,9 @@ class RestartManager:
                                 pass
                         def kill(self):
                             self.terminate()
+                        def wait(self, timeout=None):
+                            # start/cmd 模式下无法直接 wait 到真实客户端进程，保持接口兼容避免 cleanup 异常
+                            return self.returncode
                     process = VirtualProcess(process.pid, window_title)
                 else:
                     # Linux/Mac: 使用默认方式
@@ -474,6 +477,19 @@ class RestartManager:
         # 注意：不要杀死所有python.exe进程，因为GUI本身也是Python进程
         process_names = ['guandan_offline_v1006.exe']
         self.process_monitor.kill_all(process_names)
+        
+        # 额外清理由 start "客户端X: ..." 打开的残留 cmd 窗口
+        # 仅匹配窗口标题前缀“客户端”，避免误杀普通终端
+        if sys.platform == 'win32':
+            try:
+                subprocess.run(
+                    ['taskkill', '/F', '/FI', 'WINDOWTITLE eq 客户端*'],
+                    capture_output=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                logger.info("已执行客户端 cmd 窗口清理（标题: 客户端*）")
+            except Exception as e:
+                logger.debug(f"清理客户端 cmd 窗口失败（可忽略）: {e}")
         
         # 清空进程列表
         self.client_processes = []

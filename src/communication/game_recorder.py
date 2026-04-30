@@ -192,15 +192,22 @@ class GameRecorder:
         logger = logging.getLogger(f"GameRecorder.{self.player_name}")
         
         # ⚠️ 重要：如果已经有游戏记录在进行，先保存它（防止多局游戏时丢失记录）
+        # 修复：如果当前游戏还没有result，延迟保存，等待gameResult通知
         if self.current_game:
-            logger.warning(f"⚠ 新游戏开始，但当前游戏记录未结束，先保存当前游戏记录")
-            # 使用临时结果保存当前游戏
-            temp_result = {
-                "reason": "new_game_started_before_end",
-                "saved_at": datetime.now().isoformat(),
-                "game_counter": self.game_counter
-            }
-            self.end_game(temp_result)
+            # 检查是否已经有result（说明已经收到gameResult通知）
+            if self.current_game.get("result") and isinstance(self.current_game.get("result"), dict):
+                if "victoryNum" in self.current_game.get("result", {}):
+                    # 已经有完整的result，可以保存
+                    logger.info(f"✓ 新游戏开始，当前游戏已有完整result，先保存当前游戏记录")
+                    self.end_game(self.current_game.get("result"))
+                else:
+                    # result存在但没有victoryNum，可能是临时result，等待gameResult
+                    logger.warning(f"⚠ 新游戏开始，但当前游戏记录result不完整，延迟保存等待gameResult")
+                    # 不保存，等待gameResult通知
+            else:
+                # 没有result，等待gameResult通知
+                logger.warning(f"⚠ 新游戏开始，但当前游戏记录未结束（无result），延迟保存等待gameResult")
+                # 不保存，等待gameResult通知
         
         self.game_start_time = datetime.now()
         
@@ -551,9 +558,19 @@ class GameRecorder:
             logger.info(f"✓ 游戏记录已保存: {filepath}")
             print(f"游戏记录已保存: {filepath}")
             
-            # 重置
-            self.current_game = None
-            self.game_start_time = None
+            # 重置（只有在result包含victoryNum时才重置，否则保留current_game等待gameResult）
+            # 修复：如果result不包含victoryNum，不重置current_game，等待gameResult通知
+            if result and isinstance(result, dict) and "victoryNum" in result:
+                # 有完整的victoryNum，可以重置
+                self.current_game = None
+                self.game_start_time = None
+            elif result and isinstance(result, dict) and result.get("reason") == "new_game_started_before_end":
+                # 临时保存的情况，不重置，等待gameResult
+                logger.info("保留current_game，等待gameResult通知以更新result")
+            else:
+                # 其他情况，正常重置
+                self.current_game = None
+                self.game_start_time = None
             
             return filepath
             
@@ -574,6 +591,11 @@ class GameRecorder:
         
         # 从结果中推断对手信息
         victory_num = result.get("victoryNum", [0, 0, 0, 0])
+        # 某些 gameOver/中间通知里 victoryNum 可能为空或长度不足，避免索引越界
+        if not isinstance(victory_num, list):
+            victory_num = [0, 0, 0, 0]
+        if len(victory_num) < 4:
+            victory_num = (victory_num + [0, 0, 0, 0])[:4]
         
         # 判断对手位置（队友是(player_id+2)%4）
         teammate_pos = (int(self.player_id) + 2) % 4
@@ -1308,7 +1330,11 @@ class GameRecorder:
     def save_records(self):
         """保存游戏记录（兼容V7客户端）"""
         if self.current_game:
-            self.end_game({})  # 结束当前游戏并保存
+            # 修复：如果result为空，尝试保留current_game，等待gameResult通知
+            # 只有在明确需要保存时才调用end_game
+            if self.current_game.get("result") is not None:
+                self.end_game(self.current_game.get("result", {}))  # 结束当前游戏并保存
+            # 否则不保存，等待gameResult通知
         
         import logging
         logger = logging.getLogger(f"GameRecorder.{self.player_name}")

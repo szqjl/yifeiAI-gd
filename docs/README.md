@@ -1,63 +1,130 @@
-# 鏂囨。鐩褰
+# 文档目录
 
-鏈鐩褰曞寘鍚椤圭洰鐨勬墍鏈夎︾粏鏂囨。銆
+本目录包含项目的所有详细文档。
 
-## 馃摎 鏂囨。鍒楄〃
+## 📚 快速导航
 
-### 1. [鎺艰泲AI瀹㈡埛绔鏋舵瀯鏂规.md](鎺艰泲AI瀹㈡埛绔鏋舵瀯鏂规.md)
-**璇︾粏鏋舵瀯璁捐℃枃妗**
+### 🚀 新用户入门
+- **[文档完整索引](DOCUMENTATION_INDEX.md)** - 所有文档的完整索引和分类
+- **[快速开始指南](quickstart/)** - 快速上手项目
 
-鍖呭惈瀹屾暣鐨勭郴缁熸灦鏋勮捐°佹ā鍧楄捐°佹暟鎹缁撴瀯銆侀厤缃璇存槑銆佸紑鍙戣″垝绛夎︾粏淇℃伅銆
+### 🧠 掼蛋 AI 迭代大脑（改代码前先读）
+- **[guandan-brain 说明与索引](guandan-brain/README.md)** - 缺陷（ISSUES）、迭代日志（ITERATIONS）、评测（EVAL）；与代码同仓的真源台账
+- **[指挥系统（规划 / 统筹 / 部署）](guandan-brain/COMMAND_SYSTEM.md)** - 大脑与执行层分工、标准一轮流程
+- **[本机评测清单](guandan-brain/LOCAL_EVAL_CHECKLIST.md)** - 哪些须在你本机跑对局、哪些只维护文档
+- **[给执行 AI 的改决策说明](guandan-brain/PROMPT_FOR_DECISION_FIX.md)** - 复制整段让 AI 按评测结论改 `src/decision/`
 
-**涓昏佸唴瀹**锛
-- 绯荤粺鏋舵瀯璁捐
-- 鏍稿績妯″潡璁捐
-- 鏁版嵁缁撴瀯璁捐
-- 娑堟伅娴佺▼璁捐
-- 閰嶇疆绠＄悊
-- 寮鍙戣″垝
-- 鎶鏈瑕佺偣
-- 鍙傝禌瑕佹眰涓庤瘎浼
+### 📖 主要文档分类
 
-### 2. [鎺艰泲AI姣旇禌鍙傝禌鎸囧崡.md](鎺艰泲AI姣旇禌鍙傝禌鎸囧崡.md)
-**鍙傝禌鎸囧崡鏂囨。**
+#### 1. 实施指导 (implementation/)
+详细的实施指导文档，用于执行具体任务
+- [实施指导总览](implementation/实施指导_总览_执行手册.md)
+- [执行AI必读文件清单](implementation/执行AI必读文件清单.md)
 
-璇︾粏鐨勫弬璧涙ラゅ拰娉ㄦ剰浜嬮」锛屽府鍔╁紑鍙戣呬簡瑙ｅ備綍鍙備笌姣旇禌銆
+#### 2. 训练文档 (training/)
+模型训练相关的所有文档
+- [历次训练效果汇总](training/历次训练效果汇总.md)
+- [训练监控工具替代方案](training/训练监控工具替代方案.md)
+- [各阶段训练说明](training/)
 
-**涓昏佸唴瀹**锛
-- 鍙傝禌鍩烘湰淇℃伅
-- 璇︾粏鍙傝禌姝ラ
-- 鍙傝禌妫鏌ユ竻鍗
-- 鎶鏈瑕佺偣鎻愰啋
-- 甯歌侀棶棰
-- 瀛︿範璧勬簮
-- 鍙傝禌寤鸿
+#### 3. 开发文档 (development/)
+功能开发和优化说明
+- [分支开发指南](development/分支开发指南.md)
+- [M1相关开发文档](development/M1*.md)
 
-### 3. [鎺艰泲AI鐩稿叧姣旇禌姹囨.md](鎺艰泲AI鐩稿叧姣旇禌姹囨.md)
-**姣旇禌淇℃伅姹囨绘枃妗**
+#### 4. 分析报告 (analysis/)
+问题分析和优化建议
+- [所有分析报告](analysis/)
+- [M1分析报告](reports/m1/)
 
-姹囨讳簡鎵鏈夌浉鍏崇殑鎺艰泲AI姣旇禌淇℃伅锛屽府鍔╁紑鍙戣呬簡瑙ｆ瘮璧涙儏鍐点
+#### 5. 项目报告 (reports/)
+项目总结和成果报告
+- [M1相关报告](reports/m1/)
+- [优化实施报告](reports/)
 
-**涓昏佸唴瀹**锛
-- 涓撻棬閽堝规幖铔嬬殑姣旇禌
-- 鐩稿叧鍗＄墝娓告垙AI姣旇禌
-- 鏅哄姏杩愬姩鐩稿叧姣旇禌
-- 鐮旂┒鏈烘瀯鍜岄珮鏍
-- 濡備綍鍙戠幇鏂版瘮璧
-- 姣旇禌瀵规瘮鎬荤粨
+#### 6. 使用指南 (usage/)
+工具和功能的使用说明
+- [GUI使用指南](usage/)
+- [回放系统说明](usage/REPLAY_README.md)
 
-## 馃摉 浣跨敤寤鸿
+#### 6. 知识库文档 (knowledge/)
+掼蛋游戏知识和规则
+- [知识库快速开始](knowledge/QUICK_START.md)
+- [游戏规则](knowledge/rules/)
+- [策略技能](knowledge/skills/)
 
-1. **鏂版墜鍏ラ棬**锛氬厛闃呰 [鍙傝禌鎸囧崡](鎺艰泲AI姣旇禌鍙傝禌鎸囧崡.md)锛屼簡瑙ｅ弬璧涙祦绋
-2. **寮鍙戝弬鑰**锛氶槄璇 [鏋舵瀯鏂规圿(鎺艰泲AI瀹㈡埛绔鏋舵瀯鏂规.md)锛屼簡瑙ｆ妧鏈缁嗚妭
-3. **姣旇禌淇℃伅**锛氭煡鐪 [姣旇禌姹囨籡(鎺艰泲AI鐩稿叧姣旇禌姹囨.md)锛屼簡瑙ｇ浉鍏虫瘮璧
+#### 7. 迭代大脑 (guandan-brain/)
+版本—缺陷—评测—决策台账（非通用知识库）
+- [README：使用顺序与维护约定](guandan-brain/README.md)
+- [ISSUES.md](guandan-brain/ISSUES.md) · [ITERATIONS.md](guandan-brain/ITERATIONS.md) · [EVAL.md](guandan-brain/EVAL.md)
+- [评测场景目录](guandan-brain/scenarios/)
 
-## 馃敆 鐩稿叧閾炬帴
+## 📋 文档列表
 
-- [椤圭洰涓绘枃妗](../README.md) - 椤圭洰姒傝堝拰蹇閫熷紑濮
-- [骞冲彴瀹樼綉](https://gameai.njupt.edu.cn/gameaicompetition/gameGD/index.html)
+### 核心架构文档
+- [掼蛋AI客户端架构方案](掼蛋AI客户端架构方案.md)
+- [掼蛋AI完整开发指南](掼蛋AI完整开发指南.md)
+
+### 比赛相关
+- [掼蛋AI相关比赛汇总](掼蛋AI相关比赛汇总.md)
+
+### 工具和配置
+- [Git设置指南](GIT_SETUP_GUIDE.md)
+- [WebSocket配置](WEBSOCKET_CONFIG.md)
+- [OCR和Markitdown指南](OCR_AND_MARKITDOWN_GUIDE.md)
+- [推送前检查指南](推送前检查指南.md)
+
+### 模型和版本
+- [模型文件管理方案](模型文件管理方案.md)
+- [V4 V5对比](V4_V5_COMPARISON.md)
+- [V5模型加载和调试信息](V5_MODEL_LOADING_AND_DEBUG_INFO.md)
+
+## 🔍 按主题查找
+
+### 训练相关
+- 训练效果: [历次训练效果汇总](training/历次训练效果汇总.md)
+- 训练工具: [训练监控工具替代方案](training/训练监控工具替代方案.md)
+- 训练阶段: [各阶段训练说明](training/阶段*.md)
+
+### M1相关问题
+- 所有M1报告: [reports/m1/](reports/m1/)
+- M1开发文档: [development/M1*.md](development/)
+- M1修复记录: [fixes/M1_*.md](fixes/)
+
+### 实施指导
+- 所有实施文档: [implementation/](implementation/)
+- 执行清单: [执行AI必读文件清单](implementation/执行AI必读文件清单.md)
+
+### 问题分析
+- 所有分析: [analysis/](analysis/)
+- 修复记录: [fixes/](fixes/)
+
+## 📖 推荐阅读顺序
+
+### 新用户入门
+1. [项目主README](../README.md) - 项目总览
+2. [快速开始指南](quickstart/) - 快速上手
+3. [知识库快速开始](knowledge/QUICK_START.md) - 了解知识库
+
+### 开发者
+1. [掼蛋 AI 迭代大脑](guandan-brain/README.md) - 先对齐本轮 ISSUES / ITERATIONS / EVAL
+2. [实施指导总览](implementation/实施指导_总览_执行手册.md) - 了解实施流程
+3. [开发相关文档](development/) - 开发指南
+4. [训练相关文档](training/) - 训练指南
+
+### 问题排查
+1. [修复记录](fixes/) - 查看修复记录
+2. [问题分析](analysis/) - 查看问题分析
+3. [M1相关问题](reports/m1/) - 查看M1相关问题
+
+## 🔗 相关链接
+
+- [项目主README](../README.md)
+- [完整文档索引](DOCUMENTATION_INDEX.md)
+- [掼蛋 AI 迭代大脑](guandan-brain/README.md)
+- [知识库快速开始](knowledge/QUICK_START.md)
 
 ---
 
-**鏈鍚庢洿鏂**: 浣跨敤绯荤粺鏃堕棿API鑾峰彇锛坄datetime.now()`锛
-
+**最后更新**: 2025-01-10  
+**维护者**: AI Assistant

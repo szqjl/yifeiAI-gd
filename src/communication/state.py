@@ -347,7 +347,8 @@ class State(object):
         self.remain_cards_classbynum.append(2)
         # end 1020
         # TODO: 选手可以自行做出其他处理
-        print("达到设定场次, 其中0号位胜利{}次，1号位胜利{}次，2号位胜利{}次，3号位胜利{}次".format(self._curTimes, self._settingTimes))
+        # 避免格式化参数数量不匹配（会触发 "Replacement index ... out of range"）
+        print("当前训练次数为{}，设定的游戏次数为{}".format(self._curTimes, self._settingTimes))
 
     def notify_game_result(self):
         """

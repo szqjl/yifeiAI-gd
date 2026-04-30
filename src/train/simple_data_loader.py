@@ -44,15 +44,16 @@ class SimpleGuandanDataset(Dataset):
         logger.info(f"加载了 {len(self.samples)} 个训练样本")
     
     def _load_and_convert_samples(self, max_samples: Optional[int]) -> List[Dict]:
-        """加载并转换训练样本"""
+        """加载并转换训练样本（优化：优先使用胜利记录）"""
         try:
             from replay_parser import ReplayParser
             
             # 创建ReplayParser
             parser = ReplayParser(str(self.data_dir))
             
-            # 加载原始游戏记录
-            replays = []
+            # 加载原始游戏记录（分胜利和失败两类）
+            winning_replays = []
+            losing_replays = []
             json_files = list(self.data_dir.glob("*.json"))
             
             for json_file in json_files:
@@ -62,17 +63,25 @@ class SimpleGuandanDataset(Dataset):
                     
                     # 检查是否是原始游戏记录格式
                     if 'player_id' in data and 'actions' in data:
-                        replays.append(data)
-                        
-                        # 限制加载的游戏数量以控制样本数
-                        if max_samples and len(replays) >= max_samples // 20:
-                            break
+                        # 判断是否胜利
+                        is_win = self._is_winning_record(data)
+                        if is_win:
+                            winning_replays.append(data)
+                        else:
+                            losing_replays.append(data)
                             
                 except Exception as e:
                     logger.debug(f"跳过文件 {json_file}: {e}")
                     continue
             
-            logger.info(f"加载了 {len(replays)} 个游戏记录")
+            # 优先使用胜利记录（70%胜利记录 + 30%失败记录）
+            total_needed = max_samples // 20 if max_samples else len(winning_replays) + len(losing_replays)
+            win_count = min(int(total_needed * 0.7), len(winning_replays))
+            loss_count = min(total_needed - win_count, len(losing_replays))
+            
+            replays = winning_replays[:win_count] + losing_replays[:loss_count]
+            
+            logger.info(f"加载了 {len(replays)} 个游戏记录（胜利: {win_count}, 失败: {loss_count}）")
             
             # 提取训练数据
             training_data = parser.extract_training_data(replays)
@@ -80,10 +89,21 @@ class SimpleGuandanDataset(Dataset):
             
             # 转换为向量格式
             samples = []
+            skipped_empty = 0
             for state_dict, action_cards in training_data:
                 try:
+                    # 跳过空action_cards的样本（这些是PASS动作，对训练帮助不大）
+                    if not action_cards or len(action_cards) == 0:
+                        skipped_empty += 1
+                        continue
+                    
                     state_vec = self._state_to_vector(state_dict)
                     action_vec = self._action_to_vector(action_cards)
+                    
+                    # 验证action_vec不为全0
+                    if sum(action_vec) == 0:
+                        skipped_empty += 1
+                        continue
                     
                     sample = {
                         'state_vec': state_vec,
@@ -100,6 +120,9 @@ class SimpleGuandanDataset(Dataset):
                     logger.debug(f"转换样本失败: {e}")
                     continue
             
+            if skipped_empty > 0:
+                logger.info(f"跳过了 {skipped_empty} 个空action_cards样本（PASS动作）")
+            
             logger.info(f"成功转换了 {len(samples)} 个训练样本")
             return samples
             
@@ -109,6 +132,27 @@ class SimpleGuandanDataset(Dataset):
         except Exception as e:
             logger.error(f"加载数据时出错: {e}")
             return []
+    
+    def _is_winning_record(self, record: Dict) -> bool:
+        """判断记录是否为胜利记录"""
+        player_id = record.get('player_id', 0)
+        
+        # 方法1: 从game_info获取
+        game_info = record.get('game_info', {})
+        game_result = game_info.get('game_result', '')
+        if game_result == 'win':
+            return True
+        elif game_result == 'loss':
+            return False
+        
+        # 方法2: 从result.victoryNum获取
+        result = record.get('result', {})
+        victory_num = result.get('victoryNum', [])
+        if victory_num and len(victory_num) > player_id:
+            return victory_num[player_id] > 0
+        
+        # 默认返回False（保守策略）
+        return False
     
     def _state_to_vector(self, state_dict: Dict) -> List[float]:
         """将状态字典转换为512维向量"""

@@ -340,6 +340,7 @@ guandan_ai_client/
 ├── README.md              # 说明文档（本文件）
 │
 ├── docs/                    # 文档目录
+│   ├── guandan-brain/      # 迭代大脑：缺陷/迭代/评测台账（改代码前先读 README）
 │   ├── development/        # 开发文档
 │   │   └── 分支开发指南.md  # M1/V6分支使用说明
 │   ├── 掼蛋AI客户端架构方案.md
@@ -542,6 +543,7 @@ pip install -r requirements.txt
 ### 开发流程
 
 1. **阅读文档**
+   - 若涉及 AI 行为/规则/训练改动：先读 [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md)（`ISSUES` / `ITERATIONS` / `EVAL`）
    - 阅读 [架构方案文档](docs/掼蛋AI客户端架构方案.md)
    - 理解游戏规则和JSON格式
    - 了解平台要求
@@ -584,6 +586,7 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 - v1006版本特殊规则（抗贡规则调整）
 
 ### 技术文档
+- [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md) - 缺陷、版本、评测台账（与 [文档目录首页](docs/README.md) 中的入口一致）
 - [详细架构方案](docs/掼蛋AI客户端架构方案.md)
 - [开发规范](docs/DEVELOPMENT_RULES.md) - **重要：包含时间处理规则**
 - [参赛指南](docs/掼蛋AI比赛参赛指南.md)

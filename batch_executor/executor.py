@@ -554,74 +554,12 @@ class BatchExecutor:
                 else:
                     self.logger.info("✓ 所有客户端已连接")
                 
-                # 额外等待并检测游戏是否开始
-                self.logger.info("等待游戏开始（检测服务器输出）...")
+                # 额外等待让对局启动，避免在此阶段提前消费 stdout（会影响后续完成判定）
+                self.logger.info("等待游戏开始（保留stdout给后续完成监控）...")
                 import time
-                game_start_timeout = 20  # 游戏开始超时时间
-                start_check_time = time.time()
-                game_started = False
-                
-                # 尝试读取服务器输出，检测游戏开始
-                # 注意：如果服务器窗口可见（visible_server=True），输出可能不在stdout中
-                if server_process.stdout and not self.visible_server:
-                    try:
-                        import threading
-                        import queue
-                        
-                        # 使用队列在后台线程中读取输出
-                        output_queue = queue.Queue()
-                        
-                        def read_output():
-                            """在后台线程中读取服务器输出"""
-                            try:
-                                for line in server_process.stdout:
-                                    if line:
-                                        output_queue.put(line.strip())
-                            except Exception:
-                                pass
-                        
-                        # 启动后台读取线程
-                        read_thread = threading.Thread(target=read_output, daemon=True)
-                        read_thread.start()
-                        
-                        # 轮询队列，检测游戏开始
-                        while time.time() - start_check_time < game_start_timeout:
-                            try:
-                                line = output_queue.get(timeout=1)
-                                if line:
-                                    self.logger.info(f"[服务器] {line}")
-                                    # 检测游戏开始的关键词
-                                    if any(keyword in line.lower() for keyword in [
-                                        "游戏开始", "gamestart", "game start", 
-                                        "开始游戏", "第.*局", "round.*start",
-                                        "ready", "all players connected"
-                                    ]):
-                                        self.logger.info("✓ 检测到游戏开始!")
-                                        game_started = True
-                                        break
-                            except queue.Empty:
-                                # 超时，继续等待
-                                pass
-                            
-                            time.sleep(0.5)
-                    except Exception as e:
-                        self.logger.debug(f"读取服务器输出检测游戏开始时出错: {e}")
-                else:
-                    # 服务器窗口可见，无法从stdout读取，直接等待
-                    self.logger.info("服务器窗口可见，无法从stdout读取输出")
-                    self.logger.info("等待 10 秒让游戏有时间开始...")
-                    time.sleep(10)
-                    game_started = True  # 假设已开始
-                
-                if game_started:
-                    self.logger.info("✓ 游戏已开始或正在开始，继续监控...")
-                else:
-                    self.logger.warning("⚠️ 未检测到游戏开始消息，但继续执行")
-                    self.logger.warning("   可能原因:")
-                    self.logger.warning("   1. 服务器输出格式不同")
-                    self.logger.warning("   2. 游戏已开始但未输出检测关键词")
-                    self.logger.warning("   3. 服务器窗口可见，输出在窗口中显示")
-                    self.logger.warning("   建议: 检查服务器窗口确认游戏是否已开始")
+                game_start_wait_seconds = 10
+                time.sleep(game_start_wait_seconds)
+                self.logger.info(f"已等待 {game_start_wait_seconds} 秒，进入完成监控阶段...")
                 
                 # 等待服务器完成
                 server_name = os.path.basename(self.server_path)
@@ -651,6 +589,18 @@ class BatchExecutor:
                     
                     output_queue = queue.Queue()
                     read_complete = threading.Event()
+                    server_reported_done = False
+                    done_detected_at: Optional[float] = None
+                    # 兼容编码乱码与不同服务器输出：中文、英文、通知键等都可触发完成
+                    done_markers = (
+                        "达到设定场次",
+                        "游戏结束",
+                        "gameover",
+                        "gameresult",
+                        "setting",
+                        "curtimes",
+                    )
+                    batch_start_completed = state.completed_games
                     
                     def read_stdout():
                         """在单独线程中读取stdout"""
@@ -678,6 +628,56 @@ class BatchExecutor:
                         if return_code is not None:
                             self.logger.info(f"服务器进程已结束，返回码: {return_code}")
                             break
+                        
+                        # 收集输出队列中的内容，并检查是否已到达设定场次
+                        try:
+                            while True:
+                                line = output_queue.get_nowait()
+                                server_output.append(line)
+                                line_norm = line.lower()
+                                if any(marker in line_norm for marker in done_markers):
+                                    server_reported_done = True
+                                    if done_detected_at is None:
+                                        done_detected_at = time.time()
+                                        self.logger.info("检测到服务器完成标记，等待进程自行退出...")
+                        except queue.Empty:
+                            pass
+                        
+                        # game_records 已达到本批目标：即使服务端日志编码异常，也可判定完成并收尾
+                        try:
+                            paired_now = _paired_m1_game_ids(self.project_root / "game_records")
+                            if self._game_records_baseline is not None:
+                                session_done = min(
+                                    len(paired_now - self._game_records_baseline), state.target_games
+                                )
+                                batch_done = session_done - batch_start_completed
+                                if batch_done >= batch_games:
+                                    server_reported_done = True
+                                    if done_detected_at is None:
+                                        done_detected_at = time.time()
+                                        self.logger.info(
+                                            "检测到 game_records 本批已达标（+%d/%d），等待进程退出...",
+                                            batch_done,
+                                            batch_games,
+                                        )
+                        except Exception as e:
+                            self.logger.debug(f"按 game_records 判定批次完成失败（可忽略）: {e}")
+                        
+                        # 服务端已明确完成但进程不退出：给几秒缓冲后主动结束，避免 m1.bat 一直无回传
+                        if server_reported_done and done_detected_at is not None:
+                            if time.time() - done_detected_at >= 8:
+                                self.logger.info("服务器已报告完成且超出缓冲时间，主动结束服务端进程以回传结果")
+                                try:
+                                    server_process.terminate()
+                                    server_process.wait(timeout=5)
+                                except Exception:
+                                    # 这里只是让父流程尽快推进，不视作超时强杀失败
+                                    try:
+                                        server_process.kill()
+                                        server_process.wait(timeout=3)
+                                    except Exception:
+                                        pass
+                                break
                         
                         # 检查超时
                         elapsed = time.time() - start_time
@@ -711,14 +711,6 @@ class BatchExecutor:
                             else:
                                 # 进程已结束，但之前没检测到
                                 break
-                        
-                        # 收集输出队列中的内容
-                        try:
-                            while True:
-                                line = output_queue.get_nowait()
-                                server_output.append(line)
-                        except queue.Empty:
-                            pass
                         
                         # 等待一段时间再检查
                         time.sleep(check_interval)
