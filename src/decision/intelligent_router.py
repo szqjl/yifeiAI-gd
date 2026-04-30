@@ -391,6 +391,13 @@ class IntelligentStageRouter:
             if first_elem is None or first_elem == "PASS":
                 if cur_pos == -1 or greater_pos == -1:
                     return False
+                # 与 StageRouter 对齐：若首家可选非 PASS，应判为主动而非被动
+                action_list = message.get("actionList", [])
+                if action_list and len(action_list) > 0:
+                    first_action = action_list[0]
+                    if isinstance(first_action, list) and len(first_action) > 0:
+                        if first_action[0] != "PASS":
+                            return False
             elif isinstance(first_elem, str) and first_elem in ["Single", "Pair", "Trips", "ThreeWithTwo", "ThreePair", "TwoTrips", "Straight", "StraightFlush", "Bomb"]:
                 return True
         

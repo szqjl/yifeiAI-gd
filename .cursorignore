@@ -1,0 +1,32 @@
+# Cursor 索引/搜索排除：减轻卡顿（与 .gitignore 互补；不替代 Git 忽略）
+
+# 对局记录（体量大、变更频繁）
+game_records/
+
+# 前端/工具依赖
+node_modules/
+
+# 日志与运行输出
+logs/
+training_logs/
+*.log
+
+# MLflow / 训练轨迹（若存在）
+**/mlruns/
+trajectories/
+
+# 模型与大体量数据（索引无意义）
+models/
+training_data_backup/
+Testscore/
+
+# Python 缓存
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+
+# 临时与本地状态
+tmp/
+temp/
+*.tmp

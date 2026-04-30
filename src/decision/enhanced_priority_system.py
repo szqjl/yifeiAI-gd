@@ -355,8 +355,11 @@ class EnhancedPrioritySystem:
             # 三带二（夯）
             return self._calculate_three_with_two_score(candidate, context)
         elif action_type == 'Trips':
-            # 三张（特殊情况：对子较大时，宁肯只出三张）
-            return self._calculate_trips_score(candidate, context)
+            # 三张（GUA-014：扫描器仍保留钢板/三连对时，单纯出三张更易拆散好型，略降权）
+            base = self._calculate_trips_score(candidate, context)
+            if complex_types and ('TwoTrips' in complex_types or 'ThreePair' in complex_types):
+                return max(0.0, base * 0.78)
+            return base
         
         # 基于手牌结构分析（其他牌型）
         if len(candidate) > 2 and isinstance(candidate[2], list):
@@ -532,7 +535,8 @@ class EnhancedPrioritySystem:
                     if is_passive:
                         impact_score = -0.4  # 被动出牌时，拆三张惩罚减轻
                     else:
-                        impact_score = -0.6  # 主动出牌时，拆三张惩罚更重
+                        # GUA-014：主动时拆三张更伤结构，略加重惩罚
+                        impact_score = -0.68
                     break
                 
                 # 如果手牌中有4张或更多相同点数的牌，出单张就是拆炸弹
