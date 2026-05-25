@@ -2,6 +2,7 @@
 """
 游戏记录器 - 保存每局游戏并支持回放
 格式参考：2021122022131000098 [szqjl]-[新城老王].fp
+牌张与基本概念见：docs/rules/牌张与基本概念.md，常量见 game_logic.guandan_constants。
 """
 
 import json
@@ -9,6 +10,80 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Union, Any, List, Any, Optional
+
+try:
+    from game_logic.guandan_constants import CARDS_PER_PLAYER
+except ImportError:
+    CARDS_PER_PLAYER = 27  # 掼蛋每人27张，规则见 docs/rules/牌张与基本概念.md
+
+
+def normalize_cards_to_string_list(cards: List) -> List[str]:
+    """
+    将服务器下发的卡牌列表统一为字符串列表（入口规范化）。
+    支持 "S2" 与 ["S","2"] 两种格式，供决策引擎与记录器一致使用。
+    """
+    if not cards:
+        return []
+    result = []
+    for card in cards:
+        if isinstance(card, str) and len(card) >= 2:
+            result.append(card)
+        elif isinstance(card, list) and len(card) >= 2:
+            result.append(f"{str(card[0])}{str(card[1])}")
+    return result
+
+
+def normalize_action_list(action_list: List) -> List:
+    """
+    将 actionList 中每个动作的第三元（牌列表）规范成字符串列表。
+    不修改原列表，返回新列表。
+    """
+    if not action_list:
+        return action_list
+    out = []
+    for action in action_list:
+        if not isinstance(action, list) or len(action) < 3 or not isinstance(action[2], list):
+            out.append(action)
+            continue
+        out.append([action[0], action[1], normalize_cards_to_string_list(action[2])])
+    return out
+
+
+# ---------- 队友/对手识别（掼蛋规则：0与2一队，1与3一队） ----------
+
+def get_teammate_pos(my_pos: int) -> int:
+    """根据己方座位号返回队友座位号。掼蛋：0-2 一队，1-3 一队。"""
+    if my_pos is None or not (0 <= my_pos <= 3):
+        return -1
+    return (int(my_pos) + 2) % 4
+
+
+def get_opponent_positions(my_pos: int) -> tuple:
+    """根据己方座位号返回两名对手的座位号 (上家方向、下家方向)。"""
+    if my_pos is None or not (0 <= my_pos <= 3):
+        return (-1, -1)
+    return ((int(my_pos) + 1) % 4, (int(my_pos) + 3) % 4)
+
+
+def is_teammate(my_pos: int, other_pos: int) -> bool:
+    """判断 other_pos 是否是 my_pos 的队友。"""
+    if my_pos is None or other_pos is None or other_pos == -1 or my_pos == -1:
+        return False
+    return get_teammate_pos(my_pos) == int(other_pos)
+
+
+def ensure_my_pos_int(data: dict, fallback_player_id: int) -> int:
+    """
+    从消息中安全取出己方座位号并转为 int，供各客户端统一使用。
+    优先 myPos，其次 playerPosition，否则用 fallback_player_id。
+    """
+    raw = data.get("myPos", data.get("playerPosition", fallback_player_id))
+    if raw is None:
+        return int(fallback_player_id)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return int(fallback_player_id)
 
 
 def _format_cards(action_cards: Any) -> str:
@@ -210,35 +285,17 @@ class GameRecorder:
         # 生成游戏ID（时间戳格式：YYYYMMDDHHMMSSffffff）
         game_id = self.game_start_time.strftime('%Y%m%d%H%M%S%f')
         
-        # 构建所有玩家的手牌信息
-        # ⚠️ 重要：统一使用字符串键，确保与验证逻辑一致
+        # ⚠️ 入口规范化：统一将手牌转为字符串列表（兼容服务器发 ["C","8"] 格式）
+        hand_cards = normalize_cards_to_string_list(hand_cards) if hand_cards else []
+        # 构建所有玩家的手牌信息，统一使用字符串键
         all_hands = {}
         if all_players_hands:
-            # 深拷贝所有玩家的手牌，确保数据独立性
             for pos, cards in all_players_hands.items():
-                pos_str = str(pos)  # 统一转换为字符串
-                if isinstance(cards, list):
-                    all_hands[pos_str] = cards.copy()
-                else:
-                    all_hands[pos_str] = []
-        # 确保自己的手牌被记录（如果还没有）
+                pos_str = str(pos)
+                all_hands[pos_str] = normalize_cards_to_string_list(cards) if isinstance(cards, list) else []
         my_pos_str = str(my_pos)
         if my_pos_str not in all_hands:
-            all_hands[my_pos_str] = hand_cards.copy() if isinstance(hand_cards, list) else []
-        
-        # 验证手牌格式
-        for pos, cards in all_hands.items():
-            if not isinstance(cards, list):
-                logger.warning(f"⚠ 玩家{pos}的手牌格式不正确: {type(cards)}，已转换为空列表")
-                all_hands[pos] = []
-            # 验证卡牌格式（应该是字符串列表，如["C8", "D4"]）
-            valid_cards = []
-            for card in cards:
-                if isinstance(card, str) and len(card) >= 2:
-                    valid_cards.append(card)
-                else:
-                    logger.warning(f"⚠ 玩家{pos}的手牌中包含无效卡牌: {card}，已忽略")
-            all_hands[pos] = valid_cards
+            all_hands[my_pos_str] = hand_cards.copy()
         
         self.current_game = {
             "game_id": game_id,
@@ -1056,8 +1113,8 @@ class GameRecorder:
         
         # my_pos 和 teammate_pos 已在上面定义，这里不需要重复定义
         
-        # 初始化玩家剩余牌数和牌型统计
-        player_cards = {0: 27, 1: 27, 2: 27, 3: 27}
+        # 初始化玩家剩余牌数和牌型统计（每人 CARDS_PER_PLAYER，规则见 docs/rules/牌张与基本概念.md）
+        player_cards = {0: CARDS_PER_PLAYER, 1: CARDS_PER_PLAYER, 2: CARDS_PER_PLAYER, 3: CARDS_PER_PLAYER}
         # 使用所有玩家的手牌信息初始化剩余牌数
         for pos, hand_cards in all_hands.items():
             if hand_cards:

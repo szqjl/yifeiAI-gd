@@ -16,6 +16,11 @@ import hashlib
 import json
 import logging
 from datetime import datetime
+try:
+    from game_logic.guandan_constants import CARDS_PER_PLAYER, DEFAULT_REST_CARDS
+except ImportError:
+    CARDS_PER_PLAYER = 27
+    DEFAULT_REST_CARDS = 27
 
 
 class RouteCache:
@@ -156,14 +161,14 @@ class IntelligentStageRouter:
         my_pos = message.get("myPos", 0)
         
         # 计算剩余牌数
-        my_remain = len(handcards) if handcards else 27
+        my_remain = len(handcards) if handcards else CARDS_PER_PLAYER
         cards_left = {}
         opponent_rest_cards_list = []
-        teammate_rest_cards = 27
+        teammate_rest_cards = DEFAULT_REST_CARDS
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
-                rest = info.get("rest", 27)
+                rest = info.get("rest", DEFAULT_REST_CARDS)
                 cards_left[i] = rest
                 if i != my_pos:
                     opponent_rest_cards_list.append(rest)
@@ -255,7 +260,7 @@ class IntelligentStageRouter:
     def _score_by_phase(self, context: Dict) -> float:
         """根据阶段评分"""
         game_phase = context.get('game_phase', 'opening')
-        my_remain = context.get('my_remain', 27)
+        my_remain = context.get('my_remain', DEFAULT_REST_CARDS)
         
         # 阶段评分：残局阶段评分更高（需要更精确的路由）
         phase_scores = {
@@ -289,8 +294,8 @@ class IntelligentStageRouter:
     
     def _score_by_teammate(self, context: Dict) -> float:
         """根据队友状态评分"""
-        teammate_rest_cards = context.get('teammate_rest_cards', 27)
-        my_remain = context.get('my_remain', 27)
+        teammate_rest_cards = context.get('teammate_rest_cards', DEFAULT_REST_CARDS)
+        my_remain = context.get('my_remain', DEFAULT_REST_CARDS)
         
         # 队友牌数很少，需要更精确的路由
         if teammate_rest_cards <= 3:

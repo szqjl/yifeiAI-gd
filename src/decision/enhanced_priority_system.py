@@ -13,6 +13,11 @@ from typing import Dict, List, Optional
 import logging
 from datetime import datetime
 import numpy as np
+try:
+    from game_logic.guandan_constants import DEFAULT_REST_CARDS, GAME_OBJECTIVE
+except ImportError:
+    DEFAULT_REST_CARDS = 27
+    GAME_OBJECTIVE = ""
 
 
 class DynamicWeightAdjuster:
@@ -30,6 +35,7 @@ class DynamicWeightAdjuster:
             'risk': 0.05,
             'split_impact': 0.3,  # 拆牌影响因素权重（提高，确保不破坏受保护组合）
             'action_effect': 0.25,  # 实际动作效果权重（轮次减少、单牌减少等）- 提高权重以匹配client AI
+            'win_awareness': 0.1,   # 赢意识：有局目标时整体向争头游/获胜倾斜
         }
         
         # 阶段权重调整因子
@@ -195,6 +201,8 @@ class EnhancedPrioritySystem:
                 
                 # 因素9: 实际动作效果（新增：利用扫描器的动作评估）
                 'action_effect': self._calculate_action_effect_factor(idx, candidate, action_evaluations, context),
+                # 因素10: 赢意识（有局目标时所有候选均加分，强化争头游/获胜）
+                'win_awareness': 1.0 if context.get('game_objective') else 0.0,
             }
             factors_list.append(factors)
         
@@ -406,7 +414,7 @@ class EnhancedPrioritySystem:
     
     def _calculate_teammate_cooperation_factor(self, candidate: List, context: Dict) -> float:
         """计算队友配合因素"""
-        teammate_rest_cards = context.get('teammate_rest_cards', 27)
+        teammate_rest_cards = context.get('teammate_rest_cards', DEFAULT_REST_CARDS)
         greater_pos = context.get('greater_pos', -1)
         my_pos = context.get('my_pos', 0)
         teammate_pos = (my_pos + 2) % 4
@@ -428,7 +436,7 @@ class EnhancedPrioritySystem:
     def _calculate_timing_factor(self, candidate: List, context: Dict) -> float:
         """计算时机因素"""
         game_phase = context.get('game_phase', 'opening')
-        my_remain = context.get('my_remain', 27)
+        my_remain = context.get('my_remain', DEFAULT_REST_CARDS)
         pass_count = context.get('pass_count', 0)
         
         # 残局阶段，时机因素更重要
@@ -697,7 +705,7 @@ class EnhancedPrioritySystem:
         - 牌力强（≥7）
         - 牌力差（<5）
         """
-        my_remain = context.get('my_remain', 27)
+        my_remain = context.get('my_remain', DEFAULT_REST_CARDS)
         if my_remain < 5:
             return 'strong'  # 牌力强
         elif my_remain <= 7:

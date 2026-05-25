@@ -10,6 +10,20 @@
 
 from typing import Dict, Optional, List, Tuple
 from abc import ABC, abstractmethod
+try:
+    from game_logic.guandan_constants import (
+        CARDS_PER_PLAYER,
+        DEFAULT_REST_CARDS,
+        GAME_OBJECTIVE,
+        WIN_FIRST_PRIORITY,
+        WINNING_RANKS,
+    )
+except ImportError:
+    CARDS_PER_PLAYER = 27
+    DEFAULT_REST_CARDS = 27
+    GAME_OBJECTIVE = "每副牌争头游，己方头游+二游即获胜；牌力强主攻冲刺，牌力弱助攻掩护。"
+    WIN_FIRST_PRIORITY = "本局唯一目标：己方赢（头游+二游）；一切出牌围绕争头游、保二游，不赢则无意义。"
+    WINNING_RANKS = (1, 2)
 
 
 class BasePhaseHandler(ABC):
@@ -136,7 +150,7 @@ class BasePhaseHandler(ABC):
             game_state = {}
             if context:
                 game_state = {
-                    'opponent_rest_cards': context.get('opponent_rest_cards', 27),
+                    'opponent_rest_cards': context.get('opponent_rest_cards', DEFAULT_REST_CARDS),
                     'greater_action': context.get('greater_action', []),
                     'game_phase': context.get('game_phase', 'opening')
                 }
@@ -787,14 +801,14 @@ class BasePhaseHandler(ABC):
         cur_rank = message.get("curRank", "2")
         
         # 计算剩余牌数
-        my_remain = len(handcards) if handcards else 27
+        my_remain = len(handcards) if handcards else CARDS_PER_PLAYER
         cards_left = {}
         opponent_rest_cards_list = []
-        teammate_rest_cards = 27
+        teammate_rest_cards = DEFAULT_REST_CARDS
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
-                rest = info.get("rest", 27)
+                rest = info.get("rest", DEFAULT_REST_CARDS)
                 cards_left[i] = rest
                 if i != my_pos:
                     opponent_rest_cards_list.append(rest)
@@ -831,8 +845,12 @@ class BasePhaseHandler(ABC):
             'is_passive': is_passive,  # ⚠️ 被动出牌标志（供优先级系统使用，允许合理拆牌压制）
             'handcards': handcards,  # ⚠️ 手牌信息（供优先级系统使用）
             'max_remain_value': max(opponent_rest_cards_list) if opponent_rest_cards_list else 15,
-            'next_player_remain': cards_left.get((my_pos + 1) % 4, 27),
+            'next_player_remain': cards_left.get((my_pos + 1) % 4, DEFAULT_REST_CARDS),
             'pass_count': message.get("pass_count", 0),
+            # 胜负意识：每副牌目标 = 争头游，己方头游+二游即获胜（供各阶段策略使用）
+            'game_objective': GAME_OBJECTIVE,
+            'win_first_priority': WIN_FIRST_PRIORITY,  # 强化赢意识
+            'winning_ranks': WINNING_RANKS,
         }
 
 

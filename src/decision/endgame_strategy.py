@@ -1,5 +1,10 @@
 from typing import Dict, List, Tuple, Optional
 from abc import ABC, abstractmethod
+try:
+    from game_logic.guandan_constants import DEFAULT_REST_CARDS, DEFAULT_OTHERS_REST_LIST
+except ImportError:
+    DEFAULT_REST_CARDS = 27
+    DEFAULT_OTHERS_REST_LIST = [27, 27, 27]
 
 def check_one_hand_finish(
     my_rest_cards: int,
@@ -55,7 +60,7 @@ def check_one_hand_finish(
     return {'can_finish': False, 'best_action_index': -1, 'action_type': '', 'reason': '没有能一手出完的动作'}
 
 def endgame_strategy(
-    opponent_rest_cards: int = 27,
+    opponent_rest_cards: int = None,
     power: float = 5.0,
     has_pair: bool = False,
     has_trips: bool = False,
@@ -67,8 +72,8 @@ def endgame_strategy(
     is_reported_double: bool = False,  # 是否报双
     is_reported_single: bool = False,  # 是否报单
     is_first_place_finished: bool = False,  # 头游是否已跑
-    my_rest_cards: int = 27,  # 自己剩余牌数
-    lower_hand_rest_cards: int = 27,  # 下家剩余牌数
+    my_rest_cards: int = None,  # 自己剩余牌数
+    lower_hand_rest_cards: int = None,  # 下家剩余牌数
     action_list: List = None,  # 动作列表（用于判断能否一手出完）
     hand_cards: List = None,  # 手牌（用于判断能否一手出完）
     sorted_cards: Dict = None,  # 已组合的手牌（用于判断能否一手出完）
@@ -77,8 +82,8 @@ def endgame_strategy(
 ) -> Dict[str, str]:
     """
     残局技巧决策函数
-    根据对手剩牌数返回建议。
-    集成单张技巧中的残局规则（44-49行）：
+    目标：己方赢（头游+二游），残局一切围绕争头游、保二游。
+    根据对手剩牌数返回建议。集成单张技巧中的残局规则（44-49行）：
     1. 残局忌给下家顺牌
     2. 报双.须打单诱其拆
     3. 报单.只能打非单牌型
@@ -87,9 +92,15 @@ def endgame_strategy(
     action = "未知"
     reason = ""
     
-    # 初始化参数
+    # 初始化参数（使用规则常量）
+    if opponent_rest_cards is None:
+        opponent_rest_cards = DEFAULT_REST_CARDS
+    if my_rest_cards is None:
+        my_rest_cards = DEFAULT_REST_CARDS
+    if lower_hand_rest_cards is None:
+        lower_hand_rest_cards = DEFAULT_REST_CARDS
     if opponent_rest_cards_list is None:
-        opponent_rest_cards_list = [27, 27, 27]
+        opponent_rest_cards_list = list(DEFAULT_OTHERS_REST_LIST)
     if action_list is None:
         action_list = []
     if hand_cards is None:
@@ -100,7 +111,7 @@ def endgame_strategy(
         bomb_info = {}
     
     # 获取下家剩余牌数（优先使用传入的参数，否则从列表中获取）
-    if len(opponent_rest_cards_list) > 1 and lower_hand_rest_cards == 27:
+    if len(opponent_rest_cards_list) > 1 and lower_hand_rest_cards == DEFAULT_REST_CARDS:
         lower_hand_rest_cards = opponent_rest_cards_list[1]
     
     # 特殊情形：对方任何一家只剩下一张牌，根据角色出不同的单
@@ -256,17 +267,17 @@ def _is_endgame_enhanced(message: dict) -> Tuple[bool, str]:
     teammate_pos = (my_pos + 2) % 4
     
     # 计算剩余牌数
-    teammate_remain = 27
-    opponents_remain = [27, 27]  # 两个对手
+    teammate_remain = DEFAULT_REST_CARDS
+    opponents_remain = [DEFAULT_REST_CARDS, DEFAULT_REST_CARDS]  # 两个对手
     
     if len(public_info) > teammate_pos and isinstance(public_info[teammate_pos], dict):
-        teammate_remain = public_info[teammate_pos].get('rest', 27)
+        teammate_remain = public_info[teammate_pos].get('rest', DEFAULT_REST_CARDS)
     
     # 获取对手剩余牌数
     opponent_positions = [(my_pos + 1) % 4, (my_pos + 3) % 4]
     for i, pos in enumerate(opponent_positions):
         if len(public_info) > pos and isinstance(public_info[pos], dict):
-            opponents_remain[i] = public_info[pos].get('rest', 27)
+            opponents_remain[i] = public_info[pos].get('rest', DEFAULT_REST_CARDS)
     
     # 残局类型判断（需求1.2-1.5，属性2-5）
     # 类型1: 冲刺型（自己牌少，需要快速出完）- 需求1.2，属性2

@@ -13,6 +13,10 @@ from pathlib import Path
 # 将 src 目录添加到系统路径
 if str(Path(__file__).parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent.parent))
+try:
+    from game_logic.guandan_constants import CARDS_PER_PLAYER
+except ImportError:
+    CARDS_PER_PLAYER = 27
 
 from game_logic.enhanced_state import EnhancedGameStateManager
 from game_logic.hand_combiner import HandCombiner
@@ -200,9 +204,9 @@ class MultiFactorEvaluator:
         cards = action[2] if len(action) > 2 else []
         card_count = len(cards) if isinstance(cards, list) else 1
         
-        # 计算出牌数量占当前手牌的比例（假设当前手牌27张为初始值）
+        # 计算出牌数量占当前手牌的比例（使用规则常量）
         # 出牌数量越多，剩余越少，分数越高
-        return min(card_count / 27.0, 1.0)
+        return min(card_count / float(CARDS_PER_PLAYER), 1.0)
     
     def _evaluate_cooperation(self, action: List, target_action: Optional[List]) -> float:
         """评估配合度"""

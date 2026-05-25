@@ -20,8 +20,12 @@ class InteractiveReplay:
         self.auto_play = False
         self.auto_speed = 1.0  # 自动播放速度（秒/步）
         
-        # 初始化玩家剩余牌数（假设每人27张，两副牌共108张）
-        self.player_cards = {0: 27, 1: 27, 2: 27, 3: 27}
+        # 初始化玩家剩余牌数（规则：每人27张，两副牌108张，见 docs/rules/牌张与基本概念.md）
+        try:
+            from game_logic.guandan_constants import CARDS_PER_PLAYER
+        except ImportError:
+            CARDS_PER_PLAYER = 27
+        self.player_cards = {0: CARDS_PER_PLAYER, 1: CARDS_PER_PLAYER, 2: CARDS_PER_PLAYER, 3: CARDS_PER_PLAYER}
         
         # 牌型统计
         self.action_type_stats = {}

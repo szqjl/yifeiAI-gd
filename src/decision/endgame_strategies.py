@@ -10,6 +10,10 @@
 from typing import Dict, List, Optional
 from abc import ABC, abstractmethod
 import logging
+try:
+    from game_logic.guandan_constants import DEFAULT_REST_CARDS
+except ImportError:
+    DEFAULT_REST_CARDS = 27
 
 
 class EndgameStrategy(ABC):
@@ -76,7 +80,7 @@ class DefendStrategy(EndgameStrategy):
             return None
         
         # 如果队友牌数很少，优先PASS让队友出
-        teammate_remain = context.get("teammate_rest_cards", 27)
+        teammate_remain = context.get("teammate_rest_cards", DEFAULT_REST_CARDS)
         if teammate_remain <= 3:
             self.logger.info("DefendStrategy: 队友牌数少，PASS保护")
             return 0  # PASS
@@ -139,7 +143,7 @@ class CooperateStrategy(EndgameStrategy):
             return 0  # PASS
         
         # 否则，选择能帮助队友的动作
-        teammate_remain = context.get("teammate_rest_cards", 27)
+        teammate_remain = context.get("teammate_rest_cards", DEFAULT_REST_CARDS)
         if teammate_remain <= 5:
             # 队友牌少，选择能送牌的动作
             return self._select_helpful_action(action_list, context)
@@ -183,7 +187,7 @@ class ControlStrategy(EndgameStrategy):
         
         # 如果对手牌数少，需要压制
         opponents_remain = context.get("opponent_rest_cards_list", [])
-        min_opponent_remain = min(opponents_remain) if opponents_remain else 27
+        min_opponent_remain = min(opponents_remain) if opponents_remain else DEFAULT_REST_CARDS
         
         if min_opponent_remain <= 3:
             # 对手快走完，需要压制
@@ -245,10 +249,10 @@ class EndgameStrategySelector:
     
     def _classify_endgame(self, message: Dict, context: Dict) -> str:
         """残局分类（提升：多维度分类）"""
-        my_remain = context.get("my_remain", 27)
-        teammate_remain = context.get("teammate_rest_cards", 27)
+        my_remain = context.get("my_remain", DEFAULT_REST_CARDS)
+        teammate_remain = context.get("teammate_rest_cards", DEFAULT_REST_CARDS)
         opponents_remain = context.get("opponent_rest_cards_list", [])
-        max_opponent_remain = max(opponents_remain) if opponents_remain else 27
+        max_opponent_remain = max(opponents_remain) if opponents_remain else DEFAULT_REST_CARDS
         
         # 分类1: 冲刺型（自己牌少，需要快速出完）
         if my_remain <= 3 and max_opponent_remain >= 8:
@@ -263,7 +267,7 @@ class EndgameStrategySelector:
             return 'cooperate'
         
         # 分类4: 控制型（对手牌少，需要控制节奏）
-        min_opponent_remain = min(opponents_remain) if opponents_remain else 27
+        min_opponent_remain = min(opponents_remain) if opponents_remain else DEFAULT_REST_CARDS
         if my_remain <= 5 and min_opponent_remain <= 5:
             return 'control'
         

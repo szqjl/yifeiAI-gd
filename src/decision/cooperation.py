@@ -14,6 +14,10 @@ from pathlib import Path
 # 濞ｈ插瀞rc閻╄ぐ鏇炲煂鐠哄
 if str(Path(__file__).parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent.parent))
+try:
+    from game_logic.guandan_constants import DEFAULT_REST_CARDS
+except ImportError:
+    DEFAULT_REST_CARDS = 27
 
 from game_logic.enhanced_state import EnhancedGameStateManager
 
@@ -44,9 +48,9 @@ class CooperationStrategy:
                                 greater_action: Optional[List],
                                 game_stage: str = "early",
                                 teammate_passed: bool = False,
-                                my_rest_cards: int = 27,
-                                teammate_rest_cards: int = 27,
-                                opponent_rest_cards: int = 27,
+                                my_rest_cards: int = None,
+                                teammate_rest_cards: int = None,
+                                opponent_rest_cards: int = None,
                                 my_power: float = 10.0,  # 添加我方牌力参数
                                 teammate_power: float = 10.0) -> Dict[str, Any]:
         """
@@ -83,6 +87,10 @@ class CooperationStrategy:
             "should_take_over": False,
             "best_action_index": None
         }
+        # 赢意识：配合与接牌均服务于己方赢（头游+二游），不赢则无意义
+        my_rest_cards = my_rest_cards if my_rest_cards is not None else DEFAULT_REST_CARDS
+        teammate_rest_cards = teammate_rest_cards if teammate_rest_cards is not None else DEFAULT_REST_CARDS
+        opponent_rest_cards = opponent_rest_cards if opponent_rest_cards is not None else DEFAULT_REST_CARDS
         
         # 婵″倹鐏夊▽鈩冩箒瑜版挸澧犻崝銊ょ稊閿涘奔绗夐棁鐟曚線鍘ら崥
         if not cur_action or cur_action[0] == "PASS":

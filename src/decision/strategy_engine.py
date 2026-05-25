@@ -11,6 +11,13 @@
 from typing import Dict, List, Optional, Tuple
 from abc import ABC, abstractmethod
 import logging
+try:
+    from game_logic.guandan_constants import DEFAULT_REST_CARDS, GAME_OBJECTIVE
+except ImportError:
+    DEFAULT_REST_CARDS = 27
+    GAME_OBJECTIVE = ""
+# 赢意识加成：context 带 game_objective 时给有利于争头游/获胜的决策加分
+WIN_AWARENESS_BONUS = 15
 
 
 class ProtectionRule(ABC):
@@ -85,7 +92,7 @@ class LowCardCountProtectionRule(ProtectionRule):
         # 如果队友是最大动作者
         if greater_pos == teammate_pos:
             cards_left = context.get("cards_left", {})
-            teammate_cards = cards_left.get(teammate_pos, 27)
+            teammate_cards = cards_left.get(teammate_pos, DEFAULT_REST_CARDS)
             
             # 队友牌数越少，保护需求越高
             if teammate_cards <= 2:
@@ -135,13 +142,13 @@ class ThreatAssessmentRule(ProtectionRule):
         if greater_pos == teammate_pos:
             cards_left = context.get("cards_left", {})
             opponents_cards = [
-                cards_left.get(i, 27) 
+                cards_left.get(i, DEFAULT_REST_CARDS) 
                 for i in range(4) 
                 if i != my_pos and i != teammate_pos
             ]
             
             # 对手牌数越少，威胁越大，保护需求越高
-            min_opponent_cards = min(opponents_cards) if opponents_cards else 27
+            min_opponent_cards = min(opponents_cards) if opponents_cards else DEFAULT_REST_CARDS
             if min_opponent_cards <= 3:
                 return 0.9  # 对手快走完，需要保护队友
             elif min_opponent_cards <= 5:
@@ -215,7 +222,7 @@ class TeammateProtectionStrategy:
         cards_left = context.get("cards_left", {})
         my_pos = message.get("myPos", 0)
         teammate_pos = (my_pos + 2) % 4
-        teammate_cards = cards_left.get(teammate_pos, 27)
+        teammate_cards = cards_left.get(teammate_pos, DEFAULT_REST_CARDS)
         
         # 队友牌数很少，完全保护
         if teammate_cards <= 2:
@@ -281,7 +288,7 @@ class ContextPriorityAdjuster:
         adjusted = base_scores.copy()
         
         # 调整因子1: 下家牌数
-        next_player_remain = context.get("next_player_remain", 27)
+        next_player_remain = context.get("next_player_remain", DEFAULT_REST_CARDS)
         if next_player_remain == 1:
             # 下家只剩1张，降低单张优先级
             adjusted = self._reduce_single_priority(adjusted, context)
@@ -393,17 +400,23 @@ class PrioritySystem:
             action_type = candidate[0] if isinstance(candidate, list) else str(candidate)
             action_type_lower = action_type.lower() if isinstance(action_type, str) else str(action_type).lower()
             
-            # 检查一手出完
+            # 检查一手出完（强化赢意识：能一手出完必争）
             handcards = context.get("handcards", [])
             if len(candidate) > 2 and isinstance(candidate[2], list) and len(candidate[2]) == len(handcards):
-                scores.append(float(priority_map.get('one_hand_complete', 1000)))
+                s = float(priority_map.get('one_hand_complete', 1000))
+                if context.get("game_objective"):
+                    s += WIN_AWARENESS_BONUS
+                scores.append(s)
                 continue
             
-            # 检查两手出完（主动出牌时）
+            # 检查两手出完（主动出牌时）（强化赢意识：冲刺头游）
             if is_active and len(candidate) > 2 and isinstance(candidate[2], list):
                 card_count = len(candidate[2])
                 if card_count >= len(handcards) * 0.7:  # 出牌数超过70%手牌
-                    scores.append(float(priority_map.get('two_hand_complete', 900)))
+                    s = float(priority_map.get('two_hand_complete', 900))
+                    if context.get("game_objective"):
+                        s += WIN_AWARENESS_BONUS
+                    scores.append(s)
                     continue
             
             # 根据动作类型获取优先级
@@ -414,7 +427,7 @@ class PrioritySystem:
             if action_type_lower == 'bomb' and is_active:
                 game_phase = context.get("game_phase", "opening")
                 # 兼容两种字段名：my_rest 和 my_remain
-                my_rest = context.get("my_rest", context.get("my_remain", 27))
+                my_rest = context.get("my_rest", context.get("my_remain", DEFAULT_REST_CARDS))
                 # 开局阶段（剩余牌数>20）或中局前期（剩余牌数>15），禁止主动出炸弹
                 if my_rest > 15:
                     score = 0  # 开局和中局前期，炸弹优先级为0（禁止使用）
@@ -437,7 +450,11 @@ class PrioritySystem:
                     if rank_char in small_ranks:
                         score = priority_map.get('small_single', 800)
             
-            scores.append(float(score))
+            # 赢意识加成：有局目标时，所有决策略向「争头游/获胜」倾斜
+            final_score = float(score)
+            if context.get("game_objective"):
+                final_score += WIN_AWARENESS_BONUS
+            scores.append(final_score)
         
         return scores
 

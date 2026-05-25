@@ -2,6 +2,15 @@ import torch
 import numpy as np
 from typing import List, Dict, Optional
 import logging
+try:
+    from game_logic.guandan_constants import CARDS_PER_PLAYER, DEFAULT_REST_CARDS, DEFAULT_OTHERS_REST_LIST
+except ImportError:
+    try:
+        from src.game_logic.guandan_constants import CARDS_PER_PLAYER, DEFAULT_REST_CARDS, DEFAULT_OTHERS_REST_LIST
+    except ImportError:
+        CARDS_PER_PLAYER = 27
+        DEFAULT_REST_CARDS = 27
+        DEFAULT_OTHERS_REST_LIST = [27, 27, 27]
 from src.rl_agent.agent import PPOAgent
 # Assuming we have a base class or interface, but for now standalone
 # from .base_decision_engine import BaseDecisionEngine 
@@ -547,8 +556,8 @@ class RLDecisionEngine:
         # 2. 编码游戏阶段（120-122维）
         # 根据剩余牌数判断阶段
         hand_count = len(state_info['hand'])
-        opponent_rest_cards_list = state_info.get('opponent_rest_cards_list', [27, 27, 27])
-        min_opponent_cards = min(opponent_rest_cards_list) if opponent_rest_cards_list else 27
+        opponent_rest_cards_list = state_info.get('opponent_rest_cards_list', list(DEFAULT_OTHERS_REST_LIST))
+        min_opponent_cards = min(opponent_rest_cards_list) if opponent_rest_cards_list else DEFAULT_REST_CARDS
         
         # 判断游戏阶段
         if min_opponent_cards >= 20:
@@ -562,14 +571,14 @@ class RLDecisionEngine:
         
         # 3. 编码玩家剩余牌数（123-126维，归一化到0-1）
         my_rest_cards = hand_count
-        teammate_rest_cards = state_info.get('teammate_rest_cards', 27)
-        opponent_rest_cards = opponent_rest_cards_list[1] if len(opponent_rest_cards_list) > 1 else 27
-        opponent2_rest_cards = opponent_rest_cards_list[2] if len(opponent_rest_cards_list) > 2 else 27
+        teammate_rest_cards = state_info.get('teammate_rest_cards', DEFAULT_REST_CARDS)
+        opponent_rest_cards = opponent_rest_cards_list[1] if len(opponent_rest_cards_list) > 1 else DEFAULT_REST_CARDS
+        opponent2_rest_cards = opponent_rest_cards_list[2] if len(opponent_rest_cards_list) > 2 else DEFAULT_REST_CARDS
         
-        obs[123] = my_rest_cards / 27.0
-        obs[124] = teammate_rest_cards / 27.0
-        obs[125] = opponent_rest_cards / 27.0
-        obs[126] = opponent2_rest_cards / 27.0
+        obs[123] = my_rest_cards / float(CARDS_PER_PLAYER)
+        obs[124] = teammate_rest_cards / float(CARDS_PER_PLAYER)
+        obs[125] = opponent_rest_cards / float(CARDS_PER_PLAYER)
+        obs[126] = opponent2_rest_cards / float(CARDS_PER_PLAYER)
         
         # 4. 编码上一步动作（127-151维）
         greater_action = state_info.get('greater_action', [])

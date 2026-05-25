@@ -15,6 +15,10 @@ from pathlib import Path
 # 将 src 目录添加到系统路径
 if str(Path(__file__).parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent.parent))
+try:
+    from game_logic.guandan_constants import DEFAULT_REST_CARDS
+except ImportError:
+    DEFAULT_REST_CARDS = 27
 
 from game_logic.enhanced_state import EnhancedGameStateManager
 from game_logic.hand_combiner import HandCombiner
@@ -522,8 +526,8 @@ class BombHandler(CardTypeHandler):
         # 如果对手牌数很少，或者队友需要保护，才使用炸弹
         cards_left = context.get("cards_left", {})
         my_pos = message.get("myPos", 0)
-        opponents_remain = [cards_left.get(i, 27) for i in range(4) if i != my_pos and (my_pos + 2) % 4 != i]
-        min_opponent_remain = min(opponents_remain) if opponents_remain else 27
+        opponents_remain = [cards_left.get(i, DEFAULT_REST_CARDS) for i in range(4) if i != my_pos and (my_pos + 2) % 4 != i]
+        min_opponent_remain = min(opponents_remain) if opponents_remain else DEFAULT_REST_CARDS
         
         # 对手牌数很少，需要压制，可以使用炸弹
         if min_opponent_remain <= 3:

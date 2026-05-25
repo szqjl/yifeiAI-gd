@@ -15,6 +15,12 @@ from pathlib import Path
 # 添加路径以导入策略函数
 if str(Path(__file__).parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent.parent))
+try:
+    from game_logic.guandan_constants import CARDS_PER_PLAYER, DEFAULT_REST_CARDS, DEFAULT_ALL_REST_LIST
+except ImportError:
+    CARDS_PER_PLAYER = 27
+    DEFAULT_REST_CARDS = 27
+    DEFAULT_ALL_REST_LIST = [27, 27, 27, 27]
 
 from .stage_router import BasePhaseHandler
 from .card_power_evaluator import calculate_card_power
@@ -84,14 +90,14 @@ class OpeningActiveHandler(BasePhaseHandler):
         cur_rank = message.get("curRank", "2")
         
         # 计算剩余牌数
-        my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27, 27]  # 修复：初始化为4个元素（对应4个玩家）
-        teammate_rest_cards = 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
+        opponent_rest_cards_list = list(DEFAULT_ALL_REST_LIST)
+        teammate_rest_cards = DEFAULT_REST_CARDS
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
-                    rest = info.get("rest", 27)
+                    rest = info.get("rest", DEFAULT_REST_CARDS)
                     if i < len(opponent_rest_cards_list):  # 添加边界检查，防止索引越界
                         opponent_rest_cards_list[i] = rest
                     # 队友位置：第1个和第3个为一队，第2个和第4个为一队
@@ -573,14 +579,14 @@ class OpeningPassiveHandler(BasePhaseHandler):
         my_pos = message.get("myPos", 0)
         cur_rank = message.get("curRank", "2")
         
-        my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27, 27]  # 修复：初始化为4个元素（对应4个玩家）
-        teammate_rest_cards = 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
+        opponent_rest_cards_list = list(DEFAULT_ALL_REST_LIST)
+        teammate_rest_cards = DEFAULT_REST_CARDS
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
-                    rest = info.get("rest", 27)
+                    rest = info.get("rest", DEFAULT_REST_CARDS)
                     if i < len(opponent_rest_cards_list):  # 添加边界检查，防止索引越界
                         opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
@@ -749,7 +755,7 @@ class OpeningPassiveHandler(BasePhaseHandler):
         
         # ⚠️ 优先级3：使用级牌/王压制（后期阻击对手或者自己冲刺）
         # 只在后期阶段（endgame）使用级牌/王
-        my_rest = len(handcards) if handcards else 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
         is_endgame = my_rest <= 10  # 剩余牌数≤10认为是后期
         
         if is_endgame:
@@ -1252,14 +1258,14 @@ class MidEarlyActiveHandler(BasePhaseHandler):
         public_info = message.get("publicInfo", [])
         my_pos = message.get("myPos", 0)
         
-        my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27, 27]  # 修复：初始化为4个元素（对应4个玩家）
-        teammate_rest_cards = 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
+        opponent_rest_cards_list = list(DEFAULT_ALL_REST_LIST)
+        teammate_rest_cards = DEFAULT_REST_CARDS
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
-                    rest = info.get("rest", 27)
+                    rest = info.get("rest", DEFAULT_REST_CARDS)
                     if i < len(opponent_rest_cards_list):  # 添加边界检查，防止索引越界
                         opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
@@ -1384,14 +1390,14 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         public_info = message.get("publicInfo", [])
         my_pos = message.get("myPos", 0)
         
-        my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27, 27]  # 修复：初始化为4个元素（对应4个玩家）
-        teammate_rest_cards = 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
+        opponent_rest_cards_list = list(DEFAULT_ALL_REST_LIST)
+        teammate_rest_cards = DEFAULT_REST_CARDS
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
-                    rest = info.get("rest", 27)
+                    rest = info.get("rest", DEFAULT_REST_CARDS)
                     if i < len(opponent_rest_cards_list):  # 添加边界检查，防止索引越界
                         opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
@@ -1435,15 +1441,15 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         
         # 提取玩家剩余牌数信息（学习lalala）
         public_info = message.get("publicInfo", [])
-        numofplayers = [27, 27, 27, 27]
+        numofplayers = list(DEFAULT_ALL_REST_LIST)
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
-                numofplayers[i] = info.get("rest", 27)
+                numofplayers[i] = info.get("rest", DEFAULT_REST_CARDS)
         
         numofnext = numofplayers[(my_pos + 1) % 4]  # 下家剩余牌数
         numofpre = numofplayers[(my_pos - 1) % 4]  # 上家剩余牌数
         numoffri = numofplayers[(my_pos + 2) % 4]  # 队友剩余牌数
-        numofgreaterPos = numofplayers[greater_pos] if greater_pos >= 0 else 27
+        numofgreaterPos = numofplayers[greater_pos] if greater_pos >= 0 else DEFAULT_REST_CARDS
         
         # 计算当前牌值和最大牌值（学习lalala）
         cur_rank_val = self._get_rank_value(action_rank, cur_rank)
@@ -1654,7 +1660,7 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         
         # ⚠️ 优先级3：使用级牌/王压制（后期阻击对手或者自己冲刺）
         # 只在后期阶段（endgame）使用级牌/王
-        my_rest = len(handcards) if handcards else 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
         is_endgame = my_rest <= 10  # 剩余牌数≤10认为是后期
         
         if is_endgame:
@@ -2123,14 +2129,14 @@ class MidLateActiveHandler(BasePhaseHandler):
         public_info = message.get("publicInfo", [])
         my_pos = message.get("myPos", 0)
         
-        my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27, 27]  # 修复：初始化为4个元素（对应4个玩家）
-        teammate_rest_cards = 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
+        opponent_rest_cards_list = list(DEFAULT_ALL_REST_LIST)
+        teammate_rest_cards = DEFAULT_REST_CARDS
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
-                    rest = info.get("rest", 27)
+                    rest = info.get("rest", DEFAULT_REST_CARDS)
                     if i < len(opponent_rest_cards_list):  # 添加边界检查，防止索引越界
                         opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
@@ -2296,7 +2302,7 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
         context['excess_singles'] = excess_singles
         context['combination_score'] = combination_score
         
-        my_rest = len(handcards) if handcards else 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
         
         # 优先级1: 一手出完（使用endgame_strategy的check_one_hand_finish）
         if self.check_one_hand:
@@ -2434,8 +2440,8 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
         context = self._build_context(message)
         context.update({
             'my_remain': my_rest,
-            'teammate_rest_cards': state.get('teammate_rest_cards', 27),
-            'opponent_rest_cards_list': state.get('opponent_rest_cards_list', [27, 27, 27, 27])
+            'teammate_rest_cards': state.get('teammate_rest_cards', DEFAULT_REST_CARDS),
+            'opponent_rest_cards_list': state.get('opponent_rest_cards_list', list(DEFAULT_ALL_REST_LIST))
         })
         
         if self.strategy_selector:
@@ -2469,14 +2475,14 @@ class EndgameEarlyActiveHandler(BasePhaseHandler):
         public_info = message.get("publicInfo", [])
         my_pos = message.get("myPos", 0)
         
-        my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27, 27]  # 修复：初始化为4个元素（对应4个玩家）
-        teammate_rest_cards = 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
+        opponent_rest_cards_list = list(DEFAULT_ALL_REST_LIST)
+        teammate_rest_cards = DEFAULT_REST_CARDS
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
-                    rest = info.get("rest", 27)
+                    rest = info.get("rest", DEFAULT_REST_CARDS)
                     if i < len(opponent_rest_cards_list):  # 添加边界检查，防止索引越界
                         opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
@@ -2562,17 +2568,17 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
             
             # 提取玩家剩余牌数信息
             public_info = message.get("publicInfo", [])
-            numofplayers = [27, 27, 27, 27]
+            numofplayers = list(DEFAULT_ALL_REST_LIST)
             if public_info and len(public_info) == 4:
                 for i, info in enumerate(public_info):
-                    numofplayers[i] = info.get("rest", 27)
+                    numofplayers[i] = info.get("rest", DEFAULT_REST_CARDS)
             
             my_pos = message.get("myPos", 0)
             greater_pos = message.get("greaterPos", -1)
             numofnext = numofplayers[(my_pos + 1) % 4]
             numofpre = numofplayers[(my_pos - 1) % 4]
             numoffri = numofplayers[(my_pos + 2) % 4]
-            numofgreaterPos = numofplayers[greater_pos] if greater_pos >= 0 else 27
+            numofgreaterPos = numofplayers[greater_pos] if greater_pos >= 0 else DEFAULT_REST_CARDS
             
             # 计算最大牌值
             max_val = 14
@@ -2814,7 +2820,7 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
             if protection_action is not None:
                 return protection_action
         
-        my_rest = len(handcards) if handcards else 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
         greater_pos = message.get("greaterPos", -1)
         my_pos = message.get("myPos", 0)
         is_teammate = self._is_teammate(greater_pos, my_pos)
@@ -2932,7 +2938,7 @@ class EndgameLateActiveHandler(BasePhaseHandler):
         context['excess_singles'] = excess_singles
         context['combination_score'] = combination_score
         
-        my_rest = len(handcards) if handcards else 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
         
         # 优先级1: 一手出完（残局最重要）
         one_hand_idx = self._check_one_hand_complete(action_list, handcards)
@@ -3091,8 +3097,8 @@ class EndgameLateActiveHandler(BasePhaseHandler):
         state = self._extract_game_state(message)
         context.update({
             'my_remain': my_rest,
-            'teammate_rest_cards': state.get('teammate_rest_cards', 27),
-            'opponent_rest_cards_list': state.get('opponent_rest_cards_list', [27, 27, 27, 27])
+            'teammate_rest_cards': state.get('teammate_rest_cards', DEFAULT_REST_CARDS),
+            'opponent_rest_cards_list': state.get('opponent_rest_cards_list', list(DEFAULT_ALL_REST_LIST))
         })
         
         if self.strategy_selector:
@@ -3124,14 +3130,14 @@ class EndgameLateActiveHandler(BasePhaseHandler):
         public_info = message.get("publicInfo", [])
         my_pos = message.get("myPos", 0)
         
-        my_rest = len(handcards) if handcards else 27
-        opponent_rest_cards_list = [27, 27, 27, 27]  # 修复：初始化为4个元素（对应4个玩家）
-        teammate_rest_cards = 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
+        opponent_rest_cards_list = list(DEFAULT_ALL_REST_LIST)
+        teammate_rest_cards = DEFAULT_REST_CARDS
         
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 if i != my_pos:
-                    rest = info.get("rest", 27)
+                    rest = info.get("rest", DEFAULT_REST_CARDS)
                     if i < len(opponent_rest_cards_list):  # 添加边界检查，防止索引越界
                         opponent_rest_cards_list[i] = rest
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
@@ -3197,7 +3203,7 @@ class EndgameLatePassiveHandler(EndgameEarlyPassiveHandler):
             if protection_action is not None:
                 return protection_action
         
-        my_rest = len(handcards) if handcards else 27
+        my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
         greater_pos = message.get("greaterPos", -1)
         my_pos = message.get("myPos", 0)
         is_teammate = self._is_teammate(greater_pos, my_pos)

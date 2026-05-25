@@ -38,6 +38,14 @@ docs/planning/
     └── deliverable.md       # 最终输出（完成后创建）
 ```
 
+### 掼蛋 AI 胜负目标（决策/策略/RL 必读）
+
+- **规则层**：`src/game_logic/guandan_constants.py` 中定义 `GAME_OBJECTIVE`（每副牌争头游，己方头游+二游即获胜）。
+- **主决策入口**：M1 / V5 / Stage5 会注入目标到 **context** 或 **message**：
+  - M1：`context['game_objective']`、`context['winning_ranks']`。
+  - V5/Stage5：`message['_game_objective']`。
+- **目标对齐**：策略、规则与 RL 应使用 `context.get('game_objective')` 或 `message.get('_game_objective')` 做优先级、奖励设计等对齐。详见 `docs/rules/胜负与目标.md`。
+
 ### 关键词触发
 
 当用户使用以下关键词时，必须检查规划文件：

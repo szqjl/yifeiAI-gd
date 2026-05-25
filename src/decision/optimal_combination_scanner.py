@@ -19,6 +19,11 @@ if str(Path(__file__).parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from game_logic.hand_combiner import HandCombiner
+try:
+    from game_logic.guandan_constants import CARDS_PER_PLAYER, DEFAULT_REST_CARDS
+except ImportError:
+    CARDS_PER_PLAYER = 27
+    DEFAULT_REST_CARDS = 27
 
 
 class OptimalCombinationScanner:
@@ -36,7 +41,7 @@ class OptimalCombinationScanner:
     def __init__(self):
         self.combiner = HandCombiner()
         # 动态调整状态跟踪
-        self.last_hand_count = 27  # 上次手牌数（用于牌力变化感知）
+        self.last_hand_count = CARDS_PER_PLAYER  # 上次手牌数（用于牌力变化感知）
         self.last_power = 0.0  # 上次牌力（用于牌力变化感知）
     
     def scan_optimal_combination(self, handcards: List[str], rank: str, 
@@ -76,11 +81,11 @@ class OptimalCombinationScanner:
         
         # ⚠️ 动态调整：根据游戏状态调整扫描策略
         game_phase = 'opening'
-        opponent_rest_cards = 27
-        my_rest_cards = len(handcards) if handcards else 27
+        opponent_rest_cards = DEFAULT_REST_CARDS
+        my_rest_cards = len(handcards) if handcards else CARDS_PER_PLAYER
         
         if game_state:
-            opponent_rest_cards = game_state.get('opponent_rest_cards', 27)
+            opponent_rest_cards = game_state.get('opponent_rest_cards', DEFAULT_REST_CARDS)
             if opponent_rest_cards >= 20:
                 game_phase = 'opening'
             elif opponent_rest_cards >= 10:
@@ -459,7 +464,7 @@ class OptimalCombinationScanner:
                     hand_count += len(cards)
         
         # 手数越少，评分越高（每减少一手+100分，提高权重确保这是最重要的原则）
-        rounds_reduced = 27 - hand_count
+        rounds_reduced = CARDS_PER_PLAYER - hand_count
         score += rounds_reduced * 100
         
         # ⚠️ 原则2：减少<10的单张（小单张）- 第二重要原则
@@ -866,9 +871,9 @@ class OptimalCombinationScanner:
             return power_result.get('total_power', 5.0)
         except Exception:
             # 降级：简单估算
-            my_rest_cards = len(handcards) if handcards else 27
+            my_rest_cards = len(handcards) if handcards else CARDS_PER_PLAYER
             # 牌数越少，牌力越强（简化估算）
-            return max(0.0, min(10.0, (27 - my_rest_cards) / 2.7))
+            return max(0.0, min(10.0, (CARDS_PER_PLAYER - my_rest_cards) / 2.7))
     
     def _adjust_score_by_game_state(self, base_score: float, combo: Dict, game_phase: str,
                                    current_power: float, my_rest_cards: int, 
@@ -905,7 +910,7 @@ class OptimalCombinationScanner:
                         hand_count += len(cards)
             
             # 残局阶段，手数越少越好
-            rounds_reduced = 27 - hand_count
+            rounds_reduced = CARDS_PER_PLAYER - hand_count
             adjusted_score += rounds_reduced * 30.0  # 每减少一手+30分
         
         # 调整2：手牌较少时，优先减少单牌
@@ -951,7 +956,7 @@ class OptimalCombinationScanner:
                         else:
                             hand_count += len(cards)
                 
-                rounds_reduced = 27 - hand_count
+                rounds_reduced = CARDS_PER_PLAYER - hand_count
                 adjusted_score += rounds_reduced * 15.0  # 牌力增强，优先减少轮次
             else:
                 # 牌力减弱，保守组牌，保留炸弹

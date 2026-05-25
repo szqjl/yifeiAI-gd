@@ -12,6 +12,10 @@
 from typing import Dict, List, Optional
 import logging
 from datetime import datetime
+try:
+    from game_logic.guandan_constants import DEFAULT_REST_CARDS
+except ImportError:
+    DEFAULT_REST_CARDS = 27
 
 
 class CollaborationProtocol:
@@ -110,7 +114,7 @@ class CooperationStrategy:
             return True
         
         # 如果队友牌数很少，主动配合
-        teammate_rest_cards = context.get('teammate_rest_cards', 27)
+        teammate_rest_cards = context.get('teammate_rest_cards', DEFAULT_REST_CARDS)
         if teammate_rest_cards <= 5:
             return True
         
@@ -154,8 +158,8 @@ class SignalStrategy:
     def should_signal(self, message: Dict, context: Dict) -> bool:
         """判断是否应该发送信号"""
         # 在特定情况下发送信号
-        my_remain = context.get('my_remain', 27)
-        teammate_rest_cards = context.get('teammate_rest_cards', 27)
+        my_remain = context.get('my_remain', DEFAULT_REST_CARDS)
+        teammate_rest_cards = context.get('teammate_rest_cards', DEFAULT_REST_CARDS)
         
         # 如果我的牌数很多，队友牌数很少，发送"可以配合"信号
         if my_remain > 15 and teammate_rest_cards <= 5:
@@ -173,8 +177,8 @@ class SignalStrategy:
         if not action_list:
             return None
         
-        my_remain = context.get('my_remain', 27)
-        teammate_rest_cards = context.get('teammate_rest_cards', 27)
+        my_remain = context.get('my_remain', DEFAULT_REST_CARDS)
+        teammate_rest_cards = context.get('teammate_rest_cards', DEFAULT_REST_CARDS)
         
         # 发送"可以配合"信号：出较大的牌
         if my_remain > 15 and teammate_rest_cards <= 5:

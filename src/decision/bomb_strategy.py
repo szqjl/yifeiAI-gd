@@ -1,9 +1,13 @@
 from typing import Dict, List
+try:
+    from game_logic.guandan_constants import DEFAULT_REST_CARDS
+except ImportError:
+    DEFAULT_REST_CARDS = 27
 
 def bomb_strategy(
     game_phase: str = 'mid',
     power: float = 5.0,
-    opponent_rest_cards: int = 27,
+    opponent_rest_cards: int = None,
     opponent_action_type: str = 'none',  # e.g., 'trips', 'pair', 'straight', 'three_head', 'single'
     opponent_action_rank: int = 0,  # 牌点，如10 for 10以上
     opponent_action_cards: List = None,  # 对手出的牌
@@ -23,9 +27,10 @@ def bomb_strategy(
     card_type_clear: bool = True  # 牌型是否明朗
 ) -> Dict[str, List[Dict[str, str]]]:
     """
-    出炸弹要领决策函数
-    基于《出炸弹要领.txt》的完整知识体系
+    出炸弹要领决策函数。目标：为己方赢（头游+二游）服务，该炸则炸、该省则省。
+    基于《出炸弹要领.txt》的完整知识体系。
     """
+    opponent_rest_cards = opponent_rest_cards if opponent_rest_cards is not None else DEFAULT_REST_CARDS
     suggestions = []
     opponent_action_cards = opponent_action_cards or []
     

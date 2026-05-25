@@ -8,6 +8,11 @@ import torch
 import numpy as np
 from typing import Dict, List, Optional, Tuple
 import logging
+try:
+    from game_logic.guandan_constants import DEFAULT_REST_CARDS, DEFAULT_ALL_REST_LIST
+except ImportError:
+    DEFAULT_REST_CARDS = 27
+    DEFAULT_ALL_REST_LIST = [27, 27, 27, 27]
 
 
 class PredictionOptimizer:
@@ -59,7 +64,7 @@ class PredictionOptimizer:
             自适应阈值 (0.0-1.0)
         """
         game_phase = context.get('game_phase', 1)
-        player_rest_cards = context.get('player_rest_cards', [27, 27, 27, 27])
+        player_rest_cards = context.get('player_rest_cards', list(DEFAULT_ALL_REST_LIST))
         current_player = context.get('current_player', 0)
         
         # 计算对手威胁
@@ -69,7 +74,7 @@ class PredictionOptimizer:
         teammate_support = self._calculate_teammate_support(context)
         
         # 计算当前玩家剩余牌数
-        my_cards = player_rest_cards[current_player] if current_player < len(player_rest_cards) else 27
+        my_cards = player_rest_cards[current_player] if current_player < len(player_rest_cards) else DEFAULT_REST_CARDS
         
         # 基础阈值（根据游戏阶段）
         if game_phase == 0:
@@ -191,7 +196,7 @@ class PredictionOptimizer:
         """
         计算对手威胁程度 (0.0-1.0)
         """
-        player_rest_cards = context.get('player_rest_cards', [27, 27, 27, 27])
+        player_rest_cards = context.get('player_rest_cards', list(DEFAULT_ALL_REST_LIST))
         current_player = context.get('current_player', 0)
         
         # 计算对手（非当前玩家和队友）
@@ -218,7 +223,7 @@ class PredictionOptimizer:
         """
         计算队友支持程度 (0.0-1.0)
         """
-        player_rest_cards = context.get('player_rest_cards', [27, 27, 27, 27])
+        player_rest_cards = context.get('player_rest_cards', list(DEFAULT_ALL_REST_LIST))
         current_player = context.get('current_player', 0)
         
         teammate = (current_player + 2) % 4
