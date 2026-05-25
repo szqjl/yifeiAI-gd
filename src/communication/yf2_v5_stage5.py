@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent)) # Add project root
 from decision.yf_v5_stage5_decision_engine import YF_V5_Stage5_DecisionEngine
 from decision.rl_decision_engine import RLDecisionEngine
-from communication.game_recorder import GameRecorder
+from communication.game_recorder import GameRecorder, normalize_cards_to_string_list, normalize_action_list
 from communication.websocket_manager import WebSocketManager
 from decision.card_power_evaluator import calculate_card_power
 from decision.single_card_strategy import single_card_strategy
@@ -27,6 +27,11 @@ from decision.card_grouping_strategy import grouping_strategy
 from decision.dynamic_grouping_optimizer import DynamicGroupingOptimizer
 from decision.bomb_selector import select_bomb_priority, should_use_bomb
 from communication.utils import combine_handcards, is_inStraight
+try:
+    from game_logic.guandan_constants import DEFAULT_REST_CARDS, DEFAULT_OTHERS_REST_LIST
+except ImportError:
+    DEFAULT_REST_CARDS = 27
+    DEFAULT_OTHERS_REST_LIST = [27, 27, 27]
 
 # Configure logging
 import os
@@ -171,6 +176,11 @@ class YF2_V5_Client:
     async def handle_action_request(self, data: dict):
         """Handle action request from server (V5增强决策)"""
         self.decision_count += 1
+        if "handCards" in data and data["handCards"]:
+            data["handCards"] = normalize_cards_to_string_list(data["handCards"])
+        if "actionList" in data and data["actionList"]:
+            data["actionList"] = normalize_action_list(data["actionList"])
+        data["myPos"] = self.player_id
         action_list = data.get("actionList", [])
         
         if not action_list:
@@ -222,12 +232,11 @@ class YF2_V5_Client:
         Returns:
             包含游戏状态信息的字典
         """
-        # 获取手牌
-        hand_cards = self.hand_cards if self.hand_cards else data.get("handCards", [])
+        hand_cards = self.hand_cards if self.hand_cards else normalize_cards_to_string_list(data.get("handCards", []))
         
         # 获取对手剩余牌数
         public_info = data.get("publicInfo", [])
-        opponent_rest_cards = 27  # 默认值
+        opponent_rest_cards = DEFAULT_REST_CARDS
         my_pos = data.get("myPos", self.player_id)
         
         if public_info and isinstance(public_info, list):
@@ -235,7 +244,7 @@ class YF2_V5_Client:
             opponent_cards = []
             for i, info in enumerate(public_info):
                 if isinstance(info, dict):
-                    rest = info.get("rest", 27)
+                    rest = info.get("rest", DEFAULT_REST_CARDS)
                     # 对手是 (my_pos+1)%4 和 (my_pos+3)%4
                     if i != my_pos and i != (my_pos + 2) % 4:
                         opponent_cards.append(rest)
@@ -269,11 +278,11 @@ class YF2_V5_Client:
         my_pass_num = data.get("my_pass_num", self.my_pass_num)
         
         # 获取对手剩余牌数列表（用于判断残局）
-        opponent_rest_cards_list = [27, 27, 27]
+        opponent_rest_cards_list = list(DEFAULT_OTHERS_REST_LIST)
         if public_info and isinstance(public_info, list):
             for i, info in enumerate(public_info):
                 if isinstance(info, dict):
-                    rest = info.get("rest", 27)
+                    rest = info.get("rest", DEFAULT_REST_CARDS)
                     if i < len(opponent_rest_cards_list):
                         opponent_rest_cards_list[i] = rest
         
@@ -340,8 +349,8 @@ class YF2_V5_Client:
                 max_val = card_val.get(greater_rank, 0)
         
         # 获取下家剩余牌数（用于残局判断）
-        opponent_rest_cards_list = game_state.get("opponent_rest_cards_list", [27, 27, 27])
-        numofnext = opponent_rest_cards_list[1] if len(opponent_rest_cards_list) > 1 else 27
+        opponent_rest_cards_list = game_state.get("opponent_rest_cards_list", list(DEFAULT_OTHERS_REST_LIST))
+        numofnext = opponent_rest_cards_list[1] if len(opponent_rest_cards_list) > 1 else DEFAULT_REST_CARDS
         
         try:
             # 策略应用顺序（按优先级）：
@@ -450,7 +459,7 @@ class YF2_V5_Client:
             opponent_not_accept_small_single = False  # TODO: 需要从历史记录中判断
             
             # 获取队友剩余牌数（简化：从game_state中获取，如果没有则用默认值）
-            teammate_rest_cards = game_state.get("teammate_rest_cards", 27)
+            teammate_rest_cards = game_state.get("teammate_rest_cards", DEFAULT_REST_CARDS)
             
             # 判断是否主动出牌
             is_active = game_state.get("is_active", False)
@@ -482,10 +491,10 @@ class YF2_V5_Client:
                         single_card_ranks.append(rank_str)
             
             # 获取对手剩余牌数列表（简化：需要从game_state中获取）
-            opponent_rest_cards_list = game_state.get("opponent_rest_cards_list", [27, 27, 27])
+            opponent_rest_cards_list = game_state.get("opponent_rest_cards_list", list(DEFAULT_OTHERS_REST_LIST))
             
             # 获取队友剩余牌数详情
-            teammate_rest_cards_detail = game_state.get("teammate_rest_cards", 27)
+            teammate_rest_cards_detail = game_state.get("teammate_rest_cards", DEFAULT_REST_CARDS)
             
             # 判断对手是否有单张（简化：需要从历史记录中判断）
             opponent_has_single = False  # TODO: 需要从历史记录中判断
@@ -609,7 +618,7 @@ class YF2_V5_Client:
             
             # 5. 残局策略（基于牌力评估结果，集成单张技巧残局规则）
             # 获取对手剩余牌数列表（简化：需要从game_state中获取）
-            opponent_rest_cards_list = game_state.get("opponent_rest_cards_list", [27, 27, 27])
+            opponent_rest_cards_list = game_state.get("opponent_rest_cards_list", list(DEFAULT_OTHERS_REST_LIST))
             
             # 判断头游是否已跑（简化：需要从game_state中获取）
             is_first_place_finished = game_state.get("is_first_place_finished", False)
@@ -622,7 +631,7 @@ class YF2_V5_Client:
             is_reported_single = game_state.get("is_reported_single", False)
             
             # 获取下家剩余牌数
-            lower_hand_rest_cards = opponent_rest_cards_list[1] if len(opponent_rest_cards_list) > 1 else 27
+            lower_hand_rest_cards = opponent_rest_cards_list[1] if len(opponent_rest_cards_list) > 1 else DEFAULT_REST_CARDS
             
             # 获取级牌
             cur_rank = game_state.get("cur_rank", "2")
@@ -1364,10 +1373,9 @@ class YF2_V5_Client:
         stage = data.get("stage", "")
         
         if stage == "beginning":
-            # 获取初始手牌信息
-            hand_cards = data.get("handCards", [])
-            self.hand_cards = hand_cards # Store for RL engine
-            
+            hand_cards = normalize_cards_to_string_list(data.get("handCards", []))
+            self.hand_cards = hand_cards
+
             # 调试：检查手牌中是否有重复卡牌
             from collections import Counter
             card_counts = Counter(hand_cards)
@@ -1388,6 +1396,10 @@ class YF2_V5_Client:
                 # 位置与期望一致，也显示一下
                 print(f"[yf2_v5] 我在{my_pos}号位（与期望位置一致）")
             
+            self.logger.info(
+                "[座位排查] 来源=yf2_v5_stage5.is_beginning, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
+                data.get("myPos"), data.get("playerPosition"), self.player_id
+            )
             # 打印手牌信息
             print(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
             self.logger.info(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
@@ -1432,9 +1444,7 @@ class YF2_V5_Client:
                                 continue
                         cards = rest_info[1]
                         if cards and isinstance(cards, list) and len(cards) > 0:
-                            if isinstance(cards[0], list):
-                                normalized_cards = [f"{c[0]}{c[1]}" if isinstance(c, list) and len(c) >= 2 else str(c) for c in cards]
-                                cards = normalized_cards
+                            cards = normalize_cards_to_string_list(cards)
                         if pos != my_pos:
                             all_players_hands[pos] = cards
                             self.logger.info(f"记录{pos}号位手牌: {len(cards)}张")
@@ -1484,9 +1494,7 @@ class YF2_V5_Client:
                                     continue
                             cards = rest_info[1]
                             if cards and isinstance(cards, list) and len(cards) > 0:
-                                if isinstance(cards[0], list):
-                                    normalized_cards = [f"{c[0]}{c[1]}" if isinstance(c, list) and len(c) >= 2 else str(c) for c in cards]
-                                    cards = normalized_cards
+                                cards = normalize_cards_to_string_list(cards)
                             all_hands[pos] = cards
                     
                     # 更新游戏记录中的all_players_hands

@@ -14,7 +14,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from decision.hybrid_decision_engine_v4 import HybridDecisionEngineV4
-from communication.game_recorder import GameRecorder
+from communication.game_recorder import (
+    GameRecorder,
+    normalize_cards_to_string_list,
+    normalize_action_list,
+    ensure_my_pos_int,
+)
 
 # Configure logging
 import os
@@ -124,7 +129,11 @@ class YF2_V4_Client:
             return
         
         try:
-            # Use HybridDecisionEngineV4 to make decision
+            if "handCards" in data and data["handCards"]:
+                data["handCards"] = normalize_cards_to_string_list(data["handCards"])
+            if "actionList" in data and data["actionList"]:
+                data["actionList"] = normalize_action_list(data["actionList"])
+            data["myPos"] = self.player_id
             act_index = self.decision_engine.decide(data)
             
             # Get decision details for recording
@@ -156,10 +165,17 @@ class YF2_V4_Client:
         stage = data.get("stage", "")
         
         if stage == "beginning":
-            # 获取初始手牌信息
-            hand_cards = data.get("handCards", [])
-            my_pos = data.get("myPos", self.player_id)
-            
+            hand_cards = normalize_cards_to_string_list(data.get("handCards", []))
+            self.hand_cards = hand_cards
+            my_pos = ensure_my_pos_int(data, self.player_id)
+            if my_pos != self.player_id:
+                self.logger.info(f"Position updated: {self.player_id} -> {my_pos} (server myPos)")
+                self.player_id = my_pos
+            self.logger.info(
+                "[座位排查] 来源=yf2_v4.beginning, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
+                data.get("myPos"), data.get("playerPosition"), self.player_id
+            )
+
             # 打印手牌信息
             print(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
             self.logger.info(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
@@ -198,11 +214,8 @@ class YF2_V4_Client:
                         cards = rest_info[1]
                         # 转换手牌格式：如果是列表格式 [['S', '3'], ...]，转换为字符串格式
                         if cards and isinstance(cards, list) and len(cards) > 0:
-                            if isinstance(cards[0], list):
-                                # 列表格式：[['S', '3'], ['D', '3']] -> ['S3', 'D3']
-                                normalized_cards = [f"{c[0]}{c[1]}" if isinstance(c, list) and len(c) >= 2 else str(c) for c in cards]
-                                cards = normalized_cards
-                        if pos != my_pos:  # 不覆盖自己的手牌
+                            cards = normalize_cards_to_string_list(cards)
+                        if pos != my_pos:
                             all_players_hands[pos] = cards
                             self.logger.info(f"记录{pos}号位手牌: {len(cards)}张")
             
@@ -253,11 +266,8 @@ class YF2_V4_Client:
                                 except:
                                     continue
                             cards = rest_info[1]
-                            # 转换手牌格式
                             if cards and isinstance(cards, list) and len(cards) > 0:
-                                if isinstance(cards[0], list):
-                                    normalized_cards = [f"{c[0]}{c[1]}" if isinstance(c, list) and len(c) >= 2 else str(c) for c in cards]
-                                    cards = normalized_cards
+                                cards = normalize_cards_to_string_list(cards)
                             if pos not in current_hands:
                                 current_hands[pos] = cards
                                 self.logger.info(f"从第一个play消息中记录{pos}号位手牌: {len(cards)}张")

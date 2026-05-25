@@ -16,6 +16,11 @@ import random
 import time
 from typing import Dict, List, Optional
 
+try:
+    from game_logic.guandan_constants import GAME_OBJECTIVE
+except ImportError:
+    GAME_OBJECTIVE = "每副牌争头游，己方头游+二游即获胜；牌力强主攻冲刺，牌力弱助攻掩护。"
+
 
 class HybridDecisionEngineV5:
     """
@@ -61,6 +66,7 @@ class HybridDecisionEngineV5:
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
         
+        self.game_objective = GAME_OBJECTIVE
         self.logger.info("HybridDecisionEngineV5 initialized")
     
     def decide(self, message: dict) -> int:
@@ -82,6 +88,11 @@ class HybridDecisionEngineV5:
         """
         start_time = time.time()
         performance_threshold = self.config.get("performance_threshold", 1.0)
+        # 胜负意识：每副牌目标 = 争头游，己方头游+二游即获胜（供下游策略与规则使用）
+        message = dict(message) if isinstance(message, dict) else message
+        if isinstance(message, dict):
+            message["_game_objective"] = self.game_objective
+        self.logger.debug("本局目标: %s", self.game_objective)
         
         # ========== Step 0: Critical Rules Check ==========
         # 在 decide() 开头添加关键规则检查

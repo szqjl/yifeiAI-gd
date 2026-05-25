@@ -12,6 +12,11 @@ import time
 import torch
 import numpy as np
 
+try:
+    from game_logic.guandan_constants import GAME_OBJECTIVE
+except ImportError:
+    GAME_OBJECTIVE = "每副牌争头游，己方头游+二游即获胜；牌力强主攻冲刺，牌力弱助攻掩护。"
+
 from .rl_decision_engine import RLDecisionEngine
 from src.rl_agent.strategy_pattern_recognizer import StrategyPatternRecognizer
 from src.rl_agent.opponent_model import OpponentModel, OpponentAnalyzer
@@ -304,6 +309,7 @@ class YF_V5_Stage5_DecisionEngine:
             'avg_decision_time': 0.0
         }
 
+        self.game_objective = GAME_OBJECTIVE
         self.logger.info("✓ YF_V5 Stage5 Decision Engine initialized")
         self.logger.info(f"Stage5 weights: {self.stage5_weights}")
 
@@ -328,10 +334,14 @@ class YF_V5_Stage5_DecisionEngine:
             动作索引（int）
         """
         start_time = time.time()
+        # 胜负意识：每副牌目标 = 争头游，己方头游+二游即获胜
+        msg = dict(message) if isinstance(message, dict) else message
+        if isinstance(msg, dict):
+            msg["_game_objective"] = self.game_objective
 
         try:
             # 1. 使用RL引擎进行基础决策
-            action_index = self.rl_engine.decide(message)
+            action_index = self.rl_engine.decide(msg)
 
             # 2. 验证动作索引有效性
             action_list = message.get("actionList", [])
