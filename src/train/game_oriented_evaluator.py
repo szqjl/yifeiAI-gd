@@ -38,19 +38,11 @@ class GameOrientedEvaluator:
     - 预测准确性（权重10%）
     """
     
-<<<<<<< HEAD
-    def __init__(self):
-=======
     def __init__(self, model_path: Optional[str] = None):
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
         self.win_rate_weight = 0.5
         self.strategy_adaptability_weight = 0.2
         self.decision_quality_weight = 0.2
         self.prediction_accuracy_weight = 0.1
-<<<<<<< HEAD
-        
-    def evaluate_model(self, game_records: List[Dict], player_id: int = 0) -> Dict:
-=======
         self.model_path = model_path
         self.model = None
         self.device = None
@@ -117,29 +109,22 @@ class GameOrientedEvaluator:
             self.model = None
         
     def evaluate_model(self, game_records: List[Dict], player_id: int = 0, model_path: Optional[str] = None) -> Dict:
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
         """
         计算综合评估分数
         
         Args:
             game_records: 游戏记录列表，每个记录包含result字段
             player_id: 要评估的玩家ID（默认0）
-<<<<<<< HEAD
-=======
             model_path: 模型路径（可选，如果提供则进行模型推理评估）
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
             
         Returns:
             评估结果字典，包含各项指标和综合分数
         """
-<<<<<<< HEAD
-=======
         # 如果提供了模型路径，加载模型
         if model_path:
             self.model_path = model_path
             self._load_model()
         
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
         # 1. 计算胜率
         win_rate, win_rate_ci = self._calculate_win_rate(game_records, player_id)
         
@@ -149,16 +134,11 @@ class GameOrientedEvaluator:
         # 3. 计算决策质量
         decision_quality = self._assess_decision_quality(game_records, player_id)
         
-<<<<<<< HEAD
-        # 4. 计算预测准确性
-        prediction_accuracy = self._measure_prediction_accuracy(game_records, player_id)
-=======
         # 4. 计算预测准确性（如果模型已加载，使用模型推理；否则使用历史数据）
         if self.model is not None:
             prediction_accuracy = self._measure_prediction_accuracy_with_model(game_records, player_id)
         else:
             prediction_accuracy = self._measure_prediction_accuracy(game_records, player_id)
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
         
         # 5. 计算综合分数
         total_score = (
@@ -378,12 +358,7 @@ class GameOrientedEvaluator:
     
     def _measure_prediction_accuracy(self, game_records: List[Dict], player_id: int) -> float:
         """
-<<<<<<< HEAD
-        测量预测准确性
-        基于动作预测的准确性（如果有相关数据）
-=======
         测量预测准确性（基于历史数据）
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
         
         Args:
             game_records: 游戏记录列表
@@ -392,11 +367,6 @@ class GameOrientedEvaluator:
         Returns:
             预测准确性分数（0-1）
         """
-<<<<<<< HEAD
-        # 这里暂时返回一个基于决策评分的代理指标
-        # 实际应该基于模型预测的准确性
-=======
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
         if not game_records:
             return 0.0
         
@@ -408,10 +378,6 @@ class GameOrientedEvaluator:
             for decision in my_decisions:
                 total_decisions += 1
                 score = decision.get('score', 0) or 0
-<<<<<<< HEAD
-                # 高分决策可能表示预测更准确
-=======
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
                 if score > 250:
                     high_confidence_decisions += 1
         
@@ -421,8 +387,6 @@ class GameOrientedEvaluator:
         accuracy = high_confidence_decisions / total_decisions
         return min(1.0, max(0.0, accuracy))
     
-<<<<<<< HEAD
-=======
     def _measure_prediction_accuracy_with_model(self, game_records: List[Dict], player_id: int) -> float:
         """
         使用模型推理测量预测准确性
@@ -537,7 +501,6 @@ class GameOrientedEvaluator:
             traceback.print_exc()
             return self._measure_prediction_accuracy(game_records, player_id)
     
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
     def _extract_strategy_type(self, layer: str) -> Optional[str]:
         """从layer字符串中提取策略类型"""
         if not layer or 'Strategy-' not in layer:

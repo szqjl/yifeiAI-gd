@@ -847,9 +847,6 @@ class GuandanDataset(Dataset):
             normalized_effectiveness = min(strategy_effectiveness / 30.0, 1.0) if strategy_effectiveness > 0 else 0.0
             state_vec[163] = normalized_effectiveness
         
-<<<<<<< HEAD
-        # 8. 编码历史动作（164-511维，348个维度）- 新增：实现历史动作编码
-=======
         # **阶段6优化版新增**: 编码胜率权重（164维）- 用于胜率导向损失
         # 从state_dict中提取胜率权重（在数据加载时已添加）
         win_weight = state_dict.get('win_weight', 1.0)  # 默认权重1.0
@@ -859,7 +856,6 @@ class GuandanDataset(Dataset):
             state_vec[164] = normalized_win_weight
         
         # 9. 编码历史动作（165-511维，347个维度）- 新增：实现历史动作编码（调整起始位置）
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
         # 每个历史动作编码为17维：动作类型（10维）+ 动作牌点（15维）+ 动作玩家（2维）
         # 最多编码20个历史动作（20 * 17 = 340维），剩余8维保留
         history = state_dict.get('history', [])
@@ -882,13 +878,8 @@ class GuandanDataset(Dataset):
             for hist_idx in range(max_history):
                 hist_action = history[-(hist_idx + 1)]  # 从最新到最旧
                 
-<<<<<<< HEAD
-                # 计算起始维度：164 + hist_idx * 17
-                base_dim = 164 + hist_idx * 17
-=======
                 # 计算起始维度：165 + hist_idx * 17（调整起始位置，为胜率权重让出164维）
                 base_dim = 165 + hist_idx * 17
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
                 if base_dim + 17 > 512:
                     break  # 超出范围，停止编码
                 
@@ -1069,13 +1060,9 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
              use_curriculum_learning=False, curriculum_stages=3, use_improved_model=False, attention_heads=8,
              enable_strategy_pattern=True, strategy_pattern_weight=0.2,
              enable_opponent_modeling=True, opponent_model_weight=0.15,
-<<<<<<< HEAD
-             enable_dynamic_strategy=True, dynamic_strategy_weight=0.1):
-=======
              enable_dynamic_strategy=True, dynamic_strategy_weight=0.1,
              freeze_backbone=False, load_pretrained_model=None, trajectory_data=None,
              enable_win_rate_oriented_loss=True, win_rate_oriented_loss_weight=0.5):
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
     """
     行为克隆预训练（支持多任务学习）
 
@@ -1170,8 +1157,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     data_load_total = time.time() - start_time
     print(f"[DEBUG] [1/8] 数据加载阶段总耗时: {data_load_total:.2f}秒")
     
-<<<<<<< HEAD
-=======
     # **阶段6优化版新增**: 从游戏记录中提取胜率信息，用于样本权重
     print("[阶段6优化版] 📊 提取游戏胜率信息用于样本权重...")
     game_win_info = {}  # {replay_index: is_win}
@@ -1274,7 +1259,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     raw_data = weighted_raw_data
     print(f"[阶段6优化版] ✅ 已为 {len(raw_data)} 个样本添加胜率权重")
 
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
     # 阶段6优化：数据增强（提升泛化能力）
     if len(raw_data) > 1000:  # 只有在数据量足够时才进行增强
         raw_data = augment_training_data(raw_data, augmentation_factor=3)  # 3倍数据增强
@@ -1484,8 +1468,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
     model_create_time = time.time() - model_create_start
     print(f"[DEBUG] [2/8] 模型创建完成，耗时: {model_create_time:.2f}秒")
 
-<<<<<<< HEAD
-=======
     # **阶段6优化版新增**: 加载预训练模型
     if load_pretrained_model and os.path.exists(load_pretrained_model):
         print(f"[阶段6优化版] 加载预训练模型: {load_pretrained_model}")
@@ -1512,7 +1494,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 print(f"  冻结: {name}")
         print(f"[阶段6优化版] ✅ 主干层已冻结，只训练决策头（fc3, fc_strategy）")
 
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
     # **阶段5新增**: 高级策略学习组件
     strategy_pattern_recognizer = None
     opponent_model = None
@@ -1816,8 +1797,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
 
                 # 数据平衡权重已在函数开头定义
 
-<<<<<<< HEAD
-=======
                 # **阶段6优化版新增**: 从state_vec中提取胜率权重（编码在164维）
                 sample_win_weights = []
                 if enable_win_rate_oriented_loss:
@@ -1831,20 +1810,16 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 else:
                     sample_win_weights = [1.0] * batch_size
                 
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
                 for i in range(batch_size):
                     sample_logits = action_logits[i:i+1]
                     sample_actions = actions[i:i+1]
 
                     # 计算单个样本的损失
                     sample_loss = action_criterion(sample_logits, sample_actions)
-<<<<<<< HEAD
-=======
                     
                     # **阶段6优化版新增**: 应用胜率权重
                     if enable_win_rate_oriented_loss and i < len(sample_win_weights):
                         sample_loss = sample_loss * sample_win_weights[i]
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
 
                     # **阶段0方案D（改进损失函数）**: 添加预测数量惩罚
                     if use_improved_loss:
@@ -1925,11 +1900,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 
                 # 计算策略分类损失（忽略unknown类别，即索引7）
                 # 只计算非unknown样本的损失
-<<<<<<< HEAD
-                valid_mask = (strategy_labels < 7)  # 排除unknown（索引7）
-                if valid_mask.sum() > 0:
-                    valid_strategy_labels = strategy_labels[valid_mask]
-=======
                 # **修复**: 确保标签值在有效范围内（0-6），策略分类头只有7类（0-6）
                 strategy_labels_long = strategy_labels.long()
                 valid_mask = (strategy_labels_long >= 0) & (strategy_labels_long < 7)  # 只接受0-6
@@ -1937,7 +1907,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     valid_strategy_labels = strategy_labels_long[valid_mask]
                     # **修复**: 再次确保标签值在有效范围内（0-6）
                     valid_strategy_labels = torch.clamp(valid_strategy_labels, 0, 6)
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
                     valid_strategy_logits = strategy_logits[valid_mask]
                     strategy_loss = strategy_criterion(valid_strategy_logits, valid_strategy_labels)
                     strategy_loss_count += valid_mask.sum().item()
@@ -1950,13 +1919,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                 strategy_consistency_loss = torch.tensor(0.0, device=device)
                 
                 if enable_strategy_tasks and strategy_tasks_outputs is not None and grouping_labels is not None:
-<<<<<<< HEAD
-                    # 任务1: 组牌策略分类（交叉熵）
-                    grouping_loss = nn.CrossEntropyLoss()(strategy_tasks_outputs['grouping'], grouping_labels)
-                    
-                    # 任务2: 角色判断（交叉熵）
-                    role_loss = nn.CrossEntropyLoss()(strategy_tasks_outputs['role'], role_labels)
-=======
                     # 任务1: 组牌策略分类（交叉熵）- 7类（0-6）
                     grouping_labels_clamped = torch.clamp(grouping_labels.long(), 0, 6)
                     grouping_loss = nn.CrossEntropyLoss()(strategy_tasks_outputs['grouping'], grouping_labels_clamped)
@@ -1964,21 +1926,10 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     # 任务2: 角色判断（交叉熵）- 3类（0-2）
                     role_labels_clamped = torch.clamp(role_labels.long(), 0, 2)
                     role_loss = nn.CrossEntropyLoss()(strategy_tasks_outputs['role'], role_labels_clamped)
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
                     
                     # 任务3: 牌力评估（回归，MSE）
                     power_loss = nn.MSELoss()(strategy_tasks_outputs['power'].squeeze(), power_scores)
                     
-<<<<<<< HEAD
-                    # 任务4: 保护/压制判断（交叉熵）
-                    protect_suppress_loss = nn.CrossEntropyLoss()(strategy_tasks_outputs['protect_suppress'], protect_suppress_labels)
-                    
-                    # 任务5: 炸弹出炸时机（交叉熵）
-                    bomb_timing_loss = nn.CrossEntropyLoss()(strategy_tasks_outputs['bomb_timing'], bomb_timing_labels)
-                    
-                    # 任务6: 红心配策略（交叉熵）
-                    red_heart_loss = nn.CrossEntropyLoss()(strategy_tasks_outputs['red_heart'], red_heart_labels)
-=======
                     # 任务4: 保护/压制判断（交叉熵）- 3类（0-2）
                     protect_suppress_labels_clamped = torch.clamp(protect_suppress_labels.long(), 0, 2)
                     protect_suppress_loss = nn.CrossEntropyLoss()(strategy_tasks_outputs['protect_suppress'], protect_suppress_labels_clamped)
@@ -1990,7 +1941,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     # 任务6: 红心配策略（交叉熵）- 4类（0-3）
                     red_heart_labels_clamped = torch.clamp(red_heart_labels.long(), 0, 3)
                     red_heart_loss = nn.CrossEntropyLoss()(strategy_tasks_outputs['red_heart'], red_heart_labels_clamped)
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
                     
                     # 任务7: 策略原因学习（交叉熵）- 新增：学习"为什么这样选择"
                     reason_loss = torch.tensor(0.0, device=device)
@@ -2024,12 +1974,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                         
                         # 策略一致性损失：如果动作预测基本正确（匹配率>0.9），策略分类也应该正确
                         action_correct_mask = (card_match_rates > 0.9)  # (batch_size,)
-<<<<<<< HEAD
-                        valid_strategy_mask = (strategy_labels < 7) & action_correct_mask
-                        
-                        if valid_strategy_mask.sum() > 0:
-                            valid_strategy_labels_consistency = strategy_labels[valid_strategy_mask]
-=======
                         strategy_labels_long_consistency = strategy_labels.long()
                         valid_strategy_mask = (strategy_labels_long_consistency >= 0) & (strategy_labels_long_consistency < 7) & action_correct_mask
                         
@@ -2037,7 +1981,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                             valid_strategy_labels_consistency = strategy_labels_long_consistency[valid_strategy_mask]
                             # **修复**: 确保标签值在有效范围内（0-6）
                             valid_strategy_labels_consistency = torch.clamp(valid_strategy_labels_consistency, 0, 6)
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
                             valid_strategy_logits_consistency = strategy_logits[valid_strategy_mask]
                             
                             # 策略分类应该正确
@@ -2047,18 +1990,12 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                         
                         # **新增**：联合损失 - 直接鼓励动作和策略同时正确
                         # 使用卡牌匹配率作为权重，匹配率越高，策略分类损失权重越大
-<<<<<<< HEAD
-                        valid_strategy_mask_joint = (strategy_labels < 7)  # (batch_size,)
-                        if valid_strategy_mask_joint.sum() > 0:
-                            valid_strategy_labels_joint = strategy_labels[valid_strategy_mask_joint]
-=======
                         strategy_labels_long_joint = strategy_labels.long()
                         valid_strategy_mask_joint = (strategy_labels_long_joint >= 0) & (strategy_labels_long_joint < 7)  # (batch_size,)
                         if valid_strategy_mask_joint.sum() > 0:
                             valid_strategy_labels_joint = strategy_labels_long_joint[valid_strategy_mask_joint]
                             # **修复**: 确保标签值在有效范围内（0-6）
                             valid_strategy_labels_joint = torch.clamp(valid_strategy_labels_joint, 0, 6)
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
                             valid_strategy_logits_joint = strategy_logits[valid_strategy_mask_joint]
                             valid_card_match_rates = card_match_rates[valid_strategy_mask_joint]
                             
@@ -2127,30 +2064,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                         dynamic_strategy_loss = torch.tensor(0.0, device=device)
                 
                 # **阶段6新增**: 胜率导向损失函数（学习"什么有效"）
-<<<<<<< HEAD
-                # 基于策略有效性调整损失权重：策略有效性越高，损失权重越大（鼓励学习有效策略）
-                win_rate_oriented_loss = torch.tensor(0.0, device=device)
-                win_rate_weight = 0.3  # 胜率导向损失权重
-                
-                # 从状态中提取策略有效性（如果可用）
-                # 策略有效性越高，说明这个决策越有效，应该给予更高的学习权重
-                if hasattr(states, 'strategy_effectiveness'):
-                    # 如果states包含策略有效性信息，使用它来调整损失权重
-                    strategy_effectiveness = states.strategy_effectiveness  # (batch_size,)
-                    # 归一化策略有效性到[0.5, 2.0]范围，作为损失权重
-                    # 有效性越高，权重越大，鼓励模型学习有效策略
-                    effectiveness_weights = 0.5 + 1.5 * strategy_effectiveness  # 归一化到[0.5, 2.0]
-                    # 对动作损失和策略损失应用有效性权重
-                    weighted_action_loss = action_loss * effectiveness_weights.mean()
-                    weighted_strategy_loss = strategy_loss * effectiveness_weights.mean()
-                    # 胜率导向损失 = 加权后的损失差异
-                    win_rate_oriented_loss = (weighted_action_loss + weighted_strategy_loss) * win_rate_weight
-                else:
-                    # 如果没有策略有效性信息，使用策略效果分数（从state_dict中提取）
-                    # 注意：这需要在数据加载时提取strategy_effectiveness
-                    # 暂时使用策略一致性损失作为代理
-                    win_rate_oriented_loss = strategy_consistency_loss * win_rate_weight * 0.5
-=======
                 # 基于实际游戏胜率调整损失权重：获胜样本权重更高，鼓励学习有效策略
                 win_rate_oriented_loss = torch.tensor(0.0, device=device)
                 if enable_win_rate_oriented_loss:
@@ -2205,7 +2118,6 @@ def train_bc(data_dir="game_records", epochs=30, batch_size=64, lr=0.0003, model
                     else:
                         # 如果没有胜率信息，使用策略一致性损失作为代理
                         win_rate_oriented_loss = strategy_consistency_loss * win_rate_weight * 0.5
->>>>>>> 92bf1e81c49f275c75c658ad113aeb57e47c4ff8
                 
                 # **阶段5更新**: 组合损失（包含所有高级策略学习组件 + 7个策略任务 + 策略一致性损失 + 胜率导向损失）
                 total_batch_loss = (current_action_weight * action_loss +
