@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+V7完整系统启动脚本
+确保服务器先启动，然后按正确顺序启动客户端
+"""
+
+import subprocess
+import time
+import sys
+import os
+import socket
+from pathlib import Path
+
+def check_port_listening(port, timeout=30):
+    """检查端口是否在监听"""
+    print(f"检查端口 {port} 是否监听...")
+    start_time = time.time()
+    
+    while time.time() - start_time < timeout:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('127.0.0.1', port))
+            sock.close()
+            
+            if result == 0:
+                print(f"✓ 端口 {port} 已监听")
+                return True
+        except:
+            pass
+        
+        time.sleep(1)
+    
+    print(f"✗ 端口 {port} 在 {timeout} 秒内未监听")
+    return False
+
+def start_server():
+    """启动服务器"""
+    server_path = "D:\\guandanscore\\guandan_offline_v1006\\windows\\guandan_offline_v1006.exe"
+    
+    if not os.path.exists(server_path):
+        print(f"✗ 服务器文件不存在: {server_path}")
+        return None
+    
+    print("🚀 启动服务器...")
+    print(f"服务器路径: {server_path}")
+    
+    # 启动服务器（可见窗口）
+    process = subprocess.Popen(
+        [server_path, "10"],  # 10场游戏
+        cwd=os.path.dirname(server_path),
+        creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0
+    )
+    
+    print(f"✓ 服务器已启动，PID: {process.pid}")
+    
+    # 等待服务器就绪
+    if check_port_listening(23456, timeout=30):
+        print("✓ 服务器就绪，可以连接客户端")
+        return process
+    else:
+        print("✗ 服务器启动失败或未监听端口")
+        process.terminate()
+        return None
+
+def start_client(script_path, delay=0, window_title="客户端"):
+    """启动客户端"""
+    if delay > 0:
+        print(f"⏳ 等待 {delay} 秒后启动 {window_title}...")
+        time.sleep(delay)
+    
+    print(f"🚀 启动 {window_title}: {script_path}")
+    
+    if not os.path.exists(script_path):
+        print(f"✗ 客户端文件不存在: {script_path}")
+        return None
+    
+    if sys.platform == 'win32':
+        # Windows: 创建新的控制台窗口
+        cmd = f'start "{window_title}" cmd /k "cd /d {os.getcwd()} && python {script_path}"'
+        process = subprocess.Popen(
+            cmd,
+            shell=True,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+    else:
+        # Linux/Mac
+        process = subprocess.Popen(['python', script_path])
+    
+    print(f"✓ {window_title} 已启动，PID: {process.pid}")
+    return process
+
+def main():
+    """主函数"""
+    print("=" * 60)
+    print("V7终极胜率导向系统完整启动")
+    print("=" * 60)
+    
+    # 检查必要文件
+    required_files = [
+        "D:\\guandanscore\\guandan_offline_v1006\\windows\\guandan_offline_v1006.exe",
+        "src/communication/yf1_v7.py",
+        "D:\\NYGD\\lalala\\client3.py",
+        "src/communication/yf2_v7.py",
+        "D:\\NYGD\\lalala\\client4.py"
+    ]
+    
+    print("检查必要文件...")
+    for file_path in required_files:
+        if os.path.exists(file_path):
+            print(f"✓ {file_path}")
+        else:
+            print(f"✗ {file_path} - 文件不存在")
+            return
+    
+    print("\n" + "=" * 60)
+    print("启动序列")
+    print("=" * 60)
+    
+    # 1. 启动服务器
+    server_process = start_server()
+    if not server_process:
+        print("✗ 服务器启动失败，终止启动")
+        return
+    
+    print("\n等待3秒，确保服务器完全就绪...")
+    time.sleep(3)
+    
+    try:
+        # 2. 按顺序启动客户端
+        clients = []
+        
+        # yf1_v7 (3秒内部延迟)
+        client1 = start_client("src/communication/yf1_v7.py", delay=0, window_title="yf1_v7")
+        if client1:
+            clients.append(client1)
+        
+        # client3 (10秒内部延迟) - 等待yf1_v7连接后启动
+        client2 = start_client("D:\\NYGD\\lalala\\client3.py", delay=4, window_title="client3")
+        if client2:
+            clients.append(client2)
+        
+        # yf2_v7 (9秒内部延迟) - 等待client3连接后启动
+        client3 = start_client("src/communication/yf2_v7.py", delay=11, window_title="yf2_v7")
+        if client3:
+            clients.append(client3)
+        
+        # client4 (20秒内部延迟) - 等待yf2_v7连接后启动
+        client4 = start_client("D:\\NYGD\\lalala\\client4.py", delay=10, window_title="client4")
+        if client4:
+            clients.append(client4)
+        
+        print("\n" + "=" * 60)
+        print("启动完成")
+        print("=" * 60)
+        print(f"✓ 服务器进程: PID {server_process.pid}")
+        print(f"✓ 客户端进程: {len(clients)} 个")
+        print("\n预期连接顺序:")
+        print("1. yf1_v7 (T+3s)")
+        print("2. client3 (T+14s)")
+        print("3. yf2_v7 (T+24s)")
+        print("4. client4 (T+45s)")
+        print("\n请查看服务器窗口确认客户端连接状态")
+        print("按 Ctrl+C 退出")
+        
+        # 保持运行
+        while True:
+            time.sleep(1)
+            
+            # 检查服务器进程
+            if server_process.poll() is not None:
+                print(f"\n⚠️ 服务器进程已退出，返回码: {server_process.returncode}")
+                break
+    
+    except KeyboardInterrupt:
+        print("\n\n收到退出信号，正在清理进程...")
+        
+        # 清理客户端进程
+        for i, client in enumerate(clients):
+            try:
+                if client.poll() is None:
+                    print(f"终止客户端 {i+1}...")
+                    client.terminate()
+            except:
+                pass
+        
+        # 清理服务器进程
+        try:
+            if server_process.poll() is None:
+                print("终止服务器...")
+                server_process.terminate()
+        except:
+            pass
+        
+        print("✓ 清理完成")
+
+if __name__ == "__main__":
+    main()
