@@ -86,6 +86,31 @@ def ensure_my_pos_int(data: dict, fallback_player_id: int) -> int:
         return int(fallback_player_id)
 
 
+def sync_pass_counters(
+    pass_num: int,
+    my_pass_num: int,
+    cur_action: list,
+    cur_pos: int,
+    player_id: int,
+) -> tuple:
+    """
+    按 lalala 客户端逻辑更新连续 PASS 计数（GUA-022 context 补全）。
+    返回 (pass_num, my_pass_num)。
+    """
+    if not cur_action:
+        return pass_num, my_pass_num
+    if cur_action[0] == "PASS":
+        pass_num += 1
+    else:
+        pass_num = 0
+    if cur_pos == player_id:
+        if cur_action[0] == "PASS":
+            my_pass_num += 1
+        else:
+            my_pass_num = 0
+    return pass_num, my_pass_num
+
+
 def _format_cards(action_cards: Any) -> str:
     """
     格式化牌面显示，支持多种数据格式

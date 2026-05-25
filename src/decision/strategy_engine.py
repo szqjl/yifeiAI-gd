@@ -268,6 +268,11 @@ class TeammateProtectionStrategy:
         min_opponent_cards = min(opponents_cards) if opponents_cards else DEFAULT_REST_CARDS
         if min_opponent_cards <= 3 and teammate_cards > 2:
             return False
+
+        # GUA-022：下家剩牌极少时不应无脑 PASS（对齐 lalala numofnext <= 4）
+        numofnext = context.get("numofnext", context.get("next_player_remain", DEFAULT_REST_CARDS))
+        if numofnext <= 4 and teammate_cards > numofnext:
+            return False
         
         # 队友牌数很少，完全保护
         if teammate_cards <= 2:

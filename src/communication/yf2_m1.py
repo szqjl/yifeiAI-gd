@@ -35,6 +35,7 @@ from communication.game_recorder import (
     normalize_cards_to_string_list,
     normalize_action_list,
     ensure_my_pos_int,
+    sync_pass_counters,
 )
 from communication.websocket_manager import WebSocketManager
 try:
@@ -149,6 +150,10 @@ class YF2_M1_Client:
             self.decision_engine = RuleBasedDecisionEngineM1(player_id, config)
         
         self.hand_cards = []  # Track current hand
+        
+        # 连续 PASS 计数（lalala 式，供 phase_handlers / strategy 使用）
+        self.pass_num = 0
+        self.my_pass_num = 0
         
         # Statistics
         self.decision_count = 0
@@ -345,6 +350,13 @@ class YF2_M1_Client:
                 data["actionList"] = normalize_action_list(data["actionList"])
             # 保证决策层拿到正确座位（act 消息可能不含 myPos，用已同步的 player_id）
             data["myPos"] = self.player_id
+            cur_action = data.get("curAction") or []
+            cur_pos = data.get("curPos", -1)
+            self.pass_num, self.my_pass_num = sync_pass_counters(
+                self.pass_num, self.my_pass_num, cur_action, cur_pos, self.player_id
+            )
+            data["pass_num"] = self.pass_num
+            data["my_pass_num"] = self.my_pass_num
             act_index = self.decision_engine.decide(data)
             self.logger.info(f"Decision engine returned action index: {act_index}, action: {action_list[act_index] if act_index < len(action_list) else 'INVALID'}")
             
@@ -527,6 +539,8 @@ class YF2_M1_Client:
             data.get("myPos"), data.get("playerPosition"), self.player_id
         )
         self.hand_cards = hand_cards
+        self.pass_num = 0
+        self.my_pass_num = 0
         print(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
         self.logger.info(f"游戏开始, 我是{my_pos}号位，手牌数：{len(hand_cards)}")
         

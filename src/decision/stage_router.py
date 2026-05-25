@@ -842,6 +842,18 @@ class BasePhaseHandler(ABC):
         
         # 判断是否被动出牌
         is_passive = message.get("curAction") is not None and len(message.get("curAction", [])) > 0
+
+        greater_pos = message.get("greaterPos", -1)
+        pass_num = message.get("pass_num", 0)
+        my_pass_num = message.get("my_pass_num", 0)
+        numofnext = cards_left.get((my_pos + 1) % 4, DEFAULT_REST_CARDS) if cards_left else DEFAULT_REST_CARDS
+        numofpre = cards_left.get((my_pos - 1) % 4, DEFAULT_REST_CARDS) if cards_left else DEFAULT_REST_CARDS
+        numoffri = cards_left.get((my_pos + 2) % 4, DEFAULT_REST_CARDS) if cards_left else DEFAULT_REST_CARDS
+        numofgreaterPos = (
+            cards_left.get(greater_pos, DEFAULT_REST_CARDS)
+            if greater_pos >= 0 and cards_left
+            else DEFAULT_REST_CARDS
+        )
         
         return {
             'my_remain': my_remain,
@@ -856,8 +868,15 @@ class BasePhaseHandler(ABC):
             'is_passive': is_passive,  # ⚠️ 被动出牌标志（供优先级系统使用，允许合理拆牌压制）
             'handcards': handcards,  # ⚠️ 手牌信息（供优先级系统使用）
             'max_remain_value': max(opponent_rest_cards_list) if opponent_rest_cards_list else 15,
-            'next_player_remain': cards_left.get((my_pos + 1) % 4, DEFAULT_REST_CARDS),
+            'next_player_remain': numofnext,
             'pass_count': message.get("pass_count", 0),
+            'pass_num': pass_num,
+            'my_pass_num': my_pass_num,
+            'greater_pos': greater_pos,
+            'numofnext': numofnext,
+            'numofpre': numofpre,
+            'numoffri': numoffri,
+            'numofgreaterPos': numofgreaterPos,
             # 胜负意识：每副牌目标 = 争头游，己方头游+二游即获胜（供各阶段策略使用）
             'game_objective': GAME_OBJECTIVE,
             'win_first_priority': WIN_FIRST_PRIORITY,  # 强化赢意识
