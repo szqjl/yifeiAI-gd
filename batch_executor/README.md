@@ -256,6 +256,17 @@ python -m batch_executor ^
 
 **用途**: 用于崩溃恢复和状态查询
 
+**与 `game_records/` 的一致性（M1 / GUA-022 口径）**：
+
+- 一次完整执行 `--target-games N` 结束后，文件中的 **`target_games` 应等于本次传入的 N**（进程启动后即写入，不再沿用磁盘旧值）。
+- **`completed_games` 以项目根目录 `game_records/` 为准**：统计「本 Run 开始时」到「当前」**新增的**成对 **`game_id`**（同一 `game_id` 下同时存在 `yf1_m1` 与 `yf2_m1` 的 JSON 文件名各一份，计为 1 局）。与 `ITERATIONS.md` 评测统计口径一致。
+- 若某批次被超时强杀或客户端异常退出，只要未成对落盘，就不会把该场记为完成。
+
+**批等待超时（可选环境变量）**：
+
+- `BATCH_EXECUTOR_SECONDS_PER_GAME_ESTIMATE`：单场预估秒数，默认 `720`（12 分钟）。
+- `BATCH_EXECUTOR_MIN_BATCH_SECONDS`：单批最短等待秒数，默认 `180`。
+
 ## 进度显示
 
 执行过程中，系统会实时显示进度信息：

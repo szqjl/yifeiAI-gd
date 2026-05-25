@@ -138,22 +138,47 @@ class ReplayParser:
                     print(f"Error loading {filename}: {e}")
         return replays
 
-    def parse_action_string(self, action_str: str) -> Tuple[str, List[str]]:
+    def parse_action_string(self, action_str) -> Tuple[str, List[str]]:
         """
-        Parse action string like "['Straight', '6', ['C6', 'S7', 'S8', 'S9', 'HT']]"
+        Parse action string or list like "['Straight', '6', ['C6', 'S7', 'S8', 'S9', 'HT']]"
+        or ['Single', '4', ['H4']]
         Returns (Type, CardList)
         """
-        try:
-            # Use ast.literal_eval to safely parse the string representation of list
-            parsed = ast.literal_eval(action_str)
-            if parsed[0] == 'PASS':
-                return 'PASS', []
-            return parsed[0], parsed[2]
-        except:
-            # Handle potential format variations
-            if 'PASS' in action_str:
-                return 'PASS', []
+        # 如果已经是列表格式，直接处理
+        if isinstance(action_str, list):
+            if len(action_str) >= 1:
+                if action_str[0] == 'PASS':
+                    return 'PASS', []
+                # 格式: [type, rank, cards] 或 [type, cards]
+                if len(action_str) >= 3 and isinstance(action_str[2], list):
+                    return action_str[0], action_str[2]
+                elif len(action_str) >= 2 and isinstance(action_str[1], list):
+                    return action_str[0], action_str[1]
+                else:
+                    return action_str[0], []
             return 'UNKNOWN', []
+        
+        # 如果是字符串格式，尝试解析
+        if isinstance(action_str, str):
+            try:
+                # Use ast.literal_eval to safely parse the string representation of list
+                parsed = ast.literal_eval(action_str)
+                if isinstance(parsed, list) and len(parsed) >= 1:
+                    if parsed[0] == 'PASS':
+                        return 'PASS', []
+                    if len(parsed) >= 3 and isinstance(parsed[2], list):
+                        return parsed[0], parsed[2]
+                    elif len(parsed) >= 2 and isinstance(parsed[1], list):
+                        return parsed[0], parsed[1]
+                    else:
+                        return parsed[0], []
+            except:
+                # Handle potential format variations
+                if 'PASS' in action_str:
+                    return 'PASS', []
+                return 'UNKNOWN', []
+        
+        return 'UNKNOWN', []
 
     def extract_training_data(self, replays: List[Dict]):
         """

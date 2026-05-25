@@ -14,7 +14,7 @@ from pathlib import Path
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent))
 
-from batch_executor.main import BatchExecutor
+from batch_executor.executor import BatchExecutor
 from batch_executor.logging_config import setup_logging
 
 
@@ -222,8 +222,9 @@ class BatchExecutorGUIM1:
         """加载默认配置（M1版本）"""
         # 尝试找到服务器可执行文件
         possible_paths = [
-            "../GDAI/离线平台/windows/guandan_offline_v1006.exe",  # 优先：标准位置
-            "D:/GDAI/离线平台/windows/guandan_offline_v1006.exe",   # 绝对路径
+            "../GDAI/离线平台/windows/guandan_offline_v1006.exe",
+            "D:/GDAI/server/windows/guandan_offline_v1006.exe",
+            "D:/GDAI/离线平台/windows/guandan_offline_v1006.exe",
             "guandan_offline_v1006.exe",
             "../guandan_offline_v1006.exe",
             "server/guandan_offline_v1006.exe"
@@ -298,30 +299,29 @@ class BatchExecutorGUIM1:
         """更新进度定时器"""
         if self.is_running and self.executor:
             try:
+                # get_state() 返回 ExecutionState（dataclass），不是 dict
                 state = self.executor.get_state()
-                if state:
-                    completed = state.completed_games
-                    target = state.target_games
-                    restarts = state.restart_count
-                    # 从tracker获取胜场和负场信息
-                    tracker = self.executor.tracker
-                    wins = tracker.team_a_wins if tracker else 0
-                    losses = tracker.team_b_wins if tracker else 0
-                    
-                    # 更新进度条
-                    if target > 0:
-                        progress = (completed / target) * 100
-                        self.progress_var.set(progress)
-                    
-                    # 更新标签
-                    self.progress_label.config(text=f"{completed} / {target}")
-                    self.restart_label.config(text=f"重启: {restarts}")
-                    self.score_label.config(text=f"战绩: {wins}-{losses}")
+                if state is None:
+                    raise ValueError("state is None")
+                completed = state.completed_games
+                target = state.target_games
+                restarts = state.restart_count
+                tracker = getattr(self.executor, "tracker", None)
+                if tracker is not None:
+                    wins = getattr(tracker, "team_a_wins", 0)
+                    losses = getattr(tracker, "team_b_wins", 0)
                 else:
-                    # 如果状态不可用，使用默认值
-                    self.progress_label.config(text="0 / 0")
-                    self.restart_label.config(text="重启: 0")
-                    self.score_label.config(text="战绩: 0-0")
+                    wins, losses = 0, 0
+                
+                # 更新进度条
+                if target > 0:
+                    progress = (completed / target) * 100
+                    self.progress_var.set(progress)
+                
+                # 更新标签
+                self.progress_label.config(text=f"{completed} / {target}")
+                self.restart_label.config(text=f"重启: {restarts}")
+                self.score_label.config(text=f"战绩: {wins}-{losses}")
                 
                 # 更新状态
                 if completed >= target:
@@ -329,7 +329,7 @@ class BatchExecutorGUIM1:
                 else:
                     self.status_label.config(text="运行中...")
                 
-            except Exception as e:
+            except Exception:
                 pass
         
         # 继续定时更新
@@ -462,54 +462,40 @@ class BatchExecutorGUIM1:
                 visible_server=True
             )
             
+            # 与 CLI 一致：run() 内先诊断，再按需进入批量；状态写入 execution_state.json
             if diagnose_only:
-                self.log_message("正在诊断服务器配置...", "INFO")
-                # 执行诊断
-                report = self.executor.run_diagnostic()
-                
-                if report:
-                    self.log_message("\n诊断报告:", "SUCCESS")
-                    self.log_message(f"发现配置文件: {', '.join(report.config_files_found) if report.config_files_found else '无'}", "INFO")
-                    self.log_message(f"期望游戏次数: {report.expected_count}", "INFO")
-                    self.log_message(f"实际游戏次数: {report.actual_count if report.actual_count else '未检测到'}", "INFO")
-                    
-                    if report.mismatch_detected:
-                        self.log_message("\n检测到参数不匹配！", "WARNING")
-                        self.log_message("可能原因:", "WARNING")
-                        for cause in report.possible_causes:
-                            self.log_message(f"  - {cause}", "WARNING")
-                        self.log_message("\n建议:", "INFO")
-                        for rec in report.recommendations:
-                            self.log_message(f"  - {rec}", "INFO")
-                    else:
-                        self.log_message("\n✓ 配置正常", "SUCCESS")
+                self.log_message("正在诊断（run() → run_diagnostic）...", "INFO")
             else:
-                # 执行批量游戏
                 self.log_message("开始执行批量游戏...", "INFO")
-                self.executor.run()
-                
-                # 执行完成
-                self.log_message("\n" + "=" * 60, "INFO")
-                self.log_message("批量游戏执行完成", "SUCCESS")
-                self.log_message("=" * 60, "INFO")
-                
-                # 显示结果
+            self.executor.run()
+            
+            # 执行完成
+            self.log_message("\n" + "=" * 60, "INFO")
+            self.log_message(
+                "诊断完成" if diagnose_only else "批量游戏执行完成",
+                "SUCCESS",
+            )
+            self.log_message("=" * 60, "INFO")
+            
+            if not diagnose_only:
                 state = self.executor.get_state()
-                if state:
+                if state is not None:
                     completed = state.completed_games
-                    # 从tracker获取胜场和负场信息
-                    tracker = self.executor.tracker
-                    wins = tracker.team_a_wins if tracker else 0
-                    losses = tracker.team_b_wins if tracker else 0
-                    
-                    self.log_message(f"\n完成场数: {completed}", "INFO")
-                    self.log_message(f"Team A 胜场: {wins}", "SUCCESS")
-                    self.log_message(f"Team B 胜场: {losses}", "INFO")
-                    if completed > 0:
-                        win_rate = (wins / completed) * 100
-                        self.log_message(f"Team A 胜率: {win_rate:.2f}%", "SUCCESS")
+                    tracker = getattr(self.executor, "tracker", None)
+                    if tracker is not None:
+                        wins = tracker.team_a_wins
+                        losses = tracker.team_b_wins
+                    else:
+                        wins, losses = 0, 0
                 else:
-                    self.log_message("\n无法获取执行状态", "WARNING")
+                    completed, wins, losses = 0, 0, 0
+                
+                self.log_message(f"\n完成场数: {completed}", "INFO")
+                self.log_message(f"胜场: {wins}", "SUCCESS")
+                self.log_message(f"负场: {losses}", "INFO")
+                if completed > 0:
+                    win_rate = (wins / completed) * 100
+                    self.log_message(f"胜率: {win_rate:.2f}%", "SUCCESS")
         
         except Exception as e:
             self.log_message(f"执行错误: {e}", "ERROR")

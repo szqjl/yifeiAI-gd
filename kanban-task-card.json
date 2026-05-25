@@ -1,0 +1,109 @@
+{
+  "schema": "2.0",
+  "config": {
+    "update_multi": true,
+    "enable_forward": true,
+    "width_mode": "default",
+    "summary": {
+      "content": "新的Kanban任务已创建：{{task_title}}",
+      "i18n_content": {
+        "zh_cn": "新的Kanban任务已创建：{{task_title}}",
+        "en_us": "New Kanban task created: {{task_title}}"
+      }
+    }
+  },
+  "header": {
+    "title": {
+      "tag": "plain_text",
+      "content": "🎯 yifeGDBOT任务推送"
+    },
+    "subtitle": {
+      "tag": "plain_text",
+      "content": "任务已分配到{{workflow_name}}"
+    },
+    "template": "blue",
+    "padding": "12px 8px 12px 8px"
+  },
+  "body": {
+    "direction": "vertical",
+    "padding": "12px 8px 12px 8px",
+    "vertical_spacing": "4px",
+    "elements": [
+      {
+        "tag": "div",
+        "text": {
+          "tag": "lark_md",
+          "content": "**任务名称：** {{task_title}}\n\n**任务状态：** {{task_status}}\n\n**优先级：** {{priority}}\n\n**负责人：** {{assignee}}\n\n**任务类型：** {{task_type}}"
+        },
+        "margin": "8px 0 8px 0",
+        "element_id": "task_info"
+      },
+      {
+        "tag": "hr",
+        "element_id": "divider"
+      },
+      {
+        "tag": "div",
+        "text": {
+          "tag": "lark_md",
+          "content": "**任务目标：**\n\n{{task_description}}\n\n**验收标准：**\n{{acceptance_criteria}}"
+        },
+        "margin": "8px 0 8px 0",
+        "element_id": "task_desc"
+      },
+      {
+        "tag": "div",
+        "text": {
+          "tag": "lark_md",
+          "content": "**任务ID：** `{{task_id}}`\n\n**创建时间：** {{created_at}}\n\n**预计工时：** {{estimated_hours}}h\n\n**涉及技术：** {{technologies}}"
+        },
+        "margin": "8px 0 8px 0",
+        "element_id": "meta_info"
+      },
+      {
+        "tag": "action",
+        "actions": [
+          {
+            "tag": "button",
+            "text": {
+              "tag": "plain_text",
+              "content": "🔍 查看详情"
+            },
+            "type": "primary",
+            "url": "{{task_detail_url}}",
+            "action_id": "view_details"
+          },
+          {
+            "tag": "button",
+            "text": {
+              "tag": "plain_text",
+              "content": "🚀 执行任务"
+            },
+            "type": "default",
+            "action_id": "execute_task"
+          },
+          {
+            "tag": "button",
+            "text": {
+              "tag": "plain_text",
+              "content": "💬 评论"
+            },
+            "type": "default",
+            "action_id": "add_comment"
+          },
+          {
+            "tag": "button",
+            "text": {
+              "tag": "plain_text",
+              "content": "📊 查看进度"
+            },
+            "type": "default",
+            "action_id": "view_progress"
+          }
+        ],
+        "layout": "flow",
+        "element_id": "action_buttons"
+      }
+    ]
+  }
+}

@@ -106,6 +106,34 @@ class RuleBasedDecisionEngineM1:
         self.logger.info(f"  - Series: M (Hardcoded Rules)")
         self.logger.info(f"  - Strategy Engine: {strategy_engine_status}")
     
+    def _first_non_pass_index(self, action_list, handcards=None) -> int:
+        """
+        与 StageRouter 路由层兜底一致：在有多项可选时避免无依据地落到 PASS。
+        优先返回首张通过手牌校验的非 PASS；否则返回首个非 PASS 索引。
+        """
+        if not action_list:
+            return 0
+        any_handler = next(iter(self.handlers.values()), None)
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0:
+                if action[0] == "PASS":
+                    continue
+            elif action == "PASS":
+                continue
+            if handcards and any_handler and hasattr(any_handler, "_validate_action_cards"):
+                if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                    if any_handler._validate_action_cards(action, handcards):
+                        return i
+            else:
+                return i
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                self.logger.warning(f"Fallback: first non-PASS at index {i} (validation skipped or failed)")
+                return i
+            if not isinstance(action, list) and action != "PASS":
+                return i
+        return 0
+    
     def _check_strategy_engine_status(self) -> str:
         """检查策略引擎状态"""
         # 检查第一个处理器（作为代表）的策略引擎状态
@@ -176,9 +204,6 @@ class RuleBasedDecisionEngineM1:
             selected_action = action_list[action_idx] if action_idx < len(action_list) else None
             handcards = message.get("handCards", [])
             if selected_action and handcards:
-                # 使用BasePhaseHandler的验证方法
-                from .stage_router import BasePhaseHandler
-                # 创建一个临时实例用于验证（或者直接调用静态方法）
                 if isinstance(selected_action, list) and len(selected_action) > 0 and selected_action[0] != "PASS":
                     # 简单验证：检查动作中的卡牌是否在手牌中
                     action_cards = []
@@ -192,8 +217,11 @@ class RuleBasedDecisionEngineM1:
                         
                         for card, count in action_card_counts.items():
                             if card not in handcard_counts or handcard_counts[card] < count:
-                                self.logger.warning(f"Selected action {action_idx} contains cards not in handcards: {card}, falling back to PASS")
-                                return 0  # 如果验证失败，返回PASS
+                                self.logger.warning(
+                                    f"Selected action {action_idx} contains cards not in handcards: {card}, "
+                                    f"falling back to first non-PASS instead of PASS"
+                                )
+                                return self._first_non_pass_index(action_list, handcards)
             
             return action_idx
             

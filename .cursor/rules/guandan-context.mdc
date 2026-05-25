@@ -1,0 +1,24 @@
+---
+description: 掼蛋 AI 改动前必读迭代大脑（ISSUES + ITERATIONS），禁止仅凭聊天历史假设
+alwaysApply: true
+---
+
+# 掼蛋 AI 迭代上下文
+
+本仓库掼蛋 AI 相关开发以 **`docs/guandan-brain/`** 为真源，与聊天上下文无关。
+
+## 执行任何「修改惯蛋 AI 行为/规则/模型/训练配置」的任务前必须
+
+1. 阅读 `docs/guandan-brain/ISSUES.md`，确认与本次改动相关的 **open** `GUA-xxx` 及标签（`rules` / `observation` / `policy`）。
+2. 阅读 `docs/guandan-brain/ITERATIONS.md` 中**最新一条**（或本轮草稿），对齐本轮目标与完成定义；若本轮未登记，先追加一条再改代码。
+3. 阅读 `docs/guandan-brain/EVAL.md` 中的评测入口与通过标准；改动后更新评测结果与 ITERATIONS（含回归：pass→fail）。
+
+## 禁止
+
+- 仅凭对话历史推断「上次修了什么」或「约定是什么」而不查上述文件。
+- 在同一迭代内无目标地同时改多处 unrelated 逻辑（除非 ITERATIONS 明确列出并说明原因）。
+
+## 完成后
+
+- 在 `ISSUES.md` 更新相关条目的状态与 `closed_in`（若关闭）。
+- 在 `ITERATIONS.md` 追加一行：目标 GUA、改动摘要、评测摘要、下轮 priority。

@@ -1,0 +1,109 @@
+{
+  "schema": "2.0",
+  "config": {
+    "update_multi": true,
+    "enable_forward": true,
+    "width_mode": "default",
+    "summary": {
+      "content": "新的Kanban任务已创建：PHASE4-006: 深度优化choose_bomb策略",
+      "i18n_content": {
+        "zh_cn": "新的Kanban任务已创建：PHASE4-006: 深度优化choose_bomb策略",
+        "en_us": "New Kanban task created: PHASE4-006: 深度优化choose_bomb策略"
+      }
+    }
+  },
+  "header": {
+    "title": {
+      "tag": "plain_text",
+      "content": "🎯 yifeGDBOT任务推送"
+    },
+    "subtitle": {
+      "tag": "plain_text",
+      "content": "任务已分配到yifeGDBOT"
+    },
+    "template": "blue",
+    "padding": "12px 8px 12px 8px"
+  },
+  "body": {
+    "direction": "vertical",
+    "padding": "12px 8px 12px 8px",
+    "vertical_spacing": "4px",
+    "elements": [
+      {
+        "tag": "div",
+        "text": {
+          "tag": "lark_md",
+          "content": "**任务名称：** PHASE4-006: 深度优化choose_bomb策略\n\n**任务状态：** 🚀 进行中\n\n**优先级：** 🔴 P0\n\n**负责人：** cursor\n\n**任务类型：** 算法优化"
+        },
+        "margin": "8px 0 8px 0",
+        "element_id": "task_info"
+      },
+      {
+        "tag": "hr",
+        "element_id": "divider"
+      },
+      {
+        "tag": "div",
+        "text": {
+          "tag": "lark_md",
+          "content": "**任务目标：**\n\n基于PHASE4-001分析结果，深度优化choose_bomb函数，提升M1对lalala的胜率从0%到>90%\n\n**优化策略：**\n1. 改进炸弹选择算法\n2. 优化优先级计算\n3. 增强决策逻辑\n\n**验收标准：**\n1. 胜率达到90%以上\n2. 通过16局真实对局验证\n3. 保持代码可读性和可维护性\n4. 编写详细的优化报告"
+        },
+        "margin": "8px 0 8px 0",
+        "element_id": "task_desc"
+      },
+      {
+        "tag": "div",
+        "text": {
+          "tag": "lark_md",
+          "content": "**任务ID：** `t_623fb825`\n\n**创建时间：** 2026-05-25 19:45:00\n\n**预计工时：** 16h\n\n**涉及技术：** Python, AI算法, 掼牌游戏, 机器学习"
+        },
+        "margin": "8px 0 8px 0",
+        "element_id": "meta_info"
+      },
+      {
+        "tag": "action",
+        "actions": [
+          {
+            "tag": "button",
+            "text": {
+              "tag": "plain_text",
+              "content": "🔍 查看详情"
+            },
+            "type": "primary",
+            "url": "https://kanban.example.com/task/t_623fb825",
+            "action_id": "view_details"
+          },
+          {
+            "tag": "button",
+            "text": {
+              "tag": "plain_text",
+              "content": "🚀 执行任务"
+            },
+            "type": "default",
+            "action_id": "execute_task"
+          },
+          {
+            "tag": "button",
+            "text": {
+              "tag": "plain_text",
+              "content": "💬 评论"
+            },
+            "type": "default",
+            "action_id": "add_comment"
+          },
+          {
+            "tag": "button",
+            "text": {
+              "tag": "plain_text",
+              "content": "📊 查看进度"
+            },
+            "type": "default",
+            "action_id": "view_progress"
+          }
+        ],
+        "layout": "flow",
+        "element_id": "action_buttons"
+      }
+    ]
+  }
+}

@@ -129,6 +129,33 @@ class CriticalStageProtectionRule(ProtectionRule):
         return 0.0
 
 
+class OpponentSprintWhenTeammateLeadsRule(ProtectionRule):
+    """
+    GUA-022：队友为当前最大时，若对手有人已极少张而队友仍较多，降低「无脑让牌」倾向，
+    避免对手接权冲关；以负分拉低 protection_score，使 should_protect 更难成立。
+    """
+
+    def evaluate(self, message: Dict, context: Dict) -> float:
+        greater_pos = message.get("greaterPos", -1)
+        my_pos = message.get("myPos", -1)
+        if my_pos < 0 or greater_pos < 0:
+            return 0.0
+        teammate_pos = (my_pos + 2) % 4
+        if greater_pos != teammate_pos:
+            return 0.0
+        cards_left = context.get("cards_left") or {}
+        if not cards_left:
+            return 0.0
+        teammate_cards = cards_left.get(teammate_pos, 27)
+        opp_cards = [cards_left.get(i, 27) for i in range(4) if i not in (my_pos, teammate_pos)]
+        min_opp = min(opp_cards) if opp_cards else 27
+        if min_opp <= 6 and teammate_cards >= 8:
+            return -0.55
+        if min_opp <= 4 and teammate_cards >= 5:
+            return -0.4
+        return 0.0
+
+
 class ThreatAssessmentRule(ProtectionRule):
     """威胁评估保护规则"""
     
@@ -170,6 +197,7 @@ class TeammateProtectionStrategy:
             LowCardCountProtectionRule(),   # 低牌数保护
             CriticalStageProtectionRule(),  # 关键阶段保护
             ThreatAssessmentRule(),         # 威胁评估保护
+            OpponentSprintWhenTeammateLeadsRule(),  # GUA-022：对手冲关时减弱让牌
         ]
     
     def should_protect(self, message: Dict, context: Dict) -> bool:
@@ -193,20 +221,24 @@ class TeammateProtectionStrategy:
         """获取保护动作（提升：智能选择保护方式）"""
         if not self.should_protect(message, context):
             return None
-        
+
+        # GUA-022：当对手接近冲关时，不应“完全保护=直接PASS”，而是优先最小代价压制
+        high_threat_counter = self._is_high_threat_counterattack_needed(message, context)
+
         # 保护方式1: PASS（完全保护）
-        if self._should_full_protect(message, context):
+        if self._should_full_protect(message, context) and not high_threat_counter:
             return 0
-        
+
         # 保护方式2: 出最小管牌（部分保护）
         if self._should_partial_protect(message, context):
-            return self._find_minimal_action(message)
+            return self._find_minimal_action(message, context)
         
         return None
     
     def _get_dynamic_threshold(self, message: Dict, context: Dict) -> float:
         """获取动态阈值（提升：根据情况调整）"""
-        base_threshold = self.config.get("protection_threshold", 1.5)
+        # GUA-022：默认提高阈值，减少「队友一出就跟 PASS」导致丢权；可通过 config 覆盖
+        base_threshold = float(self.config.get("protection_threshold", 2.25))
         
         # 根据游戏阶段调整阈值
         game_phase = context.get("game_phase", "opening")
@@ -214,6 +246,9 @@ class TeammateProtectionStrategy:
             return base_threshold * 0.8  # 残局降低阈值，更容易触发保护
         elif game_phase == "mid_late":
             return base_threshold * 0.9
+        elif game_phase in ("opening", "mid_early"):
+            # 开局/中局前期更不宜过早让满权
+            return base_threshold * 1.12
         
         return base_threshold
     
@@ -223,6 +258,16 @@ class TeammateProtectionStrategy:
         my_pos = message.get("myPos", 0)
         teammate_pos = (my_pos + 2) % 4
         teammate_cards = cards_left.get(teammate_pos, DEFAULT_REST_CARDS)
+
+        # GUA-022：对手有人进入冲关区时，除非队友也接近出完，否则不建议直接PASS
+        opponents_cards = [
+            cards_left.get(i, DEFAULT_REST_CARDS)
+            for i in range(4)
+            if i not in (my_pos, teammate_pos)
+        ]
+        min_opponent_cards = min(opponents_cards) if opponents_cards else DEFAULT_REST_CARDS
+        if min_opponent_cards <= 3 and teammate_cards > 2:
+            return False
         
         # 队友牌数很少，完全保护
         if teammate_cards <= 2:
@@ -242,7 +287,7 @@ class TeammateProtectionStrategy:
         # 不完全保护的情况下，可以考虑部分保护
         return not self._should_full_protect(message, context)
     
-    def _find_minimal_action(self, message: Dict) -> Optional[int]:
+    def _find_minimal_action(self, message: Dict, context: Dict = None) -> Optional[int]:
         """找到最小管牌动作"""
         action_list = message.get("actionList", [])
         cur_action = message.get("curAction", [])
@@ -258,26 +303,78 @@ class TeammateProtectionStrategy:
         
         if not candidates:
             return None
-        
-        # 选择最小的动作（这里简化处理，实际应该比较牌值）
-        return candidates[0][0]
+
+        # GUA-022/GUA-014：优先“最小代价压制”
+        # 排序维度：是否炸弹 -> 出牌张数 -> 牌值
+        ranked = sorted(
+            candidates,
+            key=lambda x: self._action_cost_key(x[1], context or {})
+        )
+        return ranked[0][0]
     
     def _can_beat(self, action: List, cur_action: List) -> bool:
         """判断动作是否能管住当前动作"""
-        # 简化实现，实际应该根据牌型规则判断
         if not action or not cur_action:
             return False
         
         action_type = action[0] if isinstance(action, list) else str(action)
         cur_type = cur_action[0] if isinstance(cur_action, list) else str(cur_action)
-        
-        # 同类型且更大，或炸弹
-        if action_type == cur_type:
+
+        # 炸弹可压多数牌型
+        if action_type == "Bomb":
             return True
-        elif action_type == "Bomb":
-            return True
-        
-        return False
+
+        # 非同型不可压（简化）
+        if action_type != cur_type:
+            return False
+
+        # 同型需比较牌值
+        cur_rank = cur_action[1] if len(cur_action) > 1 else ""
+        act_rank = action[1] if len(action) > 1 else ""
+        if not cur_rank or not act_rank:
+            return False
+
+        rank = "2"
+        return self._get_rank_value(act_rank, rank) > self._get_rank_value(cur_rank, rank)
+
+    def _is_high_threat_counterattack_needed(self, message: Dict, context: Dict) -> bool:
+        """对手冲关威胁下是否应优先压制而非让牌。"""
+        cards_left = context.get("cards_left", {}) if context else {}
+        my_pos = message.get("myPos", -1)
+        if my_pos < 0 or not cards_left:
+            return False
+        teammate_pos = (my_pos + 2) % 4
+        teammate_cards = cards_left.get(teammate_pos, 27)
+        opponents_cards = [cards_left.get(i, 27) for i in range(4) if i not in (my_pos, teammate_pos)]
+        min_opponent_cards = min(opponents_cards) if opponents_cards else 27
+        return min_opponent_cards <= 3 and teammate_cards >= 4
+
+    def _action_cost_key(self, action: List, context: Dict) -> tuple:
+        """
+        最小代价键：越小越优先。
+        1) 非炸弹优先；2) 出牌张数越少优先；3) 牌值越小优先。
+        """
+        action_type = action[0] if isinstance(action, list) and action else ""
+        is_bomb = 1 if action_type == "Bomb" else 0
+        cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+        card_count = len(cards) if cards else 1
+        rank = action[1] if len(action) > 1 else ""
+        rank_value = self._get_rank_value(rank, context.get("cur_rank", "2"))
+        return (is_bomb, card_count, rank_value)
+
+    def _get_rank_value(self, rank: str, cur_rank: str = "2") -> int:
+        """简化牌值比较，支持点数、级牌、大小王。"""
+        rank_map = {
+            '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
+            '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
+            'B': 16, 'R': 17
+        }
+        if not isinstance(rank, str) or not rank:
+            return 0
+        rank_char = rank[-1] if len(rank) > 1 else rank
+        if rank_char == cur_rank:
+            return 15
+        return rank_map.get(rank_char, 0)
 
 
 class ContextPriorityAdjuster:
@@ -356,10 +453,11 @@ class PrioritySystem:
                 'one_hand_complete': 1000,
                 'two_hand_complete': 900,
                 'small_single': 800,
-                'threepair': 700,
+                # GUA-014：钢板/三连对优先于单纯三张，减少无谓拆复杂牌型
+                'threepair': 780,
                 'straight': 600,
                 'three_with_two': 500,
-                'trips': 400,
+                'trips': 360,
                 'pair': 300,
                 'single': 200,
                 'bomb_active': 50,  # ⚠️ 开局主动出牌时，炸弹优先级很低（应该保留到关键时刻）

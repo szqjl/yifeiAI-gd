@@ -156,6 +156,8 @@ class YF2_M1_Client:
         
         # Initialize game recorder
         self.game_recorder = GameRecorder(player_id, "yf2_m1")
+        # 暂存“已落盘但缺 victoryNum”的记录，待 gameResult 回填
+        self.pending_result_files = []
         
         self.logger.info(f"✓ yf2_m1 initialized (Player {player_id})")
         if USE_MOE_ENGINE:
@@ -451,6 +453,8 @@ class YF2_M1_Client:
         # 处理游戏结束（兼容多种格式：gameOver, gameResult, episodeOver）
         elif notification_key in ["gameOver", "gameResult", "episodeOver"]:
             self.logger.info(f"✓ 识别到游戏结束通知: notification_key={notification_key}")
+            # 将notification_key传递给_handle_game_over，用于区分gameOver和gameResult
+            data["notification_key"] = notification_key
             self._handle_game_over(data)
         # 处理进贡
         elif notification_key == "tribute":
@@ -546,49 +550,128 @@ class YF2_M1_Client:
     
     def _handle_game_over(self, data: dict):
         """处理游戏结束通知"""
-        # 兼容两种格式：result字段和gameResult格式
-        result = data.get("result", {})
+        stage = data.get("stage", "")
+        notification_key = data.get("notification_key", "")
+
+        # gameOver 通常不带结果，仅作阶段通知
+        if stage == "gameOver" or notification_key == "gameOver":
+            self.logger.info(f"✓ 识别到游戏结束通知: notification_key={notification_key}")
+            self.logger.info(f"游戏结束: {data}, current_game={bool(self.game_recorder.current_game)}")
+            print(f"游戏结束: {data}")
+            return
+
+        result = self._extract_result_from_notification(data)
+        has_victory = isinstance(result.get("victoryNum"), list) and len(result.get("victoryNum")) >= 4
         
-        # 如果是gameResult格式，提取victoryNum和draws
-        # gameResult 是累计结果，包含所有游戏的 victoryNum
-        if data.get("stage") == "gameResult" or "victoryNum" in data:
-            # 提取 victoryNum（可能在 data 中，也可能在 result 中）
-            victory_num = data.get("victoryNum") or result.get("victoryNum", [])
-            if victory_num:
-                result = {
-                    "victoryNum": victory_num,
-                    "draws": data.get("draws", result.get("draws", [])),
-                    "total_decisions": self.decision_count,
-                    "game_count": self.game_count
-                }
-            elif not result:
-                # 如果没有 victoryNum，至少保存其他信息
-                result = {
-                    "draws": data.get("draws", []),
-                    "total_decisions": self.decision_count,
-                    "game_count": self.game_count
-                }
-        
-        self.logger.info(f"游戏结束: {result}, current_game={self.game_recorder.current_game is not None}")
+        self.logger.info(f"✓ 识别到游戏结果通知: notification_key={notification_key}")
+        self.logger.info(f"游戏结束: {result}, current_game={bool(self.game_recorder.current_game)}")
         print(f"游戏结束: {result}")
         
-        # 检查是否已经有游戏记录
-        if not self.game_recorder.current_game:
-            self.logger.warning(f"⚠ 游戏结束通知收到，但current_game为None，可能已经保存过了")
-            # 即使没有 current_game，如果是 gameResult，也保存 victoryNum 到共享文件
-            if data.get("stage") == "gameResult" and "victoryNum" in data:
-                self._save_victory_num_to_shared_file(data.get("victoryNum", []))
-            return
-        
-        # 记录游戏结束
-        filepath = self.game_recorder.end_game(result)
-        if filepath:
-            self.logger.info(f"✓ 游戏记录已保存: {filepath}")
-            # 如果是 gameResult，也保存 victoryNum 到共享文件
-            if data.get("stage") == "gameResult" and "victoryNum" in data:
-                self._save_victory_num_to_shared_file(data.get("victoryNum", []))
+        # 保存当前局
+        if self.game_recorder.current_game:
+            filepath = self.game_recorder.end_game(result)
+            if filepath:
+                if has_victory:
+                    self.logger.info(f"✓ 游戏记录已保存（包含victoryNum）: {filepath}")
+                else:
+                    self.pending_result_files.append(str(filepath))
+                    self.logger.warning(f"⚠ 游戏记录先落盘但无victoryNum，待后续回填: {filepath}")
         else:
-            self.logger.warning(f"⚠ 游戏记录保存失败，可能原因：start_game()未被调用")
+            self.logger.warning("⚠ 游戏结果通知收到，但current_game为None，尝试更新已保存的记录...")
+            self._update_latest_record_with_result(result)
+
+        # 若本次拿到完整 gameResult，回填此前 episodeOver 产生的空结果文件
+        if has_victory:
+            self._flush_pending_records(result)
+
+    def _extract_result_from_notification(self, data: dict) -> dict:
+        """从多种通知格式中提取统一 result。"""
+        result = data.get("result", {}) if isinstance(data, dict) else {}
+        if not isinstance(result, dict):
+            result = {}
+        if not result.get("victoryNum"):
+            result["victoryNum"] = data.get("victoryNum", [])
+            result["draws"] = data.get("draws", [])
+        result["total_decisions"] = self.decision_count
+        result["game_count"] = self.game_count
+        return result
+
+    def _flush_pending_records(self, result: dict):
+        """将缓存的缺胜负记录统一回填 victoryNum。"""
+        if not self.pending_result_files:
+            return
+        import json
+        import tempfile
+        import os
+        flushed = 0
+        for path in list(self.pending_result_files):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                data["result"] = result
+                fd, tmp = tempfile.mkstemp(dir=str(Path(path).parent), suffix=".tmp")
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp, path)
+                flushed += 1
+            except Exception as e:
+                self.logger.warning(f"回填 pending 记录失败: {path}, error={e}")
+        self.pending_result_files.clear()
+        if flushed:
+            self.logger.info(f"✓ 已批量回填 pending 记录 victoryNum: {flushed} 个")
+    
+    def _update_latest_record_with_result(self, result: dict):
+        """更新最近保存的游戏记录，添加result信息"""
+        try:
+            from pathlib import Path
+            import json
+            import tempfile
+            import os
+            
+            # 查找最近保存的yf2_m1记录
+            game_records_dir = Path("game_records")
+            if not game_records_dir.exists():
+                return
+            
+            yf2_records = sorted(
+                game_records_dir.glob("*yf2_m1*.json"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if not yf2_records:
+                return
+            
+            # 找到最近一份可解析JSON的记录；若遇到损坏文件，跳过并告警
+            latest_record = None
+            record_data = None
+            for candidate in yf2_records:
+                try:
+                    with open(candidate, 'r', encoding='utf-8') as f:
+                        record_data = json.load(f)
+                    latest_record = candidate
+                    break
+                except json.JSONDecodeError as e:
+                    self.logger.warning(f"跳过损坏记录文件: {candidate.name} ({e})")
+                    continue
+            if latest_record is None or record_data is None:
+                self.logger.warning("未找到可解析的 yf2_m1 记录文件，无法补写 gameResult")
+                return
+            
+            # 更新result字段（只在拿到完整 victoryNum 时写回）
+            if isinstance(result.get("victoryNum"), list) and len(result.get("victoryNum")) >= 4:
+                record_data["result"] = result
+                
+                # 原子写回，避免并发写导致JSON损坏
+                fd, temp_path = tempfile.mkstemp(
+                    dir=str(latest_record.parent), suffix=".tmp", prefix=latest_record.name + "."
+                )
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    json.dump(record_data, f, ensure_ascii=False, indent=2)
+                os.replace(temp_path, latest_record)
+                
+                self.logger.info(f"✓ 已更新游戏记录: {latest_record.name}，添加了victoryNum信息")
+        except Exception as e:
+            self.logger.warning(f"更新游戏记录失败: {e}")
     
     def _save_victory_num_to_shared_file(self, victory_num: list):
         """保存 victoryNum 到共享文件，供 batch_executor 读取"""

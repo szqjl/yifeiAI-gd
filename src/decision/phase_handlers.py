@@ -1372,9 +1372,10 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         my_pos = state['my_pos']
         is_teammate = self._is_teammate(greater_pos, my_pos)
         
-        # 队友出牌，中局前期让过
+        # 队友出牌：仅当无非 PASS 可选时才 PASS；与 OpeningPassive 一致，避免「actionList 多项仍 PASS」
         if is_teammate:
-            return 0
+            if not self._action_list_has_non_pass(action_list):
+                return 0
         
         # 对手出牌，根据牌型处理
         if cur_action_type == 'Single':
@@ -1721,9 +1722,9 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
                 my_rest_cards=state['my_rest']
             )
             
-            # 如果策略明确建议不出单，且没有能压制的动作，才PASS
+            # 策略建议不出单时仍不得在无充分理由下 PASS；兜底第一个非 PASS
             if '不出单' in single_sugg.get('action', '') and '主动时不出小单' in single_sugg.get('action', ''):
-                return 0
+                return self._default_passive_action(action_list, message)
         
         # 降级：选择第一个能压制的动作（即使不是最优）
         return self._default_passive_action(action_list, message)
@@ -1774,8 +1775,8 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         action_rank = cur_action[1] if len(cur_action) > 1 else ""
         is_teammate = self._is_teammate(greater_pos, my_pos)
         
-        # 如果是队友出对子，让过
-        if is_teammate:
+        # 队友出对子：若仍有非 PASS 可选，继续走压制/兜底逻辑，避免盲目 PASS
+        if is_teammate and not self._action_list_has_non_pass(action_list):
             return 0
         
         # 获取当前级牌
@@ -2224,9 +2225,9 @@ class MidLatePassiveHandler(MidEarlyPassiveHandler):
         my_pos = state['my_pos']
         is_teammate = self._is_teammate(greater_pos, my_pos)
         
-        # 队友出牌，中局后期仍然让过
         if is_teammate:
-            return 0
+            if not self._action_list_has_non_pass(action_list):
+                return 0
         
         # 中局后期更积极：降低牌力阈值，更倾向于压制
         # 牌力阈值从5降低到3，更积极压制对手
@@ -2825,9 +2826,9 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
         my_pos = message.get("myPos", 0)
         is_teammate = self._is_teammate(greater_pos, my_pos)
         
-        # 队友出牌，残局前期让过
         if is_teammate:
-            return 0
+            if not self._action_list_has_non_pass(action_list):
+                return 0
         
         # 残局前期：快速压制，优先一手出完
         one_hand_idx = self._check_one_hand_complete(action_list, handcards)
@@ -3208,9 +3209,9 @@ class EndgameLatePassiveHandler(EndgameEarlyPassiveHandler):
         my_pos = message.get("myPos", 0)
         is_teammate = self._is_teammate(greater_pos, my_pos)
         
-        # 队友出牌，残局后期让过
         if is_teammate:
-            return 0
+            if not self._action_list_has_non_pass(action_list):
+                return 0
         
         # 残局后期：全力压制，优先一手出完
         one_hand_idx = self._check_one_hand_complete(action_list, handcards)

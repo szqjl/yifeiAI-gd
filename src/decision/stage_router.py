@@ -301,6 +301,17 @@ class BasePhaseHandler(ABC):
         
         return True
     
+    def _action_list_has_non_pass(self, action_list: List) -> bool:
+        """actionList 中是否存在非 PASS 的合法动作（用于避免有多选仍 PASS）。"""
+        if not action_list:
+            return False
+        for action in action_list:
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                return True
+            if not isinstance(action, list) and action != "PASS":
+                return True
+        return False
+    
     def _filter_valid_actions(self, action_list: List, handcards: List, logger=None) -> Tuple[List, List]:
         """
         过滤有效的动作（验证卡牌一致性）
