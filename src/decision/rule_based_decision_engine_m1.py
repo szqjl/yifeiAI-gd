@@ -36,6 +36,7 @@ class RuleBasedDecisionEngineM1:
     - 硬编码规则优化
     - 完全独立于V5版本
     - M系列：硬编码规则引擎系列
+    - 胜负意识：每副牌目标 = 争头游，己方头游+二游即获胜（由 stage_router 注入 context['game_objective']）
     """
     
     def __init__(self, player_id: int = 0, config: Dict = None):

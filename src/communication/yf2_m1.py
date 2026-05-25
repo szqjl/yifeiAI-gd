@@ -30,8 +30,18 @@ try:
 except ImportError:
     from decision.rule_based_decision_engine_m1 import RuleBasedDecisionEngineM1
     USE_MOE_ENGINE = False
-from communication.game_recorder import GameRecorder
+from communication.game_recorder import (
+    GameRecorder,
+    normalize_cards_to_string_list,
+    normalize_action_list,
+    ensure_my_pos_int,
+)
 from communication.websocket_manager import WebSocketManager
+try:
+    from game_logic.guandan_constants import CARDS_PER_PLAYER, DEFAULT_REST_CARDS
+except ImportError:
+    CARDS_PER_PLAYER = 27
+    DEFAULT_REST_CARDS = 27
 
 # Configure logging
 import os
@@ -247,10 +257,18 @@ class YF2_M1_Client:
         # 检查是否是游戏开始（如果还没有开始记录）
         # 有些服务器可能在第一个action请求时发送handCards
         if not self.game_recorder.current_game:
-            hand_cards = data.get("handCards", [])
-            if hand_cards and len(hand_cards) == 27:
+            raw_hand = data.get("handCards", [])
+            hand_cards = normalize_cards_to_string_list(raw_hand)
+            if hand_cards and len(hand_cards) == CARDS_PER_PLAYER:
                 self.logger.info("在action请求中检测到初始手牌，触发游戏开始")
-                my_pos = data.get("myPos", self.player_id)
+                my_pos = ensure_my_pos_int(data, self.player_id)
+                if my_pos != self.player_id:
+                    self.player_id = my_pos
+                self.logger.info(
+                    "[座位排查] 来源=yf2_m1.act触发开局, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
+                    data.get("myPos"), data.get("playerPosition"), self.player_id
+                )
+                self.hand_cards = hand_cards
                 game_info = {
                     "selfRank": data.get("selfRank"),
                     "oppoRank": data.get("oppoRank"),
@@ -302,11 +320,11 @@ class YF2_M1_Client:
             public_info = data.get("publicInfo", [])
             
             # 计算下家剩余牌数
-            my_pos = data.get("myPos", self.player_id)
+            my_pos = ensure_my_pos_int(data, self.player_id)
             lower_hand_pos = (my_pos + 1) % 4
-            lower_hand_rest = 27
+            lower_hand_rest = DEFAULT_REST_CARDS
             if public_info and len(public_info) > lower_hand_pos:
-                lower_hand_rest = public_info[lower_hand_pos].get("rest", 27)
+                lower_hand_rest = public_info[lower_hand_pos].get("rest", DEFAULT_REST_CARDS)
             
             # 显示当前动作和最大动作
             print(f"当前动作为{cur_pos}号-动作{cur_action}， 最大动作为{greater_pos}号-动作{greater_action}")
@@ -316,11 +334,15 @@ class YF2_M1_Client:
             valid_action_count = sum(1 for a in action_list if len(a) > 0 and a[0] != "PASS")
             print(f"可用动作数: {valid_action_count}/{len(action_list)}")
             if valid_action_count > 0:
-                # 显示前几个有效动作的类型
                 valid_types = [a[0] for a in action_list[:10] if len(a) > 0 and a[0] != "PASS"]
                 print(f"有效动作类型: {valid_types[:5]}")
             
-            # 决策：使用MoE引擎或原始M1引擎
+            if "handCards" in data and data["handCards"]:
+                data["handCards"] = normalize_cards_to_string_list(data["handCards"])
+            if "actionList" in data and data["actionList"]:
+                data["actionList"] = normalize_action_list(data["actionList"])
+            # 保证决策层拿到正确座位（act 消息可能不含 myPos，用已同步的 player_id）
+            data["myPos"] = self.player_id
             act_index = self.decision_engine.decide(data)
             self.logger.info(f"Decision engine returned action index: {act_index}, action: {action_list[act_index] if act_index < len(action_list) else 'INVALID'}")
             
@@ -456,18 +478,9 @@ class YF2_M1_Client:
     
     def _handle_game_start(self, data: dict):
         """处理游戏开始通知（兼容多种格式）"""
-        # 兼容多种格式：handCards字段或playerPosition字段
-        hand_cards = data.get("handCards", [])
-        if not hand_cards:
-            # 尝试从其他字段获取
-            hand_cards = data.get("initial_hand", [])
+        hand_cards = normalize_cards_to_string_list(data.get("handCards", []) or data.get("initial_hand", []))
         
-        # 兼容多种格式：myPos字段或playerPosition字段
-        my_pos = data.get("myPos", self.player_id)
-        if my_pos == self.player_id:
-            my_pos = data.get("playerPosition", my_pos)
-        
-        # 更新player_id（如果服务器分配的位置不同）
+        my_pos = ensure_my_pos_int(data, self.player_id)
         if my_pos != self.player_id:
             self.logger.info(f"Position updated: {self.player_id} -> {my_pos}")
             self.player_id = my_pos
@@ -505,6 +518,10 @@ class YF2_M1_Client:
                 }
                 self.decision_engine = RuleBasedDecisionEngineM1(my_pos, config)
         
+        self.logger.info(
+            "[座位排查] 来源=yf2_m1._handle_game_start, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
+            data.get("myPos"), data.get("playerPosition"), self.player_id
+        )
         self.hand_cards = hand_cards
         print(f"游戏开始, 我是{my_pos}号位，手牌：{hand_cards}")
         self.logger.info(f"游戏开始, 我是{my_pos}号位，手牌数：{len(hand_cards)}")
@@ -598,25 +615,12 @@ class YF2_M1_Client:
     
     def _handle_act_notification(self, data: dict):
         """处理其他玩家出牌通知"""
-        # ⚠️ 重要：优先使用服务器发送的最新handCards（服务器的手牌信息最准确）
         hand_cards = data.get("handCards", [])
         if hand_cards:
-            # 验证手牌数量合理性
-            if len(hand_cards) <= 27:
-                # 验证卡牌格式
-                valid_cards = []
-                for card in hand_cards:
-                    if isinstance(card, str) and len(card) >= 2:
-                        valid_cards.append(card)
-                    elif isinstance(card, list) and len(card) >= 2:
-                        # 处理["C", "8"]格式，转换为"C8"
-                        suit = str(card[0])
-                        rank = str(card[1])
-                        valid_cards.append(f"{suit}{rank}")
-                
+            if len(hand_cards) <= CARDS_PER_PLAYER:
+                valid_cards = normalize_cards_to_string_list(hand_cards)
                 if len(valid_cards) != len(hand_cards):
                     self.logger.warning(f"⚠ 手牌格式验证：原始{len(hand_cards)}张，有效{len(valid_cards)}张")
-                
                 old_hand_size = len(self.hand_cards)
                 self.hand_cards = valid_cards
                 self.logger.debug(f"✓ 从服务器更新手牌: {old_hand_size} -> {len(valid_cards)}张")
