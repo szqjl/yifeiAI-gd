@@ -20,6 +20,11 @@ from pathlib import Path
 from typing import Callable, Optional, Set
 import logging
 
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
 
 # game_records 文件名示例：「<game_id> [yf1_m1]-...」「<game_id> [yf2_m1]-...」
 # 评测口径（GUA-022 / ITERATIONS）：一局 = 同一 game_id 下 yf1_m1 与 yf2_m1 各一份 JSON 成对出现。
@@ -250,6 +255,7 @@ class BatchExecutor:
         self.validator = InputValidator()
         # 本 Run 开始时 game_records 中成对 game_id 快照（与 GUA-022 评测口径一致）
         self._game_records_baseline: Optional[Set[str]] = None
+        self._run_lock_path: Optional[Path] = None
         
         # 初始化信号处理器（仅在主线程中）
         self.signal_handler = None
@@ -403,8 +409,52 @@ class BatchExecutor:
         if self._current_state is not None and self._game_records_baseline is not None:
             self._sync_completed_from_game_records(self._current_state)
     
+    def _acquire_run_lock(self) -> None:
+        """防止多个 batch_executor 同时抢占端口 23456 并互相杀进程。"""
+        lock_path = self.project_root / ".batch_executor.lock"
+        if lock_path.exists():
+            try:
+                old_pid = int(lock_path.read_text(encoding="utf-8").strip())
+                if psutil is not None and psutil.pid_exists(old_pid):
+                    raise RuntimeError(
+                        f"已有 batch_executor 在运行 (PID {old_pid})。"
+                        "请先 Ctrl+C 停止该进程，或删除 stale lock 后再试。"
+                    )
+            except ValueError:
+                pass
+            lock_path.unlink(missing_ok=True)
+        lock_path.write_text(str(os.getpid()), encoding="utf-8")
+        self._run_lock_path = lock_path
+    
+    def _release_run_lock(self) -> None:
+        if self._run_lock_path is None:
+            return
+        try:
+            if self._run_lock_path.exists():
+                if self._run_lock_path.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                    self._run_lock_path.unlink()
+        except OSError:
+            pass
+        self._run_lock_path = None
+    
+    def _count_live_client_processes(self) -> int:
+        """统计当前仍在运行的客户端 Python 进程数（按脚本名匹配，去重 PID）。"""
+        from .restart_manager import _count_live_client_scripts
+        return _count_live_client_scripts(self.client_scripts)
+    
     def run(self) -> None:
         """执行批量游戏"""
+        self._acquire_run_lock()
+        try:
+            self._run_impl()
+        finally:
+            self.logger.info("清理进程...")
+            self.restart_manager.cleanup()
+            self._release_run_lock()
+            self._running = False
+    
+    def _run_impl(self) -> None:
+        """run() 主体逻辑（由 run() 包装 lock/cleanup）。"""
         # 立即创建执行状态，以便GUI可以显示
         state = ExecutionState(
             target_games=self.target_games,
@@ -444,7 +494,6 @@ class BatchExecutor:
                 state.save(self.state_file)
             except Exception as e:
                 self.logger.warning(f"保存执行状态失败: {e}")
-            self._running = False
             return
         
         # 检查诊断是否成功
@@ -484,9 +533,33 @@ class BatchExecutor:
             records_dir,
         )
         
+        max_no_progress_restarts = int(
+            os.environ.get("BATCH_EXECUTOR_MAX_NO_PROGRESS_RESTARTS", "3")
+        )
+        max_total_restarts = int(
+            os.environ.get(
+                "BATCH_EXECUTOR_MAX_TOTAL_RESTARTS",
+                str(max(state.target_games * 5, 15)),
+            )
+        )
+        client_monitor_grace_seconds = int(
+            os.environ.get("BATCH_EXECUTOR_CLIENT_MONITOR_GRACE", "60")
+        )
+        consecutive_no_progress_restarts = 0
+        last_completed_games = 0
+        
         # 主执行循环
         try:
             while state.completed_games < state.target_games and self._running:
+                if state.restart_count >= max_total_restarts:
+                    self.logger.error(
+                        "已达最大重启次数 %d（completed=%d/%d），停止执行。"
+                        "请确认无其他 test_t9/batch_executor 在并行运行。",
+                        max_total_restarts,
+                        state.completed_games,
+                        state.target_games,
+                    )
+                    break
                 if self.signal_handler and self.signal_handler.is_shutdown_requested():
                     self.logger.info("检测到关闭请求，停止执行")
                     break
@@ -521,11 +594,32 @@ class BatchExecutor:
                 import time
                 time.sleep(2)
                 
-                # 验证服务器进程仍在运行
+                # 验证服务器进程仍在运行（或端口已开放）
+                # NOTE: 掼蛋 exe 会启动 tornado 服务端后作为孤儿进程退出父进程，
+                #       因此直接检查 process.poll() 会误杀仍在运行的背景服务器。
+                #       改为检查端口 23456 是否开放 —— 如果开放说明服务端在运行。
                 if server_process.poll() is not None:
-                    self.logger.error(f"服务器进程已退出，返回码: {server_process.returncode}")
-                    self.logger.error("请检查服务器窗口或日志，查看启动失败原因")
-                    break
+                    self.logger.warning(
+                        f"服务器主进程已退出（返回码 {server_process.returncode}），"
+                        f"检查端口 23456 是否仍开放..."
+                    )
+                    import socket
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(2)
+                    port_open = sock.connect_ex(('127.0.0.1', 23456)) == 0
+                    sock.close()
+                    if port_open:
+                        self.logger.info(
+                            "✓ 端口 23456 已开放，孤儿服务端进程正常运行，"
+                            "继续执行"
+                        )
+                    else:
+                        self.logger.error(
+                            f"服务器进程已退出（返回码: {server_process.returncode}），"
+                            "且端口 23456 未开放"
+                        )
+                        self.logger.error("请检查服务器窗口或日志，查看启动失败原因")
+                        break
                 
                 self.logger.info("✓ 服务器端口就绪，开始启动客户端...")
                 
@@ -580,7 +674,9 @@ class BatchExecutor:
                 # 等待服务器进程结束并读取输出
                 server_output = []
                 start_time = time.time()
+                client_monitor_ready_at = start_time + client_monitor_grace_seconds
                 server_terminated_by_kill = False  # 超时强杀则不计入 completed_games（见下方）
+                low_client_strikes = 0
                 
                 try:
                     # 使用混合方式：同时读取stdout和监控进程状态
@@ -622,7 +718,40 @@ class BatchExecutor:
                     
                     # 主线程：等待进程结束，同时收集输出
                     check_interval = 5  # 每5秒检查一次进程状态
+                    expected_clients = len(self.client_scripts)
                     while True:
+                        # 客户端启动后需等待一段时间再监控，避免误判导致每批立即重启
+                        if time.time() >= client_monitor_ready_at:
+                            live_clients = self._count_live_client_processes()
+                            if live_clients < expected_clients:
+                                low_client_strikes += 1
+                                if low_client_strikes >= 2:
+                                    self.logger.error(
+                                        "连续检测到客户端进程不足（%d/%d），"
+                                        "可能已手动关闭客户端窗口，终止本批次",
+                                        live_clients,
+                                        expected_clients,
+                                    )
+                                    server_terminated_by_kill = True
+                                    if server_process.poll() is None:
+                                        try:
+                                            server_process.terminate()
+                                            server_process.wait(timeout=5)
+                                        except Exception:
+                                            try:
+                                                server_process.kill()
+                                            except Exception:
+                                                pass
+                                    break
+                                self.logger.warning(
+                                    "客户端进程不足（%d/%d），等待下次确认（%d/2）",
+                                    live_clients,
+                                    expected_clients,
+                                    low_client_strikes,
+                                )
+                            else:
+                                low_client_strikes = 0
+                        
                         # 检查进程是否已结束
                         return_code = server_process.poll()
                         if return_code is not None:
@@ -785,6 +914,26 @@ class BatchExecutor:
                 
                 # 检查是否需要重启
                 if state.completed_games < state.target_games:
+                    if state.completed_games <= last_completed_games:
+                        consecutive_no_progress_restarts += 1
+                        self.logger.warning(
+                            "本批次未产生新进度（completed_games=%d），"
+                            "连续无进度重启 %d/%d",
+                            state.completed_games,
+                            consecutive_no_progress_restarts,
+                            max_no_progress_restarts,
+                        )
+                        if consecutive_no_progress_restarts >= max_no_progress_restarts:
+                            self.logger.error(
+                                "连续 %d 次重启仍无进度，停止执行。"
+                                "请检查：是否重复启动了 test_t9/batch_executor、"
+                                "客户端是否异常退出、端口 23456 是否被占用。",
+                                max_no_progress_restarts,
+                            )
+                            break
+                    else:
+                        consecutive_no_progress_restarts = 0
+                    last_completed_games = state.completed_games
                     state.restart_count += 1
                     state.current_batch += 1
                     self.logger.info(f"准备重启，已完成 {state.completed_games}/{state.target_games} 场")
@@ -803,11 +952,6 @@ class BatchExecutor:
         except Exception as e:
             self.logger.error(f"执行过程中发生错误: {e}", exc_info=True)
             raise
-        finally:
-            # 清理所有进程
-            self.logger.info("清理进程...")
-            self.restart_manager.cleanup()
-            self._running = False
     
     def start(self) -> None:
         """启动执行（用于GUI）"""

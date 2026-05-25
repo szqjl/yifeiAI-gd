@@ -14,8 +14,112 @@ from pathlib import Path
 
 from .process_monitor import ProcessMonitor
 
+# 用于强制清理残留服务器进程
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
 
 logger = logging.getLogger(__name__)
+
+
+def _pids_for_client_script(script_basename: str) -> List[int]:
+    """按脚本文件名查找仍在运行的客户端 Python 进程 PID。"""
+    if psutil is None:
+        return []
+    target = script_basename.lower()
+    pids: List[int] = []
+    for proc in psutil.process_iter(["pid", "name"]):
+        try:
+            name = (proc.info.get("name") or "").lower()
+            if "python" not in name:
+                continue
+            cmdline = proc.cmdline()
+            cmd_str = " ".join(cmdline).lower()
+            if target in cmd_str:
+                pids.append(proc.info["pid"])
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    return pids
+
+
+def _count_live_client_scripts(client_scripts: List[str]) -> int:
+    """统计仍在运行的客户端进程数（按脚本名去重 PID）。"""
+    if psutil is None:
+        return len(client_scripts)
+    seen: set = set()
+    for script in client_scripts:
+        for pid in _pids_for_client_script(os.path.basename(script)):
+            seen.add(pid)
+    return len(seen)
+
+
+class TrackedClientProcess:
+    """
+    Windows start/cmd 模式下跟踪真实客户端 Python 进程。
+    VirtualProcess 只跟踪 start 壳进程，会导致误判客户端已退出并触发无限重启。
+    """
+
+    def __init__(self, script_basename: str, window_title: str):
+        self.script_basename = script_basename
+        self.window_title = window_title
+        self.pid: Optional[int] = None
+        self.returncode: Optional[int] = None
+
+    def resolve_pid(self, wait_seconds: float = 8.0) -> Optional[int]:
+        deadline = time.time() + wait_seconds
+        while time.time() < deadline:
+            pids = _pids_for_client_script(self.script_basename)
+            if pids:
+                self.pid = pids[-1]
+                return self.pid
+            time.sleep(0.5)
+        return None
+
+    def poll(self) -> Optional[int]:
+        if self.returncode is not None:
+            return self.returncode
+        if self.pid is None:
+            self.resolve_pid(wait_seconds=0)
+        if self.pid is None:
+            # 尚未解析到 PID：可能仍在启动，不视为已退出
+            return None
+        if psutil is None:
+            return None
+        try:
+            if psutil.pid_exists(self.pid):
+                return None
+        except Exception:
+            return None
+        self.returncode = -1
+        return self.returncode
+
+    def terminate(self) -> None:
+        if self.pid is not None and psutil is not None:
+            try:
+                psutil.Process(self.pid).terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/FI", f"WINDOWTITLE eq {self.window_title}*"],
+                capture_output=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        except Exception:
+            pass
+
+    def kill(self) -> None:
+        if self.pid is not None and psutil is not None:
+            try:
+                psutil.Process(self.pid).kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        self.terminate()
+
+    def wait(self, timeout=None):
+        return self.returncode
 
 
 class RestartManager:
@@ -61,6 +165,20 @@ class RestartManager:
             成功启动的服务器进程，如果失败返回None
         """
         for attempt in range(max_retries):
+            # 强制清理残留的旧服务器进程，确保端口释放（解决 WinError 10048 端口占用）
+            if psutil is not None:
+                for proc in psutil.process_iter(['name']):
+                    try:
+                        if proc.info['name'] and 'guandan_offline_v1006.exe' in proc.info['name']:
+                            logger.warning(f"强制结束残留服务器进程 PID={proc.pid}，确保端口释放")
+                            proc.kill()
+                            proc.wait(timeout=3)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                        pass
+            else:
+                # 降级方案：使用 PowerShell 命令清理
+                os.system('powershell -Command "Get-Process guandan_offline_v1006 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"')
+
             try:
                 logger.info(f"尝试启动服务器 (尝试 {attempt + 1}/{max_retries})")
                 logger.info(f"服务器路径: {server_path}")
@@ -239,6 +357,7 @@ class RestartManager:
             成功启动的客户端进程列表
         """
         processes = []
+        self._last_client_scripts = list(client_scripts)
         
         for i, script_path in enumerate(client_scripts):
             try:
@@ -267,8 +386,9 @@ class RestartManager:
                 logger.info(f"启动客户端 {i + 1}/{len(client_scripts)}: {script_path}")
                 logger.info(f"  绝对路径: {abs_script_path}")
                 
-                # 确定如何启动客户端（Python脚本）
-                command = ['python', abs_script_path]
+                # 确定如何启动客户端（Python脚本）— 与 test_t9 使用同一解释器
+                python_exe = sys.executable.replace("/", "\\")
+                command = [python_exe, abs_script_path]
                 
                 # 启动客户端进程
                 # 不捕获输出，让输出显示在控制台窗口中
@@ -289,7 +409,10 @@ class RestartManager:
                         rel_path_normalized = abs_script_path.replace('/', '\\')
                     # 使用与CMD文件相同的格式：start "窗口标题" cmd /k "python 相对路径"
                     # 这样工作目录会自动设置为当前目录（项目根目录）
-                    start_command = f'start "{window_title}" cmd /k "cd /d {work_dir} && python {rel_path_normalized}"'
+                    start_command = (
+                        f'start "{window_title}" cmd /k "cd /d {work_dir} && '
+                        f'"{python_exe}" {rel_path_normalized}"'
+                    )
                     process = subprocess.Popen(
                         start_command,
                         shell=True,  # 使用shell=True来执行start命令
@@ -306,27 +429,18 @@ class RestartManager:
                     logger.info(f"  窗口标题: {window_title}")
                     logger.info(f"  启动命令: {start_command}")
                     logger.info(f"  提示: 如果看不到窗口，请检查任务栏或使用 Alt+Tab 切换")
-                    # 创建一个虚拟的进程对象用于跟踪
-                    class VirtualProcess:
-                        def __init__(self, pid, window_title):
-                            self.pid = pid
-                            self.returncode = None
-                            self.window_title = window_title
-                        def poll(self):
-                            return self.returncode
-                        def terminate(self):
-                            # 尝试终止新窗口中的进程
-                            try:
-                                subprocess.run(['taskkill', '/F', '/FI', f'WINDOWTITLE eq {self.window_title}*'], 
-                                             capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                            except:
-                                pass
-                        def kill(self):
-                            self.terminate()
-                        def wait(self, timeout=None):
-                            # start/cmd 模式下无法直接 wait 到真实客户端进程，保持接口兼容避免 cleanup 异常
-                            return self.returncode
-                    process = VirtualProcess(process.pid, window_title)
+                    process = TrackedClientProcess(
+                        os.path.basename(abs_script_path),
+                        window_title,
+                    )
+                    process.resolve_pid(wait_seconds=6.0)
+                    if process.pid:
+                        logger.info(f"  已解析客户端 Python PID: {process.pid}")
+                    else:
+                        logger.warning(
+                            f"  暂未解析到 {os.path.basename(abs_script_path)} 的 Python PID，"
+                            "后续将按脚本名继续检测"
+                        )
                 else:
                     # Linux/Mac: 使用默认方式
                     process = subprocess.Popen(command)
@@ -397,13 +511,24 @@ class RestartManager:
                 # 注意：这只能检测服务器是否在监听，不能检测客户端连接数
                 # 但我们可以通过多次尝试连接来间接判断
                 
-                # 方法2: 检查客户端进程是否仍在运行（间接判断）
-                active_clients = 0
-                for i, process in enumerate(self.client_processes):
-                    if process.poll() is None:  # 进程仍在运行
-                        active_clients += 1
+                # 方法2: 按脚本名检查真实 Python 客户端（避免 VirtualProcess 误报）
+                if psutil is not None and self.client_processes:
+                    script_paths = getattr(self, "_last_client_scripts", [])
+                    if script_paths:
+                        active_clients = _count_live_client_scripts(script_paths)
                     else:
-                        logger.warning(f"客户端 {i+1} 进程已退出，返回码: {process.returncode}")
+                        active_clients = sum(
+                            1 for p in self.client_processes if p.poll() is None
+                        )
+                else:
+                    active_clients = 0
+                    for i, process in enumerate(self.client_processes):
+                        if process.poll() is None:
+                            active_clients += 1
+                        else:
+                            logger.warning(
+                                f"客户端 {i+1} 进程已退出，返回码: {process.returncode}"
+                            )
                 
                 if active_clients >= expected_count:
                     logger.info(f"✓ 检测到 {active_clients} 个客户端进程正在运行")
@@ -477,6 +602,16 @@ class RestartManager:
         # 注意：不要杀死所有python.exe进程，因为GUI本身也是Python进程
         process_names = ['guandan_offline_v1006.exe']
         self.process_monitor.kill_all(process_names)
+        
+        # 清理由 start 启动的残留 Python 客户端（按脚本名匹配）
+        if psutil is not None and getattr(self, "_last_client_scripts", None):
+            for script in self._last_client_scripts:
+                for pid in _pids_for_client_script(os.path.basename(script)):
+                    try:
+                        psutil.Process(pid).kill()
+                        logger.info(f"已结束残留客户端 Python PID={pid} ({os.path.basename(script)})")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
         
         # 额外清理由 start "客户端X: ..." 打开的残留 cmd 窗口
         # 仅匹配窗口标题前缀“客户端”，避免误杀普通终端

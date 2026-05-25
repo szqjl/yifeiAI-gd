@@ -4,20 +4,32 @@
 
 本目录在流程上即 **指挥系统**：负责 **规划、统筹、部署任务**（见 **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)**）；**不**替代本机离线对局与真实 `game_records` 生成。
 
-**当前指挥（本轮）**：主目标 **GUA-022**（M1 对 lalala 队胜率），联动 **GUA-014** ——以 [`ITERATIONS.md`](ITERATIONS.md) **记录表最后一行**为准。共用层代码已落地；**离线跑局与 `victoryNum`/PASS 统计须本机**（见 [`LOCAL_EVAL_CHECKLIST.md`](LOCAL_EVAL_CHECKLIST.md)），填回 **ITERATIONS** 后闭环。
+**当前指挥（本轮）**：主目标 **GUA-022**（M1 对 lalala 队胜率），联动 **GUA-014** ——以 [`ITERATIONS.md`](ITERATIONS.md) **记录表最后一行**为准。任务拆解见 **[`TASKS.md`](TASKS.md)**。共用层代码已落地；**离线跑局与 `victoryNum`/PASS 统计须本机**（见 [`LOCAL_EVAL_CHECKLIST.md`](LOCAL_EVAL_CHECKLIST.md)），填回 **ITERATIONS** 后闭环。
+
+## 四角色概览
+
+| 角色 | 职责 | 载体/工具 |
+|------|------|----------|
+| **Hermes（总协调）** | 定迭代、拆任务、审查验收、更新台账 | `ISSUES.md`、`ITERATIONS.md`、`TASKS.md`、`EVAL.md` |
+| **Opencode（执行 AI-A）** | 认领任务、改代码、自动化验证 | 本终端 |
+| **Cursor（执行 AI-B）** | 认领任务、改代码、自动化验证 | Cursor IDE |
+| **人类（局主）** | 告诉 AI 去认领任务、本机跑离线对局 | 本机、批量脚本 |
+
+详见 **[`COMMAND_SYSTEM.md`](COMMAND_SYSTEM.md)**。
+
+**多 Agent 协作探索**（飞书失败、Agent Hub、OpenCastle、Hermes Kanban+ACP · 知乎素材 · 未跑通）：[`MULTI_AGENT_ORCHESTRATION.md`](MULTI_AGENT_ORCHESTRATION.md)
 
 ## 使用顺序（改代码或调参前）
 
 1. 阅读 [`ISSUES.md`](ISSUES.md) 中 **open** 条目，确认本轮是否与之相关。
 2. 阅读 [`ITERATIONS.md`](ITERATIONS.md) **最新一条**（或本轮正在写的草稿），确认本轮目标与完成定义。
-3. 阅读 [`EVAL.md`](EVAL.md) 中的评测入口与通过标准（含 **M1 yf1/yf2 已测结果表**）；改动后按该文档跑评测并更新 ITERATIONS。
-4. 可选：在 [`scenarios/`](scenarios/) 中为复杂局面添加最小复现（YAML/JSON/Markdown 均可）。
+3. 阅读 [`TASKS.md`](TASKS.md) 查看当前活跃任务，确认 Hermes 是否已拆好任务。
+4. 阅读 [`EVAL.md`](EVAL.md) 中的评测入口与通过标准（含 **M1 yf1/yf2 已测结果表**）；改动后按该文档跑评测并更新 ITERATIONS。
+5. 可选：在 [`scenarios/`](scenarios/) 中为复杂局面添加最小复现（YAML/JSON/Markdown 均可）。
 
-## 大脑下发指令（交接规范）
+## 任务分派（Hermes → 执行 AI）
 
-[`ITERATIONS.md`](ITERATIONS.md) **表格最后一行**是**迭代契约**（目标 GUA、完成定义、约束），**不是**给执行层的完整施工单。若只把这一行复制给「执行 AI」而不说明**必须改代码**，对方容易只做文档对齐而**不写代码**。
-
-**指挥方（人 / 任一助手）在部署任务时**，应**额外**给出下面这一段**自包含**文字（可复制粘贴），路径写仓库内相对路径（如 `src/decision/`、`docs/guandan-brain/...`），动词写死（如「修改」「实现」「禁止」）。
+任务写入 **`TASKS.md`**（而非仅靠会话传递），每条任务包含以下块：
 
 | 块 | 写什么 |
 |----|--------|
@@ -29,24 +41,17 @@
 
 **执行 AI 收到上述块后**：默认应**改代码**（若任务需要），而非仅改 `docs/`；若无法改代码须明确说明原因。
 
-### 执行 AI → 指挥官「一句话交接」（收工范式）
+### 执行 AI → Hermes「一句话交接」（收工范式）
 
-每轮**在仓库内改完代码**后，执行 AI 必须给出**一句中文交接**，且直接可转发给指挥官；后续 AI 应**严格沿用本句式**，不要只给长段落。
+执行 AI 改完代码后必须在 `TASKS.md` 对应行填写**一句中文交接**。
 
-**固定句式（必须包含两段，中间用分号连接）：**
+**固定句式：**
 
-- **前半句（我做了什么）**：已改哪些目录/文件、解决了什么问题、最好带验证结论。  
-- **后半句（请指挥官做什么）**：指挥官需在本机执行的动作（离线跑局、统计指标、回填文档），并指向 [`LOCAL_EVAL_CHECKLIST.md`](LOCAL_EVAL_CHECKLIST.md) 或 `EVAL.md`。
+> 已在 `<改动目录/文件>` 修复 `<问题/编号>`，并完成 `<自动化验证结论>`；请 Hermes 审查 diff 并验收，如需本机跑局请转人类按 `LOCAL_EVAL_CHECKLIST.md` 执行。
 
-**推荐可直接复用模板（其他 AI 看到即可照抄）：**
+### 执行 AI 交接示例
 
-> 已在 `<改动目录/文件>` 修复 `<问题/编号>`，并完成 `<本机或自动化验证结论>`；请指挥官按 `LOCAL_EVAL_CHECKLIST.md` 再跑 `<约定局数/场景>`，统计 `<victoryNum/PASS/近似问题 PASS 等指标>` 并回填 `ITERATIONS.md`（必要时更新 `ISSUES.md`）。
-
-**本轮示例（真实可用）：**
-
-> 已在 `batch_executor` 与 `src/communication` 修复批跑回传卡住、状态台账对不上及 `client4`/记录补写异常，并通过本机回归验证 `--target-games 3` 与 `6` 均可正常结束且 `execution_state.json` 达到 `target_games==completed_games`；请指挥官按 `LOCAL_EVAL_CHECKLIST.md` 再跑一轮约定局数并将 `victoryNum`/PASS 统计回填 `ITERATIONS.md`（必要时更新 `ISSUES.md`）。
-
-指挥官可把该句复制到会话顶或 IM，作为「本轮交付 + 待验收」的**唯一摘要行**。
+> 已在 `src/decision/phase_handlers.py` 和 `src/decision/stage_router.py` 收紧 Opening 被动分支的非 PASS 兜底，`pytest tests/test_decision_gua022_gua014.py` 7 passed；请 Hermes 审查 diff 并验收，如需本机跑局请转人类按 `LOCAL_EVAL_CHECKLIST.md` 再跑 5 对局并回填 `game_records`。
 
 ## 维护约定（摘要）
 
@@ -66,4 +71,4 @@
 
 ## 与本仓库的关系
 
-当前仓库根路径：`D:\YiFeiAI-GD`，即掼蛋 AI 相关开发的**主工作仓**；本目录为该项目专用台账，通过 Git 做版本对照。
+当前仓库根路径（**主工作仓，以本机实际为准**）：`c:\yifeGDBOT`（掼蛋 AI 相关开发）；本目录为该项目专用台账，通过 Git 做版本对照。若在其他机器克隆，以该克隆的 Git 根目录为准，勿沿用旧路径 `D:\YiFeiAI-GD`。

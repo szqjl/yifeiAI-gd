@@ -29,9 +29,18 @@
 | GUA-019 | closed | P1 | policy | 训练 | （已合并跟踪）损失爆炸与阈值专项 | 与 GUA-017 同源：`WORKFLOW_RESTART_LOG.md` 中阈值 clamp、对数惩罚等 | 同 GUA-017 | **closed**；`duplicate of GUA-017`（同一轮日志治理，避免双开） |
 | GUA-020 | closed | P2 | observation, policy | m1 | 验证 yf2_m1 是否仍明显弱于 yf1_m1 | 成对 `game_id` 扩样后差距不显著 | `yf1_m1.py`、`yf2_m1.py`、共用 `src/decision/` | `closed_in` 2026-04-21：见 `ITERATIONS.md`；`logs/yf1_m1_*.log` / `yf2_m1_*.log` |
 | GUA-021 | closed | P1 | policy | m1 | M1 「问题 PASS」仍偏多（复盘） | 改后新局 3 个成对 `game_id` 合并：近似问题 PASS **0**（见 `ITERATIONS`「GUA-021 共用层收紧」行） | `phase_handlers`、`stage_router`、`rule_based_decision_engine_m1`、`intelligent_router` | `closed_in` 2026-04-21；全量 `game_records` 若混改前旧局，合并合计仍可能 **>0**，评测建议按「改后 `game_id`」子集统计 |
-| GUA-022 | open | P1 | policy | m1 | M1 对 lalala **队胜率过低**（YiFei 0+2 长期不胜） | 多局 `victoryNum` 为 `[0,3,0,3]`；需队级策略与配合 | 共用决策层、队友/压制、残局；与 **GUA-014** 可联动 | 指挥系统规划见 `ITERATIONS`「下一轮指挥」行 |
+| GUA-022 | open | P1 | policy | m1 | M1 对 lalala **队胜率过低**（YiFei 0+2 长期不胜） | 多局 `victoryNum` 为 `[0,3,0,3]`；需队级策略与配合 | 共用决策层、队友/压制、残局；与 **GUA-014** 可联动 | 指挥/看板见 [`AGENT_HUB.md`](AGENT_HUB.md)；迭代见 `ITERATIONS`「下一轮指挥」行 |
+| GUA-023 | open | P1 | observation, infra | agent-hub | Kanban worker 经 OpenCode ACP 无法执行（0 tool calls → crash 循环） | `copilot-acp` + `opencode acp`：Hermes 收不到 `<tool_call>`，worker 未 `kanban_complete` 即退出；例 `t_b53fc45b` | Hermes `copilot_acp_client`、profile `opencode-eng` | 根因与处置见 [`AGENT_HUB.md`](AGENT_HUB.md)「方案 A」「接下来要做的（2026-05-21）」；与 **GUA-022** 策略无关（Kanban 任务误标 GUA-022 测试） |
 
 ---
+
+## 交叉引用
+
+| ID | 相关文档 |
+|----|----------|
+| GUA-022 | [`AGENT_HUB.md`](AGENT_HUB.md) — 多 Agent / Kanban 编排（cursor → opencode-eng） |
+| GUA-023 | [`AGENT_HUB.md`](AGENT_HUB.md) — OpenCode ACP 桥接不兼容、GUA-022 联调任务 `t_b53fc45b` 结论 |
+
 
 ## 来自「比赛汇总」的说明（非缺陷）
 

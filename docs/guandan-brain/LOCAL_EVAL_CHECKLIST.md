@@ -2,7 +2,7 @@
 
 > **让 AI 根据本轮评测改决策**：复制 **[PROMPT_FOR_DECISION_FIX.md](PROMPT_FOR_DECISION_FIX.md)** 中的整段说明到对话里即可。
 
-> **仓库里的「大脑」文档**（`ISSUES` / `ITERATIONS` / `EVAL` / `scenarios`）可在 Git 中维护；**以下步骤依赖本机离线服务器、窗口环境与真实对局**，须由你在 **`D:\YiFeiAI-GD`**（或你的克隆路径）**亲自执行**。  
+> **仓库里的「大脑」文档**（`ISSUES` / `ITERATIONS` / `EVAL` / `scenarios`）可在 Git 中维护；**以下步骤依赖本机离线服务器、窗口环境与真实对局**，须由你在本仓库 **Git 根目录**（当前主工作仓：`c:\yifeGDBOT`）**亲自执行**。  
 > 当前轮次若针对 **GUA-021（减少问题 PASS）**：改代码 → 跑对局 → 把统计结果写回 **`ITERATIONS.md`** 对应行。
 
 ## 1. 环境
