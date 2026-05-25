@@ -474,8 +474,12 @@ class BatchExecutorGUI:
             messagebox.showerror("配置错误", "请指定服务器路径")
             return False
         
-        if not os.path.exists(server_path):
-            messagebox.showerror("配置错误", f"服务器文件不存在: {server_path}")
+        # 如果server_path包含参数，需要分离出可执行文件路径
+        server_parts = server_path.split()
+        actual_server_path = server_parts[0]  # 第一部分是可执行文件路径
+        
+        if not os.path.exists(actual_server_path):
+            messagebox.showerror("配置错误", f"服务器文件不存在: {actual_server_path}\n原始命令: {server_path}")
             return False
         
         clients = [c.strip() for c in self.clients_var.get().split(",") if c.strip()]
@@ -484,8 +488,16 @@ class BatchExecutorGUI:
             return False
         
         for client in clients:
-            if not os.path.exists(client):
-                messagebox.showwarning("配置警告", f"客户端文件不存在: {client}")
+            # 如果client包含python命令，需要提取实际的脚本路径
+            client_parts = client.split()
+            if len(client_parts) > 1 and client_parts[0].lower() in ['python', 'python.exe', 'py']:
+                # 提取实际的脚本路径（去掉python命令）
+                actual_client_path = ' '.join(client_parts[1:])  # 支持路径中有空格的情况
+            else:
+                actual_client_path = client
+            
+            if not os.path.exists(actual_client_path):
+                messagebox.showwarning("配置警告", f"客户端文件不存在: {actual_client_path}\n原始命令: {client}")
         
         return True
     

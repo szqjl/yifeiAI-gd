@@ -75,21 +75,31 @@ class RestartManager:
                 logger.info(f"游戏场数: {game_count}")
                 
                 # 检查服务器文件是否存在
-                if not os.path.exists(server_path):
-                    logger.error(f"服务器文件不存在: {server_path}")
+                # 如果server_path包含参数，需要分离出可执行文件路径
+                server_parts = server_path.split()
+                actual_server_path = server_parts[0]  # 第一部分是可执行文件路径
+                
+                if not os.path.exists(actual_server_path):
+                    logger.error(f"服务器文件不存在: {actual_server_path}")
+                    logger.error(f"原始命令: {server_path}")
                     return None
                 
                 # 构建启动命令
-                # 如果game_count是single_run_limit（3），不传递参数让服务器无限运行
-                # 这样可以通过外部控制来停止服务器，而不是让服务器自己决定何时停止
-                if game_count == 3:  # single_run_limit的默认值
-                    command = [server_path]  # 不传递参数，让服务器无限运行
-                    logger.info("使用无限运行模式启动服务器（不传递游戏次数参数）")
+                # 如果server_path已经包含参数，直接使用
+                if len(server_parts) > 1:
+                    # server_path已经包含参数，直接使用
+                    command = server_parts
+                    logger.info(f"使用预配置的服务器命令: {' '.join(command)}")
                 else:
-                    command = [server_path, str(game_count)]
+                    # server_path只是可执行文件路径，需要添加参数
+                    if game_count == 3:  # single_run_limit的默认值
+                        command = [actual_server_path]  # 不传递参数，让服务器无限运行
+                        logger.info("使用无限运行模式启动服务器（不传递游戏次数参数）")
+                    else:
+                        command = [actual_server_path, str(game_count)]
                 
                 # 获取服务器所在目录作为工作目录
-                server_dir = os.path.dirname(server_path) or "."
+                server_dir = os.path.dirname(actual_server_path) or "."
                 logger.info(f"工作目录: {server_dir}")
                 
                 # 启动服务器进程
@@ -324,8 +334,27 @@ class RestartManager:
                     abs_script_path = script_path
                 
                 # 验证文件是否存在
+                # 如果script_path包含python命令，需要提取实际的脚本路径
+                script_parts = script_path.split()
+                if len(script_parts) > 1 and script_parts[0].lower() in ['python', 'python.exe', 'py']:
+                    # 提取实际的脚本路径（去掉python命令）
+                    actual_script_path = ' '.join(script_parts[1:])  # 支持路径中有空格的情况
+                    
+                    # 将相对路径转换为绝对路径
+                    if not os.path.isabs(actual_script_path):
+                        abs_script_path = os.path.abspath(actual_script_path)
+                        if not os.path.exists(abs_script_path):
+                            abs_script_path = self.project_root / actual_script_path
+                            abs_script_path = str(abs_script_path.resolve())
+                    else:
+                        abs_script_path = actual_script_path
+                else:
+                    # 没有python命令，直接使用之前的逻辑
+                    actual_script_path = script_path
+                
                 if not os.path.exists(abs_script_path):
-                    logger.error(f"客户端脚本不存在: {script_path}")
+                    logger.error(f"客户端脚本不存在: {actual_script_path}")
+                    logger.error(f"  原始命令: {script_path}")
                     logger.error(f"  尝试的绝对路径: {abs_script_path}")
                     logger.error(f"  当前工作目录: {os.getcwd()}")
                     logger.error(f"  项目根目录: {self.project_root}")
@@ -414,24 +443,24 @@ class RestartManager:
                 processes.append(process)
                 
                 # 等待后再启动下一个客户端 (确保顺序连接)
-                # 客户端内部延迟：yf1_m1=5s, client3=10s, yf2_m1=15s, client4=20s
+                # 客户端内部延迟：yf1_v7=3s, client3=10s, yf2_v7=9s, client4=20s
                 # 需要等待足够时间，确保前一个客户端完成内部延迟并开始连接
                 if i < len(client_scripts) - 1:
                     # 根据当前客户端类型计算需要等待的时间
                     # 等待时间 = 当前客户端内部延迟 + 1秒缓冲
                     current_script = os.path.basename(script_path).lower()
-                    if 'yf1_m1' in current_script:
-                        # yf1_m1 需要5秒延迟，等待6秒确保它开始连接
-                        wait_time = 6
-                        logger.info(f"等待 {wait_time} 秒（yf1_m1需要5秒内部延迟，确保它开始连接后再启动下一个）...")
+                    if 'yf1_v7' in current_script or 'yf1_m1' in current_script:
+                        # yf1_v7 需要3秒延迟，等待4秒确保它开始连接
+                        wait_time = 4
+                        logger.info(f"等待 {wait_time} 秒（yf1_v7需要3秒内部延迟，确保它开始连接后再启动下一个）...")
                     elif 'client3' in current_script:
                         # client3 需要10秒延迟，等待11秒确保它开始连接
                         wait_time = 11
                         logger.info(f"等待 {wait_time} 秒（client3需要10秒内部延迟，确保它开始连接后再启动下一个）...")
-                    elif 'yf2_m1' in current_script:
-                        # yf2_m1 需要15秒延迟，等待16秒确保它开始连接
-                        wait_time = 16
-                        logger.info(f"等待 {wait_time} 秒（yf2_m1需要15秒内部延迟，确保它开始连接后再启动下一个）...")
+                    elif 'yf2_v7' in current_script or 'yf2_m1' in current_script:
+                        # yf2_v7 需要9秒延迟，等待10秒确保它开始连接
+                        wait_time = 10
+                        logger.info(f"等待 {wait_time} 秒（yf2_v7需要9秒内部延迟，确保它开始连接后再启动下一个）...")
                     else:
                         # 默认等待时间（client4是最后一个，不需要等待）
                         wait_time = wait_between
