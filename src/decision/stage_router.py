@@ -39,6 +39,7 @@ class BasePhaseHandler(ABC):
         try:
             from .strategy_engine import (
                 TeammateProtectionStrategy,
+                TeamOffensiveStrategy,
                 PrioritySystem,
                 CardValueSystem
             )
@@ -46,6 +47,7 @@ class BasePhaseHandler(ABC):
             # 根据配置选择使用基础协作策略还是增强协作策略
             use_enhanced_collaboration = self.config.get('use_enhanced_collaboration', False)
             base_protection_strategy = TeammateProtectionStrategy(self.config)
+            self.team_offensive = TeamOffensiveStrategy(self.config)
             
             if use_enhanced_collaboration:
                 try:
@@ -89,6 +91,7 @@ class BasePhaseHandler(ABC):
         except ImportError as e:
             # 如果导入失败，设置为None，后续可以优雅降级
             self.teammate_protection = None
+            self.team_offensive = None
             self.priority_system = None
             self.card_value_system = None
             self.hand_analyzer = None
@@ -301,6 +304,68 @@ class BasePhaseHandler(ABC):
         
         return True
     
+    def _rank_counts(self, handcards: List) -> "Counter":
+        """按点数统计手牌（掼蛋卡牌字符串末位为点数）。"""
+        from collections import Counter
+        counts = Counter()
+        for card in handcards or []:
+            if isinstance(card, str) and len(card) >= 2:
+                counts[card[1]] += 1
+        return counts
+    
+    def _single_splits_trips_or_bomb(self, handcards: List, action: List, min_group: int = 3) -> bool:
+        """单张是否拆了同点三张/炸弹结构。"""
+        if not action or action[0] != "Single":
+            return False
+        cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+        if len(cards) != 1:
+            return False
+        card = cards[0]
+        if not isinstance(card, str) or len(card) < 2:
+            return False
+        return self._rank_counts(handcards).get(card[1], 0) >= min_group
+    
+    def _action_breaks_scanned_complex(self, action: List, scan_result: Dict) -> bool:
+        """出牌是否拆散扫描器识别的钢板/三连对等复杂牌型。"""
+        if not action or not scan_result:
+            return False
+        action_type = action[0] if isinstance(action[0], str) else ""
+        cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+        if not cards:
+            return False
+        action_set = set(cards)
+        complex_types = scan_result.get("complex_types") or {}
+        if action_type == "Trips" and "TwoTrips" in complex_types:
+            return True
+        if action_type == "Trips" and "ThreePair" in complex_types:
+            return True
+        for ctype, combos in complex_types.items():
+            if ctype not in ("TwoTrips", "ThreePair"):
+                continue
+            for combo in combos or []:
+                if not isinstance(combo, list):
+                    continue
+                combo_set = set(combo)
+                if action_set & combo_set and not action_set.issubset(combo_set):
+                    if action_type in ("Trips", "Pair", "Single"):
+                        return True
+        return False
+    
+    def _apply_team_strategies(self, message: Dict, context: Dict) -> Optional[int]:
+        """
+        GUA-022：队级进攻优先于队友保护（仅对手控牌/接权时进攻）。
+        返回 action index 或 None（继续阶段逻辑）。
+        """
+        if getattr(self, "team_offensive", None):
+            offensive = self.team_offensive.get_offensive_action(message, context)
+            if offensive is not None:
+                return offensive
+        if getattr(self, "teammate_protection", None):
+            protection = self.teammate_protection.get_protection_action(message, context)
+            if protection is not None:
+                return protection
+        return None
+    
     def _action_list_has_non_pass(self, action_list: List) -> bool:
         """actionList 中是否存在非 PASS 的合法动作（用于避免有多选仍 PASS）。"""
         if not action_list:
@@ -311,6 +376,32 @@ class BasePhaseHandler(ABC):
             if not isinstance(action, list) and action != "PASS":
                 return True
         return False
+    
+    def _first_non_pass_index(self, action_list: List, handcards: List = None) -> int:
+        """GUA-021/PHASE2-005：有多项可选时优先首张可验证的非 PASS。"""
+        if not action_list:
+            return 0
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0:
+                if action[0] == "PASS":
+                    continue
+            elif action == "PASS":
+                continue
+            if handcards and self._validate_action_cards(action, handcards):
+                return i
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                return i
+            if not isinstance(action, list) and action != "PASS":
+                return i
+        return 0
+    
+    def _avoid_unjustified_pass(self, action_list: List, message: Dict, chosen: int) -> int:
+        """若 actionList 有非 PASS 却选了 PASS，改为首个非 PASS（接风/兜底）。"""
+        if chosen != 0 or not self._action_list_has_non_pass(action_list):
+            return chosen
+        handcards = message.get("handCards", []) if message else []
+        return self._first_non_pass_index(action_list, handcards)
     
     def _filter_valid_actions(self, action_list: List, handcards: List, logger=None) -> Tuple[List, List]:
         """
@@ -854,6 +945,38 @@ class BasePhaseHandler(ABC):
             if greater_pos >= 0 and cards_left
             else DEFAULT_REST_CARDS
         )
+
+        teammate_pos = (my_pos + 2) % 4
+        opp_rests = [
+            cards_left.get(i, DEFAULT_REST_CARDS)
+            for i in range(4)
+            if i not in (my_pos, teammate_pos)
+        ] if cards_left else opponent_rest_cards_list
+        min_opponent_cards = min(opp_rests) if opp_rests else DEFAULT_REST_CARDS
+        opponent_on_sprint = min_opponent_cards <= 5
+        teammate_on_sprint = numoffri <= 5
+        is_opponent_greater = (
+            greater_pos >= 0
+            and greater_pos not in (my_pos, teammate_pos)
+        )
+        should_seize_control = is_opponent_greater and (
+            opponent_on_sprint or numofnext <= 4
+        )
+
+        card_power = 5.0
+        team_role = "balanced"
+        try:
+            from .card_power_evaluator import calculate_card_power
+            power_info = calculate_card_power(
+                handcards, game_phase=game_phase, opponent_rest_cards=min_opponent_cards
+            )
+            card_power = float(power_info.get("total_power", 5.0))
+            if card_power >= 7:
+                team_role = "main_attacker"
+            elif card_power < 5:
+                team_role = "assist"
+        except Exception:
+            pass
         
         return {
             'my_remain': my_remain,
@@ -877,6 +1000,12 @@ class BasePhaseHandler(ABC):
             'numofpre': numofpre,
             'numoffri': numoffri,
             'numofgreaterPos': numofgreaterPos,
+            'card_power': card_power,
+            'team_role': team_role,
+            'min_opponent_cards': min_opponent_cards,
+            'opponent_on_sprint': opponent_on_sprint,
+            'teammate_on_sprint': teammate_on_sprint,
+            'should_seize_control': should_seize_control,
             # 胜负意识：每副牌目标 = 争头游，己方头游+二游即获胜（供各阶段策略使用）
             'game_objective': GAME_OBJECTIVE,
             'win_first_priority': WIN_FIRST_PRIORITY,  # 强化赢意识
@@ -922,6 +1051,42 @@ class StageRouter:
         if back_handler:
             self.back_handler = back_handler
     
+    def _coerce_non_pass_if_available(self, action_idx: int, message: Dict) -> int:
+        """GUA-021/PHASE2-005：actionList 有多项时，避免无依据落到 PASS（含智能路由缓存命中）。"""
+        action_list = message.get("actionList") or []
+        if not action_list or len(action_list) <= 1:
+            return action_idx
+        selected_action = action_list[action_idx] if 0 <= action_idx < len(action_list) else None
+        is_pass = False
+        if selected_action == "PASS":
+            is_pass = True
+        elif isinstance(selected_action, list) and len(selected_action) > 0 and selected_action[0] == "PASS":
+            is_pass = True
+        if not is_pass:
+            return action_idx
+        has_non_pass = any(
+            isinstance(a, list) and len(a) > 0 and a[0] != "PASS"
+            for a in action_list
+        ) or any(not isinstance(a, list) and a != "PASS" for a in action_list)
+        if not has_non_pass:
+            return action_idx
+        import logging
+        logger = logging.getLogger("StageRouter")
+        logger.warning(
+            f"Coercing PASS (index {action_idx}) to first non-PASS; actionList size={len(action_list)}"
+        )
+        handcards = message.get("handCards", []) if message else []
+        handler = next(iter(self.handlers.values()), None) if self.handlers else None
+        if handler and hasattr(handler, "_first_non_pass_index"):
+            return handler._first_non_pass_index(action_list, handcards)
+        for i in range(1, len(action_list)):
+            action = action_list[i]
+            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                return i
+            if not isinstance(action, list) and action != "PASS":
+                return i
+        return action_idx
+    
     def route(self, message: Dict) -> int:
         """路由到对应阶段处理器（优化：直接路由，无额外判断）"""
         stage = message.get("stage", "play")
@@ -952,49 +1117,7 @@ class StageRouter:
             
             if handler:
                 action_idx = handler.handle(message)
-                action_list = message.get("actionList", [])
-                
-                # ⚠️ 最终防线：无论handler返回什么，只要有非PASS动作就强制返回第一个非PASS动作
-                # 这是最后的保障，确保不会在有可选动作时PASS
-                if action_list and len(action_list) > 1:
-                    # 检查返回的动作是否是PASS
-                    selected_action = action_list[action_idx] if action_idx < len(action_list) else None
-                    is_pass = False
-                    if selected_action == "PASS":
-                        is_pass = True
-                    elif isinstance(selected_action, list) and len(selected_action) > 0:
-                        if selected_action[0] == "PASS":
-                            is_pass = True
-                    
-                    # 如果返回的是PASS，但actionList中有非PASS动作，强制返回第一个非PASS动作
-                    if is_pass:
-                        import logging
-                        logger = logging.getLogger("StageRouter")
-                        logger.warning(f"Handler returned PASS (index {action_idx}), but actionList has {len(action_list)} actions, forcing return first non-PASS action")
-                        
-                        # ⚠️ 关键修复：必须跳过index 0（因为它是PASS），从index 1开始查找
-                        for i in range(1, len(action_list)):
-                            action = action_list[i]
-                            if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
-                                logger.warning(f"Forcing return non-PASS action at index {i}: {action[0]}")
-                                return i
-                            elif action != "PASS":
-                                logger.warning(f"Forcing return non-PASS action at index {i}: {action}")
-                                return i
-                        
-                        # 如果从index 1开始都没找到，再检查index 0（虽然它应该是PASS）
-                        # 但为了安全，还是检查一下
-                        first_action = action_list[0] if action_list else None
-                        if first_action and isinstance(first_action, list) and len(first_action) > 0 and first_action[0] != "PASS":
-                            logger.warning(f"Forcing return non-PASS action at index 0: {first_action[0]}")
-                            return 0
-                        elif first_action and first_action != "PASS":
-                            logger.warning(f"Forcing return non-PASS action at index 0: {first_action}")
-                            return 0
-                        
-                        logger.error(f"CRITICAL: Handler returned PASS, but no non-PASS action found in actionList of size {len(action_list)}")
-                
-                return action_idx
+                return self._coerce_non_pass_if_available(action_idx, message)
         
         return 0
     
@@ -1033,13 +1156,18 @@ class StageRouter:
         # 如果curAction是列表，检查第一个元素
         if isinstance(cur_action, list) and len(cur_action) > 0:
             first_elem = cur_action[0]
+            action_list = message.get("actionList") or []
+            has_play_option = any(
+                isinstance(a, list) and len(a) > 0 and a[0] != "PASS"
+                for a in action_list
+            )
             # 如果第一个元素是None或"PASS"，可能是主动出牌
             if first_elem is None or first_elem == "PASS":
-                # 进一步检查：如果curPos=-1或greaterPos=-1，说明是主动出牌
+                # PHASE2-005/GUA-021：接风（curAction 为 PASS 但有可出牌）→ 主动
+                if has_play_option:
+                    return False
                 if cur_pos == -1 or greater_pos == -1:
                     return False
-                # 如果actionList的第一个动作不是PASS，说明是主动出牌
-                action_list = message.get("actionList", [])
                 if action_list and len(action_list) > 0:
                     first_action = action_list[0]
                     if isinstance(first_action, list) and len(first_action) > 0:

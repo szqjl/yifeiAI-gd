@@ -36,6 +36,7 @@ class DynamicWeightAdjuster:
             'split_impact': 0.3,  # 拆牌影响因素权重（提高，确保不破坏受保护组合）
             'action_effect': 0.25,  # 实际动作效果权重（轮次减少、单牌减少等）- 提高权重以匹配client AI
             'win_awareness': 0.1,   # 赢意识：有局目标时整体向争头游/获胜倾斜
+            'team_offensive': 0.08,  # GUA-022：队级进攻/接权
         }
         
         # 阶段权重调整因子
@@ -86,6 +87,11 @@ class DynamicWeightAdjuster:
             for factor, adjustment in adjustments.items():
                 if factor in weights:
                     weights[factor] += adjustment
+        
+        # GUA-014：开局主动更重视拆牌惩罚与复杂牌型结构
+        if phase == 'opening' and context.get('is_active'):
+            weights['split_impact'] = weights.get('split_impact', 0.3) * 1.4
+            weights['hand_structure'] = weights.get('hand_structure', 0.12) * 1.25
         
         # 确保权重非负
         weights = {k: max(0.0, v) for k, v in weights.items()}
@@ -203,6 +209,8 @@ class EnhancedPrioritySystem:
                 'action_effect': self._calculate_action_effect_factor(idx, candidate, action_evaluations, context),
                 # 因素10: 赢意识（有局目标时所有候选均加分，强化争头游/获胜）
                 'win_awareness': 1.0 if context.get('game_objective') else 0.0,
+                # 因素11: 队级进攻（对手冲刺/接权时压制优于 PASS）
+                'team_offensive': self._calculate_team_offensive_factor(candidate, context),
             }
             factors_list.append(factors)
         
@@ -384,7 +392,7 @@ class EnhancedPrioritySystem:
             # 三张（GUA-014：扫描器仍保留钢板/三连对时，单纯出三张更易拆散好型，略降权）
             base = self._calculate_trips_score(candidate, context)
             if complex_types and ('TwoTrips' in complex_types or 'ThreePair' in complex_types):
-                return max(0.0, base * 0.78)
+                return max(0.0, base * 0.55)
             return base
         
         # 基于手牌结构分析（其他牌型）
@@ -394,6 +402,20 @@ class EnhancedPrioritySystem:
             return min(1.0, ratio * 1.2)
         
         return 0.5
+    
+    def _calculate_team_offensive_factor(self, candidate: List, context: Dict) -> float:
+        """GUA-022：队级进攻因素——对手冲刺/接权时压制优于 PASS。"""
+        if not candidate:
+            return 0.5
+        action_type = candidate[0] if isinstance(candidate[0], str) else ""
+        seize = context.get("should_seize_control") or context.get("opponent_on_sprint")
+        if not seize and context.get("team_role") != "main_attacker":
+            return 0.5
+        if action_type == "PASS":
+            return 0.0
+        if action_type == "Bomb":
+            return 0.4 if context.get("min_opponent_cards", 27) > 4 else 0.75
+        return 0.85
     
     def _calculate_opponent_threat_factor(self, candidate: List, context: Dict) -> float:
         """计算对手威胁因素"""
@@ -528,48 +550,58 @@ class EnhancedPrioritySystem:
             if card in excess_singles:
                 return 1.0  # 是多余单张，不认为是拆牌，最优
         
-        # 统计手牌中每张牌的数量
+        # 统计手牌中每个点数的数量（GUA-014：按 rank 计，避免只计单张花色）
         from collections import Counter
-        handcard_counts = Counter(handcards)
+        rank_counts = Counter()
+        for card in handcards:
+            if isinstance(card, str) and len(card) >= 2:
+                rank_counts[card[1]] += 1
         
         # 检查是否是拆牌
         is_split = False
-        split_type = None
         impact_score = 0.0
         
+        action_rank = candidate[1] if len(candidate) > 1 else ""
+        rank_char = action_rank[-1] if isinstance(action_rank, str) and action_rank else ""
+        
+        if action_type == 'Trips' and rank_char:
+            scan_result = context.get('scan_result', {})
+            complex_types = scan_result.get('complex_types', {})
+            if 'TwoTrips' in complex_types or 'ThreePair' in complex_types:
+                is_split = True
+                impact_score = -0.85 if not is_passive else -0.5
+            elif rank_counts.get(rank_char, 0) >= 6:
+                is_split = True
+                impact_score = -0.7
+        
+        if action_type == 'Pair' and rank_char and rank_counts.get(rank_char, 0) >= 4:
+            is_split = True
+            impact_score = -0.75 if not is_passive else -0.35
+        
         for card in action_cards:
-            if len(card) >= 2:
-                card_rank = card[1] if len(card) == 2 else card[1:]
-                card_count = handcard_counts.get(card, 0)
-                
-                # 如果手牌中有2张或更多相同点数的牌，出单张就是拆对
-                if action_type == 'Single' and card_count >= 2:
+            if not isinstance(card, str) or len(card) < 2:
+                continue
+            card_rank = card[1]
+            rank_count = rank_counts.get(card_rank, 0)
+            
+            if action_type == 'Single':
+                if rank_count >= 4:
                     is_split = True
-                    split_type = 'pair'
-                    # 被动出牌时，拆对子的惩罚可以减轻（因为需要压制对手）
-                    if is_passive:
-                        impact_score = -0.1  # 被动出牌时，拆对子惩罚很轻（可以接受）
-                    else:
-                        impact_score = -0.3  # 主动出牌时，拆对子惩罚更重
+                    impact_score = -0.9
                     break
-                
-                # 如果手牌中有3张或更多相同点数的牌，出单张就是拆三张
-                if action_type == 'Single' and card_count >= 3:
+                if rank_count >= 3:
                     is_split = True
-                    split_type = 'trips'
-                    # 被动出牌时，拆三张的惩罚可以减轻（因为需要压制对手）
                     if is_passive:
-                        impact_score = -0.4  # 被动出牌时，拆三张惩罚减轻
+                        impact_score = -0.4
                     else:
-                        # GUA-014：主动时拆三张更伤结构，略加重惩罚
-                        impact_score = -0.68
+                        impact_score = -0.75
                     break
-                
-                # 如果手牌中有4张或更多相同点数的牌，出单张就是拆炸弹
-                if action_type == 'Single' and card_count >= 4:
+                if rank_count >= 2:
                     is_split = True
-                    split_type = 'bomb'
-                    impact_score = -0.9  # 拆炸弹负面影响最大（从-0.8增加到-0.9）
+                    if is_passive:
+                        impact_score = -0.1
+                    else:
+                        impact_score = -0.3
                     break
         
         if not is_split:

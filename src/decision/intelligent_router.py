@@ -144,6 +144,8 @@ class IntelligentStageRouter:
         cached_route = self.route_cache.get_route(context_hash)
         if cached_route is not None:
             self.logger.debug(f"Route cache hit: {context_hash[:8]}")
+            if self.base_router and hasattr(self.base_router, "_coerce_non_pass_if_available"):
+                return self.base_router._coerce_non_pass_if_available(cached_route, message)
             return cached_route
         
         # 4. 智能路由决策
@@ -152,6 +154,8 @@ class IntelligentStageRouter:
         # 5. 缓存结果
         self.route_cache.cache_route(context_hash, route_result)
         
+        if self.base_router and hasattr(self.base_router, "_coerce_non_pass_if_available"):
+            return self.base_router._coerce_non_pass_if_available(route_result, message)
         return route_result
     
     def _build_routing_context(self, message: Dict) -> Dict:
@@ -393,11 +397,17 @@ class IntelligentStageRouter:
         
         if isinstance(cur_action, list) and len(cur_action) > 0:
             first_elem = cur_action[0]
+            action_list = message.get("actionList") or []
+            has_play_option = any(
+                isinstance(a, list) and len(a) > 0 and a[0] != "PASS"
+                for a in action_list
+            )
             if first_elem is None or first_elem == "PASS":
+                # PHASE2-005：接风（curAction 为 PASS 但有可出牌）→ 主动
+                if has_play_option:
+                    return False
                 if cur_pos == -1 or greater_pos == -1:
                     return False
-                # 与 StageRouter 对齐：若首家可选非 PASS，应判为主动而非被动
-                action_list = message.get("actionList", [])
                 if action_list and len(action_list) > 0:
                     first_action = action_list[0]
                     if isinstance(first_action, list) and len(first_action) > 0:

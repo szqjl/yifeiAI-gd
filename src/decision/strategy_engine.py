@@ -219,20 +219,33 @@ class TeammateProtectionStrategy:
     
     def get_protection_action(self, message: Dict, context: Dict) -> Optional[int]:
         """获取保护动作（提升：智能选择保护方式）"""
+        my_pos = message.get("myPos", 0)
+        greater_pos = message.get("greaterPos", -1)
+        teammate_pos = (my_pos + 2) % 4
+
+        # 对手控牌时不走队友保护（交给 TeamOffensiveStrategy）
+        if greater_pos >= 0 and greater_pos != teammate_pos:
+            return None
+
         if not self.should_protect(message, context):
+            return None
+
+        # GUA-022：队友控牌但有非 PASS 选项时，不强制 PASS（允许顺走/配合）
+        action_list = message.get("actionList") or []
+        has_non_pass = any(
+            isinstance(a, list) and a and a[0] != "PASS" for a in action_list
+        )
+        if has_non_pass:
             return None
 
         # GUA-022：当对手接近冲关时，不应“完全保护=直接PASS”，而是优先最小代价压制
         high_threat_counter = self._is_high_threat_counterattack_needed(message, context)
 
-        # 保护方式1: PASS（完全保护）
+        # 保护方式1: PASS（完全保护）— 仅队友控牌时
         if self._should_full_protect(message, context) and not high_threat_counter:
             return 0
 
-        # 保护方式2: 出最小管牌（部分保护）
-        if self._should_partial_protect(message, context):
-            return self._find_minimal_action(message, context)
-        
+        # 队友控牌时禁止用“压制”误伤队友
         return None
     
     def _get_dynamic_threshold(self, message: Dict, context: Dict) -> float:
@@ -300,10 +313,11 @@ class TeammateProtectionStrategy:
         if not action_list or not cur_action:
             return None
         
+        ctx = context or {}
         # 找到能管住当前动作的最小动作
         candidates = []
         for i, action in enumerate(action_list):
-            if action[0] != "PASS" and self._can_beat(action, cur_action):
+            if isinstance(action, list) and action and action[0] != "PASS" and self._can_beat(action, cur_action, ctx):
                 candidates.append((i, action))
         
         if not candidates:
@@ -317,7 +331,7 @@ class TeammateProtectionStrategy:
         )
         return ranked[0][0]
     
-    def _can_beat(self, action: List, cur_action: List) -> bool:
+    def _can_beat(self, action: List, cur_action: List, context: Dict = None) -> bool:
         """判断动作是否能管住当前动作"""
         if not action or not cur_action:
             return False
@@ -339,7 +353,7 @@ class TeammateProtectionStrategy:
         if not cur_rank or not act_rank:
             return False
 
-        rank = "2"
+        rank = (context or {}).get("cur_rank", "2")
         return self._get_rank_value(act_rank, rank) > self._get_rank_value(cur_rank, rank)
 
     def _is_high_threat_counterattack_needed(self, message: Dict, context: Dict) -> bool:
@@ -380,6 +394,110 @@ class TeammateProtectionStrategy:
         if rank_char == cur_rank:
             return 15
         return rank_map.get(rank_char, 0)
+
+
+def find_minimal_beat_action(message: Dict, context: Dict) -> Optional[int]:
+    """共享：在 actionList 中找最小代价且能压制 curAction 的动作 index。"""
+    helper = TeammateProtectionStrategy()
+    return helper._find_minimal_action(message, context)
+
+
+def find_bomb_action_index(message: Dict) -> Optional[int]:
+    """共享：返回 actionList 中第一个炸弹 index。"""
+    for i, action in enumerate(message.get("actionList") or []):
+        if isinstance(action, list) and action and action[0] == "Bomb":
+            return i
+    return None
+
+
+def find_one_hand_complete_index(message: Dict, context: Dict) -> Optional[int]:
+    """共享：能一手出完的 action index。"""
+    handcards = context.get("handcards") or message.get("handCards") or []
+    if not handcards:
+        return None
+    n = len(handcards)
+    for i, action in enumerate(message.get("actionList") or []):
+        if (
+            isinstance(action, list)
+            and len(action) > 2
+            and isinstance(action[2], list)
+            and len(action[2]) == n
+        ):
+            return i
+    return None
+
+
+class TeamOffensiveStrategy:
+    """
+    GUA-022 队级进攻：接权、压制对手冲刺、主攻抢权。
+    仅在对手控牌或接权窗口生效，不抢队友出牌权。
+    """
+
+    def __init__(self, config: Dict = None):
+        self.config = config or {}
+        self.logger = logging.getLogger("TeamOffensiveStrategy")
+
+    def get_offensive_action(self, message: Dict, context: Dict) -> Optional[int]:
+        if self._is_teammate_greater(message):
+            return None
+
+        idx = find_one_hand_complete_index(message, context)
+        if idx is not None:
+            return idx
+
+        cur_action = message.get("curAction") or []
+        if not cur_action or cur_action[0] == "PASS":
+            return None
+
+        game_phase = context.get("game_phase", "opening")
+        minimal = find_minimal_beat_action(message, context)
+
+        if self._teammate_passed_recently(message, context):
+            if minimal is not None:
+                return minimal
+            bomb = find_bomb_action_index(message)
+            if bomb is not None:
+                return bomb
+
+        if context.get("should_seize_control") or context.get("opponent_on_sprint"):
+            if minimal is not None:
+                return minimal
+            if context.get("min_opponent_cards", 27) <= 4:
+                bomb = find_bomb_action_index(message)
+                if bomb is not None:
+                    return bomb
+
+        if game_phase in ("endgame_early", "endgame_late", "mid_late"):
+            if minimal is not None:
+                return minimal
+            bomb = find_bomb_action_index(message)
+            if bomb is not None:
+                return bomb
+
+        # 对手控牌且能同型压制：一律接权
+        if minimal is not None:
+            return minimal
+
+        return None
+
+    def get_sprint_active_index(self, message: Dict, context: Dict) -> Optional[int]:
+        """主动出牌：一手/大幅减张冲刺。"""
+        return find_one_hand_complete_index(message, context)
+
+    def _is_teammate_greater(self, message: Dict) -> bool:
+        my_pos = message.get("myPos", -1)
+        greater_pos = message.get("greaterPos", -1)
+        if my_pos < 0 or greater_pos < 0:
+            return False
+        return greater_pos == (my_pos + 2) % 4
+
+    def _teammate_passed_recently(self, message: Dict, context: Dict) -> bool:
+        my_pass = context.get("my_pass_num", message.get("my_pass_num", 0))
+        pass_num = context.get("pass_num", message.get("pass_num", 0))
+        return pass_num >= 1 and my_pass >= 1
+
+    def _action_list_has_beat_option(self, message: Dict, context: Dict) -> bool:
+        return find_minimal_beat_action(message, context) is not None
 
 
 class ContextPriorityAdjuster:

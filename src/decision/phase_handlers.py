@@ -76,7 +76,15 @@ class OpeningActiveHandler(BasePhaseHandler):
             logger.warning("Empty actionList, returning 0")
             return 0
         
-        # 开局不需要检查"一手出完"（优化：避免不必要的检查）
+        context = self._build_context(message)
+        if getattr(self, "team_offensive", None):
+            sprint_idx = self.team_offensive.get_sprint_active_index(message, context)
+            if sprint_idx is not None:
+                return sprint_idx
+        one_hand = self._check_one_hand_complete(action_list, handcards)
+        if one_hand is not None:
+            return one_hand
+        
         # 开局策略：建立牌型结构
         result = self._build_structure_strategy(message, action_list, handcards)
         logger.info(f"Selected action index: {result}, action: {action_list[result] if result < len(action_list) else 'INVALID'}")
@@ -196,6 +204,17 @@ class OpeningActiveHandler(BasePhaseHandler):
                                             break
                             if would_break:
                                 continue
+                        
+                        # GUA-014：主动避免拆三张/炸弹；拆对仅在 excess_singles 中允许
+                        if action[0] == 'Single' and self._single_splits_trips_or_bomb(handcards, action):
+                            ac = action_cards[0] if len(action_cards) == 1 else None
+                            if ac not in excess_singles:
+                                continue
+                        if action[0] == 'Trips' and self._action_breaks_scanned_complex(action, scan_result):
+                            continue
+                        complex_types = scan_result.get('complex_types') or {}
+                        if action[0] == 'Trips' and ('TwoTrips' in complex_types or 'ThreePair' in complex_types):
+                            continue
                         
                         # ⚠️ 即使验证失败，也添加到候选列表（opening阶段更宽松）
                         candidates.append(action)
@@ -372,20 +391,26 @@ class OpeningActiveHandler(BasePhaseHandler):
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0 and action[0] == 'Pair':
                     return i
-            # 最后才考虑单张
+            # 最后才考虑单张（不拆三张/炸弹）
             for i, action in enumerate(action_list):
                 if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                    if self._single_splits_trips_or_bomb(handcards, action):
+                        ac = action[2][0] if len(action) > 2 and isinstance(action[2], list) and action[2] else None
+                        if ac not in excess_singles:
+                            continue
                     return i
         else:
-            # 牌力正常，按常规优先级：小单张 → 三连对/钢板 → 顺子 → 三带二 → 三张 → 对子
-            priority_order = ['Single', 'TwoTrips', 'ThreePair', 'Straight', 
-                             'ThreeWithTwo', 'Trips', 'Pair']
+            # 牌力正常：优先复杂牌型，单张放后且避免拆结构
+            priority_order = ['TwoTrips', 'ThreePair', 'Straight',
+                             'ThreeWithTwo', 'Trips', 'Pair', 'Single']
             for card_type in priority_order:
                 for i, action in enumerate(action_list):
                     if isinstance(action, list) and len(action) > 0 and action[0] == card_type:
-                        # 单张选择最小的
                         if card_type == 'Single':
-                            return i
+                            if self._single_splits_trips_or_bomb(handcards, action):
+                                ac = action[2][0] if len(action) > 2 and isinstance(action[2], list) and action[2] else None
+                                if ac not in excess_singles:
+                                    continue
                         return i
         
         # ⚠️ 关键修复：在返回0（PASS）之前，确保至少尝试返回第一个非PASS动作
@@ -483,21 +508,18 @@ class OpeningPassiveHandler(BasePhaseHandler):
                 return 0
             # ⚠️ 关键修复：如果第一个元素是"PASS"，说明上家已经PASS，这是主动出牌，不应该走被动出牌逻辑
             if cur_action[0] == "PASS":
-                logger.warning(f"curAction is PASS: {cur_action}, this should be active play, not passive. Returning _default_passive_action to find first non-PASS action")
-                # 即使curAction是PASS，如果actionList中有非PASS动作，也应该返回第一个非PASS动作
-                return self._default_passive_action(action_list, message)
+                logger.warning(f"curAction is PASS: {cur_action}, treat as lead play after pass")
+                handcards = message.get("handCards", [])
+                return self._first_non_pass_index(action_list, handcards)
         
         # 构建上下文信息
         context = self._build_context(message)
         
-        # ⭐ 使用队友保护策略（提升：多策略组合）
-        if self.teammate_protection:
-            protection_action = self.teammate_protection.get_protection_action(message, context)
-            if protection_action is not None:
-                logger.info(f"Teammate protection returned action: {protection_action}")
-                return protection_action
-            else:
-                logger.debug("Teammate protection returned None")
+        # GUA-022：队级进攻 → 队友保护
+        team_action = self._apply_team_strategies(message, context)
+        if team_action is not None:
+            logger.info(f"Team strategy returned action: {team_action}")
+            return team_action
         
         # 提取游戏状态
         state = self._extract_game_state(message)
@@ -679,13 +701,9 @@ class OpeningPassiveHandler(BasePhaseHandler):
         if strategy_suggests_no_single:
             logger.info("Strategy suggests not playing single, but will still try to find valid actions")
         
-        # ⚠️ 关键修复：如果greater_pos是队友，不应该压制，直接PASS
         is_teammate = self._is_teammate(greater_pos, my_pos)
-        if is_teammate:
-            logger.info(f"Teammate (pos {greater_pos}) played single, should not suppress, passing")
-            return 0  # PASS，不压制队友
         
-        # ⚠️ 优先级1：使用多余单张（最高优先级）
+        # ⚠️ 优先级1：使用多余单张（最高优先级，含队友出牌时顺走）
         handcards = message.get("handCards", [])
         rank = message.get("curRank", "2")
         cur_action_rank = action_rank if action_rank else ""
@@ -709,6 +727,18 @@ class OpeningPassiveHandler(BasePhaseHandler):
                                                 return i
             except Exception as e:
                 logger.warning(f"扫描多余单张时出错: {e}")
+        
+        # GUA-014 优先级1.5：级牌/王压制（先于拆对子/炸弹）
+        if cur_action_rank:
+            cur_rank_value = self._get_rank_value(cur_action_rank, rank)
+            for special in (rank, 'B', 'R'):
+                for i, action in enumerate(action_list):
+                    if isinstance(action, list) and len(action) > 0 and action[0] == 'Single':
+                        if len(action) > 1 and action[1] == special:
+                            if self._get_rank_value(action[1], rank) > cur_rank_value:
+                                if self._validate_action_cards(action, handcards):
+                                    logger.info(f"级牌/王压制: {action[1]} > {cur_action_rank}")
+                                    return i
         
         # ⚠️ 优先级2：如果10以上没有极差的对子较多，则拆对子，压制对手的单张
         # 检查手牌中是否有10以上的对子（T=10, J, Q, K, A）
@@ -742,6 +772,8 @@ class OpeningPassiveHandler(BasePhaseHandler):
                                 if action_rank_str == preferred_rank:
                                     # 验证卡牌一致性
                                     if self._validate_action_cards(action, handcards):
+                                        if self._single_splits_trips_or_bomb(handcards, action):
+                                            continue
                                         # 确保能压制对手的牌
                                         if cur_action_rank:
                                             cur_rank_value = self._get_rank_value(cur_action_rank, state['cur_rank'])
@@ -874,8 +906,13 @@ class OpeningPassiveHandler(BasePhaseHandler):
                             logger.info(f"Opponent high card, returning first valid action at index {i}: {action[0]}")
                             return i
         
+        if is_teammate:
+            logger.info(f"Teammate (pos {greater_pos}) played single, no 顺走/压制选项, passing")
+            return 0
+        
         # 最后尝试默认动作（选择第一个有效的非PASS动作）
         result = self._default_passive_action(action_list, message)
+        result = self._avoid_unjustified_pass(action_list, message, result)
         logger.info(f"_default_passive_action returned: {result}")
         return result
     
@@ -1160,6 +1197,11 @@ class MidEarlyActiveHandler(BasePhaseHandler):
         context['excess_singles'] = excess_singles
         context['combination_score'] = combination_score
         
+        if getattr(self, "team_offensive", None):
+            sprint_idx = self.team_offensive.get_sprint_active_index(message, context)
+            if sprint_idx is not None:
+                return sprint_idx
+        
         # 检查两手出完
         two_hand_idx = self._check_two_hand_complete(action_list, handcards)
         if two_hand_idx is not None:
@@ -1360,11 +1402,9 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         # 构建上下文信息
         context = self._build_context(message)
         
-        # ⭐ 使用队友保护策略（提升：多策略组合）
-        if self.teammate_protection:
-            protection_action = self.teammate_protection.get_protection_action(message, context)
-            if protection_action is not None:
-                return protection_action
+        team_action = self._apply_team_strategies(message, context)
+        if team_action is not None:
+            return team_action
         
         state = self._extract_game_state(message)
         cur_action_type = cur_action[0] if isinstance(cur_action, list) and len(cur_action) > 0 else ""
@@ -1701,8 +1741,8 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
                         for card in action_cards:
                             if len(card) >= 2:
                                 card_rank = card[1] if len(card) == 2 else card[1:]
-                                card_count = handcard_counts.get(card, 0)
-                                if card_count >= 3:  # 拆三张或拆炸弹
+                                rank_count = sum(1 for hc in handcards if len(hc) >= 2 and hc[1] == card_rank)
+                                if rank_count >= 3:  # 拆三张或拆炸弹
                                     is_split = True
                                     logger.warning(f"Single action at index {i} would split trips/bomb: {action}")
                                     break
@@ -2214,11 +2254,9 @@ class MidLatePassiveHandler(MidEarlyPassiveHandler):
         # 构建上下文信息
         context = self._build_context(message)
         
-        # ⭐ 使用队友保护策略（提升：多策略组合）
-        if self.teammate_protection:
-            protection_action = self.teammate_protection.get_protection_action(message, context)
-            if protection_action is not None:
-                return protection_action
+        team_action = self._apply_team_strategies(message, context)
+        if team_action is not None:
+            return team_action
         
         state = self._extract_game_state(message)
         greater_pos = message.get("greaterPos", -1)
@@ -2815,11 +2853,9 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
         # 构建上下文信息
         context = self._build_context(message)
         
-        # ⭐ 使用队友保护策略（提升：多策略组合，残局阶段更重要）
-        if self.teammate_protection:
-            protection_action = self.teammate_protection.get_protection_action(message, context)
-            if protection_action is not None:
-                return protection_action
+        team_action = self._apply_team_strategies(message, context)
+        if team_action is not None:
+            return team_action
         
         my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
         greater_pos = message.get("greaterPos", -1)
@@ -3198,11 +3234,9 @@ class EndgameLatePassiveHandler(EndgameEarlyPassiveHandler):
         # 构建上下文信息
         context = self._build_context(message)
         
-        # ⭐ 使用队友保护策略（提升：多策略组合，残局后期最重要）
-        if self.teammate_protection:
-            protection_action = self.teammate_protection.get_protection_action(message, context)
-            if protection_action is not None:
-                return protection_action
+        team_action = self._apply_team_strategies(message, context)
+        if team_action is not None:
+            return team_action
         
         my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
         greater_pos = message.get("greaterPos", -1)

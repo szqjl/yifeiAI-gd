@@ -223,6 +223,15 @@ class RuleBasedDecisionEngineM1:
                                 )
                                 return self._first_non_pass_index(action_list, handcards)
             
+            # PHASE2-005：有多选仍 PASS 时兜底（接风等）
+            any_handler = next(iter(self.handlers.values()), None)
+            if any_handler and hasattr(any_handler, "_avoid_unjustified_pass"):
+                action_idx = any_handler._avoid_unjustified_pass(action_list, message, action_idx)
+            
+            coerce_router = getattr(self.router, "base_router", None) or self.router
+            if hasattr(coerce_router, "_coerce_non_pass_if_available"):
+                action_idx = coerce_router._coerce_non_pass_if_available(action_idx, message)
+            
             return action_idx
             
         except Exception as e:
