@@ -514,13 +514,32 @@ class OpeningPassiveHandler(BasePhaseHandler):
         
         # 构建上下文信息
         context = self._build_context(message)
-        
+
         # GUA-022：队级进攻 → 队友保护
         team_action = self._apply_team_strategies(message, context)
         if team_action is not None:
             logger.info(f"Team strategy returned action: {team_action}")
             return team_action
-        
+
+        # P0-③: 主动传牌给队友
+        try:
+            from .teammate_opportunity_finder import TeammateOpportunityFinder
+            _finder = TeammateOpportunityFinder(self.config)
+            _analysis = _finder.analyze_teammate_needs(
+                my_pos=context['my_pos'],
+                handcards=context['handcards'],
+                history_info=context.get('history_info', {}),
+                team_coordination_info=context.get('team_coordination_info', {}),
+                current_greater_action=message.get('curAction'),
+            )
+            if _finder.should_prioritize_passing(_analysis, context):
+                _passing = _finder.find_passing_actions(context['my_pos'], action_list, _analysis)
+                if _passing:
+                    logger.debug(f"【P0改进③】选择传牌动作: {_passing[0]}")
+                    return _passing[0][0]
+        except Exception as e:
+            logger.debug(f"【P0改进③】传牌分析异常: {e}")
+
         # 提取游戏状态
         state = self._extract_game_state(message)
         
@@ -1398,14 +1417,35 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
         
         if not action_list or not cur_action:
             return 0
-        
+
         # 构建上下文信息
         context = self._build_context(message)
-        
+
         team_action = self._apply_team_strategies(message, context)
         if team_action is not None:
             return team_action
-        
+
+        # P0-③: 主动传牌给队友
+        try:
+            from .teammate_opportunity_finder import TeammateOpportunityFinder
+            _finder = TeammateOpportunityFinder(self.config)
+            _analysis = _finder.analyze_teammate_needs(
+                my_pos=context['my_pos'],
+                handcards=context['handcards'],
+                history_info=context.get('history_info', {}),
+                team_coordination_info=context.get('team_coordination_info', {}),
+                current_greater_action=cur_action,
+            )
+            if _finder.should_prioritize_passing(_analysis, context):
+                _passing = _finder.find_passing_actions(context['my_pos'], action_list, _analysis)
+                if _passing:
+                    import logging
+                    logger = logging.getLogger("MidEarlyPassiveHandler")
+                    logger.debug(f"【P0改进③】选择传牌动作: {_passing[0]}")
+                    return _passing[0][0]
+        except Exception:
+            pass
+
         state = self._extract_game_state(message)
         cur_action_type = cur_action[0] if isinstance(cur_action, list) and len(cur_action) > 0 else ""
         greater_pos = message.get("greaterPos", -1)
@@ -2257,7 +2297,28 @@ class MidLatePassiveHandler(MidEarlyPassiveHandler):
         team_action = self._apply_team_strategies(message, context)
         if team_action is not None:
             return team_action
-        
+
+        # P0-③: 主动传牌给队友
+        try:
+            from .teammate_opportunity_finder import TeammateOpportunityFinder
+            _finder = TeammateOpportunityFinder(self.config)
+            _analysis = _finder.analyze_teammate_needs(
+                my_pos=context['my_pos'],
+                handcards=context['handcards'],
+                history_info=context.get('history_info', {}),
+                team_coordination_info=context.get('team_coordination_info', {}),
+                current_greater_action=cur_action,
+            )
+            if _finder.should_prioritize_passing(_analysis, context):
+                _passing = _finder.find_passing_actions(context['my_pos'], action_list, _analysis)
+                if _passing:
+                    import logging
+                    logger = logging.getLogger("MidLatePassiveHandler")
+                    logger.debug(f"【P0改进③】选择传牌动作: {_passing[0]}")
+                    return _passing[0][0]
+        except Exception:
+            pass
+
         state = self._extract_game_state(message)
         greater_pos = message.get("greaterPos", -1)
         my_pos = state['my_pos']
@@ -2856,16 +2917,37 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
         team_action = self._apply_team_strategies(message, context)
         if team_action is not None:
             return team_action
-        
+
+        # P0-③: 主动传牌给队友
+        try:
+            from .teammate_opportunity_finder import TeammateOpportunityFinder
+            _finder = TeammateOpportunityFinder(self.config)
+            _analysis = _finder.analyze_teammate_needs(
+                my_pos=context['my_pos'],
+                handcards=context['handcards'],
+                history_info=context.get('history_info', {}),
+                team_coordination_info=context.get('team_coordination_info', {}),
+                current_greater_action=cur_action,
+            )
+            if _finder.should_prioritize_passing(_analysis, context):
+                _passing = _finder.find_passing_actions(context['my_pos'], action_list, _analysis)
+                if _passing:
+                    import logging
+                    logger = logging.getLogger("EndgameEarlyPassiveHandler")
+                    logger.debug(f"【P0改进③】选择传牌动作: {_passing[0]}")
+                    return _passing[0][0]
+        except Exception:
+            pass
+
         my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
         greater_pos = message.get("greaterPos", -1)
         my_pos = message.get("myPos", 0)
         is_teammate = self._is_teammate(greater_pos, my_pos)
-        
+
         if is_teammate:
             if not self._action_list_has_non_pass(action_list):
                 return 0
-        
+
         # 残局前期：快速压制，优先一手出完
         one_hand_idx = self._check_one_hand_complete(action_list, handcards)
         if one_hand_idx is not None:
