@@ -535,10 +535,10 @@ class OpeningPassiveHandler(BasePhaseHandler):
             if _finder.should_prioritize_passing(_analysis, context):
                 _passing = _finder.find_passing_actions(context['my_pos'], action_list, _analysis)
                 if _passing:
-                    logger.debug(f"【P0改进③】选择传牌动作: {_passing[0]}")
+                    logger.info(f"【P0改进③】选择传牌动作: {_passing[0]}")
                     return _passing[0][0]
         except Exception as e:
-            logger.debug(f"【P0改进③】传牌分析异常: {e}")
+            logger.info(f"【P0改进③】传牌分析异常: {e}")
 
         # 提取游戏状态
         state = self._extract_game_state(message)
@@ -1441,7 +1441,7 @@ class MidEarlyPassiveHandler(BasePhaseHandler):
                 if _passing:
                     import logging
                     logger = logging.getLogger("MidEarlyPassiveHandler")
-                    logger.debug(f"【P0改进③】选择传牌动作: {_passing[0]}")
+                    logger.info(f"【P0改进③】选择传牌动作: {_passing[0]}")
                     return _passing[0][0]
         except Exception:
             pass
@@ -2314,7 +2314,7 @@ class MidLatePassiveHandler(MidEarlyPassiveHandler):
                 if _passing:
                     import logging
                     logger = logging.getLogger("MidLatePassiveHandler")
-                    logger.debug(f"【P0改进③】选择传牌动作: {_passing[0]}")
+                    logger.info(f"【P0改进③】选择传牌动作: {_passing[0]}")
                     return _passing[0][0]
         except Exception:
             pass
@@ -2934,7 +2934,7 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
                 if _passing:
                     import logging
                     logger = logging.getLogger("EndgameEarlyPassiveHandler")
-                    logger.debug(f"【P0改进③】选择传牌动作: {_passing[0]}")
+                    logger.info(f"【P0改进③】选择传牌动作: {_passing[0]}")
                     return _passing[0][0]
         except Exception:
             pass
@@ -3069,14 +3069,14 @@ class EndgameLateActiveHandler(BasePhaseHandler):
         if endgame_two_hand_combos and self.endgame_planner:
             import logging
             logger = logging.getLogger("EndgameLateActiveHandler")
-            logger.debug(f"【P0改进②】检测到 {len(endgame_two_hand_combos)} 个两手配对")
+            logger.info(f"【P0改进②】检测到 {len(endgame_two_hand_combos)} 个两手配对")
 
             # 选择最优配对的第一手
             best_first_action = self.endgame_planner.recommend_first_action(
                 endgame_two_hand_combos, action_list, context
             )
             if best_first_action is not None and best_first_action < len(action_list):
-                logger.debug(f"【P0改进②】选择两手配对第一手: {best_first_action}")
+                logger.info(f"【P0改进②】选择两手配对第一手: {best_first_action}")
                 return best_first_action
         
         # 如果有多余单张，优先考虑出单张（残局后期快速减少牌数）
