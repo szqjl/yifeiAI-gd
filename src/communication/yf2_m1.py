@@ -357,8 +357,9 @@ class YF2_M1_Client:
             )
             data["pass_num"] = self.pass_num
             data["my_pass_num"] = self.my_pass_num
+            self.logger.info(f"【决策入口】即将调用decide()，actionList大小={len(action_list)}")
             act_index = self.decision_engine.decide(data)
-            self.logger.info(f"Decision engine returned action index: {act_index}, action: {action_list[act_index] if act_index < len(action_list) else 'INVALID'}")
+            self.logger.info(f"【决策出口】decide()返回={act_index}")
             
             # 获取阶段信息（用于日志，如果引擎支持）
             phase_info = {"game_phase": "unknown", "handler_key": "unknown", "my_remain": "unknown"}  # 默认值
