@@ -1016,6 +1016,7 @@ class BasePhaseHandler(ABC):
                         cards = action.get("cur_action", [])
                         if len(cards) > 2 and isinstance(cards[2], list):
                             self.history_tracker.record_play(pos, cards[2])
+                            self.logger.info(f"【P0改进①】历史追踪记录: pos={pos}, cards={len(cards[2])}张")
 
         # 计算剩余牌数
         my_remain = len(handcards) if handcards else CARDS_PER_PLAYER

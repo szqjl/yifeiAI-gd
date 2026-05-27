@@ -1,8 +1,11 @@
 from typing import Dict, List
+import logging
 from .card_power_evaluator import calculate_card_power
 from .single_card_strategy import single_card_strategy
 from .bomb_strategy import bomb_strategy
 from .endgame_strategy import endgame_strategy
+
+logger = logging.getLogger("MainDecision")
 
 def main_decision(
     hand_cards: List[str],
@@ -22,6 +25,8 @@ def main_decision(
     # 调用子策略
     single_sugg = single_card_strategy(game_phase=game_phase, power=power, opponent_rest_cards=opponent_rest_cards)  # pass relevant
     bomb_sugg = bomb_strategy(game_phase=game_phase, power=power, opponent_rest_cards=opponent_rest_cards)  # pass relevant
+    if bomb_sugg.get('suggestions'):
+        logger.info(f"【P0改进④】炸弹策略触发: {bomb_sugg}")
     has_bomb = power_result['details']['bomb_super_high'] + power_result['details']['bomb_mid'] + power_result['details']['bomb_normal'] > 0
     endgame_sugg = endgame_strategy(opponent_rest_cards=opponent_rest_cards, power=power, has_bomb=has_bomb)  # pass relevant
 
