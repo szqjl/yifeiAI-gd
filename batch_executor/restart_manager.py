@@ -410,7 +410,7 @@ class RestartManager:
                     # 使用与CMD文件相同的格式：start "窗口标题" cmd /k "python 相对路径"
                     # 这样工作目录会自动设置为当前目录（项目根目录）
                     start_command = (
-                        f'start "{window_title}" cmd /k "cd /d {work_dir} && '
+                        f'start "{window_title}" cmd /c "cd /d {work_dir} && '
                         f'"{python_exe}" {rel_path_normalized}"'
                     )
                     process = subprocess.Popen(

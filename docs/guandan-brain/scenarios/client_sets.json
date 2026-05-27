@@ -27,5 +27,11 @@
     "src/communication/run_lalala_client3.py",
     "src/communication/yf2_v6.py",
     "src/communication/run_lalala_client4.py"
+  ],
+  "m2": [
+    "src/communication/yf1_m2.py",
+    "src/communication/run_lalala_client3.py",
+    "src/communication/yf2_m2.py",
+    "src/communication/run_lalala_client4.py"
   ]
 }

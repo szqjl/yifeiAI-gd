@@ -236,6 +236,42 @@ class GameRecorder:
         if not self.record_dir.exists():
             self.record_dir.mkdir(parents=True, exist_ok=True)
         
+    def backfill_victory_num(self, victory_num: list, pending_files: list) -> int:
+        """
+        回填 pending 记录文件的 victoryNum。
+        读取每个文件，添加 victoryNum 到 result，写回。
+        Args:
+            victory_num: [pos0_wins, pos1_wins, pos2_wins, pos3_wins]
+            pending_files: 待回填的文件路径列表
+        Returns:
+            成功回填的文件数
+        """
+        import logging
+        import json
+        import tempfile
+        import os
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        if not pending_files:
+            return 0
+        flushed = 0
+        for path in list(pending_files):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                data["result"] = data.get("result", {}) or {}
+                data["result"]["victoryNum"] = victory_num
+                fd, tmp = tempfile.mkstemp(dir=str(self.record_dir), suffix=".tmp")
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp, path)
+                flushed += 1
+            except Exception as e:
+                logger.warning("回填 pending 记录失败: {}, error={}".format(path, e))
+        pending_files.clear()
+        if flushed:
+            logger.info("已批量回填 pending 记录 victoryNum: {} 个".format(flushed))
+        return flushed
+
     def record_game_start(self, message: dict):
         """
         记录游戏开始（V7协议兼容方法）

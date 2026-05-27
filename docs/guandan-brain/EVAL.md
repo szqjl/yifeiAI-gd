@@ -10,6 +10,7 @@
 | 版本 | 典型用途 | Windows 一键脚本 | 等价命令（推荐可脚本化） |
 |------|----------|------------------|--------------------------|
 | **M1** | 硬编码规则引擎批量对战 | `START_M1_GUI.bat` | `py batch_executor_gui_m1.py`（或 `python batch_executor_gui_m1.py`） |
+| **M2** | 重构硬编码规则引擎（无分数累积+阈值保护）批量对战 | `START_M2_GUI.bat` | `py batch_executor_gui_m2.py`（或 `python batch_executor_gui_m2.py`） |
 | **V4** | 混合决策 V4 批量对战 | `START_V4_GUI.bat` | `python batch_executor_gui.py`，**须在界面将四条客户端改为 V4**（见下「GUI 与版本说明」） |
 | **V5** | V5 批量对战 | `START_V5_GUI.bat` | `py batch_executor_gui.py`，若需强制 V5 请看「GUI 与版本说明」 |
 | **V6** | V6 批量对战 | `START_V6_GUI.bat` | `py batch_executor_gui.py`，若需强制 V6 请看「GUI 与版本说明」 |

@@ -25,6 +25,13 @@ except ImportError:
     WIN_FIRST_PRIORITY = "本局唯一目标：己方赢（头游+二游）；一切出牌围绕争头游、保二游，不赢则无意义。"
     WINNING_RANKS = (1, 2)
 
+try:
+    from .history_tracker import HistoryTracker
+    from .endgame_planner import EndgamePlanner
+except ImportError:
+    HistoryTracker = None
+    EndgamePlanner = None
+
 
 class BasePhaseHandler(ABC):
     """阶段处理器基类（优化：统一接口，减少代码重复）"""
@@ -33,6 +40,9 @@ class BasePhaseHandler(ABC):
         self.config = config
         # 初始化策略引擎（延迟导入，避免循环依赖）
         self._init_strategy_engine()
+        # 初始化历史追踪器和残局规划器
+        self.history_tracker = HistoryTracker() if HistoryTracker else None
+        self.endgame_planner = EndgamePlanner(config) if EndgamePlanner else None
     
     def _init_strategy_engine(self):
         """初始化策略引擎"""
@@ -377,6 +387,56 @@ class BasePhaseHandler(ABC):
                 return True
         return False
     
+    def _should_use_bomb_passive(self, message: Dict, cur_rank_val: int, max_val: int) -> bool:
+        """
+        判断当前被动场景是否值得用炸弹。
+        炸弹是高价值武器，仅在以下情况使用：
+        1. 对手快赢了（≤3张牌）
+        2. 当前牌是高位牌（≥A / 级牌 / 王）
+        3. 已经连续PASS多次（pass_num ≥ 4）
+        4. 队友被压制且队友牌少（≤6张）
+        """
+        pass_num = message.get("pass_num", 0)
+        my_pass_num = message.get("my_pass_num", 0)
+        public_info = message.get("publicInfo", [])
+        my_pos = message.get("myPos", 0)
+        greater_pos = message.get("greaterPos", -1)
+
+        numofplayers = list(DEFAULT_ALL_REST_LIST)
+        if public_info and len(public_info) == 4:
+            for i, info in enumerate(public_info):
+                numofplayers[i] = info.get("rest", DEFAULT_REST_CARDS)
+
+        numofnext = numofplayers[(my_pos + 1) % 4] if numofplayers else DEFAULT_REST_CARDS
+        numofgreaterPos = numofplayers[greater_pos] if greater_pos >= 0 and numofplayers else DEFAULT_REST_CARDS
+        teammate_pos = (my_pos + 2) % 4
+        numoffri = numofplayers[teammate_pos] if numofplayers else DEFAULT_REST_CARDS
+
+        if numofnext <= 3:
+            return True
+        if cur_rank_val >= 14:
+            return True
+        if pass_num >= 4 or my_pass_num >= 3:
+            return True
+        if numoffri <= 6 and numofgreaterPos <= 6:
+            return True
+        return False
+
+    def _first_non_bomb_index(self, action_list: List, handcards: List = None) -> int:
+        """跳过炸弹和PASS，选第一个非炸弹可出牌。"""
+        if not action_list:
+            return 0
+        for i, action in enumerate(action_list):
+            if isinstance(action, list) and len(action) > 0:
+                if action[0] in ("PASS", "Bomb"):
+                    continue
+            elif action == "PASS":
+                continue
+            if handcards and not self._validate_action_cards(action, handcards):
+                continue
+            return i
+        return self._first_non_pass_index(action_list, handcards)
+
     def _first_non_pass_index(self, action_list: List, handcards: List = None) -> int:
         """GUA-021/PHASE2-005：有多项可选时优先首张可验证的非 PASS。"""
         if not action_list:
@@ -395,6 +455,49 @@ class BasePhaseHandler(ABC):
             if not isinstance(action, list) and action != "PASS":
                 return i
         return 0
+
+    def _get_lowest_non_bomb_index(self, action_list: List, handcards: List = None, cur_rank: str = None) -> int:
+        """主动出牌：优先组合牌型（ThreeWithTwo/Straight/ThreePair/Pair），其次单张。"""
+        if not action_list:
+            return 0
+
+        type_priority = {
+            'ThreeWithTwo': 0,
+            'Straight': 1,
+            'StraightFlush': 1,
+            'ThreePair': 2,
+            'TwoTrips': 2,
+            'Trips': 3,
+            'Pair': 4,
+            'Single': 5,
+        }
+
+        best_idx = -1
+        best_priority = 99
+        best_val = 99
+
+        for i, action in enumerate(action_list):
+            if not isinstance(action, list) or len(action) == 0:
+                if action == "PASS":
+                    continue
+            elif action[0] in ("PASS", "Bomb"):
+                continue
+            if handcards and not self._validate_action_cards(action, handcards):
+                continue
+            action_type = action[0]
+            type_p = type_priority.get(action_type, 10)
+            rank_str = action[1] if len(action) > 1 and isinstance(action[1], str) else ""
+            if not rank_str:
+                continue
+            rank_val = self._get_rank_value(rank_str, cur_rank)
+            if type_p < best_priority or (type_p == best_priority and rank_val < best_val):
+                best_priority = type_p
+                best_val = rank_val
+                best_idx = i
+
+        if best_idx >= 0:
+            return best_idx
+        return self._first_non_bomb_index(action_list, handcards)
     
     def _avoid_unjustified_pass(self, action_list: List, message: Dict, chosen: int) -> int:
         """若 actionList 有非 PASS 却选了 PASS，改为首个非 PASS（接风/兜底）。"""
@@ -901,13 +1004,25 @@ class BasePhaseHandler(ABC):
         public_info = message.get("publicInfo", [])
         my_pos = message.get("myPos", 0)
         cur_rank = message.get("curRank", "2")
-        
+
+        # P0改进①：初始化或使用现有的历史追踪器
+        if self.history_tracker and hasattr(message, 'get'):
+            # 如果消息中包含完整的play_sequence或action_sequence，更新历史
+            play_sequence = message.get("play_sequence", [])
+            if play_sequence:
+                for action in play_sequence:
+                    if action.get("cur_action") and action.get("cur_action")[0] != 'Pass':
+                        pos = action.get("cur_pos", -1)
+                        cards = action.get("cur_action", [])
+                        if len(cards) > 2 and isinstance(cards[2], list):
+                            self.history_tracker.record_play(pos, cards[2])
+
         # 计算剩余牌数
         my_remain = len(handcards) if handcards else CARDS_PER_PLAYER
         cards_left = {}
         opponent_rest_cards_list = []
         teammate_rest_cards = DEFAULT_REST_CARDS
-        
+
         if public_info and len(public_info) == 4:
             for i, info in enumerate(public_info):
                 rest = info.get("rest", DEFAULT_REST_CARDS)
@@ -917,7 +1032,7 @@ class BasePhaseHandler(ABC):
                     # 队友位置：第1个和第3个为一队，第2个和第4个为一队
                     if (my_pos in [0, 2] and i in [0, 2]) or (my_pos in [1, 3] and i in [1, 3]):
                         teammate_rest_cards = rest
-        
+
         # 判断游戏阶段
         game_phase = "opening"
         if my_remain > 20:
@@ -930,7 +1045,7 @@ class BasePhaseHandler(ABC):
             game_phase = "endgame_early"
         else:
             game_phase = "endgame_late"
-        
+
         # 判断是否被动出牌
         is_passive = message.get("curAction") is not None and len(message.get("curAction", [])) > 0
 
@@ -977,7 +1092,23 @@ class BasePhaseHandler(ABC):
                 team_role = "assist"
         except Exception:
             pass
-        
+
+        # P0改进①：将历史信息注入context
+        history_info = {}
+        team_coordination_info = {}
+        if self.history_tracker:
+            history_info = {
+                'history': self.history_tracker.history,
+                'remain_cards': self.history_tracker.get_remain_cards(),
+            }
+            team_coordination_info = self.history_tracker.get_team_coordination_info(my_pos)
+
+        # P0改进②：检查是否需要残局两手规划
+        endgame_two_hand_combos = []
+        if self.endgame_planner and self.endgame_planner.is_endgame(handcards):
+            action_list = message.get("actionList", [])
+            endgame_two_hand_combos = self.endgame_planner.find_two_hand_combinations(handcards, action_list)
+
         return {
             'my_remain': my_remain,
             'cards_left': cards_left,
@@ -1010,14 +1141,19 @@ class BasePhaseHandler(ABC):
             'game_objective': GAME_OBJECTIVE,
             'win_first_priority': WIN_FIRST_PRIORITY,  # 强化赢意识
             'winning_ranks': WINNING_RANKS,
+            # P0改进①②：历史信息和队伙协作信息
+            'history_info': history_info,
+            'team_coordination_info': team_coordination_info,
+            'endgame_two_hand_combos': endgame_two_hand_combos,
         }
 
 
 class StageRouter:
     """阶段路由器（优化：阶段细分路由，提升决策质量和速度）"""
     
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, disable_pass_coercion: bool = False):
         self.config = config
+        self.disable_pass_coercion = disable_pass_coercion
         # 初始化各阶段处理器（优化：直接路由到专门处理器）
         self.handlers = {
             # 开局阶段（剩余牌数 > 20）
@@ -1117,7 +1253,9 @@ class StageRouter:
             
             if handler:
                 action_idx = handler.handle(message)
-                return self._coerce_non_pass_if_available(action_idx, message)
+                if not self.disable_pass_coercion:
+                    return self._coerce_non_pass_if_available(action_idx, message)
+                return action_idx
         
         return 0
     

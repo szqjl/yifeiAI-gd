@@ -1,0 +1,327 @@
+{
+  "rounds": [
+    {
+      "round": 1,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 2,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 3,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "8",
+      "selfRank": "2",
+      "oppoRank": "8",
+      "result": "loss"
+    },
+    {
+      "round": 4,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "J",
+      "selfRank": "2",
+      "oppoRank": "J",
+      "result": "loss"
+    },
+    {
+      "round": 5,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "A",
+      "selfRank": "2",
+      "oppoRank": "A",
+      "result": "loss"
+    },
+    {
+      "round": 6,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 7,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 8,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 9,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 10,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "8",
+      "selfRank": "2",
+      "oppoRank": "8",
+      "result": "loss"
+    },
+    {
+      "round": 11,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "J",
+      "selfRank": "2",
+      "oppoRank": "J",
+      "result": "loss"
+    },
+    {
+      "round": 12,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "A",
+      "selfRank": "2",
+      "oppoRank": "A",
+      "result": "loss"
+    },
+    {
+      "round": 13,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 14,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 15,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "8",
+      "selfRank": "2",
+      "oppoRank": "8",
+      "result": "loss"
+    },
+    {
+      "round": 16,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "J",
+      "selfRank": "2",
+      "oppoRank": "J",
+      "result": "loss"
+    },
+    {
+      "round": 17,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "A",
+      "selfRank": "2",
+      "oppoRank": "A",
+      "result": "loss"
+    },
+    {
+      "round": 18,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 19,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 20,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "8",
+      "selfRank": "2",
+      "oppoRank": "8",
+      "result": "loss"
+    },
+    {
+      "round": 21,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "J",
+      "selfRank": "2",
+      "oppoRank": "J",
+      "result": "loss"
+    },
+    {
+      "round": 22,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "A",
+      "selfRank": "2",
+      "oppoRank": "A",
+      "result": "loss"
+    }
+  ],
+  "games": [
+    {
+      "game": 1,
+      "start_round": 1,
+      "end_round": 5,
+      "result": "loss"
+    },
+    {
+      "game": 2,
+      "start_round": 1,
+      "end_round": 12,
+      "result": "loss"
+    },
+    {
+      "game": 3,
+      "start_round": 13,
+      "end_round": 17,
+      "result": "loss"
+    },
+    {
+      "game": 4,
+      "start_round": 18,
+      "end_round": 22,
+      "result": "loss"
+    }
+  ],
+  "total_rounds": 22,
+  "round_wins": 0,
+  "round_draws": 0,
+  "round_losses": 22,
+  "total_games": 4,
+  "game_wins": 0,
+  "game_draws": 0,
+  "game_losses": 4,
+  "current_game_start_round": 23,
+  "current_level_self": "2",
+  "current_level_oppo": "A"
+}

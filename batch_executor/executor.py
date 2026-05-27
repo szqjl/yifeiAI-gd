@@ -29,67 +29,75 @@ except ImportError:
 # game_records 文件名示例：「<game_id> [yf1_m1]-...」「<game_id> [yf2_m1]-...」
 # 评测口径（GUA-022 / ITERATIONS）：一局 = 同一 game_id 下 yf1_m1 与 yf2_m1 各一份 JSON 成对出现。
 # 实际落盘时各客户端 game_id 微秒时间戳常不一致，故同时用 game_round 成对计数。
-_GAME_RECORD_M1_PAIR_PATTERN = re.compile(r"^(\d+) \[(yf1_m1|yf2_m1)\]")
-_GAME_RECORD_M1_ROUND_PATTERN = re.compile(
-    r"^(\d+) \[(yf1_m1|yf2_m1)\]-\[[^\]]+\]-\[(\d+)\]-"
+_GAME_RECORD_PAIR_PATTERN = re.compile(r"^(\d+) \[(yf[12]_(m[123]|v[4-7]))\]")
+_GAME_RECORD_ROUND_PATTERN = re.compile(
+    r"^(\d+) \[(yf[12]_(m[123]|v[4-7]))-\[[^\]]+\]-\[(\d+)\]-"
 )
+
+
+def _count_new_paired_games(
+    records_dir: Path,
+    baseline_files: Set[str],
+    player_prefix: str = "yf1_",
+    teammate_prefix: str = "yf2_",
+) -> int:
+    """本 Run 新增成对局数：优先同 game_id，否则同 game_round（仅统计 baseline 之后新文件）。
+    player_prefix/teammate_prefix 用于区分系列（默认 yf1_/yf2_，同时覆盖 m1/m2）。"""
+    if not records_dir.is_dir():
+        return 0
+    by_id_p1: Set[str] = set()
+    by_id_p2: Set[str] = set()
+    by_round_p1: Set[str] = set()
+    by_round_p2: Set[str] = set()
+    try:
+        for p in records_dir.glob("*.json"):
+            if p.name in baseline_files:
+                continue
+            m = _GAME_RECORD_PAIR_PATTERN.match(p.name)
+            if m:
+                gid, tag = m.group(1), m.group(2)
+                if tag.startswith(player_prefix):
+                    by_id_p1.add(gid)
+                elif tag.startswith(teammate_prefix):
+                    by_id_p2.add(gid)
+            m2 = _GAME_RECORD_ROUND_PATTERN.match(p.name)
+            if m2:
+                tag, rnd = m2.group(2), m2.group(4)
+                if tag.startswith(player_prefix):
+                    by_round_p1.add(rnd)
+                elif tag.startswith(teammate_prefix):
+                    by_round_p2.add(rnd)
+    except OSError as e:
+        logging.getLogger("batch_executor").warning(
+            "扫描 game_records 失败: %s: %s", records_dir, e
+        )
+        return 0
+    return max(len(by_id_p1 & by_id_p2), len(by_round_p1 & by_round_p2))
 
 
 def _count_new_paired_m1_games(
     records_dir: Path,
     baseline_files: Set[str],
 ) -> int:
-    """本 Run 新增成对局数：优先同 game_id，否则同 game_round（仅统计 baseline 之后新文件）。"""
-    if not records_dir.is_dir():
-        return 0
-    by_id_yf1: Set[str] = set()
-    by_id_yf2: Set[str] = set()
-    by_round_yf1: Set[str] = set()
-    by_round_yf2: Set[str] = set()
-    try:
-        for p in records_dir.glob("*.json"):
-            if p.name in baseline_files:
-                continue
-            m = _GAME_RECORD_M1_PAIR_PATTERN.match(p.name)
-            if m:
-                gid, tag = m.group(1), m.group(2)
-                if tag == "yf1_m1":
-                    by_id_yf1.add(gid)
-                else:
-                    by_id_yf2.add(gid)
-            m2 = _GAME_RECORD_M1_ROUND_PATTERN.match(p.name)
-            if m2:
-                tag, rnd = m2.group(2), m2.group(3)
-                if tag == "yf1_m1":
-                    by_round_yf1.add(rnd)
-                else:
-                    by_round_yf2.add(rnd)
-    except OSError as e:
-        logging.getLogger("batch_executor").warning(
-            "扫描 game_records 失败: %s: %s", records_dir, e
-        )
-        return 0
-    return max(len(by_id_yf1 & by_id_yf2), len(by_round_yf1 & by_round_yf2))
+    """本 Run 新增成对 M1 局数（yf1_m1 / yf2_m1）。"""
+    return _count_new_paired_games(records_dir, baseline_files, "yf1_m1", "yf2_m1")
 
 
 def _paired_m1_game_ids(game_records_dir: Path) -> Set[str]:
-    """
-    返回「成对」的 game_id 集合：同一 id 同时存在 yf1_m1 与 yf2_m1 的 JSON。
-    目录不存在或无法解析时返回空集（不抛错）。
-    """
+    """返回「成对」的 M1 game_id 集合。"""
     if not game_records_dir.is_dir():
         return set()
     yf1: Set[str] = set()
     yf2: Set[str] = set()
     try:
         for p in game_records_dir.glob("*.json"):
-            m = _GAME_RECORD_M1_PAIR_PATTERN.match(p.name)
+            m = _GAME_RECORD_PAIR_PATTERN.match(p.name)
             if not m:
                 continue
             gid, tag = m.group(1), m.group(2)
-            if tag == "yf1_m1":
+            if tag.startswith("yf1_m1"):
                 yf1.add(gid)
-            else:
+            elif tag.startswith("yf2_m1"):
                 yf2.add(gid)
     except OSError as e:
         logging.getLogger("batch_executor").warning(
@@ -426,12 +434,12 @@ class BatchExecutor:
     def _sync_completed_from_game_records(self, state: ExecutionState) -> None:
         """
         用项目根目录下 game_records 的本 Run 新增「成对 game_id」数量更新 completed_games。
-        与 ITERATIONS / GUA-022 一致：一局 = 同一 game_id 下 yf1_m1 与 yf2_m1 各一份 JSON。
+        同时支持 yf1_m1/yf2_m1 和 yf1_m2/yf2_m2 等系列。
         """
         if self._game_records_files_baseline is None:
             return
         records_dir = self.project_root / "game_records"
-        session_done = _count_new_paired_m1_games(
+        session_done = _count_new_paired_games(
             records_dir, self._game_records_files_baseline
         )
         capped = min(session_done, state.target_games)
@@ -733,7 +741,7 @@ class BatchExecutor:
                     done_detected_at: Optional[float] = None
                     # 兼容编码乱码与不同服务器输出：中文、英文、通知键等都可触发完成
                     done_markers = (
-                        "达到设定场次",
+                        "达到设定",
                         "游戏结束",
                         "gameover",
                         "gameresult",
@@ -820,7 +828,7 @@ class BatchExecutor:
                         try:
                             if self._game_records_files_baseline is not None:
                                 session_done = min(
-                                    _count_new_paired_m1_games(
+                                    _count_new_paired_games(
                                         self.project_root / "game_records",
                                         self._game_records_files_baseline,
                                     ),
