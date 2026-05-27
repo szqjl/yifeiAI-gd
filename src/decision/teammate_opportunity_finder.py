@@ -178,13 +178,13 @@ class TeammateOpportunityFinder:
 
         # 条件2：队友还在认真出牌（剩余牌数较多）
         teammate_remain = context.get('teammate_rest_cards', 27)
-        if teammate_remain > 15:
+        if teammate_remain > 12:  # P0改进：从15降到12，更积极地传牌
             # 队友还有足够的牌，不需要急着传
             return False
 
         # 条件3：我的牌力足够支撑传牌
         card_power = context.get('card_power', 5.0)
-        if card_power < 4:
+        if card_power < 3:  # P0改进：从4降到3，降低牌力要求
             # 我的牌太弱，传牌反而容易被对方压制
             return False
 

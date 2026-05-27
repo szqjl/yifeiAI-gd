@@ -20,7 +20,7 @@ class EndgamePlanner:
 
     def __init__(self, config: Dict = None):
         self.config = config or {}
-        self.endgame_threshold = 12  # 手牌≤12张时启用两手规划
+        self.endgame_threshold = 10  # P0改进：降低到10张，使更多残局进行两手规划
 
     def is_endgame(self, handcards: List[str]) -> bool:
         """

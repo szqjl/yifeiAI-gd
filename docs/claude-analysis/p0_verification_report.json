@@ -1,0 +1,37 @@
+{
+  "start_time": "2026-05-27T23:43:18.885756",
+  "games_run": 10,
+  "platform_started": true,
+  "games_completed": true,
+  "analysis_run": false,
+  "metrics": {},
+  "issues": [
+    "Analysis failed: 'NoneType' object has no attribute 'split'",
+    "两手规划触发 not triggered",
+    "传牌动作执行 not triggered"
+  ],
+  "tuning_suggestions": [
+    {
+      "issue": "两手规划未触发",
+      "parameter": "endgame_threshold",
+      "file": "src/decision/endgame_planner.py:14",
+      "suggestion": "降低阈值从 12 → 10，使更多残局进入两手规划",
+      "risk": "低"
+    },
+    {
+      "issue": "传牌动作未触发",
+      "parameter": "teammate_remain / card_power",
+      "file": "src/decision/teammate_opportunity_finder.py:180/186",
+      "suggestion": "降低触发条件: teammate_remain 15→12, card_power 4→3",
+      "risk": "中"
+    },
+    {
+      "issue": "仍未获胜",
+      "parameter": "多个",
+      "file": "多个",
+      "suggestion": "需要进一步分析具体失利原因，可能需要更激进的两手规划阈值",
+      "risk": "高"
+    }
+  ],
+  "end_time": "2026-05-27T23:48:44.988660"
+}
