@@ -57,7 +57,7 @@ log_filename = log_dir / f"yf1_m1_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log
 
 # 配置日志：同时输出到控制台和文件
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s',
     datefmt='%H:%M:%S',
     handlers=[
