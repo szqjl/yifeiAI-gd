@@ -2586,14 +2586,14 @@ class EndgameEarlyPassiveHandler(BasePhaseHandler):
         action_list = message.get("actionList", [])
         cur_action = message.get("curAction")
         handcards = message.get("handCards", [])
-        
+
         if not action_list or not cur_action:
             return 0
-        
+
         # ⚠️ 如果是单张，按照新的优先级顺序处理
         cur_action_type = cur_action[0] if isinstance(cur_action, list) and len(cur_action) > 0 else ""
         cur_rank = cur_action[1] if len(cur_action) > 1 else ""
-        
+
         if cur_action_type == 'Single':
             import logging
             logger = logging.getLogger("EndgameEarlyPassiveHandler")
@@ -2976,11 +2976,26 @@ class EndgameLateActiveHandler(BasePhaseHandler):
         context['combination_score'] = combination_score
         
         my_rest = len(handcards) if handcards else CARDS_PER_PLAYER
-        
+
         # 优先级1: 一手出完（残局最重要）
         one_hand_idx = self._check_one_hand_complete(action_list, handcards)
         if one_hand_idx is not None:
             return one_hand_idx
+
+        # P0改进②: 两手恰好出完规划（残局核心能力）
+        endgame_two_hand_combos = context.get('endgame_two_hand_combos', [])
+        if endgame_two_hand_combos and self.endgame_planner:
+            import logging
+            logger = logging.getLogger("EndgameLateActiveHandler")
+            logger.debug(f"【P0改进②】检测到 {len(endgame_two_hand_combos)} 个两手配对")
+
+            # 选择最优配对的第一手
+            best_first_action = self.endgame_planner.recommend_first_action(
+                endgame_two_hand_combos, action_list, context
+            )
+            if best_first_action is not None and best_first_action < len(action_list):
+                logger.debug(f"【P0改进②】选择两手配对第一手: {best_first_action}")
+                return best_first_action
         
         # 如果有多余单张，优先考虑出单张（残局后期快速减少牌数）
         if excess_singles:
