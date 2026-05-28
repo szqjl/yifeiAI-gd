@@ -11,20 +11,30 @@ YiFei AI 掼蛋回放系统 - 整合版
 5. 支持播放、暂停、快进、慢放等控制
 
 使用方法：
-python yf_replay.py [游戏记录文件路径]
+python scripts/tools/yf_replay.py [游戏记录文件路径]
 """
 
 import sys
 import os
+import re
 import json
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from datetime import datetime
 
-# 设置路径
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-os.environ['PYTHONPATH'] = str(Path(__file__).parent / "src")
+RECORD_NAME_RE = re.compile(r"^(\d+) \[([^\]]+)\]-\[([^\]]+)\]-\[(\d+)\]-\[([^\]]*)\]\.json$")
+
+# 显示用 rank 大小顺序（左→右，大→小）：大王 R、小王 B、A、K、Q、J、10、9...2
+RANK_DISPLAY_ORDER = ['R', 'B', 'A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2']
+SUIT_ORDER_IDX = {'H': 0, 'S': 1, 'D': 2, 'C': 3}
+SUIT_DISPLAY = {'S': '♠', 'H': '♥', 'D': '♦', 'C': '♣'}
+RANK_DISPLAY = {'T': '10', 'J': 'J', 'Q': 'Q', 'K': 'K', 'A': 'A',
+                '2': '2', 'B': 'B', 'R': 'R', '1': 'A'}
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+os.environ['PYTHONPATH'] = str(REPO_ROOT / "src")
 
 from communication.game_recorder import GameRecorder
 from communication.server_log_parser import ServerLogParser
@@ -55,6 +65,15 @@ class YiFeiReplayGUI:
         self.initial_hands = {}  # 所有玩家的初始手牌
         self.player_hands = {}  # 当前所有玩家的手牌
         self.played_cards = []
+
+        # 玩家名字（来自 JSON / 文件名，避免硬编码）
+        self.my_name = ""
+        self.teammate_name = ""
+        self.opp_label_pair = ("对手", "对手")
+
+        # 级数（本方/对方），来自 game_info；缺失时默认 '2'
+        self.self_level = '2'
+        self.opp_level = '2'
         
         # 初始化界面
         self._setup_ui()
@@ -375,11 +394,129 @@ class YiFeiReplayGUI:
             if pos_str not in self.initial_hands or not self.initial_hands[pos_str]:
                 # 如果没有初始手牌或初始手牌数量不合理，初始化一个空列表
                 self.initial_hands[pos_str] = []
-            
+
+        # 5. 解析当前玩家 / 对手名字并合并队友（同一局另一份 JSON）的初始手牌
+        self._resolve_player_labels()
+        self._try_load_teammate_record()
+        self._resolve_levels()
+
         # 6. 计算当前所有玩家的手牌
         self.player_hands = self._calculate_current_hands()
         self.status_bar.config(text=f"游戏数据加载完成，共 {self.total_steps} 个动作，初始手牌: {len(self.initial_hands)} 个玩家")
     
+    def _resolve_player_labels(self):
+        """从 JSON player_name + 文件名 opponent_* 解析 4 个玩家的显示名。"""
+        self.my_name = self.current_game_data.get('player_name', '') or ''
+
+        # 文件名形如 "<ts> [yf1_m1]-[opponent_1_3]-[20]-[None].json"
+        # opponent_X_Y 通常表示对手在 pos X 和 Y
+        m = RECORD_NAME_RE.match(self.current_game.name)
+        if m:
+            opp_field = m.group(3)
+            # 解析对手位置（pos 1 + pos 3 之类）
+            opp_positions = []
+            for part in opp_field.replace('opponent_', '').split('_'):
+                if part.isdigit():
+                    opp_positions.append(int(part))
+            if len(opp_positions) == 2:
+                self.opp_label_pair = (f"对手@{opp_positions[0]}", f"对手@{opp_positions[1]}")
+
+    def _try_load_teammate_record(self):
+        """同一局 round 的队友（yf1↔yf2）JSON 合并进 initial_hands，让对面/边上能看到我方两人手牌。"""
+        m = RECORD_NAME_RE.match(self.current_game.name)
+        if not m:
+            return
+        my_name = m.group(2)
+        round_num = m.group(4)
+        suffix = m.group(5)
+
+        # 推断队友名（仅当前命名约定：yf1 ↔ yf2）
+        if 'yf1' in my_name:
+            teammate_name = my_name.replace('yf1', 'yf2', 1)
+        elif 'yf2' in my_name:
+            teammate_name = my_name.replace('yf2', 'yf1', 1)
+        else:
+            return
+
+        # 同目录下找匹配文件（不能用 Path.glob — 文件名含 [...] 会被当字符类匹配）
+        candidates = []
+        for sibling in self.current_game.parent.iterdir():
+            if not sibling.is_file() or sibling.suffix != '.json':
+                continue
+            sm = RECORD_NAME_RE.match(sibling.name)
+            if not sm:
+                continue
+            if sm.group(2) == teammate_name and sm.group(4) == round_num and sm.group(5) == suffix:
+                candidates.append(sibling)
+        if not candidates:
+            return
+
+        # 与当前文件时间戳最接近的那份（兼容同 round 跨批次）
+        my_ts = int(self.current_game.name.split(' ', 1)[0])
+        teammate_file = min(candidates, key=lambda p: abs(int(p.name.split(' ', 1)[0]) - my_ts))
+
+        try:
+            teammate_data = GameRecorder.load_game(teammate_file)
+        except Exception as e:
+            self.status_bar.config(text=f"队友记录加载失败 {teammate_file.name}: {e}")
+            return
+
+        teammate_pos = teammate_data.get('player_id')
+        teammate_hand = teammate_data.get('initial_hand', [])
+
+        # 队友名字：哪怕手牌已被 GameRecorder.load_game 预填进 all_players_hands，名字也要落到 self.teammate_name 上
+        self.teammate_name = teammate_data.get('player_name', teammate_name) or teammate_name
+
+        if teammate_pos is None or not isinstance(teammate_hand, list) or not teammate_hand:
+            return
+
+        pos_str = str(teammate_pos)
+        # 仅在尚无该位置手牌时合并（不覆盖 GameRecorder 已合并好的数据）
+        if not self.initial_hands.get(pos_str):
+            self.initial_hands[pos_str] = list(teammate_hand)
+            self.status_bar.config(text=f"已合并队友 {self.teammate_name} 初始手牌 ({len(teammate_hand)}张) from {teammate_file.name}")
+
+    def _build_player_labels(self):
+        """返回长度 4 的玩家显示名列表，按位置 0..3。"""
+        labels = [f"玩家{i}" for i in range(4)]
+        if self.my_name:
+            labels[self.player_id] = f"玩家{self.player_id} ({self.my_name})"
+        teammate_pos = (self.player_id + 2) % 4
+        if self.teammate_name:
+            labels[teammate_pos] = f"玩家{teammate_pos} ({self.teammate_name})"
+        opp_positions = [p for p in range(4) if p != self.player_id and p != teammate_pos]
+        for idx, p in enumerate(opp_positions):
+            opp_name = self.opp_label_pair[idx] if idx < len(self.opp_label_pair) else f"对手@{p}"
+            labels[p] = f"玩家{p} ({opp_name})"
+        return labels
+
+    def _resolve_levels(self):
+        """从 game_info.selfRank / oppoRank 读级数；缺失或 None 时默认 '2'。"""
+        gi = (self.current_game_data or {}).get('game_info', {}) or {}
+        self.self_level = str(gi.get('selfRank') or '2')
+        self.opp_level = str(gi.get('oppoRank') or '2')
+
+    def _organize_hand_columns(self, cards):
+        """把手牌按 rank 分组，返回按显示顺序排好的 [(rank, [cards])]。"""
+        by_rank = {}
+        for card in cards or []:
+            if not isinstance(card, str) or len(card) < 2:
+                continue
+            rank = card[1:]
+            if rank == '1':  # 兼容遗留 '1' → 'A'
+                rank = 'A'
+                card = card[0] + 'A'
+            by_rank.setdefault(rank, []).append(card)
+        cols = []
+        for rank in RANK_DISPLAY_ORDER:
+            if rank in by_rank:
+                group = sorted(by_rank[rank], key=lambda c: SUIT_ORDER_IDX.get(c[0], 99))
+                cols.append((rank, group))
+        # 兜底：未在 RANK_DISPLAY_ORDER 出现的（不应该有，但保险）
+        for rank in sorted(by_rank.keys() - set(RANK_DISPLAY_ORDER)):
+            cols.append((rank, by_rank[rank]))
+        return cols
+
     def _calculate_current_hands(self):
         """计算所有玩家的当前手牌（到当前步骤为止）"""
         # 从初始手牌开始，确保所有4个玩家都有初始手牌记录
@@ -530,201 +667,208 @@ class YiFeiReplayGUI:
         self._draw_current_step()
     
     def _draw_current_step(self):
-        """绘制当前步骤的牌面"""
-        # 清空画布
+        """绘制当前步骤的牌面（1312 大牌风格：按 rank 堆叠 + 顶部级数标签）。"""
         self.card_canvas.delete("all")
-        
-        # 绘制背景
-        self.card_canvas.create_rectangle(0, 0, self.card_canvas.winfo_width(), 
-                                         self.card_canvas.winfo_height(), fill="#006400")
-        
-        # 绘制玩家位置
-        self._draw_player_positions()
-        
-        # 绘制所有玩家的手牌
-        for pos in range(4):
-            self._draw_player_hand(pos)
-        
-        # 如果没有动作，显示初始状态
+        w = self.card_canvas.winfo_width() or 1200
+        h = self.card_canvas.winfo_height() or 700
+        self.card_canvas.create_rectangle(0, 0, w, h, fill="#1c5b8a")
+
+        # 顶部左上角：本方/对方级数 + 过（当前步是 PASS 时）
+        self._draw_level_badges()
+
         if not self.actions:
-            info = "没有游戏动作数据"
-            self.card_canvas.create_text(self.card_canvas.winfo_width() // 2, self.card_canvas.winfo_height() // 2,
-                                        text=info, fill="white", font=("Arial", 14), anchor=tk.CENTER)
+            self.card_canvas.create_text(w // 2, h // 2,
+                                          text="没有游戏动作数据", fill="white",
+                                          font=("Arial", 14), anchor=tk.CENTER)
             return
-        
-        # 绘制当前步骤信息
-        if self.current_step <= self.total_steps:
-            self._draw_step_info()
-            
-            # 绘制当前动作
-            if self.current_step > 0:
-                action = self.actions[self.current_step - 1]
-                self._draw_current_action(action)
+
+        # 4 个玩家手牌 + 名字 + 剩余张数
+        cur_action_pos = self._current_acting_pos()
+        for pos in range(4):
+            self._draw_player_block(pos, highlight=(pos == cur_action_pos))
+
+        # 中央出牌区
+        if 0 < self.current_step <= self.total_steps:
+            self._draw_current_action(self.actions[self.current_step - 1])
+
+        # 右上角步骤信息（继续保留）
+        self._draw_step_info()
     
+    # ---------------- 新版布局工具 ----------------
+
+    def _current_acting_pos(self):
+        if 0 < self.current_step <= self.total_steps:
+            return self.actions[self.current_step - 1].get('cur_pos', -1)
+        return -1
+
+    def _seat_for_pos(self, pos):
+        """把游戏位置（0-3）映射到 GUI 座位（bottom / right / top / left），自己永远在底。"""
+        relative = (pos - self.player_id) % 4
+        # 自己 → bottom；逆时针：下家(自己+1) → right；对家(自己+2) → top；上家(自己+3) → left
+        return ['bottom', 'right', 'top', 'left'][relative]
+
+    def _seat_layout(self, seat):
+        w = self.card_canvas.winfo_width() or 1200
+        h = self.card_canvas.winfo_height() or 720
+        if seat == 'bottom':
+            return dict(orientation='horizontal', x=w // 2, y=h - 160, label_y=h - 32)
+        if seat == 'top':
+            return dict(orientation='horizontal', x=w // 2, y=85, label_y=60)
+        if seat == 'left':
+            return dict(orientation='vertical', x=70, y=h // 2 - 20, label_y=h // 2 + 270)
+        if seat == 'right':
+            return dict(orientation='vertical', x=w - 105, y=h // 2 - 20, label_y=h // 2 + 270)
+        return dict(orientation='horizontal', x=w // 2, y=h // 2, label_y=h // 2)
+
+    def _draw_level_badges(self):
+        """顶部左上角：本方 X / 对方 X，必要时再贴 过 标签。"""
+        bx, by = 10, 10
+        self._draw_pill(bx, by, 95, 30, '本方', self.self_level)
+        self._draw_pill(bx, by + 36, 95, 30, '对方', self.opp_level)
+
+        if 0 < self.current_step <= self.total_steps:
+            cur = self.actions[self.current_step - 1]
+            ainfo = self._parse_action(cur.get('cur_action'))
+            if ainfo and (ainfo[0] or '').upper() == 'PASS':
+                px = bx + 110
+                self.card_canvas.create_rectangle(px, by, px + 56, by + 30,
+                                                  fill="#fff8c8", outline="black")
+                self.card_canvas.create_text(px + 28, by + 15, text="过",
+                                              font=("Microsoft YaHei", 16, "bold"),
+                                              fill="black", anchor=tk.CENTER)
+
+    def _draw_pill(self, x, y, w, h, label, value):
+        self.card_canvas.create_rectangle(x, y, x + w, y + h, fill="#f5f5f5", outline="black")
+        self.card_canvas.create_text(x + 8, y + h // 2, anchor=tk.W,
+                                      text=label, font=("Microsoft YaHei", 11, "bold"), fill="black")
+        self.card_canvas.create_text(x + w - 10, y + h // 2, anchor=tk.E,
+                                      text=value, font=("Arial", 16, "bold"), fill="#cc0000")
+
+    def _played_count(self, pos):
+        n = 0
+        for action in self.actions[:self.current_step]:
+            if action.get('cur_pos') != pos:
+                continue
+            ainfo = self._parse_action(action.get('cur_action'))
+            if not ainfo:
+                continue
+            atype, _, cards = ainfo
+            if (atype or '').upper() != 'PASS' and cards:
+                n += len(cards)
+        return n
+
+    def _draw_player_block(self, pos, highlight=False):
+        seat = self._seat_for_pos(pos)
+        layout = self._seat_layout(seat)
+        cards = self.player_hands.get(str(pos), [])
+        # 剩余张数：有手牌走真实长度；缺源数据（对手）走 27 - 已出
+        if cards:
+            remaining = len(cards)
+        else:
+            remaining = max(0, 27 - self._played_count(pos))
+
+        self._draw_hand_stacked(cards, layout)
+
+        labels = self._build_player_labels()
+        self._draw_player_name_label(seat, layout, labels[pos], remaining, highlight)
+
+    def _draw_player_name_label(self, seat, layout, label, remaining, highlight):
+        fill = "#FFD700" if highlight else "white"
+        bg = "#cc4400" if highlight else None
+        text = f"{label}\n剩余 {remaining}"
+        x = layout['x']
+        y = layout['label_y']
+        if bg:
+            # 高亮：贴一个色块衬底
+            self.card_canvas.create_rectangle(x - 80, y - 18, x + 80, y + 18,
+                                              fill=bg, outline="")
+        self.card_canvas.create_text(x, y, text=text, fill=fill,
+                                      font=("Microsoft YaHei", 11, "bold"),
+                                      anchor=tk.CENTER, justify=tk.CENTER)
+
+    def _draw_hand_stacked(self, cards, layout):
+        """按 rank 分组堆叠：横排（top/bottom）列内纵向叠；竖排（left/right）行内横向叠。"""
+        cols = self._organize_hand_columns(cards)
+        if not cols:
+            return
+        cw, ch = 34, 48
+        if layout['orientation'] == 'horizontal':
+            col_w = cw + 2
+            stack_dy = 16
+            total_w = len(cols) * col_w
+            sx = layout['x'] - total_w // 2
+            sy = layout['y']
+            for ci, (_rank, group) in enumerate(cols):
+                cx = sx + ci * col_w
+                for ki, card in enumerate(group):
+                    cy = sy + ki * stack_dy
+                    self._draw_card_normal(cx, cy, cw, ch, card, False)
+        else:  # vertical
+            row_h = ch + 2
+            stack_dx = 12
+            total_h = len(cols) * row_h
+            sy = layout['y'] - total_h // 2
+            sx = layout['x']
+            for ri, (_rank, group) in enumerate(cols):
+                cy = sy + ri * row_h
+                for ki, card in enumerate(group):
+                    cx = sx + ki * stack_dx
+                    self._draw_card_normal(cx, cy, cw, ch, card, False)
+
+    # ---------------- 兼容旧入口（_draw_current_step 不再调用，但保留避免外部引用）----------------
+
     def _draw_player_positions(self):
-        """绘制玩家位置"""
-        # 调整玩家位置，将玩家yf1_v5向上移动
-        players = [f"玩家0 (yf1_v5)", "玩家1", "玩家2 (yf2_v5)", "玩家3"]
-        # 调整位置，将顶部玩家向上移动，确保与中央出牌区有足够空间
-        positions = [(600, 50), (1150, 400), (600, 720), (50, 400)]
-        
-        for i, (x, y) in enumerate(positions):
-            # 对所有玩家使用统一的剩余牌数计算逻辑：初始27张减去已出牌数
-            # 这是最可靠的方法，因为初始手牌加载可能不准确
-            initial_hand_count = 27  # 掼蛋每个玩家初始有27张牌
-            
-            # 计算已出的牌数
-            played_count = 0
-            for action in self.actions[:self.current_step]:
-                cur_pos = action.get('cur_pos', -1)
-                if cur_pos == i:
-                    cur_action = action.get('cur_action', [])
-                    action_info = self._parse_action(cur_action)
-                    if action_info:
-                        action_type, _, played_cards = action_info
-                        # 标准化动作类型为大写，避免大小写问题
-                        action_type = action_type.upper() if action_type else ""
-                        if action_type != "PASS" and played_cards:
-                            played_count += len(played_cards)
-            
-            # 计算剩余牌数
-            remaining_cards = initial_hand_count - played_count
-            
-            # 确保剩余牌数不会是负数或超过27
-            remaining_cards = max(0, min(27, remaining_cards))
-            
-            if i == 2:  # 底部玩家（yf2_v5），将文本放在卡牌直接下方，间距15px
-                # 玩家名称和剩余牌数放在一起，显示在卡牌下方
-                # 卡牌位置：canvas_height - 200，卡牌高度：70px
-                card_bottom = self.card_canvas.winfo_height() - 200 + 70
-                text_y = card_bottom + 15  # 间距15px
-                self.card_canvas.create_text(x, text_y, 
-                                            text=f"{players[i]} 剩余: {remaining_cards}", 
-                                            fill="white", font=("Arial", 12, "bold"), anchor=tk.CENTER)
-            else:
-                # 玩家名称 - 更大的字体，直接显示
-                self.card_canvas.create_text(x, y, text=players[i], fill="white", 
-                                            font=("Arial", 14, "bold"), anchor=tk.CENTER)
-                # 显示剩余牌数
-                if i == 0:  # 顶部玩家，剩余牌数显示在名称下方
-                    self.card_canvas.create_text(x, y+30, text=f"剩余: {remaining_cards}", 
-                                                fill="white", font=("Arial", 12), anchor=tk.CENTER)
-                else:  # 左右玩家（1和3），剩余牌数显示在名称下方，分行显示
-                    # 玩家名称
-                    self.card_canvas.create_text(x, y, text=players[i], fill="white", 
-                                                font=("Arial", 14, "bold"), anchor=tk.CENTER)
-                    # 剩余牌数显示在玩家名称下方
-                    self.card_canvas.create_text(x, y+30, text=f"剩余: {remaining_cards}", 
-                                                fill="white", font=("Arial", 12), anchor=tk.CENTER)
-    
+        pass
+
     def _draw_player_hand(self, player_pos):
-        """绘制指定玩家的手牌
-        
-        Args:
-            player_pos: 玩家位置 (0-3: 上, 右, 下, 左)
-        """
-        pos_str = str(player_pos)
-        if pos_str not in self.player_hands:
-            return
-        
-        cards = self.player_hands[pos_str]
-        if not cards:
-            return
-        
-        # 调整牌的大小和间距，使其更美观，采用竖排重叠显示
-        card_width = 50  # 竖排宽度
-        card_height = 70  # 竖排高度
-        overlap = 15  # 重叠距离，使卡牌部分重叠
-        
-        # 根据玩家位置确定布局参数
-        canvas_width = self.card_canvas.winfo_width()
-        canvas_height = self.card_canvas.winfo_height()
-        
-        num_cards = len(cards)
-        
-        if player_pos == 0:  # 顶部玩家 - yf1_v5，竖排，牌面向上
-            # 垂直居中，水平排列，牌面向上
-            start_x = canvas_width // 2 - (num_cards * (card_width - overlap) // 2)
-            start_y = 100  # 向上移动20px，确保与其他元素不重叠
-            
-            # 绘制手牌 - 顶部玩家（yf1_v5，牌面向上）
-            for i, card in enumerate(cards):
-                x = start_x + i * (card_width - overlap)
-                y = start_y
-                self._draw_card_normal(x, y, card_width, card_height, card, False)  # 牌面向上
-        elif player_pos == 1:  # 右侧玩家 - 对手，横排，牌面向右
-            # 水平居中，垂直排列，牌面向右
-            start_y = canvas_height // 2 - (num_cards * (card_height - overlap) // 2)
-            start_x = canvas_width - 150  # 向左调整更多，给玩家信息留出空间
-            
-            # 绘制手牌 - 右侧玩家（对手，牌面向右）
-            for i, card in enumerate(cards):
-                x = start_x
-                y = start_y + i * (card_height - overlap)
-                self._draw_card_vertical(x, y, card_width, card_height, card, True)  # 牌面向右
-        elif player_pos == 2:  # 底部玩家 - yf2_v5，竖排，牌面向上
-            # 垂直居中，水平排列，牌面向上
-            start_x = canvas_width // 2 - (num_cards * (card_width - overlap) // 2)
-            start_y = canvas_height - 200  # 向上调整更多，确保所有玩家信息完整显示
-            
-            # 绘制手牌 - 底部玩家（yf2_v5，牌面向上）
-            for i, card in enumerate(cards):
-                x = start_x + i * (card_width - overlap)
-                y = start_y
-                self._draw_card_normal(x, y, card_width, card_height, card, False)  # 牌面向上
-        else:  # 左侧玩家 - 对手，横排，牌面向左
-            # 水平居中，垂直排列，牌面向左
-            start_y = canvas_height // 2 - (num_cards * (card_height - overlap) // 2)
-            start_x = 100  # 向右调整更多，给玩家信息留出空间
-            
-            # 绘制手牌 - 左侧玩家（对手，牌面向左）
-            for i, card in enumerate(cards):
-                x = start_x
-                y = start_y + i * (card_height - overlap)
-                self._draw_card_vertical(x, y, card_width, card_height, card, True)  # 牌面向左
-        
-        # 更新剩余牌数，确保准确性
-        if pos_str in self.player_hands:
-            # 直接根据实际显示的卡牌数量来更新剩余牌数
-            self.player_hands[pos_str] = cards
+        pass
     
     def _draw_card_normal(self, x, y, width, height, card, is_back=False):
-        """绘制普通水平方向的牌"""
+        """绘制普通水平方向的牌（小尺寸，按 rank 堆叠场景）"""
         if is_back:
-            # 背面朝上
-            self.card_canvas.create_rectangle(x, y, x+width, y+height, 
-                                            fill="#8B0000", outline="#000000", width=2)
-            self.card_canvas.create_text(x+width/2, y+height/2, text="?", 
-                                        font=('Arial', 20, 'bold'), fill="white")
-        else:
-            # 正面朝上 - 背景色统一为白色
-            bg_color = "#FFFFFF"
-            
-            # 绘制牌的边框和背景
-            self.card_canvas.create_rectangle(x, y, x+width, y+height, 
-                                            fill=bg_color, outline="black", width=2)
-            
-            # 绘制牌面内容
-            rank_map = {'T': '10', 'J': 'J', 'Q': 'Q', 'K': 'K', 'A': 'A', 
-                       '2': '2', 'B': 'B', 'R': 'R', '1': 'A'}  # 添加对'1'的映射，确保显示为'A'
-            
-            suit_map = {'S': '♠', 'H': '♥', 'D': '♦', 'C': '♣'}
-            
-            suit = card[0]
-            rank = card[1:]
-            
-            display_rank = rank_map.get(rank, rank)
-            display_suit = suit_map.get(suit, suit)
-            
-            # 绘制左上角的花色和数字 - 增大字体+2px
-            self.card_canvas.create_text(x+5, y+5, text=f"{display_rank}{display_suit}", 
-                                        font=('Arial', 12, 'bold'), anchor=tk.NW, 
-                                        fill="black" if suit in ['S', 'C'] else "red")
-            
-            # 绘制中间的花色
-            self.card_canvas.create_text(x+width/2, y+height/2, text=display_suit, 
-                                        font=('Arial', 18, 'bold'), anchor=tk.CENTER, 
-                                        fill="black" if suit in ['S', 'C'] else "red")
+            self.card_canvas.create_rectangle(x, y, x+width, y+height,
+                                            fill="#8B0000", outline="#000000", width=1)
+            self.card_canvas.create_text(x+width/2, y+height/2, text="?",
+                                        font=('Arial', 14, 'bold'), fill="white")
+            return
+
+        if not isinstance(card, str) or len(card) < 2:
+            return
+
+        suit = card[0]
+        rank = card[1:]
+        if rank == '1':
+            rank = 'A'
+
+        # 边框 + 背景
+        self.card_canvas.create_rectangle(x, y, x+width, y+height,
+                                        fill="#FFFFFF", outline="black", width=1)
+
+        # 大小王特殊渲染
+        if rank == 'R':
+            self.card_canvas.create_text(x+3, y+2, text="R", anchor=tk.NW,
+                                          font=('Arial', 9, 'bold'), fill="red")
+            self.card_canvas.create_text(x+width/2, y+height-9,
+                                          text="JOKER", anchor=tk.CENTER,
+                                          font=('Arial', 6, 'bold'), fill="red")
+            return
+        if rank == 'B':
+            self.card_canvas.create_text(x+3, y+2, text="B", anchor=tk.NW,
+                                          font=('Arial', 9, 'bold'), fill="black")
+            self.card_canvas.create_text(x+width/2, y+height-9,
+                                          text="JOKER", anchor=tk.CENTER,
+                                          font=('Arial', 6, 'bold'), fill="black")
+            return
+
+        display_rank = RANK_DISPLAY.get(rank, rank)
+        display_suit = SUIT_DISPLAY.get(suit, suit)
+        color = "black" if suit in ('S', 'C') else "red"
+
+        # 左上角 rank + suit（一行内）
+        self.card_canvas.create_text(x+3, y+2, text=display_rank, anchor=tk.NW,
+                                    font=('Arial', 9, 'bold'), fill=color)
+        self.card_canvas.create_text(x+3, y+13, text=display_suit, anchor=tk.NW,
+                                    font=('Arial', 9, 'bold'), fill=color)
     
     def _draw_card_vertical(self, x, y, width, height, card, is_back=False):
         """绘制垂直方向的牌"""
@@ -779,9 +923,9 @@ class YiFeiReplayGUI:
             timestamp = action.get('timestamp', '')[:19]  # 只显示日期时间部分
             cur_pos = action.get('cur_pos', -1)
             cur_action = action.get('cur_action', '[]')
-            
+
             # 获取玩家名称
-            players = ["玩家0 (yf1_v5)", "玩家1", "玩家2 (yf2_v5)", "玩家3"]
+            players = self._build_player_labels()
             player_name = players[cur_pos] if 0 <= cur_pos < 4 else f"未知({cur_pos})"
             
             info = (f"步骤: {self.current_step}/{self.total_steps}\n"
@@ -796,83 +940,64 @@ class YiFeiReplayGUI:
                                     width=350, justify=tk.LEFT)
     
     def _draw_current_action(self, action):
-        """绘制当前动作（将打出的牌放在中央，增强视觉效果）"""
+        """绘制当前动作（中央出牌区）。"""
         cur_pos = action.get('cur_pos', -1)
         cur_action = action.get('cur_action', '')
-        
-        # 解析动作
+
         action_info = self._parse_action(cur_action)
         if not action_info:
-            # 如果无法解析，尝试直接从action_str中提取
-            action_str = str(cur_action)
             self.card_canvas.create_text(self.card_canvas.winfo_width() // 2, self.card_canvas.winfo_height() // 2,
-                                        text=f"动作: {action_str}", fill="white", font=("Arial", 14), anchor=tk.CENTER)
+                                        text=f"动作: {cur_action}", fill="white", font=("Arial", 14), anchor=tk.CENTER)
             return
-        
-        action_type, rank, cards = action_info
-        
-        # 绘制打出的牌 - 在中央区域，放大显示
-        canvas_width = self.card_canvas.winfo_width()
-        canvas_height = self.card_canvas.winfo_height()
-        
-        card_width = 50  # 放大牌的尺寸，使其更醒目
-        card_height = 70
-        spacing = 8
-        
-        # 计算起始位置（中央）
-        total_width = (len(cards) * (card_width + spacing)) - spacing
+
+        action_type, _rank, cards = action_info
+        canvas_width = self.card_canvas.winfo_width() or 1200
+        canvas_height = self.card_canvas.winfo_height() or 720
+
+        # 卡牌尺寸（出牌区比手牌区稍大）
+        card_width = 48
+        card_height = 66
+        spacing = 6
+
+        cards_n = len(cards) if isinstance(cards, list) else 0
+        total_width = max(0, cards_n * (card_width + spacing) - spacing)
         start_x = canvas_width // 2 - total_width // 2
         start_y = canvas_height // 2 - card_height // 2
-        
-        # 获取玩家名称
-        players = ["玩家0 (yf1_v5)", "玩家1", "玩家2 (yf2_v5)", "玩家3"]
-        player_name = players[cur_pos] if 0 <= cur_pos < 4 else f"未知({cur_pos})"
-        
-        # 绘制动作类型标签
+
+        labels = self._build_player_labels()
+        player_name = labels[cur_pos] if 0 <= cur_pos < 4 else f"未知({cur_pos})"
+
         action_types = {
-            'Single': '单牌',
-            'Pair': '对子',
-            'Triple': '三张',
-            'ThreeWithTwo': '三带二',
-            'Straight': '顺子',
-            'StraightFlush': '同花顺',
-            'Bomb': '炸弹',
-            'Rocket': '王炸',
-            'Pass': '过牌',
-            'Tribute': '进贡',
-            'Back': '还贡',
+            'Single': '单牌', 'Pair': '对子', 'Trips': '三张', 'Triple': '三张',
+            'ThreeWithTwo': '三带二', 'ThreePair': '三连对', 'TwoTrips': '钢板',
+            'TripsPair': '三带对', 'Straight': '顺子', 'StraightFlush': '同花顺',
+            'Bomb': '炸弹', 'Rocket': '王炸',
+            'Pass': '过牌', 'PASS': '过牌',
+            'Tribute': '进贡', 'tribute': '进贡',
+            'Back': '还贡', 'back': '还贡',
             'dispatch': '发牌'
         }
-        
         display_type = action_types.get(action_type, action_type)
-        
-        # 调整玩家名称和动作类型在同一行显示
-        # 玩家名称上移5px
-        combined_text = f"{player_name} 出牌 {display_type}"
-        self.card_canvas.create_text(canvas_width // 2, start_y - 45,  # 上移5px
-                                    text=combined_text, fill="#FFD700", 
-                                    font=("Arial", 10, "bold"), anchor=tk.CENTER)
-        
-        # 如果是过牌，直接显示文字，不要尝试绘制卡牌
-        if action_type == 'Pass' or display_type == '过牌':
-            # 直接显示"过牌"文字，居中显示
+
+        # 顶部标签：玩家 + 动作类型
+        self.card_canvas.create_text(canvas_width // 2, start_y - 32,
+                                    text=f"{player_name}  {display_type}",
+                                    fill="#FFD700", font=("Microsoft YaHei", 11, "bold"),
+                                    anchor=tk.CENTER)
+
+        if (action_type or '').upper() == 'PASS' or display_type == '过牌':
+            # 过牌：中央显示"过"
             self.card_canvas.create_text(canvas_width // 2, canvas_height // 2,
-                                        text="过牌", fill="#FFFFFF", 
-                                        font=("Arial", 32, "bold"), anchor=tk.CENTER)  # 缩小字体
+                                        text="过", fill="#FFFFFF",
+                                        font=("Microsoft YaHei", 36, "bold"), anchor=tk.CENTER)
         elif isinstance(cards, list) and cards:
-            # 绘制当前打出的牌
             for i, card in enumerate(cards):
-                card_x = start_x + i * (card_width + spacing)
-                card_y = start_y
-                self._draw_card_normal(card_x, card_y, card_width, card_height, card, False)
+                cx = start_x + i * (card_width + spacing)
+                self._draw_card_normal(cx, start_y, card_width, card_height, card, False)
         else:
-            # 无法解析的动作，显示文字描述
             self.card_canvas.create_text(canvas_width // 2, canvas_height // 2,
-                                        text=display_type, fill="#FFFFFF", 
-                                        font=("Arial", 36, "bold"), anchor=tk.CENTER)
-        
-        # 绘制当前玩家指示 - 高亮显示
-        self._highlight_current_player(cur_pos)
+                                        text=display_type, fill="#FFFFFF",
+                                        font=("Microsoft YaHei", 24, "bold"), anchor=tk.CENTER)
     
     def _highlight_current_player(self, player_pos):
         """高亮显示当前行动的玩家"""

@@ -75,9 +75,15 @@
 
 **`tests/` +3：** `debug_test`、`_test_regex`、`_test_replace`
 
-**暂留根目录：** `yf_replay.py`；`batch_executor_gui_m1.py`、`start_gui.py`（短期保留）；`batch_executor_gui.py` / `m2` / `m3`（收尾批）
+**收尾批已完成（2026-05-28）：**
 
-### 训练相关（V 线，非 M 日常）
+**`scripts/gui/`（3）：** `batch_executor_gui`、`batch_executor_gui_m2`、`batch_executor_gui_m3`
+
+**`scripts/tools/` +1：** `yf_replay`
+
+**根目录短期保留：** `batch_executor_gui_m1.py`、`start_gui.py`
+
+## 建议保留在根目录（短期）
 
 `train_stage*.py`、`monitor_training.py`、`check_training_progress*.py`
 
@@ -113,5 +119,5 @@
 4. ~~**第五批**~~ ✅ workflow / V7 / test（15 个）
 5. ~~**第六批**~~ ✅ 杂项脚本 14 个（`yf_replay.py` 暂留根目录）
 6. ~~**第七批**~~ ✅ `batch_executor.py`、`client_std_*`、`run_t9_direct`、debug/_test 脚本
-7. **收尾批**：`batch_executor_gui.py` / `m2` / `m3`、`yf_replay.py`
-8. 根目录 README 或 `docs/usage/` 更新启动命令
+7. ~~**收尾批**~~ ✅ GUI 变体 + `yf_replay`
+8. Phase 4 根目录脚本收敛 **已完成**（见上各批记录）

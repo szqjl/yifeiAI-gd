@@ -1,7 +1,7 @@
 """
-批量游戏执行系统 - M2版本图形界面
+批量游戏执行系统 - M3版本图形界面
 
-M2版本：重构硬编码规则引擎，无分数累积+阈值保护
+M3版本：忠实移植lalala决策引擎（顺子检测、炸弹精确阈值、主动出牌优先级）
 """
 
 import tkinter as tk
@@ -11,18 +11,19 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 from batch_executor.executor import BatchExecutor
 from batch_executor.logging_config import setup_logging
 
 
-class BatchExecutorGUIM2:
-    """批量游戏执行系统图形界面 - M2版本"""
+class BatchExecutorGUIM3:
+    """批量游戏执行系统图形界面 - M3版本"""
 
     def __init__(self, root):
         self.root = root
-        self.root.title("掼蛋AI批量对战系统 - M2版本 v1.0")
+        self.root.title("掼蛋AI批量对战系统 - M3版本 v1.0")
         self.root.geometry("950x750")
         self.root.resizable(True, True)
 
@@ -61,14 +62,14 @@ class BatchExecutorGUIM2:
 
         title_label = ttk.Label(
             title_frame,
-            text="掼蛋AI批量对战系统 - M2版本",
+            text="掼蛋AI批量对战系统 - M3版本",
             font=('Arial', 16, 'bold')
         )
         title_label.pack()
 
         subtitle_label = ttk.Label(
             title_frame,
-            text="M2：重构硬编码规则引擎（无分数累积+阈值保护）",
+            text="M3：忠实移植lalala规则引擎（顺子检测 + 炸弹精确阈值 + 主动出牌优先级链）",
             font=('Arial', 10)
         )
         subtitle_label.pack()
@@ -76,11 +77,9 @@ class BatchExecutorGUIM2:
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # 配置区域
         config_frame = ttk.LabelFrame(main_frame, text="配置", padding="10")
         config_frame.pack(fill=tk.X, pady=5)
 
-        # 服务器路径
         server_frame = ttk.Frame(config_frame)
         server_frame.pack(fill=tk.X, pady=5)
         ttk.Label(server_frame, text="服务器路径:").pack(side=tk.LEFT)
@@ -89,7 +88,6 @@ class BatchExecutorGUIM2:
         server_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         ttk.Button(server_frame, text="浏览", command=self.browse_server).pack(side=tk.RIGHT)
 
-        # 客户端脚本
         client_frame = ttk.Frame(config_frame)
         client_frame.pack(fill=tk.X, pady=5)
         ttk.Label(client_frame, text="客户端脚本:").pack(side=tk.LEFT)
@@ -97,32 +95,29 @@ class BatchExecutorGUIM2:
         clients_entry = ttk.Entry(client_frame, textvariable=self.clients_var, width=60)
         clients_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
-        # 目标场次
         games_frame = ttk.Frame(config_frame)
         games_frame.pack(fill=tk.X, pady=5)
         ttk.Label(games_frame, text="目标场次:").pack(side=tk.LEFT)
         self.target_games_var = tk.StringVar(value="10")
         games_spinbox = ttk.Spinbox(games_frame, from_=1, to=100, textvariable=self.target_games_var, width=10)
         games_spinbox.pack(side=tk.LEFT, padx=5)
+        ttk.Label(games_frame, text="（每副含多回合升级，建议10~20副）").pack(side=tk.LEFT, padx=10)
 
-        # 版本信息
         version_frame = ttk.LabelFrame(main_frame, text="版本信息", padding="5")
         version_frame.pack(fill=tk.X, pady=5)
 
-        info_text = tk.Text(version_frame, height=6, wrap=tk.WORD, font=('Arial', 9))
+        info_text = tk.Text(version_frame, height=7, wrap=tk.WORD, font=('Arial', 9))
         info_text.pack(fill=tk.X)
         info_text.insert(tk.END,
-            "M2核心改进（对比M1）：\n"
-            "• 保护逻辑内联在按牌型分发的处理器中（lalala风格）\n"
-            "• 不加载共享TeammateProtectionStrategy（去掉分数累积+阈值）\n"
-            "• PASS次数降级链完整（pass_num>=5 → special, >=7 → bomb）\n"
-            "• 队友剩牌≤4时只出刚好大1（精确边界控制）\n"
-            "• 开局主动恢复一手出完检查\n"
-            "• 所有改动限制在M2专用文件，不碰共用层"
+            "M3核心改进（对比M2）：\n"
+            "• 顺子检测：combine_handcards() 完整拆分手牌为单/对/三/顺子/同花顺/炸弹\n"
+            "• 精确炸弹阈值：choose_bomb() 按牌力打分而非简单≥4张=炸弹\n"
+            "• 主动出牌优先级：rankone()→ranktwo()→rankthree()→rankfour() 链式决策\n"
+            "• PASS降级链：pass_num≥5→拆牌、≥7→炸弹，队友剩≤4只出刚好大1\n"
+            "• 还贡策略：choose_in_single/pair/trips/bomb 按优先级还贡"
         )
         info_text.config(state=tk.DISABLED)
 
-        # 控制按钮
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, pady=10)
 
@@ -152,7 +147,6 @@ class BatchExecutorGUIM2:
             width=15
         ).pack(side=tk.RIGHT, padx=5)
 
-        # 日志区域
         log_frame = ttk.LabelFrame(main_frame, text="运行日志", padding="5")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=5)
 
@@ -164,13 +158,11 @@ class BatchExecutorGUIM2:
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
-        # 配置日志标签
         self.log_text.tag_config('INFO', foreground='black')
         self.log_text.tag_config('WARNING', foreground='orange')
         self.log_text.tag_config('ERROR', foreground='red')
         self.log_text.tag_config('SUCCESS', foreground='green')
 
-        # 进度条
         self.progress_var = tk.DoubleVar()
         self.progress_bar = ttk.Progressbar(
             main_frame,
@@ -180,7 +172,6 @@ class BatchExecutorGUIM2:
         )
         self.progress_bar.pack(fill=tk.X, pady=5)
 
-        # 状态栏
         self.status_var = tk.StringVar(value="就绪")
         status_bar = ttk.Label(
             self.root,
@@ -192,40 +183,35 @@ class BatchExecutorGUIM2:
         status_bar.pack(fill=tk.X, side=tk.BOTTOM)
 
     def load_default_config(self):
-        """加载默认配置（M2版本）"""
+        """加载默认配置（M3版本）"""
         possible_paths = [
             "../GDAI/离线平台/windows/guandan_offline_v1006.exe",
             "D:/GDAI/server/windows/guandan_offline_v1006.exe",
             "D:/GDAI/离线平台/windows/guandan_offline_v1006.exe",
             "guandan_offline_v1006.exe",
             "../guandan_offline_v1006.exe",
-            "server/guandan_offline_v1006.exe"
+            "server/guandan_offline_v1006.exe",
+            "offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe"
         ]
-
         for path in possible_paths:
             if os.path.exists(path):
                 self.server_path_var.set(os.path.abspath(path))
                 break
 
-        # M2版本默认客户端脚本
-        default_clients_m2 = [
-            "src/communication/yf1_m2.py",                   # 0号位 - YiFei M2
-            "src/communication/run_lalala_client3.py",       # 1号位 - 对手1
-            "src/communication/yf2_m2.py",                   # 2号位 - YiFei M2
-            "src/communication/run_lalala_client4.py"        # 3号位 - 对手2
+        default_clients_m3 = [
+            "src/communication/yf1_m3.py",
+            "src/communication/run_lalala_client3.py",
+            "src/communication/yf2_m3.py",
+            "src/communication/run_lalala_client4.py"
         ]
-        # 队伍A（YiFei M2队）：0号(yf1_m2) + 2号(yf2_m2)
-        # 队伍B（对手队）：1号(client3) + 3号(client4)
-
-        existing_clients = [c for c in default_clients_m2 if os.path.exists(c)]
+        existing_clients = [c for c in default_clients_m3 if os.path.exists(c)]
         if existing_clients:
             self.clients_var.set(", ".join(existing_clients))
         else:
             self.clients_var.set("请输入4个客户端脚本路径（逗号分隔）")
-            self.log_message("警告：M2客户端文件不存在", "WARNING")
+            self.log_message("警告：M3客户端文件不存在", "WARNING")
 
     def browse_server(self):
-        """浏览服务器文件"""
         filename = filedialog.askopenfilename(
             title="选择服务器可执行文件",
             filetypes=[("可执行文件", "*.exe"), ("所有文件", "*.*")]
@@ -234,17 +220,14 @@ class BatchExecutorGUIM2:
             self.server_path_var.set(filename)
 
     def log_message(self, message, level="INFO"):
-        """添加日志消息"""
         self.log_text.insert(tk.END, message + "\n", level)
         self.log_text.see(tk.END)
         self.root.update_idletasks()
 
     def clear_log(self):
-        """清空日志"""
         self.log_text.delete(1.0, tk.END)
 
     def save_log(self):
-        """保存日志"""
         filename = filedialog.asksaveasfilename(
             title="保存日志",
             defaultextension=".log",
@@ -259,35 +242,35 @@ class BatchExecutorGUIM2:
                 messagebox.showerror("保存失败", str(e))
 
     def show_help(self):
-        """显示使用说明"""
         help_text = (
-            "M2版本使用说明：\n\n"
+            "M3版本使用说明：\n\n"
             "1. 选择服务器可执行文件路径\n"
-            "2. 确认客户端脚本路径（默认yf1_m2/yf2_m2 + lalala）\n"
-            "3. 设置目标场次数\n"
+            "2. 确认客户端脚本路径（默认yf1_m3/yf2_m3 + lalala client3/client4）\n"
+            "3. 设置目标场次数（建议10~20副）\n"
             "4. 点击「开始对战」启动批量对战\n\n"
-            "M2核心改进：\n"
-            "- 保护逻辑内联在按牌型分发的处理器中\n"
-            "- 不加载共享TeammateProtectionStrategy\n"
-            "- PASS次数降级链完整\n"
-            "- 队友剩牌≤4时只出刚好大1\n"
-            "- 开局主动恢复一手出完检查\n\n"
-            "注意：所有改动限制在M2专用文件，不碰共用层"
+            "M3核心改进（对比M2）：\n"
+            "- 完整移植lalala规则引擎，含顺子检测\n"
+            "- 精确炸弹阈值选择\n"
+            "- 主动出牌多类型优先级链\n"
+            "- PASS降级链 + 边界保护\n"
+            "- T/J/Q连队规避还贡策略\n\n"
+            "注意：\n"
+            "- M3为独立文件，不依赖strategy_engine/stage_router\n"
+            "- 战绩写入 game_scores_m2.json（兼容路径）\n"
+            "- 日志文件在 logs/yf1_m3_*.log"
         )
         messagebox.showinfo("使用说明", help_text)
 
     def show_about(self):
-        """显示关于信息"""
         about_text = (
-            "掼蛋AI批量对战系统 - M2版本 v1.0\n\n"
-            "M2：重构硬编码规则引擎\n"
-            "基于M1架构重构，去掉分数累积+阈值保护\n"
-            "保护逻辑内联在按牌型分发的处理器中"
+            "掼蛋AI批量对战系统 - M3版本 v1.0\n\n"
+            "M3：忠实移植lalala规则引擎\n"
+            "基于lalala一等奖AI的action.py + utils.py移植\n"
+            "含顺子/同花顺检测、炸弹精确阈值、主动出牌优先级链"
         )
         messagebox.showinfo("关于", about_text)
 
     def start_batch(self):
-        """开始批量对战"""
         if self.is_running:
             return
 
@@ -315,7 +298,7 @@ class BatchExecutorGUIM2:
         self.progress_var.set(0)
         self.status_var.set("运行中...")
         self.log_message("=" * 50, "INFO")
-        self.log_message("开始M2批量对战", "INFO")
+        self.log_message("开始M3批量对战", "INFO")
         self.log_message("服务器: {}".format(server_path), "INFO")
         self.log_message("客户端: {}".format(clients), "INFO")
         self.log_message("目标场次: {}".format(target_games), "INFO")
@@ -329,13 +312,11 @@ class BatchExecutorGUIM2:
         self.executor_thread.start()
 
     def _run_batch(self, server_path, clients, target_games):
-        """在后台线程中运行批量对战"""
         try:
             self.executor = BatchExecutor(
                 server_path=server_path,
-                clients=clients,
+                client_scripts=clients,
                 target_games=target_games,
-                callback=self._update_progress
             )
             self.executor.run()
         except Exception as e:
@@ -343,15 +324,7 @@ class BatchExecutorGUIM2:
         finally:
             self.root.after(0, self._on_batch_complete)
 
-    def _update_progress(self, current, total, message):
-        """更新进度"""
-        progress = (current / total) * 100 if total > 0 else 0
-        self.progress_var.set(progress)
-        self.log_message("[{}/{}] {}".format(current, total, message), "INFO")
-        self.status_var.set("已完成 {}/{} 场".format(current, total))
-
     def _on_batch_complete(self):
-        """批量对战完成"""
         self.is_running = False
         self.start_button.config(state=tk.NORMAL)
         self.stop_button.config(state=tk.DISABLED)
@@ -359,7 +332,6 @@ class BatchExecutorGUIM2:
         self.log_message("批量对战完成！", "SUCCESS")
 
     def stop_batch(self):
-        """停止批量对战"""
         if self.executor and self.is_running:
             self.executor.stop()
             self.is_running = False
@@ -371,7 +343,7 @@ class BatchExecutorGUIM2:
 
 def main():
     root = tk.Tk()
-    app = BatchExecutorGUIM2(root)
+    app = BatchExecutorGUIM3(root)
     root.mainloop()
 
 

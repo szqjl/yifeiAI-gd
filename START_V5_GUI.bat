@@ -23,7 +23,8 @@ echo.
 
 REM 设置环境变量指定使用V5客户端
 set CLIENT_VERSION=v5
-py batch_executor_gui.py
+cd /d "%~dp0"
+py scripts/gui/batch_executor_gui.py
 
 pause
 

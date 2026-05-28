@@ -302,7 +302,7 @@ __pycache__/
 - [x] workflow / V7 / test 第五批（15 个）→ `scripts/workflow/`、`scripts/v7/`、`tests/`
 - [x] 根目录杂项脚本第六批（14 个）→ `scripts/training/`、`scripts/tools/`、`scripts/verify/`、`tests/`（**`yf_replay.py` 暂留根目录**）
 - [x] 根目录剩余入口第七批（7 个）→ `scripts/batch_executor.py`、`scripts/clients/`、`scripts/tools/`、`tests/`
-- [ ] Phase 4 收尾：GUI 变体（`batch_executor_gui*.py` 除 m1）、`yf_replay.py` 待迁入
+- [x] Phase 4 收尾：GUI 变体（`batch_executor_gui` / `m2` / `m3`）→ `scripts/gui/`；`yf_replay.py` → `scripts/tools/`
 - [ ] deprecated 标记 v4/v5_stage5 客户端
 - [ ] m3 `contracts/` 与目录 `src/m/`、`src/v/` 渐进迁移
 - [ ] v7 评审通过后合并 `v7-dev` → `m-dev`

@@ -22,6 +22,7 @@ echo.
 
 REM 设置环境变量指定使用V4客户端
 set CLIENT_VERSION=v4
-python batch_executor_gui.py
+cd /d "%~dp0"
+python scripts/gui/batch_executor_gui.py
 
 pause

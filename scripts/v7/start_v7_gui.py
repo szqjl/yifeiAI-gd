@@ -9,7 +9,7 @@ from pathlib import Path
 import tkinter as tk
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "gui"))
 
 try:
     from batch_executor_gui import BatchExecutorGUI

@@ -22,6 +22,7 @@ echo 正在启动GUI...
 echo ========================================
 echo.
 
-py batch_executor_gui_m2.py
+cd /d "%~dp0"
+py scripts/gui/batch_executor_gui_m2.py
 
 pause

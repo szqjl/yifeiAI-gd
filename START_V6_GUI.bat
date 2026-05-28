@@ -33,7 +33,8 @@ echo Starting GUI...
 echo ========================================
 echo.
 
-py batch_executor_gui.py
+cd /d "%~dp0"
+py scripts/gui/batch_executor_gui.py
 
 pause
 

@@ -120,7 +120,7 @@ python src/communication/yf2_m1.py
 **Option 2: Batch testing with GUI (recommended)**
 ```bash
 git checkout m1-dev
-START_M1_GUI.bat  # Windows only; run `python batch_executor_gui_m3.py` on other OS
+START_M1_GUI.bat  # Windows only; run `python scripts/gui/batch_executor_gui_m3.py` on other OS
 ```
 
 **Option 3: Check platform updates**

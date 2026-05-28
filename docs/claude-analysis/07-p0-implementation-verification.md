@@ -135,7 +135,7 @@ grep -c "P0-③: 主动传牌给队友" src/decision/phase_handlers.py
    python src/communication/yf2_m1.py
    
    # 方式2：批处理（如果平台可用）
-   START_M1_GUI.bat  # 或在Linux上运行 python batch_executor_gui_m2.py
+   START_M1_GUI.bat  # 或在Linux上运行 python scripts/gui/batch_executor_gui_m2.py
    ```
 
 2. **收集新记录到 `game_records/`**
