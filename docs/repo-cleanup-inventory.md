@@ -65,7 +65,17 @@
 
 **暂留根目录：** `yf_replay.py`（其他 Agent 编辑中）
 
-**第七批待迁：** `batch_executor.py`、`client_std_*`、`run_t9_direct`、`debug_test.py` 等
+**第七批已完成（2026-05-28）：**
+
+**`scripts/batch_executor.py`：** 原根目录 CLI 入口
+
+**`scripts/clients/`（2）：** `client_std_1`、`client_std_3`
+
+**`scripts/tools/` +1：** `run_t9_direct`
+
+**`tests/` +3：** `debug_test`、`_test_regex`、`_test_replace`
+
+**暂留根目录：** `yf_replay.py`；`batch_executor_gui_m1.py`、`start_gui.py`（短期保留）；`batch_executor_gui.py` / `m2` / `m3`（收尾批）
 
 ### 训练相关（V 线，非 M 日常）
 
@@ -102,6 +112,6 @@
 3. ~~**第四批**~~ ✅ train 剩余 + batch/clean 工具（10 个）
 4. ~~**第五批**~~ ✅ workflow / V7 / test（15 个）
 5. ~~**第六批**~~ ✅ 杂项脚本 14 个（`yf_replay.py` 暂留根目录）
-6. **第七批**：`batch_executor.py`、`client_std_*` 等剩余入口
-7. 每次 PR 只迁一类（≤15 文件），更新 import 与文档
+6. ~~**第七批**~~ ✅ `batch_executor.py`、`client_std_*`、`run_t9_direct`、debug/_test 脚本
+7. **收尾批**：`batch_executor_gui.py` / `m2` / `m3`、`yf_replay.py`
 8. 根目录 README 或 `docs/usage/` 更新启动命令

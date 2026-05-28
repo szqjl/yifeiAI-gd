@@ -12,19 +12,19 @@
 **使用方法**:
 ```bash
 # 基本用法
-python batch_executor.py --server-path <服务器路径>
+python scripts/batch_executor.py --server-path <服务器路径>
 
 # 指定目标场数
-python batch_executor.py --server-path server.exe --target-games 200
+python scripts/batch_executor.py --server-path server.exe --target-games 200
 
 # 仅运行诊断
-python batch_executor.py --server-path server.exe --diagnose-only
+python scripts/batch_executor.py --server-path server.exe --diagnose-only
 
 # 指定客户端脚本
-python batch_executor.py --server-path server.exe --clients client1.py client2.py client3.py client4.py
+python scripts/batch_executor.py --server-path server.exe --clients client1.py client2.py client3.py client4.py
 
 # 完整示例
-python batch_executor.py \
+python scripts/batch_executor.py \
     --server-path guandan_offline_v1006.exe \
     --target-games 100 \
     --clients Test1.py Test2.py client3.py client4.py \
@@ -157,12 +157,12 @@ set TARGET_GAMES=100
 
 ### 自定义日志级别
 ```bash
-python batch_executor.py --server-path server.exe --log-level DEBUG
+python scripts/batch_executor.py --server-path server.exe --log-level DEBUG
 ```
 
 ### 指定自定义文件路径
 ```bash
-python batch_executor.py \
+python scripts/batch_executor.py \
     --server-path server.exe \
     --state-file my_state.json \
     --score-file my_scores.json \
@@ -171,7 +171,7 @@ python batch_executor.py \
 
 ### 仅诊断模式
 ```bash
-python batch_executor.py --server-path server.exe --diagnose-only
+python scripts/batch_executor.py --server-path server.exe --diagnose-only
 ```
 
 ## 注意事项

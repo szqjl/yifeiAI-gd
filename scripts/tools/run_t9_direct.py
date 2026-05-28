@@ -8,7 +8,7 @@ import os, sys, shutil, subprocess, json, re, time
 from datetime import datetime
 from pathlib import Path
 
-PROJECT_ROOT = Path(r"C:\yifeGDBOT")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = PROJECT_ROOT / "_t9_logs"
 LOG_DIR.mkdir(exist_ok=True)
 LOG_FILE = LOG_DIR / f"t9_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"

@@ -124,7 +124,7 @@ def main():
 
         # 标准客户端1 (位置1)
         client1_proc = subprocess.Popen(
-            [sys.executable, "client_std_1.py"],
+            [sys.executable, "scripts/clients/client_std_1.py"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -148,7 +148,7 @@ def main():
 
         # 标准客户端3 (位置3)
         client3_proc = subprocess.Popen(
-            [sys.executable, "client_std_3.py"],
+            [sys.executable, "scripts/clients/client_std_3.py"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
