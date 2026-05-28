@@ -47,7 +47,7 @@
 
 1. 启动训练GUI：
 ```bash
-python run_stage6_training_gui.py
+python scripts/training/run_stage6_training_gui.py
 ```
 
 2. 选择包含1312格式数据的目录（如`game_records`）

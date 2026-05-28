@@ -12,7 +12,7 @@
 ### 方式2：命令行启动
 ```bash
 cd D:\YiFeiAI-GD
-python run_stage6_training_gui.py
+python scripts/training/run_stage6_training_gui.py
 ```
 
 ### 系统要求

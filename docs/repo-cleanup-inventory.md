@@ -53,7 +53,19 @@
 
 **`tests/`（10，新入库）：** `test_p0_4clients`、`test_m1_strategy_quick`、`test_p0_*`、`test_v7_*`、`test_gui_path_validation`、`test_batch_loop`、`test_yfv5_model_integration`
 
-**第六批待迁：** 根目录剩余 `test_*.py`（6）、`view_training_*`、`replay.py`、`delete_non_replay_records.py`、`feishu_*` 等
+**第六批已完成（2026-05-28，`yf_replay.py` 暂留根目录）：**
+
+**`tests/` +5：** `test_data_loader`、`test_gui_launch`、`test_simple_data_loader`、`test_ultimate_win_rate_model`、`test_win_rate_training`
+
+**`scripts/training/` +4：** `view_training_results`、`view_training_summary`、`run_stage6_training_gui`、`stage6_training_gui`
+
+**`scripts/tools/` +5：** `delete_non_replay_records`、`feishu_gateway_auth`、`feishu_kanban_card_generator`、`replay`、`fix_model_compatibility`
+
+**`scripts/verify/` +1：** `p0_verification_auto`
+
+**暂留根目录：** `yf_replay.py`（其他 Agent 编辑中）
+
+**第七批待迁：** `batch_executor.py`、`client_std_*`、`run_t9_direct`、`debug_test.py` 等
 
 ### 训练相关（V 线，非 M 日常）
 
@@ -89,6 +101,7 @@
 2. ~~**第三批**~~ ✅ `scripts/verify/`（6）、`scripts/analysis/`（6）、`scripts/training/`（3）
 3. ~~**第四批**~~ ✅ train 剩余 + batch/clean 工具（10 个）
 4. ~~**第五批**~~ ✅ workflow / V7 / test（15 个）
-5. **第六批**：根目录杂项脚本
-6. 每次 PR 只迁一类（≤15 文件），更新 import 与文档
-7. 根目录 README 或 `docs/usage/` 更新启动命令
+5. ~~**第六批**~~ ✅ 杂项脚本 14 个（`yf_replay.py` 暂留根目录）
+6. **第七批**：`batch_executor.py`、`client_std_*` 等剩余入口
+7. 每次 PR 只迁一类（≤15 文件），更新 import 与文档
+8. 根目录 README 或 `docs/usage/` 更新启动命令

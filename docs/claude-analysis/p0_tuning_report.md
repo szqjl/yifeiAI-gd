@@ -103,7 +103,7 @@ git add -A
 git commit -m "tuning(P0): 调低两手规划和传牌触发阈值"
 
 # 4. 再次测试（10局以上）
-python p0_verification_auto.py 10
+python scripts/verify/p0_verification_auto.py 10
 ```
 
 ### 二次验证（Task B - 效果评估）
@@ -209,7 +209,7 @@ git add -A
 git commit -m "tuning(P0): 激进调低两手规划和传牌触发阈值"
 
 echo "【阶段3】运行测试..."
-python p0_verification_auto.py 10
+python scripts/verify/p0_verification_auto.py 10
 
 echo "✓ 调优完成！检查log/results"
 ```

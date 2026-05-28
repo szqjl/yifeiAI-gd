@@ -33,10 +33,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 路径配置
-PLATFORM_EXE = r"D:\guandanscore\YiFeiAI-GD\offline_platform\guandan_offline_v1006\windows\guandan_offline_v1006.exe"
-PROJECT_ROOT = r"D:\guandanscore\YiFeiAI-GD"
-GAME_RECORDS_DIR = os.path.join(PROJECT_ROOT, "game_records")
-ANALYSIS_SCRIPT = os.path.join(PROJECT_ROOT, "analyze_game_rounds.py")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = str(REPO_ROOT)
+PLATFORM_EXE = str(REPO_ROOT / "offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe")
+GAME_RECORDS_DIR = str(REPO_ROOT / "game_records")
+ANALYSIS_SCRIPT = str(REPO_ROOT / "scripts/analysis/analyze_game_rounds.py")
 
 class P0VerificationTest:
     def __init__(self):

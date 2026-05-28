@@ -24,9 +24,10 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 from datetime import datetime
 import time
+from pathlib import Path
 
-# 添加项目路径
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__))))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 from src.train.pretrain import train_bc
 from src.train.game_oriented_evaluator import GameOrientedEvaluator

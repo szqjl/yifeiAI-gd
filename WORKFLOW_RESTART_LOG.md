@@ -66,5 +66,5 @@
 
 3. 训练效果：
    ```bash
-   python view_training_summary.py
+   python scripts/training/view_training_summary.py
    ```

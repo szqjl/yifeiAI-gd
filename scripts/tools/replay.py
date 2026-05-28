@@ -8,9 +8,8 @@ import sys
 import os
 from pathlib import Path
 
-# 设置路径
-script_dir = Path(__file__).parent.absolute()
-src_dir = script_dir / "src"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+src_dir = REPO_ROOT / "src"
 sys.path.insert(0, str(src_dir))
 os.environ['PYTHONPATH'] = str(src_dir)
 

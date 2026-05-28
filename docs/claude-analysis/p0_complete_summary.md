@@ -232,10 +232,10 @@ f4de5b7 - feat(P0-③): 集成主动传牌到所有PassiveHandlers
 
 ```bash
 # 自动运行（已启动）
-python p0_verification_auto.py 10
+python scripts/verify/p0_verification_auto.py 10
 
 # 手动运行（如需要）
-python p0_verification_auto.py 20  # 运行20局
+python scripts/verify/p0_verification_auto.py 20  # 运行20局
 
 # 查看日志
 tail -f p0_verification.log

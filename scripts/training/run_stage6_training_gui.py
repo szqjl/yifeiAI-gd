@@ -2,14 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 阶段6游戏导向训练GUI启动脚本
-运行命令：python run_stage6_training_gui.py
+运行命令：python scripts/training/run_stage6_training_gui.py
 """
 
 import sys
 import os
+from pathlib import Path
 
-# 添加项目路径
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__))))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 # 在导入torch之前尝试设置CUDA_VISIBLE_DEVICES，避免旧GPU警告
 # 注意：警告可能仍然会出现，但训练时会使用正确的GPU

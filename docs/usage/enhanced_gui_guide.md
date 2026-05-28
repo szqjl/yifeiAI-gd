@@ -18,7 +18,7 @@
 ### 方法2: 使用Python脚本
 
 ```bash
-python run_stage6_training_gui.py
+python scripts/training/run_stage6_training_gui.py
 ```
 
 ## 📊 功能模块

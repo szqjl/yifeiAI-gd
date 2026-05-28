@@ -49,7 +49,7 @@ mlflow ui --backend-store-uri file:///d:/YiFeiAI-GD/logs/mlruns
 
 ### 方法4: 训练效果摘要
 ```bash
-python view_training_summary.py
+python scripts/training/view_training_summary.py
 ```
 
 ## 🎯 关键监控指标
@@ -82,7 +82,7 @@ python view_training_summary.py
 
 2. **查看训练历史**:
    ```bash
-   python view_training_summary.py
+   python scripts/training/view_training_summary.py
    ```
 
 3. **检查日志文件**:

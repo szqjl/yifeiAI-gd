@@ -107,7 +107,8 @@ echo ========================================
 echo.
 
 REM 运行Python GUI脚本
-python run_stage6_training_gui.py
+cd /d "%~dp0"
+python scripts/training/run_stage6_training_gui.py
 
 REM 如果Python命令失败，显示错误信息
 if errorlevel 1 (
