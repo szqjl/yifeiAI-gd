@@ -101,7 +101,7 @@ flowchart TB
 | 远程名 | 地址角色 | 策略 |
 |--------|----------|------|
 | **`origin`** | Gitee，**唯一真相源** | 所有功能分支 push 目标 |
-| **`github`** | 镜像/备份 | `origin` 稳定后同步，不独立演进 |
+| **`github`** | 镜像（**当前暂不维护**） | 日常仅用 `origin`；不删 `develop`、不强制 sync |
 
 ### 4.2 分支对照表
 
@@ -277,8 +277,9 @@ __pycache__/
 
 - [x] `git checkout m1-dev && git pull origin m1-dev`
 - [x] 本地 `main` 打归档 tag `archive/main-pre-governance-20260528`，日常不在 `main` 提交
-- [x] `git fetch origin --prune`；`git fetch github --prune`
-- [ ] GitHub 远程 `develop` 删除（待网页/API）
+- [x] `git fetch origin --prune`
+- [ ] ~~`git fetch github --prune` / 删 develop~~ → **GitHub 暂不处理**
+- [ ] ~~GitHub 远程 `develop` 删除~~ → **暂不处理**（仅用 Gitee `origin` 为真相源）
 - [x] 确认 `credential.helper=manager`
 
 ### Phase 2 — 文档与 manifest（1 天）

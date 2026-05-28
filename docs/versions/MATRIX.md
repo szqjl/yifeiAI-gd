@@ -35,7 +35,7 @@
 | `v7-dev` | V-nn | `origin/v7-dev` | v7 实验 |
 | `v6-dev` | V-learn | `origin/v6-dev` | 归档，默认不合并 |
 | `main` | 发布 | `origin/main` | 稳定快照 |
-| `github/*` | 镜像 | — | 同步用，不独立开发 |
+| `github/*` | 镜像 | — | **暂不维护**（2026-05-28） |
 
 ---
 
