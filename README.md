@@ -586,6 +586,9 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 
 ### 技术文档
 - [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md) - 缺陷、版本、评测台账（与 [文档目录首页](docs/README.md) 中的入口一致）
+- [M/V 系列仓库治理方案](docs/governance/M-V-Series-治理方案.md) - **分支、冒烟、产物与 M/V 分层（执行基准）**
+- [腾讯云 COS 接入指南](docs/governance/COS-接入指南.md) - **回归 replay 上传/拉取**
+- [版本与分支状态矩阵](docs/versions/MATRIX.md)
 - [详细架构方案](docs/掼蛋AI客户端架构方案.md)
 - [开发规范](docs/DEVELOPMENT_RULES.md) - **重要：包含时间处理规则**
 - [参赛指南](docs/掼蛋AI比赛参赛指南.md)
@@ -616,6 +619,7 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 欢迎提交Issue和Pull Request！
 
 ### 贡献指南
+- 默认向 **`m1-dev`** 提交 PR；规范见 [M/V 系列仓库治理方案](docs/governance/M-V-Series-治理方案.md)
 1. Fork 本项目: https://gitee.com/Philsz/yifei-ai-gd
 2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)

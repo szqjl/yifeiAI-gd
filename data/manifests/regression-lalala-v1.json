@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "name": "regression-lalala-v1",
+  "description": "M 系列对 lalala 固定回归集：20 局当前问题局面 + 10 局防回归。文件存对象存储，本文件仅登记元数据。",
+  "created": "2026-05-28",
+  "game_count_target": 30,
+  "storage": {
+    "provider": "tencent_cos",
+    "region": "ap-guangzhou",
+    "bucket": "填写你的桶名-APPID",
+    "prefix": "replays/regression-lalala-v1/",
+    "local_dir": "data/artifacts/replays/regression-lalala-v1",
+    "docs": "docs/governance/COS-接入指南.md"
+  },
+  "games": [
+    {
+      "id": "reg-001",
+      "object_key": "replays/regression-lalala-v1/reg-001.json",
+      "sha256": "",
+      "tags": ["placeholder"],
+      "source": "",
+      "added": "2026-05-28",
+      "notes": "替换为真实对局；每类根因修复后可更新至多 5 局，总数保持 30"
+    }
+  ],
+  "update_policy": {
+    "max_replacements_per_rca_cycle": 5,
+    "total_count_fixed": 30
+  }
+}
