@@ -99,7 +99,27 @@
 - 所有分析: [analysis/](analysis/)
 - 修复记录: [fixes/](fixes/)
 
-## 📖 推荐阅读顺序
+## 🔧 已知字段约定 / 近期修复
+
+### selfRank / oppoRank / curRank 写入位置（2026-05-29）
+
+平台 `act` 消息里有 `selfRank / oppoRank / curRank`（PDF 第 3 页明文），但 `notify/play` 广播不带，所以历史 `game_records/*.json` 里：
+
+| 写入路径 | 来源 | 历史情况 |
+|---|---|---|
+| `game_info` | `start_game(game_info=...)` 调用方传入 | 调用方传 None → 全 None |
+| `actions[].context` | `notify/play` 通知里的 data | 该消息不含级牌 → 全 None |
+| `my_decisions[].context` | yf1_m1.py:381 / yf2_m1.py:385 自建字典 | **历史压根没塞这三字段** ❌ |
+
+**修复**：[src/communication/yf1_m1.py](../src/communication/yf1_m1.py#L385-L391) 和 [src/communication/yf2_m1.py](../src/communication/yf2_m1.py#L385-L391) 的 `decision_context` 增加 `selfRank/oppoRank/curRank`，从下一次跑就有真实级牌。
+
+**消费侧**：[scripts/tools/yf_replay.py](../scripts/tools/yf_replay.py#L498-L527) 的 `_resolve_levels` 改成三层 fallback：`game_info → my_decisions[].context → actions[].context`，旧文件仍 fallback 到 `'2'`，不会破坏回放。
+
+实测新记录 `20260529003420492436 [yf1_m1]-[25].json`：`selfRank='2', oppoRank='A', curRank='A'`（对手升 A，与昨日 0 胜结论一致）。
+
+---
+
+
 
 ### 新用户入门
 1. [项目主README](../README.md) - 项目总览
@@ -126,5 +146,5 @@
 
 ---
 
-**最后更新**: 2025-01-10  
+**最后更新**: 2026-05-29（新增「selfRank/oppoRank/curRank 写入位置」一节）
 **维护者**: AI Assistant

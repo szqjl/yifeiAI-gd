@@ -316,7 +316,7 @@ __pycache__/
 - [x] **根目录脚本收敛完成**：短期保留 `batch_executor_gui_m1.py`、`start_gui.py` 两个入口
 - [x] README 增加「掼蛋与平台基础知识（新手必读）」摘要（`9c5adb9`）
 - [x] `doc/M2_OPTIMIZATION.md`、`doc/M3_DIAGNOSIS.M2.md` → `docs/guandan-brain/`（重命名为 `M3_DIAGNOSIS.md`；`9910df3`）；空目录 `doc/` 已删除
-- [ ] **`scripts/tools/yf_replay.py`**：路径已迁入，**本地仍有未提交改动**（其他 Agent 编辑中，勿误 push）
+- [x] **`scripts/tools/yf_replay.py`**：功能优化已推送（`126b573`，Claude）
 - [ ] deprecated 标记 v4/v5_stage5 客户端
 - [ ] m3 `contracts/` 与目录 `src/m/`、`src/v/` 渐进迁移
 - [ ] v7 评审通过后合并 `v7-dev` → `m-dev`
