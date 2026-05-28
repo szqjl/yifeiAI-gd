@@ -46,7 +46,7 @@ class YiFeiReplayGUI:
         """初始化GUI"""
         self.root = root
         self.root.title("YiFei AI 掼蛋回放系统 - 整合版")
-        self.root.geometry("1200x800")
+        self.root.geometry("1280x920")
         self.root.resizable(True, True)
         
         # 游戏数据
@@ -145,6 +145,8 @@ class YiFeiReplayGUI:
         # 牌面Canvas
         self.card_canvas = tk.Canvas(card_frame, bg="#006400")
         self.card_canvas.pack(fill=tk.BOTH, expand=True)
+        # 拖动窗口时同步重绘（按 canvas 当前尺寸重新计算布局）
+        self.card_canvas.bind("<Configure>", lambda e: self._draw_current_step())
         
         # 4. 底部信息区
         info_frame = ttk.LabelFrame(main_frame, text="游戏信息", padding="5")
@@ -171,6 +173,9 @@ class YiFeiReplayGUI:
         
         # 过滤掉增强版文件，只显示原始记录
         self.game_records = [f for f in game_files if not f.name.startswith("enhanced_")]
+
+        # 倒序排列：最新的在最上面（按文件修改时间 desc）
+        self.game_records.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         
         # 更新下拉列表
         game_names = [f.name for f in self.game_records]
@@ -491,10 +496,35 @@ class YiFeiReplayGUI:
         return labels
 
     def _resolve_levels(self):
-        """从 game_info.selfRank / oppoRank 读级数；缺失或 None 时默认 '2'。"""
-        gi = (self.current_game_data or {}).get('game_info', {}) or {}
-        self.self_level = str(gi.get('selfRank') or '2')
-        self.opp_level = str(gi.get('oppoRank') or '2')
+        """读级数，优先级：game_info → my_decisions[].context → actions[].context；全缺 fallback '2'。
+
+        Why fallback：yf1_m1/yf2_m1 在 record_decision() 写入 my_decisions[].context 时才会带
+        selfRank/oppoRank/curRank（act 消息里有）；广播 notify/play 不带级牌，导致 actions[].context
+        与 game_info 大概率是 None。
+        """
+        data = self.current_game_data or {}
+        gi = data.get('game_info') or {}
+        self_level = gi.get('selfRank')
+        opp_level = gi.get('oppoRank')
+
+        if not self_level or not opp_level:
+            for d in data.get('my_decisions') or []:
+                ctx = d.get('context') or {}
+                self_level = self_level or ctx.get('selfRank')
+                opp_level = opp_level or ctx.get('oppoRank')
+                if self_level and opp_level:
+                    break
+
+        if not self_level or not opp_level:
+            for a in data.get('actions') or []:
+                ctx = a.get('context') or {}
+                self_level = self_level or ctx.get('selfRank')
+                opp_level = opp_level or ctx.get('oppoRank')
+                if self_level and opp_level:
+                    break
+
+        self.self_level = str(self_level or '2')
+        self.opp_level = str(opp_level or '2')
 
     def _organize_hand_columns(self, cards):
         """把手牌按 rank 分组，返回按显示顺序排好的 [(rank, [cards])]。"""
@@ -711,13 +741,14 @@ class YiFeiReplayGUI:
         w = self.card_canvas.winfo_width() or 1200
         h = self.card_canvas.winfo_height() or 720
         if seat == 'bottom':
-            return dict(orientation='horizontal', x=w // 2, y=h - 160, label_y=h - 32)
+            return dict(orientation='horizontal', x=w // 2, y=h - 230, label_y=h - 28)
         if seat == 'top':
-            return dict(orientation='horizontal', x=w // 2, y=85, label_y=60)
+            return dict(orientation='horizontal', x=w // 2, y=100, label_y=70)
+        # 左右对手：label 上移到画布纵向中心（≈ 中央"大王/动作牌" 的高度）
         if seat == 'left':
-            return dict(orientation='vertical', x=70, y=h // 2 - 20, label_y=h // 2 + 270)
+            return dict(orientation='vertical', x=70, y=h // 2 - 20, label_y=h // 2)
         if seat == 'right':
-            return dict(orientation='vertical', x=w - 105, y=h // 2 - 20, label_y=h // 2 + 270)
+            return dict(orientation='vertical', x=w - 105, y=h // 2 - 20, label_y=h // 2)
         return dict(orientation='horizontal', x=w // 2, y=h // 2, label_y=h // 2)
 
     def _draw_level_badges(self):
@@ -791,10 +822,10 @@ class YiFeiReplayGUI:
         cols = self._organize_hand_columns(cards)
         if not cols:
             return
-        cw, ch = 34, 48
+        cw, ch = 54, 77            # 牌张尺寸：再加 ~1/5（45×64 → 54×77）
         if layout['orientation'] == 'horizontal':
             col_w = cw + 2
-            stack_dy = 16
+            stack_dy = 26          # 同步放大：22 → 26
             total_w = len(cols) * col_w
             sx = layout['x'] - total_w // 2
             sy = layout['y']
@@ -805,7 +836,7 @@ class YiFeiReplayGUI:
                     self._draw_card_normal(cx, cy, cw, ch, card, False)
         else:  # vertical
             row_h = ch + 2
-            stack_dx = 12
+            stack_dx = 18          # 同步放大：16 → 18
             total_h = len(cols) * row_h
             sy = layout['y'] - total_h // 2
             sx = layout['x']
@@ -844,31 +875,38 @@ class YiFeiReplayGUI:
         self.card_canvas.create_rectangle(x, y, x+width, y+height,
                                         fill="#FFFFFF", outline="black", width=1)
 
-        # 大小王特殊渲染
-        if rank == 'R':
-            self.card_canvas.create_text(x+3, y+2, text="R", anchor=tk.NW,
-                                          font=('Arial', 9, 'bold'), fill="red")
-            self.card_canvas.create_text(x+width/2, y+height-9,
-                                          text="JOKER", anchor=tk.CENTER,
-                                          font=('Arial', 6, 'bold'), fill="red")
-            return
-        if rank == 'B':
-            self.card_canvas.create_text(x+3, y+2, text="B", anchor=tk.NW,
-                                          font=('Arial', 9, 'bold'), fill="black")
-            self.card_canvas.create_text(x+width/2, y+height-9,
-                                          text="JOKER", anchor=tk.CENTER,
-                                          font=('Arial', 6, 'bold'), fill="black")
+        cx_mid = x + width / 2
+        cy_mid_lower = y + height * 0.66  # 中间大花色稍偏下，避免和顶部 rank 挤
+
+        # 大小王特殊渲染：左上竖排 JOKER（红/黑）+ 中间放大的"大/小" + 底部 JOKER 横排
+        if rank in ('R', 'B'):
+            joker_color = "red" if rank == 'R' else "black"
+            big_char = "大" if rank == 'R' else "小"
+            # 竖排 JOKER（左上，5 个字符纵向排列；堆叠时露顶部 J 就能识别）
+            for i, ch in enumerate("JOKER"):
+                self.card_canvas.create_text(x+5, y+3 + i*12, text=ch, anchor=tk.NW,
+                                              font=('Arial', 9, 'bold'), fill=joker_color)
+            # 中间放大字（右半部分，避开左侧竖排 JOKER）
+            self.card_canvas.create_text(x + width*0.66, y + height*0.55,
+                                          text=big_char, anchor=tk.CENTER,
+                                          font=('Microsoft YaHei', 20, 'bold'), fill=joker_color)
             return
 
         display_rank = RANK_DISPLAY.get(rank, rank)
         display_suit = SUIT_DISPLAY.get(suit, suit)
         color = "black" if suit in ('S', 'C') else "red"
 
-        # 左上角 rank + suit（一行内）
-        self.card_canvas.create_text(x+3, y+2, text=display_rank, anchor=tk.NW,
-                                    font=('Arial', 9, 'bold'), fill=color)
-        self.card_canvas.create_text(x+3, y+13, text=display_suit, anchor=tk.NW,
-                                    font=('Arial', 9, 'bold'), fill=color)
+        # 左上角 rank + suit 同一行（堆叠后只露顶部也能看清是什么牌）
+        rank_font = ('Arial', 14, 'bold')
+        suit_font = ('Arial', 14, 'bold')
+        self.card_canvas.create_text(x+3, y+1, text=display_rank, anchor=tk.NW,
+                                    font=rank_font, fill=color)
+        suit_x = x + (24 if display_rank == '10' else 17)
+        self.card_canvas.create_text(suit_x, y+1, text=display_suit, anchor=tk.NW,
+                                    font=suit_font, fill=color)
+        # 中间大花色（堆叠遮挡时看不到也无所谓，顶牌完整露出时增强辨识）
+        self.card_canvas.create_text(cx_mid, cy_mid_lower, text=display_suit, anchor=tk.CENTER,
+                                    font=('Arial', 26, 'bold'), fill=color)
     
     def _draw_card_vertical(self, x, y, width, height, card, is_back=False):
         """绘制垂直方向的牌"""
@@ -954,9 +992,9 @@ class YiFeiReplayGUI:
         canvas_width = self.card_canvas.winfo_width() or 1200
         canvas_height = self.card_canvas.winfo_height() or 720
 
-        # 卡牌尺寸（出牌区比手牌区稍大）
-        card_width = 48
-        card_height = 66
+        # 卡牌尺寸（出牌区跟手牌区同尺寸一致）
+        card_width = 54
+        card_height = 77
         spacing = 6
 
         cards_n = len(cards) if isinstance(cards, list) else 0
@@ -979,25 +1017,40 @@ class YiFeiReplayGUI:
         }
         display_type = action_types.get(action_type, action_type)
 
-        # 顶部标签：玩家 + 动作类型
-        self.card_canvas.create_text(canvas_width // 2, start_y - 32,
-                                    text=f"{player_name}  {display_type}",
-                                    fill="#FFD700", font=("Microsoft YaHei", 11, "bold"),
-                                    anchor=tk.CENTER)
-
         if (action_type or '').upper() == 'PASS' or display_type == '过牌':
-            # 过牌：中央显示"过"
-            self.card_canvas.create_text(canvas_width // 2, canvas_height // 2,
-                                        text="过", fill="#FFFFFF",
-                                        font=("Microsoft YaHei", 36, "bold"), anchor=tk.CENTER)
+            # 过牌：亮红 + 黄色 halo，在深蓝背景上最显眼
+            cx_pass = canvas_width // 2
+            cy_pass = canvas_height // 2
+            for dx, dy in ((-3, 0), (3, 0), (0, -3), (0, 3), (-2, -2), (2, -2), (-2, 2), (2, 2)):
+                self.card_canvas.create_text(cx_pass + dx, cy_pass + dy,
+                                              text="过", fill="#FFEB3B",
+                                              font=("Microsoft YaHei", 56, "bold"),
+                                              anchor=tk.CENTER)
+            self.card_canvas.create_text(cx_pass, cy_pass,
+                                        text="过", fill="#FF1744",
+                                        font=("Microsoft YaHei", 56, "bold"), anchor=tk.CENTER)
+            # PASS 标签放在"过"字下方
+            self.card_canvas.create_text(canvas_width // 2, cy_pass + 50,
+                                        text=f"{player_name}  {display_type}",
+                                        fill="#FFD700", font=("Microsoft YaHei", 11, "bold"),
+                                        anchor=tk.CENTER)
         elif isinstance(cards, list) and cards:
             for i, card in enumerate(cards):
                 cx = start_x + i * (card_width + spacing)
                 self._draw_card_normal(cx, start_y, card_width, card_height, card, False)
+            # 出牌动作标签：放在中央牌张下方（避免被玩家 0 的手牌遮挡）
+            self.card_canvas.create_text(canvas_width // 2, start_y + card_height + 16,
+                                        text=f"{player_name}  {display_type}",
+                                        fill="#FFD700", font=("Microsoft YaHei", 11, "bold"),
+                                        anchor=tk.CENTER)
         else:
             self.card_canvas.create_text(canvas_width // 2, canvas_height // 2,
                                         text=display_type, fill="#FFFFFF",
                                         font=("Microsoft YaHei", 24, "bold"), anchor=tk.CENTER)
+            self.card_canvas.create_text(canvas_width // 2, canvas_height // 2 + 38,
+                                        text=player_name,
+                                        fill="#FFD700", font=("Microsoft YaHei", 11, "bold"),
+                                        anchor=tk.CENTER)
     
     def _highlight_current_player(self, player_pos):
         """高亮显示当前行动的玩家"""
