@@ -53,7 +53,7 @@
 
 **`tests/`（10，新入库）：** `test_p0_4clients`、`test_m1_strategy_quick`、`test_p0_*`、`test_v7_*`、`test_gui_path_validation`、`test_batch_loop`、`test_yfv5_model_integration`
 
-**第六批已完成（2026-05-28，`yf_replay.py` 暂留根目录）：**
+**第六批已完成（2026-05-28）：**
 
 **`tests/` +5：** `test_data_loader`、`test_gui_launch`、`test_simple_data_loader`、`test_ultimate_win_rate_model`、`test_win_rate_training`
 
@@ -62,8 +62,6 @@
 **`scripts/tools/` +5：** `delete_non_replay_records`、`feishu_gateway_auth`、`feishu_kanban_card_generator`、`replay`、`fix_model_compatibility`
 
 **`scripts/verify/` +1：** `p0_verification_auto`
-
-**暂留根目录：** `yf_replay.py`（其他 Agent 编辑中）
 
 **第七批已完成（2026-05-28）：**
 
@@ -83,11 +81,7 @@
 
 **根目录短期保留：** `batch_executor_gui_m1.py`、`start_gui.py`
 
-## 建议保留在根目录（短期）
-
-`train_stage*.py`、`monitor_training.py`、`check_training_progress*.py`
-
-### V7 实验
+### 训练相关（V 线，非 M 日常）
 
 `start_v7_*.py`、`diagnose_v7_connection.py`
 
