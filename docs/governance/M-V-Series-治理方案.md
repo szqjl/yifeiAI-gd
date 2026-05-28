@@ -275,21 +275,22 @@ __pycache__/
 
 ### Phase 1 — 仓库卫生（1 天）
 
-- [ ] `git checkout m1-dev && git pull origin m1-dev`
-- [ ] 本地 `main` 打归档 tag，日常不在 `main` 提交
-- [ ] `git fetch origin --prune`；GitHub `develop` 删除后 `git fetch github --prune`
-- [ ] 确认 `credential.helper=manager`
+- [x] `git checkout m1-dev && git pull origin m1-dev`
+- [x] 本地 `main` 打归档 tag `archive/main-pre-governance-20260528`，日常不在 `main` 提交
+- [x] `git fetch origin --prune`；`git fetch github --prune`
+- [ ] GitHub 远程 `develop` 删除（待网页/API）
+- [x] 确认 `credential.helper=manager`
 
 ### Phase 2 — 文档与 manifest（1 天）
 
-- [ ] 维护 `data/manifests/regression-lalala-v1.json`
-- [ ] 上传 30 局至 OSS/COS
-- [ ] README 增加「分支策略」链接至本文档
+- [x] 维护 `data/manifests/regression-lalala-v1.json`（模板）
+- [ ] 上传 30 局至 COS（待配置 `config/cos.env`）
+- [x] README 增加治理 / COS 链接
 
 ### Phase 3 — `.gitignore` 与清单（2–3 天）
 
-- [ ] 收紧 `models/`、`logs/`、`training_logs/`
-- [ ] 编写 `docs/repo-cleanup-inventory.md`（根目录脚本归类，待迁移）
+- [x] 收紧 `models/`、`logs/`、`training_logs/`、`data/artifacts/`
+- [x] 编写 `docs/repo-cleanup-inventory.md`（根目录脚本归类，待迁移）
 
 ### Phase 4 — 代码收敛（多 PR，按需）
 
