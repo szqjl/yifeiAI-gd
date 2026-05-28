@@ -6,21 +6,23 @@
   "game_count_target": 30,
   "storage": {
     "provider": "tencent_cos",
-    "region": "ap-guangzhou",
-    "bucket": "填写你的桶名-APPID",
-    "prefix": "replays/regression-lalala-v1/",
+    "region": "ap-shanghai",
+    "bucket": "hermes-1377564594",
+    "artifact_prefix": "yifei-gd/",
+    "prefix": "yifei-gd/replays/regression-lalala-v1/",
     "local_dir": "data/artifacts/replays/regression-lalala-v1",
     "docs": "docs/governance/COS-接入指南.md"
   },
   "games": [
     {
       "id": "reg-001",
-      "object_key": "replays/regression-lalala-v1/reg-001.json",
-      "sha256": "",
-      "tags": ["placeholder"],
-      "source": "",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260113110809115923 [yf1_m1]-[opponent_1_3]-[19]-[None].json",
+      "sha256": "c0ce93cf0d11c0605a8a0ceb0cb2219c55be48369ecf30059e74814dd73bdbea",
+      "tags": ["lalala", "yf1_m1"],
+      "source": "game_records/20260113110809115923 [yf1_m1]-[opponent_1_3]-[19]-[None].json",
+      "game_id": "20260113110809115923",
       "added": "2026-05-28",
-      "notes": "替换为真实对局；每类根因修复后可更新至多 5 局，总数保持 30"
+      "notes": "COS 试上传首局；余 29 局待登记"
     }
   ],
   "update_policy": {

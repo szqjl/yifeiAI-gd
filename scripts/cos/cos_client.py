@@ -24,6 +24,14 @@ def load_env_file(path: Path = ENV_FILE) -> None:
         os.environ.setdefault(key.strip(), value.strip())
 
 
+def artifact_object_key(relative: str) -> str:
+    """拼接 COS_ARTIFACT_PREFIX + 相对路径，如 yifei-gd/replays/.../file.json"""
+    root = os.environ.get("COS_ARTIFACT_PREFIX", "").strip()
+    if root and not root.endswith("/"):
+        root += "/"
+    return f"{root}{relative.lstrip('/')}"
+
+
 def get_cos_client() -> Tuple["CosS3Client", str, str]:
     """
     返回 (client, bucket, region)。

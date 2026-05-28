@@ -12,7 +12,7 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
-from cos_client import get_cos_client, load_env_file
+from cos_client import artifact_object_key, get_cos_client, load_env_file
 
 REPO_ROOT = _SCRIPT_DIR.parents[1]
 ENV_FILE = REPO_ROOT / "config" / "cos.env"
@@ -45,7 +45,7 @@ def main() -> int:
 
     game_id = args.game_id or src.stem
     prefix = args.prefix if args.prefix.endswith("/") else args.prefix + "/"
-    object_key = f"{prefix}{src.name}"
+    object_key = artifact_object_key(f"{prefix}{src.name}")
     digest = sha256_file(src)
 
     print(f"[upload] {src} -> cos://{bucket}/{object_key}")
