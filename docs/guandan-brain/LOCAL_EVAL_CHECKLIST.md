@@ -9,7 +9,7 @@
 
 - [ ] Python 可用（`py` / `python`）  
 - [ ] 离线服务器 **`guandan_offline_v1006.exe`** 路径已就绪（与 `EVAL.md` / GUI 默认探测一致）  
-- [ ] 分支与任务一致（M1 相关建议 **m1-dev**）
+- [ ] 分支与任务一致（M1 相关建议 **m-dev**）
 
 **说明**：离线服 **`guandan_offline_v1006.exe`** 可能已出现在你的工作区（常见为 `server/guandan_offline_v1006.exe`，或你从平台包解压/复制到任意路径）；也可能**未**纳入 Git、仅在本机某绝对路径——二者都正常。在 GUI 中选对该 exe，或无头 CLI 使用 `--server-path "<路径>"`。**IDE 里的助手**未必能索引到该二进制（忽略规则、沙箱或未同步），故仍以**你本机实际存在的路径**为准；`batch_executor_gui_m1.py` 的 `possible_paths` 会依次探测若干默认位置。
 

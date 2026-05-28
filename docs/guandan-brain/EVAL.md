@@ -47,7 +47,7 @@ python -m batch_executor --server-path "<SERVER_EXE>" --diagnose-only
 - **场景说明**：[`scenarios/M1_yf1_vs_yf2_comparison.md`](scenarios/M1_yf1_vs_yf2_comparison.md)（含 **§6 已测结果** 与 `game_id` 列表）。  
 - **做法**：用 M1 四客户端跑对局，从 `game_records/` 中成对文件（`*[yf1_m1]*.json` / `*[yf2_m1]*.json` 同 `game_id`）解析「我的决策」数组，统计 PASS 率与近似「问题 PASS」（`actionList_size>1` 仍选 PASS）。
 
-**实测结果（`m1-dev`，2026-04-21，写入大脑真源）**
+**实测结果（`m-dev`，2026-04-21，写入大脑真源）**
 
 | 指标 | yf1_m1（座位 0） | yf2_m1（座位 2） |
 |------|------------------|------------------|
@@ -74,13 +74,13 @@ python -m batch_executor --server-path "<SERVER_EXE>" --diagnose-only
 | **GUA-001** | smoke / infra | `scenarios/GUA-001_diagnose_only.md` | `python -m batch_executor --diagnose-only` 退出码 0，服务器路径有效 | — | 需本机存在 `<SERVER_EXE>` |
 | **GUA-002** | rules / repo | `scenarios/GUA-002_client_paths_golden.md`、`scenarios/client_sets.json` | 与当前分支一致的键（如 `m1`/`v4`/`v5`）下各脚本在仓库内存在；`v6` 若本分支无 `yf1_v6.py` 等则跳过；坐位语义 0+2 / 1+3 | — | 可做「文件存在」断言 |
 | **GUA-003** | policy / batch | 无头 CLI + `client_sets.json` 中任一键（如 `v4`） | 给定 `--target-games 1` 时流程可完成且无客户端路径报错（完整胜负依赖环境与引擎） | — | 最小对局复现时与 GUA-001 配合 |
-| **M1-yf1-yf2** | observation | `scenarios/M1_yf1_vs_yf2_comparison.md` + `game_records` | **10** 个成对 `game_id`：yf1 PASS **54.78%**（230 条决策）、yf2 **55.70%**（228 条）；近似问题 PASS **7 / 10**；结论：**无明显一方更差** | m1-dev · 2026-04-21 | **GUA-020 closed**；详见 `EVAL.md` 本节与场景文档 §6 |
+| **M1-yf1-yf2** | observation | `scenarios/M1_yf1_vs_yf2_comparison.md` + `game_records` | **10** 个成对 `game_id`：yf1 PASS **54.78%**（230 条决策）、yf2 **55.70%**（228 条）；近似问题 PASS **7 / 10**；结论：**无明显一方更差** | m-dev · 2026-04-21 | **GUA-020 closed**；详见 `EVAL.md` 本节与场景文档 §6 |
 
 ## 手工验收清单（可选）
 
 - [ ] 选定版本的四条客户端与 `scenarios/client_sets.json` 一致。
 - [ ] 离线服务器路径在 GUI 或 CLI 中指向真实 `.exe`。
-- [ ] M1 分支约定：若团队要求仅在 `m1-dev`，以团队文档为准（`START_M1_GUI.bat` 注释）。
+- [ ] M1 分支约定：若团队要求仅在 `m-dev`，以团队文档为准（`START_M1_GUI.bat` 注释）。
 
 ## 通过标准（本轮发布）
 

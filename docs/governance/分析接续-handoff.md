@@ -19,7 +19,7 @@
 
 ## 3. 新电脑 / 新 Agent 怎么继续
 
-1. `git pull`（`m1-dev`）
+1. `git pull`（`m-dev`）
 2. 打开 `docs/analysis/handoffs/` 下**日期最新**的一篇
 3. 读 handoff 里的 **「下一步唯一动作」**（只写一条主任务，避免 Agent 发散）
 4. 若 handoff 写了 COS 路径：`python scripts/cos/sync_pull_all.py` 或按路径单独拉
@@ -40,7 +40,7 @@
 | 字段 | 内容 |
 |------|------|
 | 日期 | YYYY-MM-DD |
-| 分支 | m1-dev @ <commit 短 hash> |
+| 分支 | m-dev @ <commit 短 hash> |
 | 状态 | 进行中 / 已结论待验证 / 已结案 |
 | 负责人 | （可选） |
 

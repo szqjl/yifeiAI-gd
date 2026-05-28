@@ -4,7 +4,7 @@
 
 | | lalala | M1 |
 |---|---|---|
-| 来源 | 一等奖作品，`action.py` 1412行 | yifeGDBOT m1-dev 分支，6个文件 |
+| 来源 | 一等奖作品，`action.py` 1412行 | yifeGDBOT m-dev 分支，6个文件 |
 | 系列 | 未知（纯硬编码） | M系列（Hardcoded Rules），与V系列并列 |
 | 入口 | `rule_parse()` 单入口 | `decide()` → `StageRouter` → Handler |
 

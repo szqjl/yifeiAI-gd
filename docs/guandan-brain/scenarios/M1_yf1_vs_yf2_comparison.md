@@ -5,7 +5,7 @@
 
 ## 1. 前提
 
-- 分支建议：**m1-dev**（与 `START_M1_GUI.bat` 一致）。  
+- 分支建议：**m-dev**（与 `START_M1_GUI.bat` 一致）。  
 - 四条客户端：`scenarios/client_sets.json` 中 **`m1`** 键（0/2 为 YiFei，1/3 为 lalala）。  
 - 评测入口见 **`EVAL.md`**（M1 GUI / 无头 CLI）。
 
@@ -50,7 +50,7 @@
 
 ---
 
-## 6. 已测结果（真源，m1-dev，2026-04-21）
+## 6. 已测结果（真源，m-dev，2026-04-21）
 
 数据来源：`game_records/` 下 **`yf1_m1` + `yf2_m1` 成对 `game_id` 共 10 个**（文件名形如 `<game_id> [yf1_m1]-[opponent_1_3]-[...].json`）。
 

@@ -185,7 +185,7 @@ if hour == 12:  # ❌ 错误，应该从系统时间获取
 ### 当前分支
 
 - **`main`**: 主分支，用于最终合并和发布
-- **`m1-dev`**: M1 系列硬编码规则引擎分支（本地开发）
+- **`m-dev`**: M1 系列硬编码规则引擎分支（本地开发）
   - 包含：`yf1_m1.py`, `yf2_m1.py`, `rule_based_decision_engine_m1.py`
   - 特点：全新的硬编码规则引擎，5阶段细分路由
 - **`m1-dev-clean`**: M1 系列干净分支（已推送，推荐用于训练）
@@ -199,7 +199,7 @@ if hour == 12:  # ❌ 错误，应该从系统时间获取
 
 ```bash
 # 切换到 M1 分支
-git checkout m1-dev
+git checkout m-dev
 
 # 切换到 V6 分支
 git checkout v6-dev
@@ -209,7 +209,7 @@ git checkout main
 ```
 
 **⚠️ 重要提醒**：测试不同版本时必须切换分支！
-- 测试 M1：必须在 `m1-dev` 分支运行 `yf1_m1.py`
+- 测试 M1：必须在 `m-dev` 分支运行 `yf1_m1.py`
 - 测试 V6：必须在 `v6-dev` 分支运行 `yf1_v6.py`
 
 ### M1 系列使用说明
@@ -225,7 +225,7 @@ git checkout main
 
 1. **切换到 M1 分支**
 ```bash
-git checkout m1-dev
+git checkout m-dev
 ```
 
 2. **运行 M1 客户端**
@@ -269,7 +269,7 @@ RuleBasedDecisionEngineM1 (主入口)
 **方式1：GUI批量测试（推荐，最简单）**：
 ```bash
 # 1. 切换到 M1 分支
-git checkout m1-dev
+git checkout m-dev
 
 # 2. 启动M1测试GUI
 START_M1_GUI.bat
@@ -280,7 +280,7 @@ START_M1_GUI.bat
 **方式2：手动测试**：
 ```bash
 # 1. 切换到 M1 分支
-git checkout m1-dev
+git checkout m-dev
 
 # 2. 启动第一个客户端（Player 0）
 python src/communication/yf1_m1.py
@@ -348,8 +348,8 @@ guandan_ai_client/
 │
 ├── src/
 │   ├── communication/      # 通信模块
-│   │   ├── yf1_m1.py      # M1系列客户端1（m1-dev分支）
-│   │   ├── yf2_m1.py      # M1系列客户端2（m1-dev分支）
+│   │   ├── yf1_m1.py      # M1系列客户端1（m-dev分支）
+│   │   ├── yf2_m1.py      # M1系列客户端2（m-dev分支）
 │   │   ├── yf1_v6.py       # V6系列客户端1（v6-dev分支）
 │   │   └── yf2_v6.py       # V6系列客户端2（v6-dev分支）
 │   ├── game_logic/         # 游戏逻辑模块
@@ -619,7 +619,7 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 欢迎提交Issue和Pull Request！
 
 ### 贡献指南
-- 默认向 **`m1-dev`** 提交 PR；规范见 [M/V 系列仓库治理方案](docs/governance/M-V-Series-治理方案.md)
+- 默认向 **`m-dev`** 提交 PR；规范见 [M/V 系列仓库治理方案](docs/governance/M-V-Series-治理方案.md)
 1. Fork 本项目: https://gitee.com/Philsz/yifei-ai-gd
 2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)

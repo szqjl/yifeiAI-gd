@@ -21,7 +21,7 @@ category: productivity
 ```
 ┌─────────────────────────────────────────────────────┐
 │  M1 系列（硬编码规则引擎）        V4/V5/V6 系列（神经网络/混合）│
-│  分支: m1-dev                 分支: v6-dev（规划）          │
+│  分支: m-dev                 分支: v6-dev（规划）          │
 │  RuleBasedDecisionEngineM1     HybridDecisionEngineV4/V5  │
 │  5阶段细分路由                    3层/4层决策架构             │
 │  纯规则，无模型文件               需要训练，有bc_model文件     │
@@ -128,7 +128,7 @@ category: productivity
 
 ```bash
 cd /c/yifeGDBOT
-git checkout m1-dev
+git checkout m-dev
 ```
 
 ### 离线批量测试（推荐）

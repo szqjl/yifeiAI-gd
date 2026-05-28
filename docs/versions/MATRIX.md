@@ -7,7 +7,7 @@
 | 字段 | 值 |
 |------|-----|
 | 最后更新 | 2026-05-28 |
-| 默认开发分支 | `m1-dev` |
+| 默认开发分支 | `m-dev` |
 | canonical 远程 | Gitee `origin` |
 | V-default-smoke | **OFF** |
 
@@ -31,7 +31,7 @@
 
 | 分支 | 系列 | 跟踪远程 | 角色 |
 |------|------|----------|------|
-| `m1-dev` | M | `origin/m1-dev` | **主开发 / 集成** |
+| `m-dev` | M | `origin/m-dev` | **主开发 / 集成** |
 | `v7-dev` | V-nn | `origin/v7-dev` | v7 实验 |
 | `v6-dev` | V-learn | `origin/v6-dev` | 归档，默认不合并 |
 | `main` | 发布 | `origin/main` | 稳定快照 |
@@ -43,8 +43,8 @@
 
 | 场景 | 分支 | 客户端 | 决策核心 |
 |------|------|--------|----------|
-| **当前：M × lalala** | `m1-dev` | `yf1_m1.py`, `yf2_m1.py` | M 硬编码策略 + lalala 适配 |
-| V-learn 实验 | `m1-dev` / 特性分支 | `yf1_v5.py`, `yf2_v5.py` | `hybrid_decision_engine_v5` 等 |
+| **当前：M × lalala** | `m-dev` | `yf1_m1.py`, `yf2_m1.py` | M 硬编码策略 + lalala 适配 |
+| V-learn 实验 | `m-dev` / 特性分支 | `yf1_v5.py`, `yf2_v5.py` | `hybrid_decision_engine_v5` 等 |
 | V-nn 实验 | `v7-dev` | `yf1_v7.py`, `yf2_v7.py` | `ultimate_win_rate_engine_v7.py` |
 | 历史 | 本地旧 `main` | v4/v5/stage* | 仅查阅，不扩展 |
 
@@ -71,7 +71,7 @@
 | 启用日期 | — |
 | ON 后默认 V 薄冒烟 | v5（待定，启用时在此填写） |
 
-### 4.3 改 M → `m1-dev` PR（当前）
+### 4.3 改 M → `m-dev` PR（当前）
 
 - M 冒烟（§ 治理方案 7.3）
 - 30 局 replay diff（行为变更时）
@@ -93,4 +93,4 @@
 
 | 日期 | 变更 |
 |------|------|
-| 2026-05-28 | 初版：V-smoke OFF；m1-dev 为默认；30 局回归 |
+| 2026-05-28 | 初版：V-smoke OFF；m-dev 为默认；30 局回归 |
