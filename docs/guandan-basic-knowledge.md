@@ -1,6 +1,7 @@
 # M2 对战知识库
 
-> 重要：所有离线平台细节以 `offline_platform/掼蛋平台使用说明书v1006.pdf` 及 `offline_platform/guandan_offline_v1006/使用说明.pdf` 为准，本文档仅作简要梳理。
+> **新手入门**：README 已收录本节摘要 → [README.md § 掼蛋与平台基础知识](../README.md#掼蛋与平台基础知识新手必读)  
+> **权威来源**：离线平台细节以 `offline_platform/掼蛋平台使用说明书v1006.pdf` 及 `offline_platform/guandan_offline_v1006/使用说明.pdf` 为准；本文档为开发用完整梳理。
 
 ---
 

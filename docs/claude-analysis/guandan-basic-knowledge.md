@@ -1,5 +1,6 @@
 # M2 对战知识库
 
+> **主文档**：请以 [docs/guandan-basic-knowledge.md](../guandan-basic-knowledge.md) 为准（README 已收录新手摘要）。  
 > 重要：所有离线平台细节以 `offline_platform/掼蛋平台使用说明书v1006.pdf` 及 `offline_platform/guandan_offline_v1006/使用说明.pdf` 为准，本文档仅作简要梳理。
 
 ---
