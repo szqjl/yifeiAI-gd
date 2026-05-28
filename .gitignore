@@ -25,6 +25,7 @@ models/*_training_history.json
 # Temporary files
 tmp/
 *.tmp
+.batch_executor.lock
 
 # Python cache
 __pycache__/
