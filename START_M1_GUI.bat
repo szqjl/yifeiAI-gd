@@ -29,6 +29,8 @@ echo 正在启动GUI...
 echo ========================================
 echo.
 
-py batch_executor_gui_m1.py
+REM 注意：必须使用 python.exe（指向 Python 3.13，已装齐 websockets / psutil / torch 等依赖），
+REM 不能用 py.exe（默认指向 Python 3.14，缺 websockets，会导致客户端瞬间崩溃）。
+python batch_executor_gui_m1.py
 
 pause
