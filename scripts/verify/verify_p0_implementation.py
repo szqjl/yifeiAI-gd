@@ -7,8 +7,11 @@ P0改进完整性验证 - 检查所有代码文件和集成点
 import re
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 def main():
-    project_dir = Path(__file__).parent
+    project_dir = REPO_ROOT
 
     print("="*70)
     print("P0改进完整性验证报告")

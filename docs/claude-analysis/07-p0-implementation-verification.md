@@ -143,7 +143,7 @@ grep -c "P0-③: 主动传牌给队友" src/decision/phase_handlers.py
 
 3. **运行分析**
    ```bash
-   python analyze_game_rounds.py > docs/claude-analysis/p0_verification_results.md
+   python scripts/analysis/analyze_game_rounds.py > docs/claude-analysis/p0_verification_results.md
    ```
 
 4. **对比数据**

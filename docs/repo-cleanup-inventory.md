@@ -31,6 +31,16 @@
 
 `check_model_loading`、`check_model_optimizations`、`check_training_progress`、`check_stage7_dependencies`、`check_m1_records_for_training`、`check_model_battle_record`、`check_records_for_evaluator`、`check_latest_game_records`
 
+### 验证 / 分析 / 训练（Phase 4 第三批，2026-05-28）
+
+**`scripts/verify/`（6）：** `verify_p0_improvements`、`verify_p0_improvements_v2`、`verify_p0_implementation`、`verify_p0_final`、`verify_patch`、`verify_deletion`
+
+**`scripts/analysis/`（6）：** `analyze_and_improve_training`、`analyze_practical_records_for_training`、`analyze_game_record_format`、`analyze_loss_calculation`、`analyze_game_rounds`、`analyze_m1_games`
+
+**`scripts/training/`（3）：** `train_stage5_ultra_optimized`、`train_stage6_optimized`、`train_stage6_game_oriented`
+
+**根目录待迁（第四批）：** `train_stage7_online_rl`、`train_stage8_full_rl`、`train_strategy_tasks`；以及 `batch_*`、`clean_*` 等工具脚本
+
 ### 训练相关（V 线，非 M 日常）
 
 `train_stage*.py`、`monitor_training.py`、`check_training_progress*.py`
@@ -62,6 +72,7 @@
 ## 下一步（Phase 4 PR）
 
 1. ~~新建 `scripts/checks/`~~ ✅ 已建；**check/diagnose 全部 23 个**已迁入
-2. **第三批**：根目录 `verify_*.py` / `analyze_*.py` / 训练脚本 → `scripts/` 子目录
-3. 每次 PR 只迁一类（≤15 文件），更新 import 与文档
-4. 根目录 README 或 `docs/usage/` 更新启动命令
+2. ~~**第三批**~~ ✅ `scripts/verify/`（6）、`scripts/analysis/`（6）、`scripts/training/`（3）
+3. **第四批**：剩余 `train_*.py`（3 个）及 batch/clean 工具脚本
+4. 每次 PR 只迁一类（≤15 文件），更新 import 与文档
+5. 根目录 README 或 `docs/usage/` 更新启动命令

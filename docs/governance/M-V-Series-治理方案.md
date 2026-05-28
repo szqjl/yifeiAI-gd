@@ -297,7 +297,8 @@ __pycache__/
 
 - [x] 根目录 `check_*.py` / `diagnose_*.py` 第一批（15 个）→ `scripts/checks/`
 - [x] 根目录剩余 `check_*.py` 第二批（8 个）→ `scripts/checks/`
-- [ ] 根目录其余脚本（verify / analyze / train 等）→ `scripts/`（第三批起）
+- [x] 根目录 `verify_*.py` / `analyze_*.py` / 训练脚本第三批（15 个）→ `scripts/verify/`、`scripts/analysis/`、`scripts/training/`
+- [ ] 根目录其余脚本（train 剩余、batch/clean 工具等）→ `scripts/`（第四批起）
 - [ ] deprecated 标记 v4/v5_stage5 客户端
 - [ ] m3 `contracts/` 与目录 `src/m/`、`src/v/` 渐进迁移
 - [ ] v7 评审通过后合并 `v7-dev` → `m-dev`

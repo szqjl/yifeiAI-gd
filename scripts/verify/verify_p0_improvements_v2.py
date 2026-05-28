@@ -12,6 +12,8 @@ import threading
 from pathlib import Path
 from queue import Queue
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 def monitor_output(proc, name, output_queue):
     """监听进程输出"""
     try:
@@ -69,7 +71,7 @@ def wait_for_server_ready(server_process, timeout=30):
     return False
 
 def main():
-    project_dir = Path(__file__).parent
+    project_dir = REPO_ROOT
     os.chdir(project_dir)
 
     print("="*70)

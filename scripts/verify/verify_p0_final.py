@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-P0改进验证脚本 - 使用正确的平台启动模式
-基于 batch_executor/restart_manager.py 中的验证模式
+P0改进验证脚本 - 最终版本
+使用标准化的websockets客户端替代旧的ws4py客户端
 """
 
 import subprocess
@@ -12,8 +12,10 @@ import os
 import threading
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 def kill_existing_server():
-    """杀死任何现有的服务器进程，释放端口"""
+    """杀死任何现有的服务器进程"""
     try:
         import psutil
         for proc in psutil.process_iter(['name']):
@@ -25,58 +27,41 @@ def kill_existing_server():
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
                 pass
     except ImportError:
-        # 降级方案：使用 PowerShell
-        print("[清理] 使用PowerShell清理残留进程...")
-        os.system('powershell -Command "Get-Process guandan_offline_v1006 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"')
-
-    # 额外等待端口释放
+        os.system('taskkill /F /IM guandan_offline_v1006.exe 2>nul')
     time.sleep(2)
 
 def wait_for_server_ready(server_process, timeout=30):
-    """
-    等待服务器就绪
-
-    返回：
-    - True: 服务器就绪
-    - False: 超时或出错
-    """
+    """等待服务器就绪"""
     start_time = time.time()
-    check_interval = 1
-
-    print("[等待] 监听服务器输出，等待'Ready for connect'消息...")
+    print("[等待] 监听服务器输出...")
 
     while time.time() - start_time < timeout:
         try:
-            # 读取一行输出
             line = server_process.stdout.readline()
             if line:
                 line = line.strip()
                 print(f"[服务器] {line}")
-
-                # 检查就绪信号
-                if any(keyword in line.lower() for keyword in ["ready for connect", "server started", "listening", "waiting for players"]):
+                if "ready for connect" in line.lower():
                     print("✓ 检测到服务器就绪消息!")
                     return True
 
-            # 检查进程是否已退出
             if server_process.poll() is not None:
                 print(f"❌ 服务器进程已退出，返回码: {server_process.returncode}")
                 return False
-
         except Exception as e:
             print(f"[读取错误] {e}")
 
-        time.sleep(check_interval)
+        time.sleep(0.1)
 
     print(f"❌ 超时：{timeout}秒后仍未检测到服务器就绪")
     return False
 
 def main():
-    project_dir = Path(__file__).parent
+    project_dir = REPO_ROOT
     os.chdir(project_dir)
 
     print("="*70)
-    print("掼蛋P0改进验证脚本 - 正确的平台启动模式")
+    print("掼蛋P0改进验证脚本 - 最终版本（标准化客户端）")
     print("="*70)
 
     # [1] 清理残留进程
@@ -92,9 +77,6 @@ def main():
         return 1
 
     server_dir = exe_path.parent
-    print(f"    工作目录: {server_dir}")
-    print(f"    启动命令: {exe_path.name} 10")
-
     try:
         server_process = subprocess.Popen(
             [str(exe_path), "10"],
@@ -118,16 +100,17 @@ def main():
 
     print("✓ 服务器已就绪")
 
-    # [4] 额外等待，确保端口完全监听
+    # [4] 额外等待
     print("\n[步骤4] 等待2秒确保端口完全监听...")
     time.sleep(2)
     print("✓ 完成")
 
-    # [5] 启动客户端（需要4个完整客户端才能开始游戏）
-    print("\n[步骤5] 启动客户端（位置0,1,2,3 需全部连接）...")
+    # [5] 启动客户端
+    print("\n[步骤5] 启动4个客户端...")
     clients = []
+
     try:
-        # M1 AI 客户端
+        # yf1_m1 (位置0)
         yf1_proc = subprocess.Popen(
             [sys.executable, "src/communication/yf1_m1.py"],
             stdout=subprocess.PIPE,
@@ -135,26 +118,23 @@ def main():
             text=True,
             bufsize=1
         )
-        clients.append(yf1_proc)
+        clients.append(("yf1_m1(P0)", yf1_proc))
         print(f"✓ yf1_m1 (位置0) 已启动，PID: {yf1_proc.pid}")
         time.sleep(1)
 
-        # 平台内置的标准客户端（位置1,3）
-        client1_script = project_dir / "offline_platform/guandan_offline_v1006/clients/client1.py"
-        if client1_script.exists():
-            client1_proc = subprocess.Popen(
-                [sys.executable, str(client1_script)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                cwd=str(client1_script.parent)
-            )
-            clients.append(client1_proc)
-            print(f"✓ client1 (位置1) 已启动，PID: {client1_proc.pid}")
-            time.sleep(1)
+        # 标准客户端1 (位置1)
+        client1_proc = subprocess.Popen(
+            [sys.executable, "client_std_1.py"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        clients.append(("client1(STD)", client1_proc))
+        print(f"✓ client_std_1 (位置1) 已启动，PID: {client1_proc.pid}")
+        time.sleep(1)
 
-        # M1 AI 客户端
+        # yf2_m1 (位置2)
         yf2_proc = subprocess.Popen(
             [sys.executable, "src/communication/yf2_m1.py"],
             stdout=subprocess.PIPE,
@@ -162,46 +142,43 @@ def main():
             text=True,
             bufsize=1
         )
-        clients.append(yf2_proc)
+        clients.append(("yf2_m1(P2)", yf2_proc))
         print(f"✓ yf2_m1 (位置2) 已启动，PID: {yf2_proc.pid}")
         time.sleep(1)
 
-        # 平台内置的标准客户端（位置3）
-        client3_script = project_dir / "offline_platform/guandan_offline_v1006/clients/client3.py"
-        if client3_script.exists():
-            client3_proc = subprocess.Popen(
-                [sys.executable, str(client3_script)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                cwd=str(client3_script.parent)
-            )
-            clients.append(client3_proc)
-            print(f"✓ client3 (位置3) 已启动，PID: {client3_proc.pid}")
-            time.sleep(1)
+        # 标准客户端3 (位置3)
+        client3_proc = subprocess.Popen(
+            [sys.executable, "client_std_3.py"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        clients.append(("client3(STD)", client3_proc))
+        print(f"✓ client_std_3 (位置3) 已启动，PID: {client3_proc.pid}")
+        time.sleep(1)
 
     except Exception as e:
         print(f"❌ 启动客户端失败: {e}")
-        for proc in clients:
+        for name, proc in clients:
             proc.terminate()
         server_process.terminate()
         return 1
 
-    # [6] 等待游戏运行（包括游戏启动时间）
-    print("\n[步骤6] 游戏运行中（300秒，等待足够的游戏出牌行为）...")
+    # [6] 等待游戏运行（300秒）
+    print("\n[步骤6] 游戏运行中（300秒，产生充足的决策日志）...")
     try:
-        # 在等待期间定期检查日志，看是否有出牌请求
-        for i in range(30):  # 每10秒检查一次，共300秒
+        for i in range(30):
             time.sleep(10)
-            if i % 3 == 0:  # 每30秒打一次进度
-                print(f"    已运行 {(i+1)*10}秒...")
+            if i % 3 == 0:
+                elapsed = (i+1)*10
+                print(f"    已运行 {elapsed}秒...")
     except KeyboardInterrupt:
         print("\n⚠ 被中断")
 
     # [7] 终止进程
     print("\n[步骤7] 终止进程...")
-    for proc in clients:
+    for name, proc in clients:
         proc.terminate()
         try:
             proc.wait(timeout=5)
@@ -226,8 +203,23 @@ def main():
     with open(yf1_logs, encoding='utf-8', errors='replace') as f:
         content = f.read()
 
+        # 统计关键指标
+        p0_count = content.count('【P0改进')
+        decision_count = content.count('【决策')
+        act_count = content.count('"type": "act"')
+        play_count = content.count('"stage": "play"')
+        pass_count = content.count('PASS')
+
+        print(f"📊 统计数据:")
+        print(f"  P0改进标记: {p0_count} 次")
+        print(f"  决策标记: {decision_count} 次")
+        print(f"  出牌请求(act): {act_count} 次")
+        print(f"  出牌阶段(play): {play_count} 次")
+        print(f"  PASS操作: {pass_count} 次")
+
         # 查找关键日志
-        keywords = ['【P0改进', '【决策入口】', '【决策出口】', 'handCards', 'act', 'play', 'beginning']
+        print(f"\n【关键日志】:")
+        keywords = ['【P0改进', '【决策入口】', '【决策出口】', 'act', 'play', 'Error']
         found_keywords = False
 
         for line in content.split('\n'):
@@ -237,17 +229,27 @@ def main():
 
         print("="*70)
 
-        if found_keywords:
-            print("\n✅ SUCCESS: 检测到关键日志！")
-            if '【P0改进' in content:
-                print("   P0改进代码被执行!")
-            if '【决策' in content:
-                print("   决策逻辑被触发!")
+        if p0_count > 0 or decision_count > 0:
+            print("\n✅ SUCCESS: 检测到P0改进或决策日志！")
+            if p0_count > 0:
+                print(f"   ✓ P0改进代码被执行 ({p0_count}次)!")
+            if decision_count > 0:
+                print(f"   ✓ 决策逻辑被触发 ({decision_count}次)!")
+            if act_count > 0:
+                print(f"   ✓ 平台发送出牌请求 ({act_count}次)!")
             return 0
+        elif act_count > 0:
+            print("\n⚠️ 部分成功：游戏运行但未检测到P0改进或决策日志")
+            print("   • 平台发送了出牌请求，说明游戏有进行")
+            print("   • 但没有看到P0改进的执行标记")
+            print("   • 可能是日志级别问题或代码路径未触发")
+            return 2
         else:
-            print("\n⚠️ 未检测到关键日志")
-            print("完整日志最后500行:")
-            print(content[-500:])
+            print("\n❌ 未能产生游戏交互")
+            print("   请检查日志中的错误")
+            if content:
+                print("\n【完整日志最后500字】:")
+                print(content[-500:])
             return 1
 
 if __name__ == "__main__":
