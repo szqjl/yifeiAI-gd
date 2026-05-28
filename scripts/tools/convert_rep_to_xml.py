@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 将 .rep 文件转换为 .xml 文件，以便在 Cursor 中编辑
-用法: python convert_rep_to_xml.py <rep_file_path>
+用法: python scripts/tools/convert_rep_to_xml.py <rep_file_path>
 """
 
 import sys
@@ -50,11 +50,11 @@ def convert_rep_to_xml(rep_file_path: str, output_path: str = None):
 def main():
     """主函数"""
     if len(sys.argv) < 2:
-        print("用法: python convert_rep_to_xml.py <rep_file_path> [output_path]")
+        print("用法: python scripts/tools/convert_rep_to_xml.py <rep_file_path> [output_path]")
         print("\n示例:")
-        print('  python convert_rep_to_xml.py "C:\\Program Files (x86)\\gdgame\\MobileGD\\replay\\szqjl_2024-02-04_12_20_23_\\_2024-02-04_12_15_56.rep"')
+        print('  python scripts/tools/convert_rep_to_xml.py "C:\\Program Files (x86)\\gdgame\\MobileGD\\replay\\szqjl_2024-02-04_12_20_23_\\_2024-02-04_12_15_56.rep"')
         print("\n或者批量转换:")
-        print('  python convert_rep_to_xml.py "C:\\Program Files (x86)\\gdgame\\MobileGD\\replay" --batch')
+        print('  python scripts/tools/convert_rep_to_xml.py "C:\\Program Files (x86)\\gdgame\\MobileGD\\replay" --batch')
         sys.exit(1)
     
     input_path = sys.argv[1]

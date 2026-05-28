@@ -109,7 +109,7 @@ def check_training_progress():
     
     print()
     print("="*80)
-    print("提示: 运行 'python train_strategy_tasks.py' 开始训练")
+    print("提示: 运行 'python scripts/training/train_strategy_tasks.py' 开始训练")
     print("     或运行 'START_STRATEGY_TASKS_TRAINING.bat' 启动训练")
     print("="*80)
 

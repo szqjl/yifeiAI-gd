@@ -21,9 +21,10 @@ import torch.nn as nn
 import numpy as np
 from datetime import datetime
 from typing import List, Dict, Tuple
+from pathlib import Path
 
-# 添加项目路径
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__))))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 from src.train.pretrain import train_bc
 from src.train.trajectory_collector import TrajectoryCollector

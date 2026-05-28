@@ -15,7 +15,7 @@
 #### 1. 使用专门的szqjl更新脚本
 
 ```bash
-python batch_update_szqjl_only.py
+python scripts/tools/batch_update_szqjl_only.py
 ```
 
 **优势**：
@@ -40,7 +40,7 @@ python batch_update_szqjl_only.py
 ### 步骤1: 运行批量更新脚本
 
 ```bash
-python batch_update_szqjl_only.py
+python scripts/tools/batch_update_szqjl_only.py
 ```
 
 ### 步骤2: 检查更新结果
@@ -85,7 +85,7 @@ python batch_update_szqjl_only.py
 
 1. **运行批量更新脚本** ✅
    ```bash
-   python batch_update_szqjl_only.py
+   python scripts/tools/batch_update_szqjl_only.py
    ```
 
 2. **验证更新结果** ✅

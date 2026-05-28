@@ -23,9 +23,10 @@ import numpy as np
 from datetime import datetime
 from typing import List, Dict, Tuple, Optional
 from collections import deque
+from pathlib import Path
 
-# 添加项目路径
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__))))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 from src.rl_env.guandan_env import GuandanEnv
 from src.rl_agent.model import GuandanPolicyNet

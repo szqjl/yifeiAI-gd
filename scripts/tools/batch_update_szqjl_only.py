@@ -16,12 +16,12 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# 添加项目路径
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__))))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 # 动态导入1312转换器
 import importlib.util
-converter_path = os.path.join(os.path.dirname(__file__), 'src', 'knowledge_processor', '1312_replay_converter.py')
+converter_path = REPO_ROOT / 'src' / 'knowledge_processor' / '1312_replay_converter.py'
 spec = importlib.util.spec_from_file_location("replay_1312_converter", converter_path)
 converter_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(converter_module)

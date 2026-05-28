@@ -45,7 +45,7 @@ echo Starting training...
 echo.
 
 cd /d "%~dp0"
-python train_strategy_tasks.py
+python scripts/training/train_strategy_tasks.py
 
 echo.
 echo ================================================================

@@ -49,7 +49,7 @@
 ### 使用批量更新脚本
 
 ```bash
-python batch_update_json_from_rep.py
+python scripts/tools/batch_update_json_from_rep.py
 ```
 
 ### 脚本功能
@@ -143,7 +143,7 @@ cp -r game_records game_records_backup
 1. **备份数据**（可选但推荐）
 2. **运行更新脚本**
    ```bash
-   python batch_update_json_from_rep.py
+   python scripts/tools/batch_update_json_from_rep.py
    ```
 3. **检查更新结果**
    - 查看统计信息
