@@ -54,7 +54,7 @@ if %ERRORLEVEL% EQU 0 (
     echo   models\M1_TARGET_ACHIEVED.txt
     echo.
     echo 运行以下命令查看详细状态:
-    echo   python check_workflow_notification.py
+    echo   python scripts/checks/check_workflow_notification.py
     echo.
 ) else (
     echo.
@@ -64,7 +64,7 @@ if %ERRORLEVEL% EQU 0 (
     echo ==========================================
     echo.
     echo 运行以下命令查看详细状态:
-    echo   python check_workflow_notification.py
+    echo   python scripts/checks/check_workflow_notification.py
     echo.
 )
 

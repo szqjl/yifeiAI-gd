@@ -309,7 +309,7 @@ python src/communication/yf2_m1.py
 
 2. **检查模型文件是否会被推送**：
    ```bash
-   python check_models_before_push.py
+   python scripts/checks/check_models_before_push.py
    ```
 
 3. **如果发现模型文件被跟踪，执行以下命令移除**（保留本地文件）：
@@ -322,7 +322,7 @@ python src/communication/yf2_m1.py
 
 每次推送前建议运行检查脚本：
 ```bash
-python check_models_before_push.py
+python scripts/checks/check_models_before_push.py
 ```
 
 如果脚本显示 ✅，说明模型文件不会被推送，可以安全推送。

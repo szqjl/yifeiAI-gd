@@ -7,6 +7,9 @@
 import yaml
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 def check_config():
     """检查配置文件"""
     print("=" * 60)
@@ -14,7 +17,7 @@ def check_config():
     print("=" * 60)
     
     # 1. 读取配置文件
-    config_path = Path(__file__).parent / "config.yaml"
+    config_path = REPO_ROOT / "config.yaml"
     print(f"\n[1] 读取配置文件: {config_path}")
     
     if not config_path.exists():

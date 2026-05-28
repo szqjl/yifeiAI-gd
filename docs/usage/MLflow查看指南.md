@@ -28,7 +28,7 @@ mlflow ui --backend-store-uri file:///D:/YiFeiAI-GD/logs/mlruns
 运行以下命令检查：
 
 ```bash
-python check_mlflow_runs.py
+python scripts/checks/check_mlflow_runs.py
 ```
 
 这会显示：
@@ -74,7 +74,7 @@ http://localhost:5000
 
 **解决**：
 1. 检查训练日志确认训练状态
-2. 运行 `python check_mlflow_runs.py` 查看实际运行记录
+2. 运行 `python scripts/checks/check_mlflow_runs.py` 查看实际运行记录
 
 #### 问题3：有运行记录但看不到指标
 **原因**：指标可能还在写入中，或者指标名称有问题
@@ -95,7 +95,7 @@ http://localhost:5000
 #### 方法2：使用检查脚本
 ```bash
 # 持续监控最新运行
-python check_mlflow_runs.py
+python scripts/checks/check_mlflow_runs.py
 ```
 
 ### 6. 当前实验信息
@@ -117,7 +117,7 @@ python check_mlflow_runs.py
 
 ```bash
 # 检查运行记录
-python check_mlflow_runs.py
+python scripts/checks/check_mlflow_runs.py
 
 # 启动MLflow UI
 mlflow ui --backend-store-uri file:///d:/YiFeiAI-GD/logs/mlruns
@@ -146,4 +146,4 @@ mlflow ui --backend-store-uri file:///d:/YiFeiAI-GD/logs/mlruns
 1. 确认MLflow UI的tracking URI正确
 2. 刷新浏览器页面（F5）
 3. 检查 `logs/mlruns` 目录是否存在且有数据
-4. 运行 `python check_mlflow_runs.py` 确认数据存在
+4. 运行 `python scripts/checks/check_mlflow_runs.py` 确认数据存在

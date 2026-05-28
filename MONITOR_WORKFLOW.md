@@ -25,7 +25,7 @@ mlflow ui --backend-store-uri file:///d:/YiFeiAI-GD/logs/mlruns
 ### 方法2: 检查工作流状态
 
 ```bash
-python check_workflow_status.py
+python scripts/checks/check_workflow_status.py
 ```
 
 **查看内容**：

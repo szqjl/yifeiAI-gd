@@ -50,9 +50,9 @@ python monitor_workflow_progress.py
 
 ### 详细状态
 ```bash
-python check_workflow_status.py
-python check_auto_restart_status.py
-python check_training_progress_detailed.py
+python scripts/checks/check_workflow_status.py
+python scripts/checks/check_auto_restart_status.py
+python scripts/checks/check_training_progress_detailed.py
 ```
 
 ### MLflow实时监控

@@ -234,7 +234,7 @@ __pycache__/
 
 ### 7.3 M 冒烟套件（现阶段，替代 v5 默认门禁）
 
-1. 平台/通信：连接与报文正常（如 `verify_websocket_config`）
+1. 平台/通信：连接与报文正常（如 `python scripts/checks/check_websocket_config.py`）
 2. M 客户端：`yf1_m1` / `yf2_m1`（或当前主用 m 客户端）可启动、无 import 错误
 3. lalala：短局实战 **或** 30 局离线 replay 回归（推荐后者，稳定）
 4. 通过标准：**无异常退出、决策可记录、与基线 diff 可生成**（**不要求**胜率阈值）
@@ -285,7 +285,7 @@ __pycache__/
 ### Phase 2 — 文档与 manifest（1 天）
 
 - [x] 维护 `data/manifests/regression-lalala-v1.json`（模板）
-- [ ] 上传 30 局至 COS（待配置 `config/cos.env`）
+- [x] 上传 30 局至 COS（`config/cos.env` + `pull_regression` 30/30 通过）
 - [x] README 增加治理 / COS 链接
 
 ### Phase 3 — `.gitignore` 与清单（2–3 天）
@@ -295,7 +295,9 @@ __pycache__/
 
 ### Phase 4 — 代码收敛（多 PR，按需）
 
-- [ ] 根目录脚本 → `scripts/`
+- [x] 根目录 `check_*.py` / `diagnose_*.py` 第一批（15 个）→ `scripts/checks/`
+- [x] 根目录剩余 `check_*.py` 第二批（8 个）→ `scripts/checks/`
+- [ ] 根目录其余脚本（verify / analyze / train 等）→ `scripts/`（第三批起）
 - [ ] deprecated 标记 v4/v5_stage5 客户端
 - [ ] m3 `contracts/` 与目录 `src/m/`、`src/v/` 渐进迁移
 - [ ] v7 评审通过后合并 `v7-dev` → `m-dev`

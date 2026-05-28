@@ -38,7 +38,7 @@ python monitor_workflow_progress.py
 
 ### 方法2: 详细状态检查
 ```bash
-python check_workflow_status.py
+python scripts/checks/check_workflow_status.py
 ```
 
 ### 方法3: MLflow实时监控
@@ -77,7 +77,7 @@ python view_training_summary.py
 
 1. **检查工作流状态**:
    ```bash
-   python check_workflow_status.py
+   python scripts/checks/check_workflow_status.py
    ```
 
 2. **查看训练历史**:

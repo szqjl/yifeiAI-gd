@@ -55,7 +55,7 @@
 
 1. 工作流状态：
    ```bash
-   python check_workflow_status.py
+   python scripts/checks/check_workflow_status.py
    ```
 
 2. MLflow监控：

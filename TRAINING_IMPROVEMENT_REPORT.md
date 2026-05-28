@@ -121,7 +121,7 @@ learning_rate: float = 0.000005  # 降低学习率
 
 2. **查看工作流状态**:
    ```bash
-   python check_workflow_status.py
+   python scripts/checks/check_workflow_status.py
    ```
 
 3. **MLflow实时监控**:

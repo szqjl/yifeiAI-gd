@@ -86,6 +86,6 @@ else:
 print("\n" + "="*60)
 print("提示:")
 print("  - 运行 'python monitor_workflow_progress.py' 查看训练进度")
-print("  - 运行 'python check_workflow_status.py' 查看工作流状态")
+print("  - 运行 'python scripts/checks/check_workflow_status.py' 查看工作流状态")
 print("  - 运行 'python auto_restart_workflow.py' 启动自动重启系统")
 print("="*60)

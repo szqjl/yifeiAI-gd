@@ -23,6 +23,14 @@
 
 `check_*.py`、`diagnose_*.py`、`verify_*.py`、`analyze_*.py`（根目录下多数）
 
+**已迁入 `scripts/checks/`（2026-05-28 第一批，15 个）：**
+
+`check_websocket_config`、`check_workflow_status`、`check_workflow_notification`、`check_auto_restart_status`、`check_training_progress_detailed`、`check_game_record_consistency`、`check_client_positions`、`check_mlflow_runs`、`check_models_before_push`、`check_cuda`、`check_gui_paths`、`check_evaluation_issue`、`diagnose_training_data`、`diagnose_training_issues`、`diagnose_v7_connection`
+
+**根目录 check/diagnose 已全部迁入 `scripts/checks/`（2026-05-28 第二批，8 个）：**
+
+`check_model_loading`、`check_model_optimizations`、`check_training_progress`、`check_stage7_dependencies`、`check_m1_records_for_training`、`check_model_battle_record`、`check_records_for_evaluator`、`check_latest_game_records`
+
 ### 训练相关（V 线，非 M 日常）
 
 `train_stage*.py`、`monitor_training.py`、`check_training_progress*.py`
@@ -53,6 +61,7 @@
 
 ## 下一步（Phase 4 PR）
 
-1. 新建 `scripts/checks/`、`scripts/training/` 等
-2. 每次 PR 只迁一类（≤15 文件），更新 import 与文档
-3. 根目录 README 或 `docs/usage/` 更新启动命令
+1. ~~新建 `scripts/checks/`~~ ✅ 已建；**check/diagnose 全部 23 个**已迁入
+2. **第三批**：根目录 `verify_*.py` / `analyze_*.py` / 训练脚本 → `scripts/` 子目录
+3. 每次 PR 只迁一类（≤15 文件），更新 import 与文档
+4. 根目录 README 或 `docs/usage/` 更新启动命令
