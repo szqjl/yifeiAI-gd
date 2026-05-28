@@ -2,10 +2,10 @@
 
 | 项目 | 内容 |
 |------|------|
-| 文档版本 | v1.0 |
+| 文档版本 | v1.2 |
 | 状态 | 已采纳（团队执行基准） |
 | 适用范围 | YiFeiAI-GD 仓库全体协作与分支/产物管理 |
-| 最后更新 | 2026-05-28 |
+| 最后更新 | 2026-05-28（`m-dev` @ `9910df3`） |
 
 ---
 
@@ -151,8 +151,18 @@ src/
 | `models/*.pth` 进库 | 仅保留说明 + 当前 1～2 个指针；权重走对象存储 |
 | `logs/`、`training_logs/` | `.gitignore`，本地或 OSS |
 | `game_records/`、`trajectories/` | 归并为 `data/replays/`、`data/trajectories/`（迁移期可并存） |
+| 根目录 `doc/` 与散落 M 代际文档 | 并入 `docs/guandan-brain/`（M1/M2/M3 架构与诊断台账） |
 
----
+### 5.4 文档目录（与代码收敛同步）
+
+| 目录 | 用途 |
+|------|------|
+| `docs/governance/` | 治理总纲、COS、分析接续 handoff 流程 |
+| `docs/guandan-brain/` | M 系列迭代真源：ISSUES / ITERATIONS / **M1/M2/M3 代际文档** |
+| `docs/analysis/handoffs/` | 具体任务 handoff（换机 / 新 Agent 接续） |
+| `docs/versions/MATRIX.md` | 分支与冒烟状态矩阵 |
+
+M 代际文档索引见 [docs/guandan-brain/README.md](../guandan-brain/README.md)（含 `M2_OPTIMIZATION.md`、`M3_DIAGNOSIS.md`）。
 
 ## 6. 产物与对象存储（Artifacts）
 
@@ -300,9 +310,13 @@ __pycache__/
 - [x] 根目录 `verify_*.py` / `analyze_*.py` / 训练脚本第三批（15 个）→ `scripts/verify/`、`scripts/analysis/`、`scripts/training/`
 - [x] 根目录 train 剩余 + batch/clean 工具第四批（10 个）→ `scripts/training/`、`scripts/tools/`
 - [x] workflow / V7 / test 第五批（15 个）→ `scripts/workflow/`、`scripts/v7/`、`tests/`
-- [x] 根目录杂项脚本第六批（14 个）→ `scripts/training/`、`scripts/tools/`、`scripts/verify/`、`tests/`（**`yf_replay.py` 暂留根目录**）
+- [x] 根目录杂项脚本第六批（14 个）→ `scripts/training/`、`scripts/tools/`、`scripts/verify/`、`tests/`（第六批时 **`yf_replay.py` 暂留根目录**，已在收尾批迁入）
 - [x] 根目录剩余入口第七批（7 个）→ `scripts/batch_executor.py`、`scripts/clients/`、`scripts/tools/`、`tests/`
 - [x] Phase 4 收尾：GUI 变体（`batch_executor_gui` / `m2` / `m3`）→ `scripts/gui/`；`yf_replay.py` → `scripts/tools/`
+- [x] **根目录脚本收敛完成**：短期保留 `batch_executor_gui_m1.py`、`start_gui.py` 两个入口
+- [x] README 增加「掼蛋与平台基础知识（新手必读）」摘要（`9c5adb9`）
+- [x] `doc/M2_OPTIMIZATION.md`、`doc/M3_DIAGNOSIS.M2.md` → `docs/guandan-brain/`（重命名为 `M3_DIAGNOSIS.md`；`9910df3`）；空目录 `doc/` 已删除
+- [ ] **`scripts/tools/yf_replay.py`**：路径已迁入，**本地仍有未提交改动**（其他 Agent 编辑中，勿误 push）
 - [ ] deprecated 标记 v4/v5_stage5 客户端
 - [ ] m3 `contracts/` 与目录 `src/m/`、`src/v/` 渐进迁移
 - [ ] v7 评审通过后合并 `v7-dev` → `m-dev`
@@ -317,6 +331,8 @@ __pycache__/
 | [data/manifests/regression-lalala-v1.json](../../data/manifests/regression-lalala-v1.json) | 30 局回归清单模板 |
 | [docs/governance/COS-接入指南.md](./COS-接入指南.md) | COS 配置与上传/拉取命令 |
 | [docs/governance/分析接续-handoff.md](./分析接续-handoff.md) | 换机 / 新 Agent 如何接续分析 |
+| [docs/analysis/handoffs/](../analysis/handoffs/) | 任务级 handoff（取日期最新一篇） |
+| [docs/guandan-brain/README.md](../guandan-brain/README.md) | M 系列迭代台账与 M1/M2/M3 代际文档 |
 | [docs/掼蛋AI客户端架构方案.md](../掼蛋AI客户端架构方案.md) | 模块级架构（需与本文 M/V 分层对齐） |
 | [docs/GIT_SETUP_GUIDE.md](../GIT_SETUP_GUIDE.md) | Git 操作（待与 §4 同步修订） |
 
@@ -328,3 +344,4 @@ __pycache__/
 |------|------|------|
 | v1.0 | 2026-05-28 | 首版：M/V 分层、分支、OSS、回归 30 局、V 冒烟双条件、现阶段 M-only 门禁 |
 | v1.1 | 2026-05-28 | 默认开发分支 **`m1-dev` → `m-dev`**（M 系列总线，与 m1/m2 代际区分） |
+| v1.2 | 2026-05-28 | Phase 4 脚本收敛结案；`doc/` → `docs/guandan-brain/`；README 基础知识摘要；相关 handoff 见 `docs/analysis/handoffs/2026-05-28-仓库整理方案执行中.md` |
