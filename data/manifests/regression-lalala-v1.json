@@ -1,0 +1,412 @@
+{
+  "schema_version": "1.0",
+  "name": "regression-lalala-v1",
+  "description": "M 系列对 lalala 固定回归集",
+  "created": "2026-05-28",
+  "game_count_target": 30,
+  "storage": {
+    "provider": "tencent_cos",
+    "region": "ap-shanghai",
+    "bucket": "hermes-1377564594",
+    "artifact_prefix": "yifei-gd/",
+    "prefix": "yifei-gd/replays/regression-lalala-v1/",
+    "local_dir": "data/artifacts/replays/regression-lalala-v1",
+    "docs": "docs/governance/COS-接入指南.md"
+  },
+  "games": [
+    {
+      "id": "reg-001",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260113110809115923 [yf1_m1]-[opponent_1_3]-[19]-[None].json",
+      "sha256": "c0ce93cf0d11c0605a8a0ceb0cb2219c55be48369ecf30059e74814dd73bdbea",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260113110809115923 [yf1_m1]-[opponent_1_3]-[19]-[None].json",
+      "game_id": "20260113110809115923",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-002",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421122404427820 [yf1_m1]-[opponent_1_3]-[23]-[None].json",
+      "sha256": "db512e4a7501f473f25751f28faa3178d39247f61b328bdcf8c85de95506b99c",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421122404427820 [yf1_m1]-[opponent_1_3]-[23]-[None].json",
+      "game_id": "20260421122404427820",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-003",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421122833986325 [yf1_m1]-[opponent_1_3]-[25]-[None].json",
+      "sha256": "7256d1b4d0920385827cb8816711267521d9c9c49b4cf6394e81ce196409d603",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421122833986325 [yf1_m1]-[opponent_1_3]-[25]-[None].json",
+      "game_id": "20260421122833986325",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-004",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421123017792144 [yf1_m1]-[opponent_1_3]-[32]-[None].json",
+      "sha256": "da29b9f10579e050bae0acca8c3af25cba1d26c9d6ea3aae10d44603210b2917",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421123017792144 [yf1_m1]-[opponent_1_3]-[32]-[None].json",
+      "game_id": "20260421123017792144",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-005",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421123140409339 [yf1_m1]-[opponent_1_3]-[25]-[None].json",
+      "sha256": "92d4a1e960bfd1489631d0edab32a295411416456b83156abfa924cef9fca295",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421123140409339 [yf1_m1]-[opponent_1_3]-[25]-[None].json",
+      "game_id": "20260421123140409339",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-006",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421123337946652 [yf1_m1]-[opponent_1_3]-[36]-[None].json",
+      "sha256": "679ada5de814c05569cd2ddce3516b095b69326ecc4c9c8227b65f71a156bfd1",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421123337946652 [yf1_m1]-[opponent_1_3]-[36]-[None].json",
+      "game_id": "20260421123337946652",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-007",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421123509820608 [yf1_m1]-[opponent_1_3]-[28]-[None].json",
+      "sha256": "5d238e81cce1a9398af0f5b5815f1cfdc91aad5e9d67717f7a52914d774f3d5b",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421123509820608 [yf1_m1]-[opponent_1_3]-[28]-[None].json",
+      "game_id": "20260421123509820608",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-008",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421123641090777 [yf1_m1]-[opponent_1_3]-[19]-[None].json",
+      "sha256": "d67cf4b05ab4c9a1febae2f1542b2770c6212545bbd6bd202511eb24526636a6",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421123641090777 [yf1_m1]-[opponent_1_3]-[19]-[None].json",
+      "game_id": "20260421123641090777",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-009",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421123919905488 [yf1_m1]-[opponent_1_3]-[19]-[None].json",
+      "sha256": "50c276c8ba24e65575bf570cd1f0a2cb0c38688a2f853f0ad26ab58be75c357a",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421123919905488 [yf1_m1]-[opponent_1_3]-[19]-[None].json",
+      "game_id": "20260421123919905488",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-010",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421124132048517 [yf1_m1]-[opponent_1_3]-[23]-[None].json",
+      "sha256": "8a713c9bc27a88f248491639b6f9976c3c27dcade73270dc88f68cf9d5ba9d97",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421124132048517 [yf1_m1]-[opponent_1_3]-[23]-[None].json",
+      "game_id": "20260421124132048517",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-011",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421125139953810 [yf1_m1]-[opponent_1_3]-[32]-[None].json",
+      "sha256": "d1a1dadeeb5b7af128cb0d538528eb7c843db31f79a4265379a53dd177114eed",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421125139953810 [yf1_m1]-[opponent_1_3]-[32]-[None].json",
+      "game_id": "20260421125139953810",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-012",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421125318254050 [yf1_m1]-[opponent_1_3]-[19]-[None].json",
+      "sha256": "7fd7aadfd3da746284d16aae6d94ade914daf9bd7ce200a929243d6e32ffed7f",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421125318254050 [yf1_m1]-[opponent_1_3]-[19]-[None].json",
+      "game_id": "20260421125318254050",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-013",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421125448787594 [yf1_m1]-[opponent_1_3]-[29]-[None].json",
+      "sha256": "f493fcf443b0fbe51e017732248a87a032e6c0c028ffb5722aa6226d15ccbfe3",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421125448787594 [yf1_m1]-[opponent_1_3]-[29]-[None].json",
+      "game_id": "20260421125448787594",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-014",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421130739321564 [yf1_m1]-[opponent_1_3]-[34]-[None].json",
+      "sha256": "c2dfd196305f36f22627b864c0960097ef6c2f73ef91cbf24bdbef2d74b0e2ca",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421130739321564 [yf1_m1]-[opponent_1_3]-[34]-[None].json",
+      "game_id": "20260421130739321564",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-015",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421130925429680 [yf1_m1]-[opponent_1_3]-[23]-[None].json",
+      "sha256": "e6b17f4f3345fd628eb072f3204949c8a802ab7ed50e889cf8a18426eb8ae404",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421130925429680 [yf1_m1]-[opponent_1_3]-[23]-[None].json",
+      "game_id": "20260421130925429680",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-016",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421131040387649 [yf1_m1]-[opponent_1_3]-[18]-[None].json",
+      "sha256": "ba4c9748082e05a721cdf051eccee917d59baf9731c0c9225941013dc57a0db8",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421131040387649 [yf1_m1]-[opponent_1_3]-[18]-[None].json",
+      "game_id": "20260421131040387649",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-017",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421131616379152 [yf1_m1]-[opponent_1_3]-[30]-[None].json",
+      "sha256": "71aef7969bf5ac218841032b830015ba774844fc00cf5af15f4b9e85aa29a179",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421131616379152 [yf1_m1]-[opponent_1_3]-[30]-[None].json",
+      "game_id": "20260421131616379152",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-018",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421134147866126 [yf1_m1]-[opponent_1_3]-[17]-[None].json",
+      "sha256": "7bbfef6c371f7ba959a05579978e8a00a16a9894e3d3f70f5265ee1b12039fdb",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421134147866126 [yf1_m1]-[opponent_1_3]-[17]-[None].json",
+      "game_id": "20260421134147866126",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-019",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421134942284780 [yf1_m1]-[opponent_1_3]-[28]-[None].json",
+      "sha256": "5556f0a44222997f56b1e3bd297077ea43586a9f0c2103775111df4a0c81b431",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421134942284780 [yf1_m1]-[opponent_1_3]-[28]-[None].json",
+      "game_id": "20260421134942284780",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-020",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421140528426468 [yf1_m1]-[opponent_1_3]-[50]-[None].json",
+      "sha256": "d07fa870ab91563234a62caaaa6e2f62001db17826b7a180f0330ed71f9ef6ee",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421140528426468 [yf1_m1]-[opponent_1_3]-[50]-[None].json",
+      "game_id": "20260421140528426468",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-021",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421141204039216 [yf1_m1]-[opponent_1_3]-[16]-[None].json",
+      "sha256": "ce81daa353396dd6c8a077b4cda8e46cf3f6262418780db6b5cc13660e07e7d0",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421141204039216 [yf1_m1]-[opponent_1_3]-[16]-[None].json",
+      "game_id": "20260421141204039216",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-022",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421141636628915 [yf1_m1]-[opponent_1_3]-[21]-[None].json",
+      "sha256": "54087db0cded6b8381f634a64454c10f986996e66aaf1e44bb822fed8cb1850c",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421141636628915 [yf1_m1]-[opponent_1_3]-[21]-[None].json",
+      "game_id": "20260421141636628915",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-023",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421141848024989 [yf1_m1]-[opponent_1_3]-[1]-[None].json",
+      "sha256": "370085d8e7eb0c4b2e4a96651568c1b602154cf0f3d1b4da9d1fbd20f151439a",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421141848024989 [yf1_m1]-[opponent_1_3]-[1]-[None].json",
+      "game_id": "20260421141848024989",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-024",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421141848791653 [yf1_m1]-[opponent_1_3]-[2]-[None].json",
+      "sha256": "b318554fcbcbb6133d89cdab1d0cd8e2d671233ded83839a9ba29bd6d5c66381",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421141848791653 [yf1_m1]-[opponent_1_3]-[2]-[None].json",
+      "game_id": "20260421141848791653",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-025",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421141849475594 [yf1_m1]-[opponent_1_3]-[3]-[None].json",
+      "sha256": "48329a2bd02583f2a6d8086718b2d8b50db95d5ccb85493bed3b768a55b7bbc1",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421141849475594 [yf1_m1]-[opponent_1_3]-[3]-[None].json",
+      "game_id": "20260421141849475594",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-026",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421141850136431 [yf1_m1]-[opponent_1_3]-[4]-[None].json",
+      "sha256": "d3f086acf451733d51833dca83ca8e2e70a8917fca0ee41450fc4785b526227e",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421141850136431 [yf1_m1]-[opponent_1_3]-[4]-[None].json",
+      "game_id": "20260421141850136431",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-027",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421141851019751 [yf1_m1]-[opponent_1_3]-[5]-[None].json",
+      "sha256": "0e60ddf4351d11e64fa245e6c007e9bdd296cf83c890f78ffcaacc34ec1bb6fa",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421141851019751 [yf1_m1]-[opponent_1_3]-[5]-[None].json",
+      "game_id": "20260421141851019751",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-028",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421141851637600 [yf1_m1]-[opponent_1_3]-[6]-[None].json",
+      "sha256": "9c8a06b8b5356feebbf6a68af2558c95605feb933ab084eb6596e4d522c26c59",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421141851637600 [yf1_m1]-[opponent_1_3]-[6]-[None].json",
+      "game_id": "20260421141851637600",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-029",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421141852153495 [yf1_m1]-[opponent_1_3]-[7]-[None].json",
+      "sha256": "212f99f38834a03116c99b5a0ac43cb00859bef9c0a7f123116ea128234c8faa",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421141852153495 [yf1_m1]-[opponent_1_3]-[7]-[None].json",
+      "game_id": "20260421141852153495",
+      "added": "2026-05-28",
+      "notes": ""
+    },
+    {
+      "id": "reg-030",
+      "object_key": "yifei-gd/replays/regression-lalala-v1/20260421141852813263 [yf1_m1]-[opponent_1_3]-[8]-[None].json",
+      "sha256": "439e8a3b18205aa4659a1b122038e7d2ced27f199563650498a35ba258aa19fc",
+      "tags": [
+        "lalala",
+        "yf1_m1"
+      ],
+      "source": "game_records/20260421141852813263 [yf1_m1]-[opponent_1_3]-[8]-[None].json",
+      "game_id": "20260421141852813263",
+      "added": "2026-05-28",
+      "notes": ""
+    }
+  ],
+  "update_policy": {
+    "max_replacements_per_rca_cycle": 5,
+    "total_count_fixed": 30
+  }
+}

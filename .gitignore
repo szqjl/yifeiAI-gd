@@ -35,6 +35,10 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+config/cos.env
+
+# COS 拉取的 artifact（manifest 在 Git）
+data/artifacts/
 
 # Test files
 test_*.py
@@ -46,6 +50,8 @@ Testscore/
 # Game records and logs
 game_records/
 logs/
+training_logs/
+trajectories/
 *.log
 
 # Windows special files

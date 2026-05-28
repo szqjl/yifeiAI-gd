@@ -260,7 +260,7 @@ class BatchExecutorGUIM1:
         else:
             # 如果默认路径不存在，给出提示
             self.clients_var.set("请输入4个客户端脚本路径（逗号分隔）")
-            self.log_message("⚠️ 警告：M1客户端文件不存在，请检查是否在 m1-dev 分支", "WARNING")
+            self.log_message("⚠️ 警告：M1客户端文件不存在，请检查是否在 m-dev 分支", "WARNING")
     
     def browse_server(self):
         """浏览服务器文件"""
@@ -366,7 +366,7 @@ class BatchExecutorGUIM1:
             if not os.path.exists(client):
                 messagebox.showwarning(
                     "配置警告", 
-                    f"M1客户端文件不存在: {client}\n\n请确保：\n1. 已切换到 m1-dev 分支\n2. 文件路径正确"
+                    f"M1客户端文件不存在: {client}\n\n请确保：\n1. 已切换到 m-dev 分支\n2. 文件路径正确"
                 )
         
         for client in clients:
@@ -535,7 +535,7 @@ M1批量对战系统使用说明
      * 后2个是对手AI（另一队）
 
 2. 重要提示
-   - 必须在 m1-dev 分支运行
+   - 必须在 m-dev 分支运行
    - M1是硬编码规则引擎，不是机器学习模型
    - 无需模型文件
 
