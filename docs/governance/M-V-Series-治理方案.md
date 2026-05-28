@@ -299,7 +299,8 @@ __pycache__/
 - [x] 根目录剩余 `check_*.py` 第二批（8 个）→ `scripts/checks/`
 - [x] 根目录 `verify_*.py` / `analyze_*.py` / 训练脚本第三批（15 个）→ `scripts/verify/`、`scripts/analysis/`、`scripts/training/`
 - [x] 根目录 train 剩余 + batch/clean 工具第四批（10 个）→ `scripts/training/`、`scripts/tools/`
-- [ ] 根目录 workflow / test / V7 入口等（第五批起）
+- [x] workflow / V7 / test 第五批（15 个）→ `scripts/workflow/`、`scripts/v7/`、`tests/`
+- [ ] 根目录剩余脚本（view_*、replay、feishu 等，第六批起）
 - [ ] deprecated 标记 v4/v5_stage5 客户端
 - [ ] m3 `contracts/` 与目录 `src/m/`、`src/v/` 渐进迁移
 - [ ] v7 评审通过后合并 `v7-dev` → `m-dev`

@@ -33,7 +33,7 @@
 
 ### 方法1: 快速查看进度
 ```bash
-python monitor_workflow_progress.py
+python scripts/workflow/monitor_workflow_progress.py
 ```
 
 ### 方法2: 详细状态检查

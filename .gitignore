@@ -40,8 +40,10 @@ config/cos.env
 # COS 拉取的 artifact（manifest 在 Git）
 data/artifacts/
 
-# Test files
-test_*.py
+# Legacy root test scripts (use tests/ instead)
+/test_*.py
+_test_*.py
+debug_test.py
 *.md.bak
 
 # Testscore directory (contains large binary files)

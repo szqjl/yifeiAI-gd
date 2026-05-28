@@ -103,7 +103,7 @@ if status_file.exists() and status.get('status') == 'error':
 
 print("\n" + "="*60)
 print("提示:")
-print("  - 运行 'python monitor_workflow_progress.py' 查看实时进度")
+print("  - 运行 'python scripts/workflow/monitor_workflow_progress.py' 查看实时进度")
 print("  - 运行 'python scripts/checks/check_workflow_status.py' 查看详细状态")
 print("  - 如果工作流卡住，可以手动重启")
 print("="*60)

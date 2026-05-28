@@ -175,7 +175,7 @@ def restart_workflow():
     )
     
     print(f"工作流进程已启动，PID: {process.pid}")
-    print("提示：运行 'python monitor_workflow_progress.py' 可查看进度")
+    print("提示：运行 'python scripts/workflow/monitor_workflow_progress.py' 可查看进度")
     
     return process
 
@@ -221,7 +221,7 @@ def main():
         # 如果工作流还在运行，等待
         if current_status == 'running':
             print("\n工作流正在运行中，等待完成...")
-            print("提示：运行 'python monitor_workflow_progress.py' 可查看实时进度")
+            print("提示：运行 'python scripts/workflow/monitor_workflow_progress.py' 可查看实时进度")
             time.sleep(300)  # 等待5分钟后再检查
             continue
         

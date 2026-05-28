@@ -45,7 +45,7 @@
 
 ### 快速查看
 ```bash
-python monitor_workflow_progress.py
+python scripts/workflow/monitor_workflow_progress.py
 ```
 
 ### 详细状态

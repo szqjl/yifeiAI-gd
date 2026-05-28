@@ -10,7 +10,7 @@ echo 正在运行测试脚本...
 echo.
 
 cd /d "%~dp0"
-python test_m1_strategy_quick.py
+python tests/test_m1_strategy_quick.py
 
 echo.
 echo ========================================

@@ -180,7 +180,7 @@ python D:\NYGD\lalala\client4.py
 
 修复后，V7 GUI可以正常启动和执行：
 
-1. 运行`START_V7_GUI.bat`或`python start_v7_gui.py`启动GUI
+1. 运行`START_V7_GUI.bat`或`python scripts/v7/start_v7_gui.py`启动GUI
 2. GUI会自动加载V7配置（服务器和客户端路径）
 3. 点击"开始执行"按钮，系统会正确验证路径
 4. 不再出现"服务器不存在"或"客户端不存在"的错误提示

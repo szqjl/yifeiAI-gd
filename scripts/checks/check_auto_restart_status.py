@@ -35,7 +35,7 @@ try:
         print("  [运行中] 自动重启系统进程已找到")
     else:
         print("  [未运行] 未找到自动重启系统进程")
-        print("  提示: 运行 'python auto_restart_workflow.py' 启动系统")
+        print("  提示: 运行 'python scripts/workflow/auto_restart_workflow.py' 启动系统")
 except Exception as e:
     print(f"  无法检查进程状态: {e}")
 
@@ -85,7 +85,7 @@ else:
 
 print("\n" + "="*60)
 print("提示:")
-print("  - 运行 'python monitor_workflow_progress.py' 查看训练进度")
+print("  - 运行 'python scripts/workflow/monitor_workflow_progress.py' 查看训练进度")
 print("  - 运行 'python scripts/checks/check_workflow_status.py' 查看工作流状态")
-print("  - 运行 'python auto_restart_workflow.py' 启动自动重启系统")
+print("  - 运行 'python scripts/workflow/auto_restart_workflow.py' 启动自动重启系统")
 print("="*60)

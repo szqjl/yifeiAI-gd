@@ -44,6 +44,7 @@ echo.
 echo Starting V7 Ultimate Win Rate Battle GUI...
 echo ========================================
 
-py start_v7_gui.py
+cd /d "%~dp0"
+py scripts/v7/start_v7_gui.py
 
 pause

@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 import tkinter as tk
 
-# 添加项目根目录到路径
-sys.path.insert(0, str(Path(__file__).parent))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 try:
     from batch_executor_gui import BatchExecutorGUI

@@ -116,7 +116,7 @@ learning_rate: float = 0.000005  # 降低学习率
 
 1. **查看工作流进度**:
    ```bash
-   python monitor_workflow_progress.py
+   python scripts/workflow/monitor_workflow_progress.py
    ```
 
 2. **查看工作流状态**:
@@ -132,7 +132,7 @@ learning_rate: float = 0.000005  # 降低学习率
 
 4. **启动自动重启系统**:
    ```bash
-   python auto_restart_workflow.py
+   python scripts/workflow/auto_restart_workflow.py
    ```
 
 ## 📌 备份文件

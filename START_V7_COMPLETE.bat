@@ -17,6 +17,7 @@ echo - 端口23456未被占用
 echo.
 pause
 
-python start_v7_complete.py
+cd /d "%~dp0"
+python scripts/v7/start_v7_complete.py
 
 pause

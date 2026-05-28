@@ -124,7 +124,7 @@ else:
 # 6. 自动重启系统状态
 print("\n6. 自动重启系统")
 print("-"*60)
-print("提示: 运行 'python auto_restart_workflow.py' 启动自动重启系统")
+print("提示: 运行 'python scripts/workflow/auto_restart_workflow.py' 启动自动重启系统")
 print("或运行 'START_AUTO_RESTART_WORKFLOW.bat'")
 
 print("\n" + "="*60)

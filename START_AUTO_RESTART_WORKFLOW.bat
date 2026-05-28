@@ -19,11 +19,12 @@ echo   5. 循环直到达成目标
 echo.
 
 echo 提示：运行以下命令可查看进度：
-echo   python monitor_workflow_progress.py
+echo   python scripts/workflow/monitor_workflow_progress.py
 echo.
 
+cd /d "%~dp0"
 REM 运行自动重启系统
-python auto_restart_workflow.py
+python scripts/workflow/auto_restart_workflow.py
 
 if %ERRORLEVEL% EQU 0 (
     echo.

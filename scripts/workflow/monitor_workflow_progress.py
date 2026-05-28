@@ -67,5 +67,5 @@ if workflow_file.exists():
         print(f"  状态: {latest.get('status', 'unknown')}")
 
 print("\n" + "="*60)
-print("提示: 运行 'python monitor_workflow_progress.py' 可随时查看进度")
+print("提示: 运行 'python scripts/workflow/monitor_workflow_progress.py' 可随时查看进度")
 print("="*60)

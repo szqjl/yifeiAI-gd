@@ -209,9 +209,9 @@ process = subprocess.Popen(
 
 print(f"  [OK] 工作流进程已启动，PID: {process.pid}")
 print("\n提示：")
-print("  - 运行 'python monitor_workflow_progress.py' 可查看实时进度")
+print("  - 运行 'python scripts/workflow/monitor_workflow_progress.py' 可查看实时进度")
 print("  - 运行 'python scripts/checks/check_workflow_status.py' 可查看工作流状态")
-print("  - 运行 'python auto_restart_workflow.py' 可启动自动重启系统")
+print("  - 运行 'python scripts/workflow/auto_restart_workflow.py' 可启动自动重启系统")
 
 print("\n" + "="*60)
 print("分析、改进和重启完成")

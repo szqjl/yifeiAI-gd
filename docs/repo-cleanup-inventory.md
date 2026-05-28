@@ -45,7 +45,15 @@
 
 **`scripts/tools/` +6：** `batch_update_json_from_rep`、`batch_update_szqjl_only`、`clean_git_history`、`clean_large_files`、`convert_rep_to_xml`、`download_models`
 
-**第五批待迁：** workflow（`auto_restart_workflow`、`workflow_current_status`、`monitor_workflow_progress`）、V7 入口（`start_v7_*`）、test 脚本等
+**第五批已完成（2026-05-28）：**
+
+**`scripts/workflow/`（3）：** `auto_restart_workflow`、`workflow_current_status`、`monitor_workflow_progress`
+
+**`scripts/v7/`（2）：** `start_v7_complete`、`start_v7_gui`
+
+**`tests/`（10，新入库）：** `test_p0_4clients`、`test_m1_strategy_quick`、`test_p0_*`、`test_v7_*`、`test_gui_path_validation`、`test_batch_loop`、`test_yfv5_model_integration`
+
+**第六批待迁：** 根目录剩余 `test_*.py`（6）、`view_training_*`、`replay.py`、`delete_non_replay_records.py`、`feishu_*` 等
 
 ### 训练相关（V 线，非 M 日常）
 
@@ -80,6 +88,7 @@
 1. ~~新建 `scripts/checks/`~~ ✅ 已建；**check/diagnose 全部 23 个**已迁入
 2. ~~**第三批**~~ ✅ `scripts/verify/`（6）、`scripts/analysis/`（6）、`scripts/training/`（3）
 3. ~~**第四批**~~ ✅ train 剩余 + batch/clean 工具（10 个）
-4. **第五批**：workflow / test / V7 入口等
-5. 每次 PR 只迁一类（≤15 文件），更新 import 与文档
-6. 根目录 README 或 `docs/usage/` 更新启动命令
+4. ~~**第五批**~~ ✅ workflow / V7 / test（15 个）
+5. **第六批**：根目录杂项脚本
+6. 每次 PR 只迁一类（≤15 文件），更新 import 与文档
+7. 根目录 README 或 `docs/usage/` 更新启动命令

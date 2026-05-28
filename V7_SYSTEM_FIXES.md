@@ -172,7 +172,7 @@ T+45s: client4连接到服务器
 启动方式：
 ```bash
 # 方式1：使用GUI
-python start_v7_gui.py
+python scripts/v7/start_v7_gui.py
 
 # 方式2：使用批处理
 START_V7_GUI.bat

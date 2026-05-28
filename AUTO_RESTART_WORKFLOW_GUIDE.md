@@ -54,7 +54,7 @@
 
 ### 方法1: 查看自动重启系统状态
 ```bash
-python monitor_workflow_progress.py
+python scripts/workflow/monitor_workflow_progress.py
 ```
 
 ### 方法2: 查看工作流状态
@@ -101,7 +101,7 @@ mlflow ui --backend-store-uri file:///d:/YiFeiAI-GD/logs/mlruns
 ### 如果系统停止
 1. 检查是否有错误输出
 2. 检查工作流状态文件
-3. 手动运行 `python auto_restart_workflow.py`
+3. 手动运行 `python scripts/workflow/auto_restart_workflow.py`
 
 ### 如果改进无效
 1. 查看训练历史分析结果
