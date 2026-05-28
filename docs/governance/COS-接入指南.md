@@ -31,7 +31,7 @@ data/artifacts/          # 与 COS 对应，已 .gitignore
 
 ## 2. 控制台配置（一次）
 
-1. [创建存储桶](https://console.cloud.tencent.com/cos/bucket)：私有读写、**不启 CDN**、地域如 `ap-guangzhou`  
+1. [创建存储桶](https://console.cloud.tencent.com/cos/bucket)：私有读写、**不启 CDN**、地域须与 `COS_REGION` 一致（本项目桶在 **`ap-shanghai`**）  
 2. [API 密钥](https://console.cloud.tencent.com/cam/capi)  
 3. 桶内建议前缀（可选，与 `COS_ARTIFACT_PREFIX` 一致）：
 

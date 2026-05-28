@@ -43,7 +43,7 @@ def get_cos_client() -> Tuple["CosS3Client", str, str]:
     secret_id = os.environ.get("COS_SECRET_ID")
     secret_key = os.environ.get("COS_SECRET_KEY")
     bucket = os.environ.get("COS_BUCKET")
-    region = os.environ.get("COS_REGION", "ap-guangzhou")
+    region = os.environ.get("COS_REGION", "ap-shanghai")
 
     if not all([secret_id, secret_key, bucket]):
         print(
