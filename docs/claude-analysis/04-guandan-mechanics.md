@@ -1,7 +1,7 @@
 # 04 - 掼蛋机制与 M3 诊断
 
 **日期**：2026-05-27  
-**来源**：guandan-basic-knowledge.md + M3_DIAGNOSIS.M2.md
+**来源**：guandan-basic-knowledge.md + [M3_DIAGNOSIS.md](../guandan-brain/M3_DIAGNOSIS.md)
 
 ---
 
@@ -268,4 +268,4 @@ M1/M2/M3 的共同问题：
 
 **参考**：
 - `docs/guandan-basic-knowledge.md` — 掼蛋基本规则
-- `doc/M3_DIAGNOSIS.M2.md` — M3 的 5 个 Bug 详析
+- `docs/guandan-brain/M3_DIAGNOSIS.md` — M3 的 5 个 Bug 详析

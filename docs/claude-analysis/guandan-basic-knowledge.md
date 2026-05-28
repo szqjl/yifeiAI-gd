@@ -137,4 +137,4 @@
 - `offline_platform/掼蛋平台使用说明书v1006.pdf` — 离线平台协议、参数、数据结构
 - `offline_platform/guandan_offline_v1006/使用说明.pdf` — 同一份文档的副本
 - `docs/skill/出炸弹要领.txt` — 掼蛋炸弹使用规范（76条经验规则）
-- `doc/M2_OPTIMIZATION.md` — M2优化日志、跑分记录、根因分析
+- `docs/guandan-brain/M2_OPTIMIZATION.md` — M2优化日志、跑分记录、根因分析

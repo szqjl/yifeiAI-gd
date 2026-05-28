@@ -66,7 +66,7 @@
 
 排除掉候选 A（已完成）、B（不存在不对称），剩两条可并行推进：
 
-- **D（最优先）**：PASS 率 ~49% + 我方 0 胜场表明主动出牌过保守。重点改 `OpeningActiveHandler` / `MidEarlyActiveHandler`，参考 `doc/M2_OPTIMIZATION.md` "极端被动" 节。
+- **D（最优先）**：PASS 率 ~49% + 我方 0 胜场表明主动出牌过保守。重点改 `OpeningActiveHandler` / `MidEarlyActiveHandler`，参考 `docs/guandan-brain/M2_OPTIMIZATION.md` "极端被动" 节。
 - **P0①③④ 死路检查**：先在三个 handler 入口加 INFO 日志（无条件打印 1 行），重跑 20 局看是否能进入函数体；若进得去但条件不满足，再针对性放宽阈值。
 - **C（P1 RL）**：方向较大，建议 D 改完再启动。
 

@@ -27,6 +27,14 @@
 4. 阅读 [`EVAL.md`](EVAL.md) 中的评测入口与通过标准（含 **M1 yf1/yf2 已测结果表**）；改动后按该文档跑评测并更新 ITERATIONS。
 5. 可选：在 [`scenarios/`](scenarios/) 中为复杂局面添加最小复现（YAML/JSON/Markdown 均可）。
 
+## M 系列代际文档（M1 / M2 / M3）
+
+| 文档 | 说明 |
+|------|------|
+| [M1_ARCHITECTURE.md](M1_ARCHITECTURE.md) | M1 架构与决策管线 |
+| [M2_OPTIMIZATION.md](M2_OPTIMIZATION.md) | M2 优化日志、跑分记录、根因分析 |
+| [M3_DIAGNOSIS.md](M3_DIAGNOSIS.md) | M3 完整诊断（22 副 0 胜根因、5 个 Bug 详析） |
+
 ## 任务分派（Hermes → 执行 AI）
 
 任务写入 **`TASKS.md`**（而非仅靠会话传递），每条任务包含以下块：

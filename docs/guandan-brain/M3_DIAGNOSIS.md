@@ -1,6 +1,7 @@
 # M3 完整诊断报告：22副0胜根因
 
-分析日期: 2026-05-27
+> M 系列代际文档 · 与 [M2_OPTIMIZATION.md](M2_OPTIMIZATION.md)、[M1_ARCHITECTURE.md](M1_ARCHITECTURE.md) 同级  
+> 分析日期: 2026-05-27
 测试数据: 4整局22副 / M3(vs lalala) / 0胜0平22负 / 对手均升至A级
 
 ---

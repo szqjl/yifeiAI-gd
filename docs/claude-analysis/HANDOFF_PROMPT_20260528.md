@@ -57,7 +57,7 @@
 - 见 `docs/claude-analysis/05-root-cause-analysis.md`
 
 **D. M1 PASS 率仍 ~49% + 0 胜场，调主动出牌策略（最优先）**
-- 重点看 `docs/skill/出炸弹要领.txt` 和 `doc/M2_OPTIMIZATION.md` "极端被动" 节
+- 重点看 `docs/skill/出炸弹要领.txt` 和 `docs/guandan-brain/M2_OPTIMIZATION.md` "极端被动" 节
 - 同样的根因可能存在于 M1 的 `OpeningActiveHandler` / `MidEarlyActiveHandler`
 
 **E. P0①③④ 死路诊断（新增，与 D 可并行）**
