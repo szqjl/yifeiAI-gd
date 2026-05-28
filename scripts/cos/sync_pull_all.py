@@ -1,52 +1,30 @@
 #!/usr/bin/env python3
-"""将 COS 上整个 artifact 前缀同步到本地 data/artifacts/（单一网盘：一次拉齐）。"""
+"""将 COS 上整个 artifact 前缀同步到本地 data/artifacts/。"""
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from cos_client import get_cos_client, load_env_file
+
+REPO_ROOT = _SCRIPT_DIR.parents[1]
 ENV_FILE = REPO_ROOT / "config" / "cos.env"
 DEFAULT_PREFIX = ""
 DEFAULT_LOCAL = REPO_ROOT / "data" / "artifacts"
 
 
-def load_env_file(path: Path) -> None:
-    if not path.is_file():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip())
-
-
 def main() -> int:
     load_env_file(ENV_FILE)
-
-    secret_id = os.environ.get("COS_SECRET_ID")
-    secret_key = os.environ.get("COS_SECRET_KEY")
-    bucket = os.environ.get("COS_BUCKET")
-    region = os.environ.get("COS_REGION", "ap-guangzhou")
+    client, bucket, _region = get_cos_client()
     prefix = os.environ.get("COS_ARTIFACT_PREFIX", DEFAULT_PREFIX)
     local_root = Path(os.environ.get("COS_ARTIFACT_LOCAL", str(DEFAULT_LOCAL)))
 
-    if not all([secret_id, secret_key, bucket]):
-        print("缺少 COS 配置，见 config/cos.env.example", file=sys.stderr)
-        return 1
-
-    try:
-        from qcloud_cos import CosConfig, CosS3Client
-    except ImportError:
-        print("请安装: pip install cos-python-sdk-v5", file=sys.stderr)
-        return 1
-
-    config = CosConfig(Region=region, SecretId=secret_id, SecretKey=secret_key)
-    client = CosS3Client(config)
     local_root.mkdir(parents=True, exist_ok=True)
-
     marker = ""
     count = 0
     while True:

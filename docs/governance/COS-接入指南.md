@@ -46,14 +46,26 @@ eval/summaries/
 
 ---
 
-## 3. 本机配置
+## 3. 本机配置（官方 Python SDK）
+
+| 项 | 值 |
+|----|-----|
+| PyPI | [`cos-python-sdk-v5`](https://pypi.org/project/cos-python-sdk-v5/) |
+| 导入 | `from qcloud_cos import CosConfig, CosS3Client` |
+| 文档 | [Python SDK 快速入门](https://cloud.tencent.com/document/product/436/12269) |
+| 本仓库 | `scripts/cos/cos_client.py` |
 
 ```bash
 cd D:/YiFeiAI-GD
+pip install -r requirements.txt
+
 cp config/cos.env.example config/cos.env
-# 填写 SecretId、SecretKey、Bucket、Region
-pip install cos-python-sdk-v5
+# 填写 COS_SECRET_ID、COS_SECRET_KEY、COS_BUCKET（名称-APPID）、COS_REGION
+
+python scripts/cos/verify_cos.py
 ```
+
+`config/cos.env` 已 `.gitignore`，勿提交。
 
 ---
 
@@ -85,10 +97,11 @@ pip install cos-python-sdk-v5
 
 | 操作 | 命令 |
 |------|------|
+| **验证 SDK / 密钥** | `python scripts/cos/verify_cos.py` |
 | 上传一局 replay | `python scripts/cos/upload_regression.py game_records/xxx.json --id reg-001` |
 | 只拉 regression 清单 | `python scripts/cos/pull_regression.py` |
 | **换电脑：拉整库 artifact** | `python scripts/cos/sync_pull_all.py` |
-| 控制台/COSBrowser 随便点 | 与上表同一桶即可 |
+| 控制台/COSBrowser | 与脚本同一桶；上传大文件可拖拽 |
 
 上传模型：控制台或 COSBrowser 放到 `models/你的文件.pth`；本地镜像路径为 `data/artifacts/models/`。
 
@@ -123,6 +136,8 @@ pip install cos-python-sdk-v5
 | 文件 | 说明 |
 |------|------|
 | `config/cos.env.example` | 配置模板 |
+| `scripts/cos/cos_client.py` | 官方 SDK 封装 |
+| `scripts/cos/verify_cos.py` | 连通验证 |
 | `scripts/cos/upload_regression.py` | 上传单局 |
 | `scripts/cos/pull_regression.py` | 按 manifest 拉 regression |
 | `scripts/cos/sync_pull_all.py` | 拉整库 artifact |
