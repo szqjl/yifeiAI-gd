@@ -92,3 +92,4 @@
 
 - [COS-接入指南.md](./COS-接入指南.md) — 文件同步
 - [M-V-Series-治理方案.md](./M-V-Series-治理方案.md) — 分支与回归 30 局
+- [main-branch-policy.md](./main-branch-policy.md) — **`main` / `origin/main` 拍板策略**

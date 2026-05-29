@@ -3,7 +3,19 @@
 yf1_v5_stage5 - YiFei AI V5 Stage5 Client (Player 0)
 Enhanced version with Stage5 advanced AI capabilities
 阶段5升级版本：集成策略模式识别、对手建模、动态策略调整
+
+.. deprecated:: 2026-05-29
+    Stage5 专用客户端已归档。请改用 ``yf1_v5.py`` / ``yf2_v5.py``（V-learn 主线）；
+    M 主迭代请用 ``yf1_m1.py`` / ``yf2_m1.py``。本文件仅保留供历史训练/replay 对照。
 """
+import warnings
+
+warnings.warn(
+    "yf1_v5_stage5.py is deprecated. Use yf1_v5.py (V-learn) or yf1_m1.py (M×lalala).",
+    DeprecationWarning,
+    stacklevel=1,
+)
+
 import asyncio
 import json
 import sys

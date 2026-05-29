@@ -6,10 +6,11 @@
 
 | 字段 | 值 |
 |------|-----|
-| 最后更新 | 2026-05-28 |
+| 最后更新 | 2026-05-29 |
 | 默认开发分支 | `m-dev`（Gitee 仓库默认分支 **已设置**） |
 | canonical 远程 | Gitee `origin` |
 | V-default-smoke | **OFF** |
+| `main` 策略 | **已拍板** → [main-branch-policy.md](../governance/main-branch-policy.md) |
 
 ---
 
@@ -34,7 +35,7 @@
 | `m-dev` | M | `origin/m-dev` | **主开发 / 集成** |
 | `v7-dev` | V-nn | `origin/v7-dev` | v7 实验 |
 | `v6-dev` | V-learn | `origin/v6-dev` | 归档，默认不合并 |
-| `main` | 发布 | `origin/main` | 稳定快照 |
+| `main` | 发布 | `origin/main` | **冻结快照** @ `e767f28`（tag `archive/main-pre-governance-20260528`）；里程碑前不 fast-forward |
 | `github/*` | 镜像 | — | **暂不维护**（2026-05-28） |
 
 ---
@@ -45,8 +46,9 @@
 |------|------|--------|----------|
 | **当前：M × lalala** | `m-dev` | `yf1_m1.py`, `yf2_m1.py` | M 硬编码策略 + lalala 适配 |
 | V-learn 实验 | `m-dev` / 特性分支 | `yf1_v5.py`, `yf2_v5.py` | `hybrid_decision_engine_v5` 等 |
+| V-learn 归档 | — | ~~`yf1_v4.py`~~, ~~`yf2_v4.py`~~, ~~`yf1_v5_stage5.py`~~, ~~`yf2_v5_stage5.py`~~ | **deprecated**（2026-05-29）；启动时 `DeprecationWarning` |
 | V-nn 实验 | `v7-dev` | `yf1_v7.py`, `yf2_v7.py` | `ultimate_win_rate_engine_v7.py` |
-| 历史 | 本地旧 `main` | v4/v5/stage* | 仅查阅，不扩展 |
+| 历史 | tag / `main` @ `e767f28` | v4/v5/stage* | 仅查阅，不扩展 |
 
 ---
 
@@ -95,3 +97,5 @@
 |------|------|
 | 2026-05-28 | 初版：V-smoke OFF；m-dev 为默认；30 局回归 |
 | 2026-05-28 | 分支 `m1-dev` 重命名为 `m-dev`（远程已删 `m1-dev`） |
+| 2026-05-29 | `main`/`origin/main` 策略拍板：冻结 `e767f28`，活跃线 `m-dev`；见 `docs/governance/main-branch-policy.md` |
+| 2026-05-29 | v4 / v5_stage5 客户端 deprecated 标记（`DeprecationWarning` + docstring） |

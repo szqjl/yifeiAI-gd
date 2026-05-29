@@ -2,10 +2,10 @@
 
 | 项目 | 内容 |
 |------|------|
-| 文档版本 | v1.2 |
+| 文档版本 | v1.3 |
 | 状态 | 已采纳（团队执行基准） |
 | 适用范围 | YiFeiAI-GD 仓库全体协作与分支/产物管理 |
-| 最后更新 | 2026-05-28（`m-dev` @ `9910df3`） |
+| 最后更新 | 2026-05-29（`main` 策略已拍板，见 [main-branch-policy.md](./main-branch-policy.md)） |
 
 ---
 
@@ -110,8 +110,8 @@ flowchart TB
 | **`m-dev`** | M | 主集成线（m1→m2→m3） | **是** |
 | **`v7-dev`** | V-nn | v7 实验 | 仅 V7 相关时 |
 | **`v6-dev`** | V-learn | MOE 等归档 | 否（只读参考） |
-| **`main`** | 混合/发布 | 稳定快照、少模型 | 否（仅发布/合并） |
-| 本地旧 `main` | 历史 | 阶段训练与大文件历史 | 否（已 tag 归档后勿再提交） |
+| **`main`** | 混合/发布 | 稳定快照；**当前冻结**于 `e767f28`（tag `archive/main-pre-governance-20260528`） | 否（仅里程碑合并，见 [main-branch-policy.md](./main-branch-policy.md)） |
+| 治理前 `main` 快照 | 历史 | 与上表同一 commit；V 阶段训练历史 | 否（只读；勿在 `main` 上日常提交） |
 | ~~`develop`~~ | — | Gitee 已删除 | 不恢复 |
 
 版本与状态明细见：[docs/versions/MATRIX.md](../versions/MATRIX.md)。
@@ -317,7 +317,7 @@ __pycache__/
 - [x] README 增加「掼蛋与平台基础知识（新手必读）」摘要（`9c5adb9`）
 - [x] `doc/M2_OPTIMIZATION.md`、`doc/M3_DIAGNOSIS.M2.md` → `docs/guandan-brain/`（重命名为 `M3_DIAGNOSIS.md`；`9910df3`）；空目录 `doc/` 已删除
 - [x] **`scripts/tools/yf_replay.py`**：功能优化已推送（`126b573`，Claude）
-- [ ] deprecated 标记 v4/v5_stage5 客户端
+- [x] deprecated 标记 v4/v5_stage5 客户端（2026-05-29：模块 docstring + `DeprecationWarning`）
 - [ ] m3 `contracts/` 与目录 `src/m/`、`src/v/` 渐进迁移
 - [ ] v7 评审通过后合并 `v7-dev` → `m-dev`
 
@@ -334,7 +334,8 @@ __pycache__/
 | [docs/analysis/handoffs/](../analysis/handoffs/) | 任务级 handoff（取日期最新一篇） |
 | [docs/guandan-brain/README.md](../guandan-brain/README.md) | M 系列迭代台账与 M1/M2/M3 代际文档 |
 | [docs/掼蛋AI客户端架构方案.md](../掼蛋AI客户端架构方案.md) | 模块级架构（需与本文 M/V 分层对齐） |
-| [docs/GIT_SETUP_GUIDE.md](../GIT_SETUP_GUIDE.md) | Git 操作（待与 §4 同步修订） |
+| [main-branch-policy.md](./main-branch-policy.md) | **`main` / `origin/main` 拍板策略（2026-05-29）** |
+| [docs/GIT_SETUP_GUIDE.md](../GIT_SETUP_GUIDE.md) | Git 操作（旧版；分支策略以治理方案 + main-branch-policy 为准） |
 
 ---
 
@@ -345,3 +346,4 @@ __pycache__/
 | v1.0 | 2026-05-28 | 首版：M/V 分层、分支、OSS、回归 30 局、V 冒烟双条件、现阶段 M-only 门禁 |
 | v1.1 | 2026-05-28 | 默认开发分支 **`m1-dev` → `m-dev`**（M 系列总线，与 m1/m2 代际区分） |
 | v1.2 | 2026-05-28 | Phase 4 脚本收敛结案；`doc/` → `docs/guandan-brain/`；README 基础知识摘要；相关 handoff 见 `docs/analysis/handoffs/2026-05-28-仓库整理方案执行中.md` |
+| v1.3 | 2026-05-29 | `main` / `origin/main` 策略拍板；新增 [main-branch-policy.md](./main-branch-policy.md) |

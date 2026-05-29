@@ -2,7 +2,19 @@
 """
 yf1_v4 - YiFei AI V4 Client (Player 0)
 Uses HybridDecisionEngineV4 with 4-layer fallback protection
+
+.. deprecated:: 2026-05-29
+    V4 客户端已归档，不再作为日常入口。M 主迭代请用 ``yf1_m1.py`` / ``yf2_m1.py``（``m-dev``）；
+    V-learn 实验请用 ``yf1_v5.py`` / ``yf2_v5.py``。本文件仅保留供历史 replay 与对照实验。
 """
+import warnings
+
+warnings.warn(
+    "yf1_v4.py is deprecated (archived V-learn). Use yf1_m1.py for M×lalala or yf1_v5.py for V-learn.",
+    DeprecationWarning,
+    stacklevel=1,
+)
+
 import asyncio
 import websockets
 import json
