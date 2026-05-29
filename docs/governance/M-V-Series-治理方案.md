@@ -417,6 +417,9 @@ __pycache__/
 
 ## 9. 实施路线图（不改业务逻辑的分阶段）
 
+> **状态（2026-05-29）：仓库整理已结案** — Phase 0–5 与 Phase 1 GitHub/develop 治理项已完成并推送 Gitee；日常真相源为 `origin/m-dev`。  
+> **未纳入「仓库整理」结案范围**：`v7-dev` → `m-dev` 合并（§4.3，待评审）；§8.2 PR 合并门禁为常驻流程；GitHub 镜像需本机网络可达时执行 `scripts/tools/sync_github_mirror.ps1`。
+
 ### Phase 0 — 共识（已完成）
 
 - [x] 采纳本文档与 MATRIX、回归 30 局、V 冒烟双条件、OSS 策略
@@ -461,7 +464,7 @@ __pycache__/
 - [x] M2/M3 引擎迁入 `src/m/m2/`、`src/m/m3/`（2026-05-29）
 - [ ] v7 评审通过后合并 `v7-dev` → `m-dev`
 
-### Phase 5 — 目录体感整理（文档 + 启动器 + 根目录 md/sh）（建议 2–3 个 PR）
+### Phase 5 — 目录体感整理（文档 + 启动器 + 根目录 md/sh）**（已结案，2026-05-29）**
 
 > 详案见 **§5.5–§5.9**。不改变对局逻辑，只动路径、stub、索引。
 
@@ -504,4 +507,4 @@ __pycache__/
 | v1.1 | 2026-05-28 | 默认开发分支 **`m1-dev` → `m-dev`**（M 系列总线，与 m1/m2 代际区分） |
 | v1.2 | 2026-05-28 | Phase 4 脚本收敛结案；`doc/` → `docs/guandan-brain/`；README 基础知识摘要；相关 handoff 见 `docs/analysis/handoffs/2026-05-28-仓库整理方案执行中.md` |
 | v1.3 | 2026-05-29 | `main` / `origin/main` 策略拍板；新增 [main-branch-policy.md](./main-branch-policy.md) |
-| v1.6 | 2026-05-29 | Phase 1 结案：GitHub/develop 清理脚本；`git-setup-guide` 弃用说明 |
+| v1.7 | 2026-05-29 | §9 标「仓库整理已结案」；ITERATIONS Phase 5 治理结案行 |
