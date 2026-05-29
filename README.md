@@ -42,7 +42,7 @@
 
 ## 🎴 掼蛋与平台基础知识（新手必读）
 
-> 本节摘自 [docs/guandan-basic-knowledge.md](docs/guandan-basic-knowledge.md)。**离线平台协议与字段以** `offline_platform/掼蛋平台使用说明书v1006.pdf` **为准**；下文帮助你在读代码、跑批、看日志前先建立共同语言。
+> 本节摘自 [docs/knowledge/guandan-basic-knowledge.md](docs/knowledge/guandan-basic-knowledge.md)。**离线平台协议与字段以** `offline_platform/掼蛋平台使用说明书v1006.pdf` **为准**；下文帮助你在读代码、跑批、看日志前先建立共同语言。
 
 ### 这是什么项目？
 
@@ -107,7 +107,7 @@ M2 客户端在 `yf1_m2.py` / `yf2_m2.py` 里做 **副级 + 局级** 追踪：�
 
 新手只需知道：**看胜率 / 回归别只数「副数」**——平台参数 N、批跑 `target-games` 与「完整局」可能不一致；分析时优先看 `game_scores_m2.json` 或治理文档中的 **30 局回归集**（[COS 拉取](docs/governance/COS-接入指南.md)）。
 
-更细的判定函数、JSON 格式与注意点 → [docs/guandan-basic-knowledge.md](docs/guandan-basic-knowledge.md) 第三节。
+更细的判定函数、JSON 格式与注意点 → [docs/knowledge/guandan-basic-knowledge.md](docs/knowledge/guandan-basic-knowledge.md) 第三节。
 
 ### 新手建议阅读顺序
 
@@ -445,7 +445,7 @@ guandan_ai_client/
 └── logs/                   # 日志目录
 ```
 
-详细结构说明请参考 [架构方案文档](docs/掼蛋AI客户端架构方案.md)
+详细结构说明请参考 [架构方案文档](docs/architecture/掼蛋AI客户端架构方案.md)
 
 ---
 
@@ -483,7 +483,7 @@ info_monitor:
 ```
 
 ### 配置说明
-- 详细配置说明请参考 [架构方案文档 - 配置管理](docs/掼蛋AI客户端架构方案.md#六配置管理)
+- 详细配置说明请参考 [架构方案文档 - 配置管理](docs/architecture/掼蛋AI客户端架构方案.md#六配置管理)
 
 ---
 
@@ -623,7 +623,7 @@ pip install -r requirements.txt
 
 1. **阅读文档**
    - 若涉及 AI 行为/规则/训练改动：先读 [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md)（`ISSUES` / `ITERATIONS` / `EVAL`）
-   - 阅读 [架构方案文档](docs/掼蛋AI客户端架构方案.md)
+   - 阅读 [架构方案文档](docs/architecture/掼蛋AI客户端架构方案.md)
    - 理解游戏规则和JSON格式
    - 了解平台要求
 
@@ -662,7 +662,7 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 
 ### 游戏规则
 - [掼蛋与平台基础知识（本文档摘要）](#掼蛋与平台基础知识新手必读)
-- [掼蛋基础知识（完整版）](docs/guandan-basic-knowledge.md) — 升级规则、v1006 协议、M2 胜负追踪与 `game_scores_m2.json`
+- [掼蛋基础知识（完整版）](docs/knowledge/guandan-basic-knowledge.md) — 升级规则、v1006 协议、M2 胜负追踪与 `game_scores_m2.json`
 - 江苏省体育局掼蛋竞赛简易规则
 - v1006版本特殊规则（抗贡规则调整）
 
@@ -671,10 +671,10 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 - [M/V 系列仓库治理方案](docs/governance/M-V-Series-治理方案.md) - **分支、冒烟、产物与 M/V 分层（执行基准）**
 - [腾讯云 COS 接入指南](docs/governance/COS-接入指南.md) - **回归 replay 上传/拉取**
 - [版本与分支状态矩阵](docs/versions/MATRIX.md)
-- [详细架构方案](docs/掼蛋AI客户端架构方案.md)
+- [详细架构方案](docs/architecture/掼蛋AI客户端架构方案.md)
 - [开发规范](docs/DEVELOPMENT_RULES.md) - **重要：包含时间处理规则**
 - [参赛指南](docs/掼蛋AI比赛参赛指南.md)
-- [比赛汇总](docs/掼蛋AI相关比赛汇总.md)
+- [比赛汇总](docs/competition/掼蛋AI相关比赛汇总.md)
 
 ### 技术参考
 - WebSocket协议文档

@@ -81,7 +81,7 @@ category: productivity
 
 | 文档 | 作用 |
 |------|------|
-| `docs/掼蛋AI客户端架构方案.md` | 详细架构设计（2552行） |
+| `docs/architecture/掼蛋AI客户端架构方案.md` | 详细架构设计（2552行） |
 | `docs/guandan-brain/AGENT_HUB.md` | 指挥系统（Hermes/OpenCode/Cursor） |
 | `docs/guandan-brain/MULTI_AGENT_ORCHESTRATION.md` | 多Agent协作历程 |
 

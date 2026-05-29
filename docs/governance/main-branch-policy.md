@@ -88,4 +88,4 @@ git push origin main                          # ✗ 未经里程碑 PR
 | [M-V-Series-治理方案.md](./M-V-Series-治理方案.md) | 总纲 §4 分支治理 |
 | [docs/versions/MATRIX.md](../versions/MATRIX.md) | 分支状态矩阵 |
 | [分析接续-handoff.md](./分析接续-handoff.md) | 换机接续 |
-| [GIT_SETUP_GUIDE.md](../GIT_SETUP_GUIDE.md) | 旧版 Git 指南（**分支策略以本文与治理方案为准**） |
+| [GIT_SETUP_GUIDE.md](../governance/git-setup-guide.md) | 旧版 Git 指南（**分支策略以本文与治理方案为准**） |

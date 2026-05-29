@@ -101,3 +101,4 @@
 | 2026-05-29 | `main`/`origin/main` 策略拍板：冻结 `e767f28`，活跃线 `m-dev`；见 `docs/governance/main-branch-policy.md` |
 | 2026-05-29 | v4 / v5_stage5 客户端 deprecated 标记（`DeprecationWarning` + docstring） |
 | 2026-05-29 | m3 Phase 2：M1/V 引擎物理迁入 + 契约 v1.0 + V 挂接门禁 |
+| 2026-05-29 | docs 根目录 24 篇文档归类；见 `docs/governance/DOCUMENT_AUDIT.md` |

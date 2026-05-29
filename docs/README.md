@@ -8,6 +8,10 @@
 - **[文档完整索引](DOCUMENTATION_INDEX.md)** - 所有文档的完整索引和分类
 - **[快速开始指南](quickstart/)** - 快速上手项目
 
+### 🧠 治理与归类（改仓库结构前可读）
+- **[M-V 治理方案](governance/M-V-Series-治理方案.md)** · **[文档审查台账](governance/DOCUMENT_AUDIT.md)**（2026-05-29）
+- **[main 分支策略](governance/main-branch-policy.md)** · **[COS 接入](governance/COS-接入指南.md)**
+
 ### 🧠 掼蛋 AI 迭代大脑（改代码前先读）
 - **[guandan-brain 说明与索引](guandan-brain/README.md)** - 缺陷（ISSUES）、迭代日志（ITERATIONS）、评测（EVAL）；与代码同仓的真源台账
 - **[指挥系统（规划 / 统筹 / 部署）](guandan-brain/COMMAND_SYSTEM.md)** - 大脑与执行层分工、标准一轮流程
@@ -59,25 +63,30 @@
 - [ISSUES.md](guandan-brain/ISSUES.md) · [ITERATIONS.md](guandan-brain/ITERATIONS.md) · [EVAL.md](guandan-brain/EVAL.md)
 - [评测场景目录](guandan-brain/scenarios/)
 
-## 📋 文档列表
+## 📋 文档列表（根目录已迁入子目录，见 [DOCUMENT_AUDIT](governance/DOCUMENT_AUDIT.md)）
 
 ### 核心架构文档
-- [掼蛋AI客户端架构方案](掼蛋AI客户端架构方案.md)
-- [掼蛋AI完整开发指南](掼蛋AI完整开发指南.md)
+- [掼蛋AI客户端架构方案](architecture/掼蛋AI客户端架构方案.md)
+- [掼蛋AI完整开发指南](development/掼蛋AI完整开发指南.md)
 
 ### 比赛相关
-- [掼蛋AI相关比赛汇总](掼蛋AI相关比赛汇总.md)
+- [掼蛋AI相关比赛汇总](competition/掼蛋AI相关比赛汇总.md)
+- [一等奖 lalala 分析](competition/一等奖代码优秀特点分析.md)
 
 ### 工具和配置
-- [Git设置指南](GIT_SETUP_GUIDE.md)
-- [WebSocket配置](WEBSOCKET_CONFIG.md)
-- [OCR和Markitdown指南](OCR_AND_MARKITDOWN_GUIDE.md)
-- [推送前检查指南](推送前检查指南.md)
+- [Git设置指南（旧版）](governance/git-setup-guide.md) — 分支以 [main-branch-policy](governance/main-branch-policy.md) 为准
+- [WebSocket配置](development/WEBSOCKET_CONFIG.md)
+- [OCR和Markitdown指南](usage/OCR_AND_MARKITDOWN_GUIDE.md)
+- [推送前检查指南](development/推送前检查指南.md)
 
 ### 模型和版本
-- [模型文件管理方案](模型文件管理方案.md)
-- [V4 V5对比](V4_V5_COMPARISON.md)
-- [V5模型加载和调试信息](V5_MODEL_LOADING_AND_DEBUG_INFO.md)
+- [模型文件管理方案](governance/模型文件管理方案.md) — Artifact 主路径见 [COS-接入指南](governance/COS-接入指南.md)
+- [V4 V5对比（归档）](versions/V4_V5_COMPARISON.md)
+- [V5模型加载和调试信息（归档）](versions/V5_MODEL_LOADING_AND_DEBUG_INFO.md)
+
+### 项目与规划
+- [项目开发历程总览](project/项目开发历程总览.md)
+- [一年期限与里程碑](project/项目一年期限与里程碑.md)
 
 ## 🔍 按主题查找
 

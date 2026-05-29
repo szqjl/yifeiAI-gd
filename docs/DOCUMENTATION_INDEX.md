@@ -6,6 +6,15 @@
 
 ```
 docs/
+├── governance/                  # 治理、COS、文档审查、repo 清理台账
+│   ├── M-V-Series-治理方案.md
+│   ├── DOCUMENT_AUDIT.md
+│   └── repo-cleanup-inventory.md
+├── architecture/                # 客户端架构总纲
+│   └── 掼蛋AI客户端架构方案.md
+├── project/                     # 项目历程与里程碑
+├── versions/                    # V 系列版本对比（归档）
+├── competition/                 # 比赛与对手分析
 ├── README.md                    # 文档目录总览
 ├── DOCUMENTATION_INDEX.md       # 本文档（完整索引）
 │

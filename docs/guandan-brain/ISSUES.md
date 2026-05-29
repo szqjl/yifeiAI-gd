@@ -16,7 +16,7 @@
 | GUA-006 | closed | P2 | policy | m1 | yf2_m1 相对 yf1_m1 改善滞后 | yf2 PASS、问题 PASS 仍偏多 | M1 双客户端 | `docs/reports/m1/M1行为改善分析总结.md` |
 | GUA-007 | closed | P1 | policy | m1 | M1 Opening 被动不当 PASS | 对手出对/单张仍有可选动作却 PASS | `OpeningPassiveHandler` | 同上；与 `M1_PASS问题分析报告.md` 中阶段分析一致 |
 | GUA-008 | closed | P1 | observation | m1 | M1 记录缺少 victoryNum / 评估异常 | `gameOver` 过早保存；需 `gameResult` 与 `victoryNum` | `yf1_m1.py`、`game_recorder`、评估器 | `GAME_RECORD_SAVE_FIX.md`、`EVALUATOR_COMPATIBILITY_REPORT.md` |
-| GUA-009 | open | P3 | policy | v4 | V4 RL 未启用 | 对比说明：RL 部分集成但未作为默认路径 | V4 混合决策 | `docs/V4_V5_COMPARISON.md` |
+| GUA-009 | open | P3 | policy | v4 | V4 RL 未启用 | 对比说明：RL 部分集成但未作为默认路径 | V4 混合决策 | `docs/V4_V5_COMPARISON.md` | `docs/versions/V4_V5_COMPARISON.md` |
 | GUA-010 | open | P1 | observation, policy | v4, v5 | 对局记录中决策信息不全 | `candidates_count=0` 等，score/layer 空，难评混合链 | hybrid / V4–V5 栈 | 对照 `docs/analysis/YF决策问题分析与修复.md`；与回放/评测管道一致时需样本 |
 | GUA-011 | closed | P1 | rules | v5 | 红心配（逢人配）识别与使用不当 | 曾硬编码 H2；应按 `cur_rank` 用 `H{rank}`；小顺浪费红心配 | `card_grouping_strategy` | `docs/fixes/GAME_ISSUE_FIX_SUMMARY.md` |
 | GUA-012 | closed | P2 | policy | v5 | 天然单张未优先、拆三张出单 | 有天然单张却拆三张 | `yf1_v5.py`、`yf2_v5.py` | 同上 |

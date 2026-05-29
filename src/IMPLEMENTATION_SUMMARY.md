@@ -258,5 +258,5 @@ cooperation.danger_threshold = 4   # 对手剩余牌数危险阈值
 
 - 获奖代码: `D:/掼蛋算法大赛选手人工智能代码/一等奖-东南大学-李菁-lalala-人机大赛`
 - 平台文档: `docs/gdrules/掼蛋平台使用说明书1006.md`
-- 架构方案: `docs/掼蛋AI客户端架构方案.md`
+- 架构方案: `docs/architecture/掼蛋AI客户端架构方案.md`
 

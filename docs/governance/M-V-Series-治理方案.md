@@ -157,7 +157,7 @@ src/
 
 | 目录 | 用途 |
 |------|------|
-| `docs/governance/` | 治理总纲、COS、分析接续 handoff 流程 |
+| `docs/governance/` | 治理总纲、COS、handoff、**文档审查台账** |
 | `docs/guandan-brain/` | M 系列迭代真源：ISSUES / ITERATIONS / **M1/M2/M3 代际文档** |
 | `docs/analysis/handoffs/` | 具体任务 handoff（换机 / 新 Agent 接续） |
 | `docs/versions/MATRIX.md` | 分支与冒烟状态矩阵 |
@@ -301,7 +301,7 @@ __pycache__/
 ### Phase 3 — `.gitignore` 与清单（2–3 天）
 
 - [x] 收紧 `models/`、`logs/`、`training_logs/`、`data/artifacts/`
-- [x] 编写 `docs/repo-cleanup-inventory.md`（根目录脚本归类，待迁移）
+- [x] 编写 `docs/governance/repo-cleanup-inventory.md`（根目录脚本归类，已完成）
 
 ### Phase 4 — 代码收敛（多 PR，按需）
 
@@ -334,9 +334,10 @@ __pycache__/
 | [docs/governance/分析接续-handoff.md](./分析接续-handoff.md) | 换机 / 新 Agent 如何接续分析 |
 | [docs/analysis/handoffs/](../analysis/handoffs/) | 任务级 handoff（取日期最新一篇） |
 | [docs/guandan-brain/README.md](../guandan-brain/README.md) | M 系列迭代台账与 M1/M2/M3 代际文档 |
-| [docs/掼蛋AI客户端架构方案.md](../掼蛋AI客户端架构方案.md) | 模块级架构（需与本文 M/V 分层对齐） |
+| [docs/掼蛋AI客户端架构方案.md](../architecture/掼蛋AI客户端架构方案.md) | 模块级架构（需与本文 M/V 分层对齐） |
 | [main-branch-policy.md](./main-branch-policy.md) | **`main` / `origin/main` 拍板策略（2026-05-29）** |
-| [docs/GIT_SETUP_GUIDE.md](../GIT_SETUP_GUIDE.md) | Git 操作（旧版；分支策略以治理方案 + main-branch-policy 为准） |
+| [DOCUMENT_AUDIT.md](./DOCUMENT_AUDIT.md) | 根目录文档审查与归类（2026-05-29） |
+| [git-setup-guide.md](./git-setup-guide.md) | Git 操作（旧版；分支策略以治理方案 + main-branch-policy 为准） |
 
 ---
 
