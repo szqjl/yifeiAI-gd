@@ -25,7 +25,7 @@ from pathlib import Path
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from decision.hybrid_decision_engine_v4 import HybridDecisionEngineV4
+from v.learn import HybridDecisionEngineV4
 from communication.game_recorder import (
     GameRecorder,
     normalize_cards_to_string_list,

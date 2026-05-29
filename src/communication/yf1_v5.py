@@ -15,7 +15,7 @@ import time  # Add at top if not present
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent)) # Add project root
 
-from decision.hybrid_decision_engine_v5 import HybridDecisionEngineV5
+from v.learn import HybridDecisionEngineV5
 from decision.rl_decision_engine import RLDecisionEngine
 from communication.game_recorder import GameRecorder, normalize_cards_to_string_list, normalize_action_list
 from communication.websocket_manager import WebSocketManager

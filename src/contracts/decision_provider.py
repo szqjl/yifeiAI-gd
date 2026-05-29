@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-IDecisionProvider — M3 决策引擎稳定契约（草案 v0.1）
+IDecisionProvider — M3 决策引擎稳定契约 v1.0
 
-V-learn / V-nn 客户端应只依赖本接口 + src/m/platform，不直接 import M1 代际实现。
-物理文件仍位于 src/decision/；本契约定义行为边界，渐进迁移见 src/m/、src/v/。
+V-learn / V-nn 客户端须满足本契约；实现应位于 src/v/ 并通过 is_decision_provider 校验。
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, Protocol, runtime_checkable
 
-DECISION_PROVIDER_CONTRACT_VERSION = "0.1-draft"
+DECISION_PROVIDER_CONTRACT_VERSION = "1.0"
+V_INTEGRATION_GATE_ENABLED = True
 
-# 平台 act 消息（type=act, stage=play 等）；完整字段见 docs/README 与 game_recorder
 ActMessage = Dict[str, Any]
 
 
@@ -35,6 +34,17 @@ def is_decision_provider(obj: object) -> bool:
         return False
     player_id = getattr(obj, "player_id", None)
     return isinstance(player_id, int)
+
+
+def assert_v_integration_gate(engine: object, *, label: str = "engine") -> None:
+    """V 挂接门禁：不满足契约则抛 AssertionError（供 CI / 测试调用）。"""
+    if not V_INTEGRATION_GATE_ENABLED:
+        return
+    if not is_decision_provider(engine):
+        raise AssertionError(
+            f"{label} fails IDecisionProvider v{DECISION_PROVIDER_CONTRACT_VERSION} "
+            "(requires player_id:int and decide(message)->int)"
+        )
 
 
 class DecisionProviderAdapter:

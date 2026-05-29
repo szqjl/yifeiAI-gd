@@ -34,7 +34,7 @@
 | [M1_ARCHITECTURE.md](M1_ARCHITECTURE.md) | M1 架构与决策管线 |
 | [M2_OPTIMIZATION.md](M2_OPTIMIZATION.md) | M2 优化日志、跑分记录、根因分析 |
 | [M3_DIAGNOSIS.md](M3_DIAGNOSIS.md) | M3 完整诊断（22 副 0 胜根因、5 个 Bug 详析） |
-| [../src/contracts/README.md](../../src/contracts/README.md) | M3 契约 `IDecisionProvider`（草案 v0.1） |
+| [../src/contracts/README.md](../../src/contracts/README.md) | M3 契约 `IDecisionProvider` **v1.0**（V 挂接门禁 ON） |
 | [../src/m/README.md](../../src/m/README.md) | M 系列目录映射（渐进迁移） |
 
 ## 任务分派（Hermes → 执行 AI）

@@ -26,7 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent)) # Add project root
 
-from decision.hybrid_decision_engine_v4 import HybridDecisionEngineV4
+from v.learn import HybridDecisionEngineV4
 from decision.rl_decision_engine import RLDecisionEngine
 from communication.game_recorder import (
     GameRecorder,

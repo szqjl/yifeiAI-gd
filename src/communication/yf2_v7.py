@@ -15,7 +15,7 @@ import time
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from decision.ultimate_win_rate_engine_v7 import UltimateWinRateEngineV7
+from v.nn import UltimateWinRateEngineV7
 from communication.game_recorder import (
     GameRecorder,
     normalize_cards_to_string_list,

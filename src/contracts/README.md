@@ -2,9 +2,9 @@
 
 | 字段 | 值 |
 |------|-----|
-| 契约版本 | `0.1-draft`（`DECISION_PROVIDER_CONTRACT_VERSION`） |
-| 状态 | **草案**：目录与接口已落地，**尚未**作为 V-default-smoke ON 的冻结门禁 |
-| 冻结条件 | 治理方案 §7.2 条件 B：本文档标记 `1.0` + M 冒烟连续 7 天绿 |
+| 契约版本 | **`1.0`**（`DECISION_PROVIDER_CONTRACT_VERSION`） |
+| V 挂接门禁 | **`V_INTEGRATION_GATE_ENABLED = True`** |
+| 状态 | **已冻结**（2026-05-29 Phase 2）；V 客户端/引擎 PR 须通过 `assert_v_integration_gate` |
 
 ## IDecisionProvider
 
@@ -15,12 +15,18 @@
 
 ## V 系列依赖规则
 
-- **允许**：`contracts.*`、`m.platform.*`（通信/状态/常量）
-- **禁止（新代码）**：`from decision.rule_based_decision_engine_m1 import ...` 等 M 代际直达
-- **存量**：`src/decision/` 路径在迁移期仍有效；新 V 代码应走 `src/v/` re-export
+- **允许**：`contracts.*`、`m.platform.*`、`v.learn.*`、`v.nn.*`
+- **禁止（新 V 代码）**：`from decision.hybrid_decision_engine_v5 import ...` 等（请用 `v.learn` / `v.nn`）
+- **禁止（新 V 代码）**：`from decision.rule_based_decision_engine_m1 import ...` 等 M 代际直达
+- **存量**：`src/decision/*.py`  shim 在迁移期仍可用；新 PR 不得新增对 shim 的依赖
+
+## CI / 测试门禁
+
+```bash
+pytest tests/test_m3_contracts_layout.py tests/test_v_integration_gate.py
+```
 
 ## 变更流程
 
 1. 修改 `decision_provider.py` 前在 `ITERATIONS.md` 登记
-2. 跑 `pytest tests/test_m3_contracts_layout.py`
-3. 版本号递增；破坏性变更需 major bump 并同步 MATRIX
+2. 破坏性变更须 major bump 并同步 MATRIX / 治理方案

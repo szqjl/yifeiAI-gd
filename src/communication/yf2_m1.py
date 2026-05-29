@@ -28,7 +28,7 @@ try:
     from moe_training.src.decision.moe_decision_engine_m1 import MoEDecisionEngineM1
     USE_MOE_ENGINE = True
 except ImportError:
-    from decision.rule_based_decision_engine_m1 import RuleBasedDecisionEngineM1
+    from m.m1 import RuleBasedDecisionEngineM1
     USE_MOE_ENGINE = False
 from communication.game_recorder import (
     GameRecorder,

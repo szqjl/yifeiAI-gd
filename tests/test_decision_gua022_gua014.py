@@ -9,15 +9,17 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from communication.game_recorder import sync_pass_counters
-from decision.stage_router import BasePhaseHandler, StageRouter
-from decision.intelligent_router import IntelligentStageRouter
-from decision.phase_handlers import OpeningPassiveHandler, OpeningActiveHandler
-from decision.strategy_engine import (
-    TeammateProtectionStrategy,
-    TeamOffensiveStrategy,
+from m.m1 import (
+    BasePhaseHandler,
+    EnhancedPrioritySystem,
+    IntelligentStageRouter,
+    OpeningActiveHandler,
+    OpeningPassiveHandler,
     OpponentSprintWhenTeammateLeadsRule,
+    StageRouter,
+    TeamOffensiveStrategy,
+    TeammateProtectionStrategy,
 )
-from decision.enhanced_priority_system import EnhancedPrioritySystem
 
 
 class _ContextProbeHandler(BasePhaseHandler):

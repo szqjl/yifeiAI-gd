@@ -319,7 +319,7 @@ __pycache__/
 - [x] **`scripts/tools/yf_replay.py`**：功能优化已推送（`126b573`，Claude）
 - [x] deprecated 标记 v4/v5_stage5 客户端（2026-05-29：模块 docstring + `DeprecationWarning`）
 - [x] m3 `contracts/` 与目录 `src/m/`、`src/v/` 渐进迁移 **Phase 1**（2026-05-29：命名空间 + re-export + `IDecisionProvider` 草案 v0.1）
-- [ ] m3 物理文件迁入 `m/`、`v/`（Phase 2+，按需 PR）
+- [x] m3 物理文件迁入 `m/m1/`、`v/learn/`、`v/nn/`（2026-05-29 Phase 2；`decision/*` 保留 shim）
 - [ ] v7 评审通过后合并 `v7-dev` → `m-dev`
 
 ---
