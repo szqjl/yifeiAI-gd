@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from contracts import ActMessage
-from decision.m3_decision_engine import M3DecisionEngine
+from .m3_decision_engine import M3DecisionEngine
 
 if TYPE_CHECKING:
     pass

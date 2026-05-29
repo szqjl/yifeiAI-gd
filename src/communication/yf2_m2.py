@@ -22,7 +22,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from decision.rule_based_decision_engine_m2 import RuleBasedDecisionEngineM2
+from m.m2 import RuleBasedDecisionEngineM2
 from communication.game_recorder import (
     GameRecorder,
     normalize_cards_to_string_list,

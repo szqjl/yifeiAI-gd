@@ -29,6 +29,26 @@ def test_contract_version_frozen():
 
 
 @pytest.mark.unit
+def test_m2_m3_modules_physically_under_m_package():
+    import m.m2.rule_based_decision_engine_m2 as m2e
+    import m.m3.m3_decision_engine as m3e
+
+    assert "m2" in m2e.__file__.replace("\\", "/")
+    assert "m3" in m3e.__file__.replace("\\", "/")
+
+
+@pytest.mark.unit
+def test_m2_m3_decision_shims():
+    from decision.rule_based_decision_engine_m2 import RuleBasedDecisionEngineM2 as ShimM2
+    from decision.m3_decision_engine import M3DecisionEngine as ShimM3
+    from m.m2 import RuleBasedDecisionEngineM2
+    from m.m3 import M3DecisionEngine
+
+    assert ShimM2 is RuleBasedDecisionEngineM2
+    assert ShimM3 is M3DecisionEngine
+
+
+@pytest.mark.unit
 def test_m1_modules_physically_under_m_package():
     import m.m1.stage_router as sr
     import m.m1.phase_handlers as ph

@@ -15,7 +15,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from decision.m3_decision_engine import M3DecisionEngine
+from m.m3 import M3DecisionEngine
 from communication.game_recorder import (
     GameRecorder,
     normalize_cards_to_string_list,

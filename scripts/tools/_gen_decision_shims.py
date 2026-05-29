@@ -20,6 +20,14 @@ M1_MAP = {
     "hand_structure_analyzer": "m.m1.hand_structure_analyzer",
     "enhanced_collaboration": "m.m1.enhanced_collaboration",
 }
+M2_MAP = {
+    "rule_based_decision_engine_m2": "m.m2.rule_based_decision_engine_m2",
+    "phase_handlers_m2": "m.m2.phase_handlers_m2",
+}
+M3_MAP = {
+    "m3_decision_engine": "m.m3.m3_decision_engine",
+    "m3_utils": "m.m3.m3_utils",
+}
 V_MAP = {
     "hybrid_decision_engine_v4": "v.learn.hybrid_decision_engine_v4",
     "hybrid_decision_engine_v5": "v.learn.hybrid_decision_engine_v5",
@@ -28,6 +36,6 @@ V_MAP = {
 }
 
 dec = Path(__file__).resolve().parents[2] / "src" / "decision"
-for name, target in {**M1_MAP, **V_MAP}.items():
+for name, target in {**M1_MAP, **M2_MAP, **M3_MAP, **V_MAP}.items():
     (dec / f"{name}.py").write_text(SHIM.format(new=target), encoding="utf-8")
-print("shims written:", len(M1_MAP) + len(V_MAP))
+print("shims written:", len(M1_MAP) + len(M2_MAP) + len(M3_MAP) + len(V_MAP))
