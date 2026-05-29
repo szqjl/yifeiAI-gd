@@ -20,7 +20,7 @@
 |------|--------|------|------|----------------|------|
 | **M** | — | m1 | **Production** | 是 | 对 lalala 主迭代，尚无稳定胜率 |
 | **M** | — | m2 | Integration | 否 | 工程化、批跑、offline_platform |
-| **M** | — | m3 | Planned | 否 | 契约 `IDecisionProvider` 待冻结 |
+| **M** | — | m3 | Integration (draft) | 否 | 契约 `IDecisionProvider` **0.1-draft**；`src/contracts/`、`src/m/`、`src/v/` 已建 |
 | **V-learn** | 自学 | v4 | Archive | 否 | 适配/验证 |
 | **V-learn** | 自学 | v5 | Standby | 否 | V 冒烟 OFF 前不阻塞 M PR |
 | **V-learn** | 自学 | v6 | Archive | 否 | 分支 `v6-dev`，MOE 实验 |
@@ -99,3 +99,4 @@
 | 2026-05-28 | 分支 `m1-dev` 重命名为 `m-dev`（远程已删 `m1-dev`） |
 | 2026-05-29 | `main`/`origin/main` 策略拍板：冻结 `e767f28`，活跃线 `m-dev`；见 `docs/governance/main-branch-policy.md` |
 | 2026-05-29 | v4 / v5_stage5 客户端 deprecated 标记（`DeprecationWarning` + docstring） |
+| 2026-05-29 | m3 目录 Phase 1：`src/contracts/`、`src/m/`、`src/v/` + 契约草案 v0.1 |

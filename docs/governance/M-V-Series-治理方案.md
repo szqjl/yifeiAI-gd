@@ -318,7 +318,8 @@ __pycache__/
 - [x] `doc/M2_OPTIMIZATION.md`、`doc/M3_DIAGNOSIS.M2.md` → `docs/guandan-brain/`（重命名为 `M3_DIAGNOSIS.md`；`9910df3`）；空目录 `doc/` 已删除
 - [x] **`scripts/tools/yf_replay.py`**：功能优化已推送（`126b573`，Claude）
 - [x] deprecated 标记 v4/v5_stage5 客户端（2026-05-29：模块 docstring + `DeprecationWarning`）
-- [ ] m3 `contracts/` 与目录 `src/m/`、`src/v/` 渐进迁移
+- [x] m3 `contracts/` 与目录 `src/m/`、`src/v/` 渐进迁移 **Phase 1**（2026-05-29：命名空间 + re-export + `IDecisionProvider` 草案 v0.1）
+- [ ] m3 物理文件迁入 `m/`、`v/`（Phase 2+，按需 PR）
 - [ ] v7 评审通过后合并 `v7-dev` → `m-dev`
 
 ---
