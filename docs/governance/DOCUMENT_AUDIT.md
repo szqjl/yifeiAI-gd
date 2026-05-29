@@ -31,7 +31,7 @@
 | DanZero+论文分析-架构借鉴建议.md | `analysis/` | **有效** | RL 论文借鉴，UTF-8 正常 |
 | DEVELOPMENT_RULES.md | `development/` | **有效** | 已 UTF-8 修复；与 `CLAUDE.md` 时间规则一致 |
 | DOCUMENTATION_INDEX.md | `docs/`（保留） | 有效·需对齐 | 总索引；本节 + 子目录 README 为补充 |
-| GIT_SETUP_GUIDE.md | `governance/git-setup-guide.md` | 有效·需对齐 | **已过时**：仍写 `develop`；分支以 [main-branch-policy.md](./main-branch-policy.md) 为准 |
+| GIT_SETUP_GUIDE.md | `governance/git-setup-guide.md` | 有效·归档 | **已替换为弃用说明**；分支以 [main-branch-policy.md](./main-branch-policy.md) 为准 |
 | gitee_repo_capacity_guide.md | `governance/gitee-repo-capacity-guide.md` | **有效** | 容量与清理；模型现走 COS |
 | guandan-basic-knowledge.md | `knowledge/guandan-basic-knowledge.md` | **有效** | M2 对战基础知识；与 README 摘要一致 |
 | OCR_AND_MARKITDOWN_GUIDE.md | `usage/` | **有效** | OCR / MarkItDown 工具链 |

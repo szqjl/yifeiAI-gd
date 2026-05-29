@@ -41,3 +41,4 @@
 | 2026-05-29 | Phase 5f docs 归档 / m-dev | —（docs） | `rules/`、`skill/`→`docs/archive/`；`claude-analysis/`→`analysis/agent-sessions/`；`lalala_src/*.py`→`reference/lalala/`；`check_doc_paths.py`；更新 DOCUMENT_AUDIT、STARTUP_SCRIPTS_README | `check_doc_paths` pass | **下轮**：GUA-022 队胜率 |
 | 2026-05-29 | 清空 game_records / m-dev | —（data） | 本地 **1488** 个 JSON 已删除；`.gitignore` 改为 `game_records/*` + 保留 `README.md` | 历史结论已写入 ITERATIONS/EVAL；无代码回归 | **下轮**：GUA-022 新跑局生成新记录 |
 | 2026-05-29 | Phase 5g implementation 归档 / m-dev | —（docs） | `docs/implementation/`→`docs/archive/implementation/`；`migrate_docs_phase5g.py` | — | **下轮**：GUA-022 队胜率 |
+| 2026-05-29 | GitHub/develop 清理 / m-dev | —（infra） | `sync_github_mirror.ps1`；`git-setup-guide` 弃用说明；治理 Phase 1 勾选 | 本机需自跑脚本同步 GitHub | **下轮**：GUA-022 队胜率 |

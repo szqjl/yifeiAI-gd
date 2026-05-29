@@ -101,7 +101,7 @@ flowchart TB
 | 远程名 | 地址角色 | 策略 |
 |--------|----------|------|
 | **`origin`** | Gitee，**唯一真相源** | 所有功能分支 push 目标 |
-| **`github`** | 镜像（**当前暂不维护**） | 日常仅用 `origin`；不删 `develop`、不强制 sync |
+| **`github`** | 镜像（**按需同步**） | 真相源仍为 `origin`；`develop` 已废弃；用 [sync_github_mirror.ps1](../../scripts/tools/sync_github_mirror.ps1) 推送 `m-dev` |
 
 ### 4.2 分支对照表
 
@@ -426,8 +426,8 @@ __pycache__/
 - [x] `git checkout m-dev && git pull origin m-dev`
 - [x] 本地 `main` 打归档 tag `archive/main-pre-governance-20260528`，日常不在 `main` 提交
 - [x] `git fetch origin --prune`
-- [ ] ~~`git fetch github --prune` / 删 develop~~ → **GitHub 暂不处理**
-- [ ] ~~GitHub 远程 `develop` 删除~~ → **暂不处理**（仅用 Gitee `origin` 为真相源）
+- [x] `git fetch github --prune` / 删 `develop`（脚本 `scripts/tools/sync_github_mirror.ps1`；需本机可达 GitHub）
+- [x] GitHub 远程 `develop` 删除（同上；Gitee 已无 `develop`）
 - [x] 确认 `credential.helper=manager`
 
 ### Phase 2 — 文档与 manifest（1 天）
@@ -504,4 +504,4 @@ __pycache__/
 | v1.1 | 2026-05-28 | 默认开发分支 **`m1-dev` → `m-dev`**（M 系列总线，与 m1/m2 代际区分） |
 | v1.2 | 2026-05-28 | Phase 4 脚本收敛结案；`doc/` → `docs/guandan-brain/`；README 基础知识摘要；相关 handoff 见 `docs/analysis/handoffs/2026-05-28-仓库整理方案执行中.md` |
 | v1.3 | 2026-05-29 | `main` / `origin/main` 策略拍板；新增 [main-branch-policy.md](./main-branch-policy.md) |
-| v1.5 | 2026-05-29 | Phase 5f：`docs/archive/`、`analysis/agent-sessions/`、`reference/lalala/`；`check_doc_paths.py` |
+| v1.6 | 2026-05-29 | Phase 1 结案：GitHub/develop 清理脚本；`git-setup-guide` 弃用说明 |
