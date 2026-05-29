@@ -6,7 +6,7 @@ tags: [single, card_skills, opening, midgame, endgame, teammate_cooperation]
 difficulty: intermediate
 priority: 7
 game_phase: [opening, midgame, endgame]
-source: docs/skill/单张技巧
+source: docs/archive/skill/单张技巧
 related:
   - strategy/04_phase_strategies/01_opening/01_opening_teammate_cooperation.md
   - skills/04_common_skills/02_pair_skills.md
@@ -372,7 +372,7 @@ def choose_single_card(self, hand_cards, game_state, teammate_pos, opponent_pos)
 
 ---
 
-**来源**：`docs/skill/单张技巧`  
+**来源**：`docs/archive/skill/单张技巧`  
 **优先级**：高（7/10）  
 **难度**：中等  
 **适用阶段**：开局、中局、残局

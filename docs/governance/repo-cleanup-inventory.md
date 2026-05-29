@@ -14,8 +14,12 @@
 
 | 文件 | 原因 |
 |------|------|
-| `batch_executor_gui_m1.py` | M1 批跑 GUI 常用入口 |
-| `start_gui.py` | GUI 启动 |
+| `batch_executor_gui_m1.py` | M1 GUI **薄 stub** → `scripts/gui/batch_executor_gui_m1.py` |
+| `start_gui.py` | 通用 GUI **薄 stub** → `scripts/gui/start_gui.py` |
+| `pre_push_check.bat` | 推送前检查 |
+
+**GUI 真源：** `scripts/gui/`（含 `batch_executor_gui_m1.py`、`start_gui.py`、`m2`、`m3`）  
+**Shell 真源：** `scripts/shell/`（根目录无 `.sh`）
 
 ## 建议迁入 `scripts/`（Phase 4）
 
@@ -75,11 +79,9 @@
 
 **收尾批已完成（2026-05-28）：**
 
-**`scripts/gui/`（3）：** `batch_executor_gui`、`batch_executor_gui_m2`、`batch_executor_gui_m3`
+**`scripts/gui/`（5）：** `batch_executor_gui`、`batch_executor_gui_m2`、`batch_executor_gui_m3`、`batch_executor_gui_m1`、`start_gui`
 
-**`scripts/tools/` +1：** `yf_replay`
-
-**根目录短期保留：** `batch_executor_gui_m1.py`、`start_gui.py`
+**根目录 GUI stub：** `batch_executor_gui_m1.py`、`start_gui.py`（`runpy` 转发）
 
 ### 训练相关（V 线，非 M 日常）
 
@@ -113,5 +115,16 @@
 4. ~~**第五批**~~ ✅ workflow / V7 / test（15 个）
 5. ~~**第六批**~~ ✅ 杂项脚本 14 个（`yf_replay.py` 暂留根目录）
 6. ~~**第七批**~~ ✅ `batch_executor.py`、`client_std_*`、`run_t9_direct`、debug/_test 脚本
+7. ~~**收尾**~~ ✅ GUI 变体 + `yf_replay` → `scripts/gui/`、`scripts/tools/`
+
+## Phase 5f docs 归档（2026-05-29）
+
+| 原路径 | 新路径 |
+|--------|--------|
+| `docs/rules/`、`docs/skill/` | `docs/archive/rules/`、`docs/archive/skill/`（根留 README stub） |
+| `docs/claude-analysis/` | `docs/analysis/agent-sessions/` |
+| `lalala_src/*.py` | `reference/lalala/` |
+
+守卫：`python scripts/checks/check_doc_paths.py`
 7. ~~**收尾批**~~ ✅ GUI 变体 + `yf_replay`
 8. Phase 4 根目录脚本收敛 **已完成**（见上各批记录）

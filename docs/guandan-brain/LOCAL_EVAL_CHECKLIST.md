@@ -11,14 +11,14 @@
 - [ ] 离线服务器 **`guandan_offline_v1006.exe`** 路径已就绪（与 `EVAL.md` / GUI 默认探测一致）  
 - [ ] 分支与任务一致（M1 相关建议 **m-dev**）
 
-**说明**：离线服 **`guandan_offline_v1006.exe`** 可能已出现在你的工作区（常见为 `server/guandan_offline_v1006.exe`，或你从平台包解压/复制到任意路径）；也可能**未**纳入 Git、仅在本机某绝对路径——二者都正常。在 GUI 中选对该 exe，或无头 CLI 使用 `--server-path "<路径>"`。**IDE 里的助手**未必能索引到该二进制（忽略规则、沙箱或未同步），故仍以**你本机实际存在的路径**为准；`batch_executor_gui_m1.py` 的 `possible_paths` 会依次探测若干默认位置。
+**说明**：离线服 **`guandan_offline_v1006.exe`** 可能已出现在你的工作区（常见为 `server/guandan_offline_v1006.exe`，或你从平台包解压/复制到任意路径）；也可能**未**纳入 Git、仅在本机某绝对路径——二者都正常。在 GUI 中选对该 exe，或无头 CLI 使用 `--server-path "<路径>"`。**IDE 里的助手**未必能索引到该二进制（忽略规则、沙箱或未同步），故仍以**你本机实际存在的路径**为准；`scripts/gui/batch_executor_gui_m1.py` 的 `possible_paths` 会依次探测若干默认位置。
 
 ## 2. M1 批量对战（产出 `game_records`）
 
 任选其一：
 
 1. **GUI**：双击 **`START_M1_GUI.bat`**，或项目根执行：  
-   `py batch_executor_gui_m1.py`  
+   `python scripts/gui/batch_executor_gui_m1.py`（或根目录 stub / `START_M1_GUI.bat`）  
 2. **无头 CLI**（便于脚本化）：见 **`EVAL.md`**「无头 CLI」，四客户端使用 **`scenarios/client_sets.json`** 的 **`m1`** 四条路径。
 
 跑够 **`ITERATIONS.md`** 里本轮写的场次（例如 GUA-021：**≥5 个成对 `game_id`**）。

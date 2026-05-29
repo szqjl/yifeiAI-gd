@@ -30,3 +30,6 @@ __pycache__/
 tmp/
 temp/
 *.tmp
+_batch_log.txt
+yfscore/
+tmp/.batch_executor.lock

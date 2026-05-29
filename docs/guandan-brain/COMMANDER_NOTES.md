@@ -75,7 +75,7 @@ hermes kanban worker (t_dec4aac3)
 - `TrackedClientProcess`：按脚本名解析真实 Python PID，不再误跟踪 `start` 壳进程
 - 客户端监控增加 **60s 宽限期** + **连续 2 次**不足才终止本批（`BATCH_EXECUTOR_CLIENT_MONITOR_GRACE`）
 - **连续 3 次无进度**熔断 + **总重启次数上限**（`BATCH_EXECUTOR_MAX_TOTAL_RESTARTS`）
-- 单实例锁 `.batch_executor.lock` 防止多个 batch_executor 互杀端口
+- 单实例锁 `tmp/.batch_executor.lock` 防止多个 batch_executor 互杀端口
 
 ### 处理步骤
 1. 杀掉所有相关进程：

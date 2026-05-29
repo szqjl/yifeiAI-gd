@@ -89,6 +89,6 @@
 **总体结论**：掼蛋 AI（M 系列与 V 系列）在实现上**已经按这些基本规则在用**：牌数、每人 27 张、牌面与花色、一局起止、一手牌与一圈的语义都有对应。
 
 **已落实**：规则与常量已显式写清并可在代码中引用。
-- **规则文档**：`docs/rules/牌张与基本概念.md`（108 张、27 张/人、一副牌/一手牌/一圈牌定义）。
+- **规则文档**：`docs/archive/rules/牌张与基本概念.md`（108 张、27 张/人、一副牌/一手牌/一圈牌定义）。
 - **常量模块**：`src/game_logic/guandan_constants.py`（`TOTAL_CARDS`、`CARDS_PER_PLAYER`、`DEFAULT_REST_CARDS`、花色常量等）。
 - **引用位置**：`game_recorder.py`、`replay_game_interactive.py`、`1312_replay_converter.py` 等已引用常量或注明规则文档。

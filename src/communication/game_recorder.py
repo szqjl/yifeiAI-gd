@@ -2,7 +2,7 @@
 """
 游戏记录器 - 保存每局游戏并支持回放
 格式参考：2021122022131000098 [szqjl]-[新城老王].fp
-牌张与基本概念见：docs/rules/牌张与基本概念.md，常量见 game_logic.guandan_constants。
+牌张与基本概念见：docs/archive/rules/牌张与基本概念.md，常量见 game_logic.guandan_constants。
 """
 
 import json
@@ -14,7 +14,7 @@ from typing import Dict, Union, Any, List, Any, Optional
 try:
     from game_logic.guandan_constants import CARDS_PER_PLAYER
 except ImportError:
-    CARDS_PER_PLAYER = 27  # 掼蛋每人27张，规则见 docs/rules/牌张与基本概念.md
+    CARDS_PER_PLAYER = 27  # 掼蛋每人27张，规则见 docs/archive/rules/牌张与基本概念.md
 
 
 def normalize_cards_to_string_list(cards: List) -> List[str]:
@@ -1196,7 +1196,7 @@ class GameRecorder:
         
         # my_pos 和 teammate_pos 已在上面定义，这里不需要重复定义
         
-        # 初始化玩家剩余牌数和牌型统计（每人 CARDS_PER_PLAYER，规则见 docs/rules/牌张与基本概念.md）
+        # 初始化玩家剩余牌数和牌型统计（每人 CARDS_PER_PLAYER，规则见 docs/archive/rules/牌张与基本概念.md）
         player_cards = {0: CARDS_PER_PLAYER, 1: CARDS_PER_PLAYER, 2: CARDS_PER_PLAYER, 3: CARDS_PER_PLAYER}
         # 使用所有玩家的手牌信息初始化剩余牌数
         for pos, hand_cards in all_hands.items():

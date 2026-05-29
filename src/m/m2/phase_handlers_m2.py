@@ -116,7 +116,7 @@ class M2OpeningPassiveHandler(BasePhaseHandler):
 
     def _should_bomb_this_action(self, message, cur_rank_val, max_val, cur_type=""):
         """
-        基于 docs/skill/出炸弹要领.txt 的完整炸弹判定。
+        基于 docs/archive/skill/出炸弹要领.txt 的完整炸弹判定。
         
         不宜出炸（前置门控）：
         1. 牌型不明（开局>20张且对手非冲刺）→ 不炸

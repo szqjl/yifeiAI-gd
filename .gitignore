@@ -5,8 +5,8 @@
 # 大文档文件（>50MB）- 从 git 中排除
 # Note: Keep markdown versions instead
 # 注意：保留 markdown 版本代替
-docs/skill/*.docx
-docs/skill/*.pdf
+docs/archive/skill/*.docx
+docs/archive/skill/*.pdf
 
 # Model files - too large for git repository
 # 模型文件 - 文件太大，不适合直接提交到git仓库
@@ -25,7 +25,9 @@ models/*_training_history.json
 # Temporary files
 tmp/
 *.tmp
-.batch_executor.lock
+tmp/.batch_executor.lock
+_batch_log.txt
+yfscore/
 
 # Python cache
 __pycache__/
@@ -41,6 +43,12 @@ config/cos.env
 # COS 拉取的 artifact（manifest 在 Git）
 data/artifacts/
 
+# 新跑评测 JSON（本地）
+data/eval/
+
+# 个人 VS Code 多根工作区（用 docs/dev/*.example 复制）
+yifeGDBOT.code-workspace
+
 # Legacy root test/scratch scripts (use tests/ instead)
 /test_*.py
 /_test_*.py
@@ -51,7 +59,8 @@ data/artifacts/
 Testscore/
 
 # Game records and logs
-game_records/
+game_records/*
+!game_records/README.md
 logs/
 training_logs/
 trajectories/

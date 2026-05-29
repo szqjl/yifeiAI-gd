@@ -47,7 +47,7 @@ category: productivity
 
 - V4：4层决策（HybridDecisionEngineV4）
 - V5：3层决策（HybridDecisionEngineV5）：Rule-Based → Knowledge Enhanced → Random Fallback
-- V6：优化版，规划中（见 `docs/implementation/`）
+- V6：优化版，规划中（历史实施手册见 `docs/archive/implementation/`）
 - **需要训练**，有 bc_model 文件（不上 Git）
 - 训练 pipeline：`docs/training/` 有 BC预训练 + RL自弈（stage0-8）
 
@@ -89,7 +89,7 @@ category: productivity
 
 | 文档 | 作用 |
 |------|------|
-| `docs/implementation/实施指导_总览_执行手册.md` | V6优化计划（6阶段） |
+| `docs/archive/implementation/实施指导_总览_执行手册.md` | V6优化计划（6阶段，归档） |
 | `docs/training/YF硬编码完整提升计划优化版.md` | M1提升路线图 |
 
 ---

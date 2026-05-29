@@ -303,7 +303,7 @@ M1 完全没有 history，所以无法协作
 """
 
     # 保存到文档
-    with open('docs/claude-analysis/06-game-data-analysis.md', 'w', encoding='utf-8') as f:
+    with open('docs/analysis/agent-sessions/06-game-data-analysis.md', 'w', encoding='utf-8') as f:
         f.write(report)
 
     print(report)

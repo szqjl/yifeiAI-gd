@@ -32,3 +32,12 @@
 | 2026-05-29 | m3 Phase 2 物理迁入 + 契约 v1.0 / m-dev | —（infra） | **代码**：11 个 M1 模块 → `src/m/m1/`；4 个 V 引擎 → `src/v/`；`decision/*` shim；客户端 `m.m1` / `v.learn` / `v.nn` | **自动化**：契约 + GUA 回归 **31 passed** | **下轮 priority**：GUA-022 队胜率 |
 | 2026-05-29 | M2/M3 引擎迁入 / m-dev | —（infra） | **代码**：M2/M3 → `src/m/m2/`、`src/m/m3/`；客户端 `m.m2`/`m.m3` | **自动化**：**33 passed** | **下轮 priority**：GUA-022 |
 | 2026-05-29 | docs 根目录归类 / m-dev | —（docs） | **文档**：24 篇迁入子目录；[DOCUMENT_AUDIT.md](../governance/DOCUMENT_AUDIT.md)；原路径 stub | — | **下轮 priority**：乱码文档 UTF-8 修复（可选） |
+| 2026-05-29 | docs UTF-8 修复 + 架构 M/V 对齐 / m-dev | —（docs） | **工具**：`scripts/tools/fix_doc_encoding.py`；**文档**：架构/开发指南/知识框架/一等奖分析等 7+2 篇；架构 **v2.7** 增补 `src/m/`、`src/v/`、`contracts/` | — | **下轮 priority**：GUA-022 队胜率；开发指南 frontmatter 模板 |
+| 2026-05-29 | Phase 5 launchers 第一步 / m-dev | —（infra） | **`scripts/launchers/`**（m/v-learn/v-nn/training/workflow/tools/checks）+ 根目录 25 个 bat stub；`migrate_launchers_phase5.py` | — | **下轮**：`batch_executor_gui_m1.py`→`scripts/gui/`；根目录 md 清仓 |
+| 2026-05-29 | Phase 5b 根目录散落物 / m-dev | —（infra） | [ROOT_ARTIFACT_AUDIT.md](../governance/ROOT_ARTIFACT_AUDIT.md)；md/json/sh 迁入 `notes/`、`fixes/`、`data/archive/eval/`、`scripts/shell/` | — | **下轮**：其余根目录 md（KANBAN、AUTO_RESTART_* 等） |
+| 2026-05-29 | Phase 5c 运行时/工具配置 / m-dev | —（infra） | 锁→`tmp/`；`yfscore`→`data/archive/match-logs/`；`.cursorrules`→`.cursor/rules/*.mdc` | — | **下轮**：根目录剩余 md |
+| 2026-05-29 | Phase 5d 根目录 md 清仓 / m-dev | —（docs） | KANBAN、AUTO_RESTART_*、GAME_RECORD_*、README_M1_* 等 14 篇迁入 `governance/`、`notes/`、`fixes/`、`training/archive/` | — | **下轮**：`batch_executor_gui_m1.py`→`scripts/gui/` |
+| 2026-05-29 | Phase 5e GUI + shell 收尾 / m-dev | —（infra） | `batch_executor_gui_m1.py`、`start_gui.py`→`scripts/gui/`（根 stub）；4 个 `.sh`→`scripts/shell/`；`START_M1_GUI.bat` 更新；`scripts/gui/README.md`、`scripts/shell/README.md` | — | **下轮**：Phase 5 docs 归档 |
+| 2026-05-29 | Phase 5f docs 归档 / m-dev | —（docs） | `rules/`、`skill/`→`docs/archive/`；`claude-analysis/`→`analysis/agent-sessions/`；`lalala_src/*.py`→`reference/lalala/`；`check_doc_paths.py`；更新 DOCUMENT_AUDIT、STARTUP_SCRIPTS_README | `check_doc_paths` pass | **下轮**：GUA-022 队胜率 |
+| 2026-05-29 | 清空 game_records / m-dev | —（data） | 本地 **1488** 个 JSON 已删除；`.gitignore` 改为 `game_records/*` + 保留 `README.md` | 历史结论已写入 ITERATIONS/EVAL；无代码回归 | **下轮**：GUA-022 新跑局生成新记录 |
+| 2026-05-29 | Phase 5g implementation 归档 / m-dev | —（docs） | `docs/implementation/`→`docs/archive/implementation/`；`migrate_docs_phase5g.py` | — | **下轮**：GUA-022 队胜率 |

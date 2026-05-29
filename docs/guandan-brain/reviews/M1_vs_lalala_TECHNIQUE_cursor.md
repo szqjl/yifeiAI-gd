@@ -9,8 +9,8 @@
 | 文件 | 路径 | 行数（实测） |
 |------|------|-------------|
 | opencode 分析稿 | `docs/guandan-brain/reviews/M1_vs_lalala_TECHNIQUE_opencode.md` | 291 |
-| lalala 决策 | `docs/competition/lalala/lalala_src/action.py` | 1411 |
-| lalala 工具 | `docs/competition/lalala/lalala_src/utils.py` | 769 |
+| lalala 决策 | `reference/lalala/action.py` | 1411 |
+| lalala 工具 | `reference/lalala/utils.py` | 769 |
 | M1 入口 | `src/decision/rule_based_decision_engine_m1.py` | 254 |
 | M1 路由/基类 | `src/decision/stage_router.py` | 593 |
 | M1 策略引擎 | `src/decision/strategy_engine.py` | 589 |
@@ -115,7 +115,7 @@ opencode 只强调 lalala「规则密度高」，未讨论**可维护性与可�
 
 **lalala 侧（opencode 准确）**
 
-```81:85:docs/competition/lalala/lalala_src/action.py
+```81:85:reference/lalala/action.py
         if numofnext <= 4 or (numofpre <= 3 and numofpre>=1):
             if (myPos+2)%4 == greaterPos and curVal >= max_val:
                 return 0
@@ -123,7 +123,7 @@ opencode 只强调 lalala「规则密度高」，未讨论**可维护性与可�
                 return 0
 ```
 
-```161:177:docs/competition/lalala/lalala_src/action.py
+```161:177:reference/lalala/action.py
                 if pass_num >= 5 or my_pass_num >= 3:
                     index = special(single_actionList, bomb_member, straight_member, rank_card)
                     ...
@@ -162,7 +162,7 @@ opencode 只强调 lalala「规则密度高」，未讨论**可维护性与可�
 
 **lalala（opencode 准确）**
 
-```315:367:docs/competition/lalala/lalala_src/utils.py
+```315:367:reference/lalala/utils.py
             if action[1]==rank_card[1]:
                 ...
                 bomb_res.append((index, new_card_val[action[1]] + (l - 4) * 16+prior))

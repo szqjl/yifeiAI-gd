@@ -461,7 +461,12 @@ class BatchExecutor:
     
     def _acquire_run_lock(self) -> None:
         """防止多个 batch_executor 同时抢占端口 23456 并互相杀进程。"""
-        lock_path = self.project_root / ".batch_executor.lock"
+        lock_dir = self.project_root / "tmp"
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        lock_path = lock_dir / ".batch_executor.lock"
+        stale_root_lock = self.project_root / ".batch_executor.lock"
+        if stale_root_lock.exists():
+            stale_root_lock.unlink(missing_ok=True)
         if lock_path.exists():
             try:
                 old_pid = int(lock_path.read_text(encoding="utf-8").strip())

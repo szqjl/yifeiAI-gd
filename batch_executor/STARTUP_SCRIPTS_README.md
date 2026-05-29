@@ -1,13 +1,20 @@
 # 启动脚本说明
 
-本文档说明批量游戏执行系统的启动脚本使用方法。
+本文档说明批量游戏执行系统的启动方式。**日常入口**以 `scripts/launchers/` 为准（根目录 `START_*.bat` 为薄 stub）。
+
+## 推荐入口（Phase 5）
+
+| 场景 | 路径 |
+|------|------|
+| M1 批跑 GUI | 根目录 `START_M1_GUI.bat` → `scripts/launchers/m/START_M1_GUI.bat` |
+| M2/M3 GUI | `START_M2_GUI.bat` / `START_M3_GUI.bat` |
+| CLI 批跑 | `python scripts/batch_executor.py` |
+| 启动器索引 | [scripts/launchers/README.md](../scripts/launchers/README.md) |
 
 ## 文件列表
 
-### 1. batch_executor.py
-**位置**: `YiFeiAI-GD/batch_executor.py`
-
-**说明**: Python主启动脚本，作为批量执行系统的主入口点。
+### 1. scripts/batch_executor.py
+**位置**: `YiFeiAI-GD/scripts/batch_executor.py`（原根目录 `batch_executor.py` 已迁入）
 
 **使用方法**:
 ```bash

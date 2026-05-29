@@ -11,7 +11,7 @@ related:
   - strategy/03_card_strategies/01_bomb_strategy.md
 source:
   - 基于对战日志分析（yfv4_vs_lalala，行14-23）
-  - 掼蛋四项基本原则（docs/skill/掼蛋原则）
+  - 掼蛋四项基本原则（docs/archive/skill/掼蛋原则）
 ---
 
 # 队友保护策略

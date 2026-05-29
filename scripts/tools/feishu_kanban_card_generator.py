@@ -10,6 +10,7 @@
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 class FeishuKanbanCardGenerator:
@@ -330,7 +331,12 @@ def generate_yifeGDBOT_task_card() -> str:
     card_json = generator.generate_task_card(task_data)
     
     # 保存到文件
-    output_path = "C:/yifeGDBOT/yifeGDBOT-task-card.json"
+    output_path = str(
+        Path(__file__).resolve().parents[1]
+        / "feishu"
+        / "templates"
+        / "yifeGDBOT-task-card.example.json"
+    )
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(card_json)
     

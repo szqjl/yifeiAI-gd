@@ -179,7 +179,7 @@ class P0VerificationTest:
             # 保存完整分析结果
             analysis_file = os.path.join(
                 PROJECT_ROOT,
-                "docs/claude-analysis/p0_verification_results.md"
+                "docs/analysis/agent-sessions/p0_verification_results.md"
             )
             with open(analysis_file, 'w', encoding='utf-8') as f:
                 f.write("# P0改进验证结果\n\n")
@@ -372,7 +372,7 @@ class P0VerificationTest:
         """保存完整报告"""
         report_file = os.path.join(
             PROJECT_ROOT,
-            "docs/claude-analysis/p0_verification_report.json"
+            "docs/analysis/agent-sessions/p0_verification_report.json"
         )
 
         self.results['end_time'] = datetime.now().isoformat()

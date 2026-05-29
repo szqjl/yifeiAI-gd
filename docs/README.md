@@ -10,7 +10,10 @@
 
 ### 🧠 治理与归类（改仓库结构前可读）
 - **[M-V 治理方案](governance/M-V-Series-治理方案.md)** · **[文档审查台账](governance/DOCUMENT_AUDIT.md)**（2026-05-29）
+- **[Kanban 看板](governance/KANBAN.md)** · **[飞书卡片集成](governance/KANBAN_CARD_INTEGRATION.md)**
 - **[main 分支策略](governance/main-branch-policy.md)** · **[COS 接入](governance/COS-接入指南.md)**
+- **[启动脚本 launchers](../../scripts/launchers/README.md)** — 根目录 `START_*.bat` 真源（Phase 5）
+- **[根目录散落物审查](governance/ROOT_ARTIFACT_AUDIT.md)**（2026-05-29）
 
 ### 🧠 掼蛋 AI 迭代大脑（改代码前先读）
 - **[guandan-brain 说明与索引](guandan-brain/README.md)** - 缺陷（ISSUES）、迭代日志（ITERATIONS）、评测（EVAL）；与代码同仓的真源台账
@@ -20,10 +23,9 @@
 
 ### 📖 主要文档分类
 
-#### 1. 实施指导 (implementation/)
-详细的实施指导文档，用于执行具体任务
-- [实施指导总览](implementation/实施指导_总览_执行手册.md)
-- [执行AI必读文件清单](implementation/执行AI必读文件清单.md)
+#### 1. 实施指导（已归档）
+
+历史 V6 实施手册已迁入 [archive/implementation/](archive/implementation/)；日常开发见 [development/](development/)、[guandan-brain/](guandan-brain/)。
 
 #### 2. 训练文档 (training/)
 模型训练相关的所有文档
@@ -39,6 +41,8 @@
 #### 4. 分析报告 (analysis/)
 问题分析和优化建议
 - [所有分析报告](analysis/)
+- [Agent 会话归档](analysis/agent-sessions/)（原 `claude-analysis/`）
+- [任务 handoff](analysis/handoffs/)
 - [M1分析报告](reports/m1/)
 
 #### 5. 项目报告 (reports/)
@@ -52,10 +56,11 @@
 - [回放系统说明](usage/REPLAY_README.md)
 
 #### 6. 知识库文档 (knowledge/)
-掼蛋游戏知识和规则
+掼蛋游戏知识和规则（**唯一真源**）
 - [知识库快速开始](knowledge/QUICK_START.md)
 - [游戏规则](knowledge/rules/)
 - [策略技能](knowledge/skills/)
+- 历史 OCR/txt 摘录见 [archive/skill/](archive/skill/)、[archive/rules/](archive/rules/)
 
 #### 7. 迭代大脑 (guandan-brain/)
 版本—缺陷—评测—决策台账（非通用知识库）
@@ -100,9 +105,8 @@
 - M1开发文档: [development/M1*.md](development/)
 - M1修复记录: [fixes/M1_*.md](fixes/)
 
-### 实施指导
-- 所有实施文档: [implementation/](implementation/)
-- 执行清单: [执行AI必读文件清单](implementation/执行AI必读文件清单.md)
+### 实施指导（归档）
+- 历史手册: [archive/implementation/](archive/implementation/)
 
 ### 问题分析
 - 所有分析: [analysis/](analysis/)
@@ -137,7 +141,7 @@
 
 ### 开发者
 1. [掼蛋 AI 迭代大脑](guandan-brain/README.md) - 先对齐本轮 ISSUES / ITERATIONS / EVAL
-2. [实施指导总览](implementation/实施指导_总览_执行手册.md) - 了解实施流程
+2. [开发指南](development/掼蛋AI完整开发指南.md) — 日常开发入口（历史实施手册见 `archive/implementation/`）
 3. [开发相关文档](development/) - 开发指南
 4. [训练相关文档](training/) - 训练指南
 

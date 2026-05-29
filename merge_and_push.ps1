@@ -18,7 +18,7 @@ Write-Host "`n2. 保留本地代码改进" -ForegroundColor Yellow
 
 # 3. 删除已删除的文件
 Write-Host "`n3. 处理删除的文件" -ForegroundColor Yellow
-git rm "docs/skill/掼蛋入门指南" 2>$null
+git rm "docs/archive/skill/掼蛋入门指南" 2>$null
 
 # 4. 查看最终状态
 Write-Host "`n4. 最终状态:" -ForegroundColor Yellow

@@ -22,19 +22,11 @@ docs/
 │   ├── QUICK_START_MONITORING.md      # 训练监控快速开始
 │   └── README_SMART_TRAINING.md       # 智能训练快速开始
 │
-├── implementation/              # 实施指导文档
-│   ├── 实施指导_总览_执行手册.md
-│   ├── 实施指导_第一部分_项目理解.md
-│   ├── 实施指导_第二部分_任务1.1_残局处理.md
-│   ├── 实施指导_第三部分_任务1.2_队友保护.md
-│   ├── 实施指导_第四部分_任务1.3_优先级系统.md
-│   ├── 实施指导_第五部分_集成测试.md
-│   ├── 实施指导_第六部分_执行检查清单.md
-│   ├── 交接给执行AI的完整指令.md
-│   ├── 后续实施指南.md
-│   ├── 执行AI必读文件清单.md
-│   ├── YF硬编码优化详细实施方案.md
-│   └── YF硬编码优化详细实施指导手册.md
+├── archive/                     # 历史 rules/skill/implementation 等
+│   └── implementation/
+│       ├── 实施指导_总览_执行手册.md
+│       ├── …（多部分实施指导）
+│       └── 执行AI必读文件清单.md
 │
 ├── training/                    # 训练相关文档
 │   ├── 历次训练效果汇总.md
@@ -127,13 +119,9 @@ docs/
 
 **适合人群**: 新用户、快速参考
 
-### 2. 实施指导 (implementation/)
-**用途**: 详细的实施指导文档，用于执行具体任务
-- 项目理解
-- 任务实施步骤
-- 执行检查清单
-
-**适合人群**: 执行AI、开发者
+### 2. 实施指导（archive/implementation/，已归档）
+**用途**: 历史 V6 多部分实施指导，备查  
+**日常入口**: `docs/development/`、`docs/guandan-brain/`
 
 ### 3. 训练文档 (training/)
 **用途**: 模型训练相关的所有文档
@@ -198,7 +186,7 @@ docs/
 3. `docs/knowledge/QUICK_START.md` - 知识库快速开始
 
 ### 开发者
-1. `docs/implementation/实施指导_总览_执行手册.md` - 了解实施流程
+1. `docs/archive/implementation/实施指导_总览_执行手册.md` - 历史 V6 实施流程（归档）
 2. `docs/development/` - 开发相关文档
 3. `docs/training/` - 训练相关文档
 
@@ -227,8 +215,7 @@ docs/
 - M1修复记录: `docs/fixes/M1_*.md`
 
 **实施指导**
-- 所有实施文档: `docs/implementation/`
-- 执行清单: `docs/implementation/执行AI必读文件清单.md`
+- 历史实施文档: `docs/archive/implementation/`
 
 **问题分析**
 - 所有分析: `docs/analysis/`
@@ -242,7 +229,7 @@ docs/
    - 30秒快速开始
    - 快速参考指南
 
-2. **实施指导类** → `docs/implementation/`
+2. **实施指导类（历史）** → `docs/archive/implementation/`
    - 详细实施步骤
    - 执行检查清单
 

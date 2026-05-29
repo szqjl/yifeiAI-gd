@@ -420,7 +420,8 @@ def main():
         log(f"{'=' * 50}")
 
         # 写结果
-        report = PROJECT_ROOT / "test_t9_results.json"
+        report = PROJECT_ROOT / "data" / "eval" / "test_t9_results.json"
+        report.parent.mkdir(parents=True, exist_ok=True)
         with open(report, "w", encoding="utf-8") as f:
             json.dump({
                 "timestamp": datetime.now().isoformat(),

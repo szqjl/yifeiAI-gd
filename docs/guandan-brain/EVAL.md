@@ -9,7 +9,7 @@
 
 | 版本 | 典型用途 | Windows 一键脚本 | 等价命令（推荐可脚本化） |
 |------|----------|------------------|--------------------------|
-| **M1** | 硬编码规则引擎批量对战 | `START_M1_GUI.bat` | `py batch_executor_gui_m1.py`（或 `python batch_executor_gui_m1.py`） |
+| **M1** | 硬编码规则引擎批量对战 | `START_M1_GUI.bat` | `python scripts/gui/batch_executor_gui_m1.py`（根目录 stub 仍可用） |
 | **M2** | 重构硬编码规则引擎（无分数累积+阈值保护）批量对战 | `START_M2_GUI.bat` | `py scripts/gui/batch_executor_gui_m2.py`（或 `python scripts/gui/batch_executor_gui_m2.py`） |
 | **V4** | 混合决策 V4 批量对战 | `START_V4_GUI.bat` | `python scripts/gui/batch_executor_gui.py`，**须在界面将四条客户端改为 V4**（见下「GUI 与版本说明」） |
 | **V5** | V5 批量对战 | `START_V5_GUI.bat` | `py scripts/gui/batch_executor_gui.py`，若需强制 V5 请看「GUI 与版本说明」 |
@@ -41,7 +41,7 @@ python -m batch_executor --server-path "<SERVER_EXE>" --diagnose-only
 - 要评测 **V4**：请使用 **无头 CLI 显式传入 V4 四客户端**，或在 GUI 中手动改四条客户端为 `yf1_v4.py`、`yf2_v4.py`。
 - 要评测 **V5/V6**：若仓库里同时存在 M1 客户端脚本，GUI 可能默认落到 M1；需手动改为 `yf1_v5.py` / `yf2_v5.py` 或 `yf1_v6.py` / `yf2_v6.py`，或直接使用无头 CLI。
 
-`START_M1_GUI.bat` 单独调用 `batch_executor_gui_m1.py`，默认即为 M1 四客户端。
+`START_M1_GUI.bat` 调用 `scripts/gui/batch_executor_gui_m1.py`，默认即为 M1 四客户端。
 
 ### M1：yf1_m1 与 yf2_m1 对照（台账 **GUA-020**，**已测**）
 
