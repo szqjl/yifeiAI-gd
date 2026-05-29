@@ -45,15 +45,28 @@ class M3DecisionEngine:
     def _update_play_state(self, data):
         curPos = data.get("curPos")
         curAction = data.get("curAction")
-        if curPos is not None and curAction is not None and curAction[2] != "PASS":
+        if (
+            curPos is not None
+            and curAction is not None
+            and isinstance(curAction, list)
+            and len(curAction) >= 1
+            and curAction[0] != "PASS"
+            and len(curAction) >= 3
+            and isinstance(curAction[2], list)
+        ):
             for card in curAction[2]:
                 card_str = str(card)
+                if card_str.upper() == "PASS" or len(card_str) < 2:
+                    continue
                 if card_str in ('B', 'R'):
                     ctype = 'S' if card_str == 'B' else 'H'
                     idx = 13
                 else:
                     ctype = card_str[0]
-                    idx = CARD_INDEX[card_str[-1]]
+                    rank_ch = card_str[-1]
+                    if rank_ch not in CARD_INDEX:
+                        continue
+                    idx = CARD_INDEX[rank_ch]
                 self.history[str(curPos)]["send"].append(card_str)
                 self.history[str(curPos)]["remain"] -= 1
                 self.remain_cards[ctype][idx] -= 1
@@ -84,7 +97,13 @@ class M3DecisionEngine:
             self.tribute_result = data.get("result")
 
         if "actionList" in data and data["actionList"]:
-            return self._rule_parse(data)
+            action_list = data["actionList"]
+            idx = self._rule_parse(data)
+            if idx < 0:
+                return 0
+            if idx >= len(action_list):
+                return len(action_list) - 1
+            return idx
         return -1
 
     def _rule_parse(self, data):

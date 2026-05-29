@@ -96,24 +96,29 @@ class YF1_M3_Client:
             self.logger.error("Connection error: {}".format(e), exc_info=True)
 
     async def process_message(self, data: dict):
+        message_type = data.get("type", "")
         try:
-            # 1) 让M3引擎处理所有消息（更新状态 + 返回决策）
             action_idx = self.decision_engine.on_message(data)
 
-            # 2) 处理游戏记录
-            message_type = data.get("type", "")
             if message_type == "notify":
                 self._handle_notification(data)
             elif message_type == "act":
                 self._handle_act(data)
 
-            # 3) 发送决策
-            if action_idx >= 0:
+            if message_type == "act" and action_idx >= 0:
+                action_list = data.get("actionList") or []
+                if not action_list:
+                    self.logger.warning("act message without actionList, skip send")
+                    return
+                action_idx = max(0, min(action_idx, len(action_list) - 1))
                 await self.send_action(action_idx)
 
         except Exception as e:
             self.logger.error("process_message error: {}".format(e), exc_info=True)
-            await self.send_action(0)
+            if message_type == "act":
+                action_list = data.get("actionList") or []
+                if action_list:
+                    await self.send_action(0)
 
     def _handle_notification(self, data: dict):
         notify_type = data.get("notifyType", "")

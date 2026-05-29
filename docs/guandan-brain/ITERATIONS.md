@@ -43,3 +43,4 @@
 | 2026-05-29 | Phase 5g implementation 归档 / m-dev | —（docs） | `docs/implementation/`→`docs/archive/implementation/`；`migrate_docs_phase5g.py` | — | **下轮**：GUA-022 队胜率 |
 | 2026-05-29 | GitHub/develop 清理 / m-dev | —（infra） | `sync_github_mirror.ps1`；`git-setup-guide` 弃用说明；治理 Phase 1 勾选 | 本机需自跑脚本同步 GitHub | **下轮**：Phase 5 治理结案 |
 | 2026-05-29 | **Phase 5 治理结案** / m-dev | —（infra） | Phase 0–5 + 根目录/docs/launchers 归档完成；`game_records` 清空；治理 §9 标「仓库整理已结案」；提交 `72b117c`/`6505778` | 仓库整理无业务回归项 | **下轮唯一 priority**：**GUA-022** 队胜率（本机新跑局） |
+| 2026-05-29 | M3 PASS 记牌 + actIndex 防护 / m-dev | —（infra, m3） | **`m3_decision_engine._update_play_state`**：`curAction[0]=="PASS"` 跳过记牌、过滤非法牌串；**`on_message`** clamp `actIndex`；**`yf1_m3`/`yf2_m3`**：仅 `type==act` 发送、notify 不 send、越界 clamp | **批跑 2 局**：无 `KeyError`/`IndexError`；服务端未崩溃；`game_records` 有成对 yf1/yf2 记录；`victoryNum` 正常 | **下轮 priority**：GUA-022（M1 队胜率）；M3 集成可继续扩样 |
