@@ -23,7 +23,7 @@
 
 跑够 **`ITERATIONS.md`** 里本轮写的场次（例如 GUA-021：**≥5 个成对 `game_id`**）。
 
-批量执行器在跑完后应满足：`execution_state.json` 的 `target_games` 与本次 `--target-games` 一致，`completed_games` 与「本 Run 在 `game_records/` 新增的成对 `game_id`（yf1_m1 + yf2_m1）」一致。若单局极慢仍被误杀，可在运行前设置环境变量 `BATCH_EXECUTOR_SECONDS_PER_GAME_ESTIMATE`（默认 720）或 `BATCH_EXECUTOR_MIN_BATCH_SECONDS`（默认 180），见 `batch_executor/README.md`。
+批量执行器在跑完后应满足：`execution_state.json` 的 `target_games` 与本次 `--target-games` 一致，**`completed_games` = 平台批次数累计**（非 `game_records` 文件数）；JSON 内 **`victoryNum` 为四座位累计胜场，不是局数**。落盘 PASS 分析可用成对 match key `(opponent, round, level)` 或 M1 成对 `game_id`。若单局极慢仍被误杀，可在运行前设置环境变量 `BATCH_EXECUTOR_SECONDS_PER_GAME_ESTIMATE`（默认 720）或 `BATCH_EXECUTOR_MIN_BATCH_SECONDS`（默认 180），见 `batch_executor/README.md`。
 
 ## 3. 诊断（可选、推荐先做）
 

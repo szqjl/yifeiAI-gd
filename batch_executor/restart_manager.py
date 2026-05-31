@@ -29,19 +29,60 @@ def _pids_for_client_script(script_basename: str) -> List[int]:
     if psutil is None:
         return []
     target = script_basename.lower()
+    own_pid = os.getpid()
     pids: List[int] = []
     for proc in psutil.process_iter(["pid", "name"]):
         try:
+            pid = proc.info["pid"]
+            if pid == own_pid:
+                continue
             name = (proc.info.get("name") or "").lower()
             if "python" not in name:
                 continue
             cmdline = proc.cmdline()
             cmd_str = " ".join(cmdline).lower()
-            if target in cmd_str:
-                pids.append(proc.info["pid"])
+            # batch_executor --clients  argv 也含脚本名，须排除以免批次间 cleanup 自杀
+            if "batch_executor" in cmd_str:
+                continue
+            if target not in cmd_str:
+                continue
+            # 只认「python …/script.py」式启动，排除仅被引用的路径
+            if not any(arg.lower().endswith(target) for arg in cmdline):
+                continue
+            pids.append(pid)
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
     return pids
+
+
+def _wait_port_free(port: int = 23456, timeout: float = 20.0) -> bool:
+    """等待本地端口释放（批次间避免旧服/旧连接占坑）。"""
+    import socket
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.5)
+        try:
+            if sock.connect_ex(("127.0.0.1", port)) != 0:
+                return True
+        finally:
+            sock.close()
+        time.sleep(0.5)
+    return False
+
+
+def _kill_all_client_script_processes(client_scripts: List[str]) -> None:
+    """按脚本名结束全部匹配的 Python 客户端（含 start 壳未跟踪到的残留）。"""
+    if psutil is None:
+        return
+    for script in client_scripts:
+        basename = os.path.basename(script)
+        for pid in _pids_for_client_script(basename):
+            try:
+                psutil.Process(pid).kill()
+                logger.info("已结束客户端 Python PID=%s (%s)", pid, basename)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
 
 
 def _count_live_client_scripts(client_scripts: List[str]) -> int:
@@ -67,12 +108,26 @@ class TrackedClientProcess:
         self.pid: Optional[int] = None
         self.returncode: Optional[int] = None
 
-    def resolve_pid(self, wait_seconds: float = 8.0) -> Optional[int]:
+    def resolve_pid(
+        self,
+        wait_seconds: float = 8.0,
+        exclude_pids: Optional[set] = None,
+    ) -> Optional[int]:
+        exclude = set(exclude_pids or [])
         deadline = time.time() + wait_seconds
         while time.time() < deadline:
             pids = _pids_for_client_script(self.script_basename)
-            if pids:
-                self.pid = pids[-1]
+            candidates = [p for p in pids if p not in exclude]
+            if candidates:
+                if psutil is not None:
+                    def _create_time(pid: int) -> float:
+                        try:
+                            return psutil.Process(pid).create_time()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            return 0.0
+                    self.pid = max(candidates, key=_create_time)
+                else:
+                    self.pid = candidates[-1]
                 return self.pid
             time.sleep(0.5)
         return None
@@ -358,6 +413,7 @@ class RestartManager:
         """
         processes = []
         self._last_client_scripts = list(client_scripts)
+        assigned_pids: set = set()
         
         for i, script_path in enumerate(client_scripts):
             try:
@@ -433,8 +489,9 @@ class RestartManager:
                         os.path.basename(abs_script_path),
                         window_title,
                     )
-                    process.resolve_pid(wait_seconds=6.0)
+                    process.resolve_pid(wait_seconds=6.0, exclude_pids=assigned_pids)
                     if process.pid:
+                        assigned_pids.add(process.pid)
                         logger.info(f"  已解析客户端 Python PID: {process.pid}")
                     else:
                         logger.warning(
@@ -569,6 +626,10 @@ class RestartManager:
         终止所有服务器和客户端进程，释放资源。
         """
         logger.info("开始清理所有进程...")
+
+        # 先按脚本名强杀全部客户端，避免批次间 yf1/yf2 残留占 1/3 号位
+        if getattr(self, "_last_client_scripts", None):
+            _kill_all_client_script_processes(self._last_client_scripts)
         
         # 终止所有客户端进程
         for i, process in enumerate(self.client_processes):
@@ -605,13 +666,7 @@ class RestartManager:
         
         # 清理由 start 启动的残留 Python 客户端（按脚本名匹配）
         if psutil is not None and getattr(self, "_last_client_scripts", None):
-            for script in self._last_client_scripts:
-                for pid in _pids_for_client_script(os.path.basename(script)):
-                    try:
-                        psutil.Process(pid).kill()
-                        logger.info(f"已结束残留客户端 Python PID={pid} ({os.path.basename(script)})")
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        pass
+            _kill_all_client_script_processes(self._last_client_scripts)
         
         # 额外清理由 start "客户端X: ..." 打开的残留 cmd 窗口
         # 仅匹配窗口标题前缀“客户端”，避免误杀普通终端
@@ -629,5 +684,11 @@ class RestartManager:
         # 清空进程列表
         self.client_processes = []
         self.server_process = None
+
+        if not _wait_port_free():
+            logger.warning("端口 23456 仍被占用，下一批连接可能失败")
+        else:
+            logger.info("端口 23456 已释放")
+        time.sleep(2)
         
         logger.info("清理完成")

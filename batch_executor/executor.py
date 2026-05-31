@@ -26,29 +26,37 @@ except ImportError:
     psutil = None
 
 
-# game_records 文件名示例：「<game_id> [yf1_m1]-...」「<game_id> [yf2_m1]-...」
-# 评测口径（GUA-022 / ITERATIONS）：一局 = 同一 game_id 下 yf1_m1 与 yf2_m1 各一份 JSON 成对出现。
-# 实际落盘时各客户端 game_id 微秒时间戳常不一致，故同时用 game_round 成对计数。
+# game_records 文件名示例：「<game_id> [yf1_m3]-[opponent]-[round]-[level].json」
+# 台账 completed_games = 平台批次数累计（每批 += batch_games）；落盘副数见 match_key 诊断。
+# match key 与 GUA-025 / game_recorder.parse_record_filename 一致：(opponent, round, level)。
 _GAME_RECORD_PAIR_PATTERN = re.compile(r"^(\d+) \[(yf[12]_(m[123]|v[4-7]))\]")
-_GAME_RECORD_ROUND_PATTERN = re.compile(
-    r"^(\d+) \[(yf[12]_(m[123]|v[4-7]))-\[[^\]]+\]-\[(\d+)\]-"
+_GAME_RECORD_MATCH_KEY_RE = re.compile(
+    r"^(\d+) \[([^\]]+)\]-\[([^\]]+)\]-\[(\d+)\]-\[([^\]]*)\]\.json$"
 )
 
 
-def _count_new_paired_games(
+@dataclass
+class GameRecordsStats:
+    """本 Run 相对 baseline 的落盘诊断计数（不驱动 completed_games）。"""
+    paired_game_id: int = 0
+    paired_match_key: int = 0
+    legacy_round_only_pairs: int = 0
+
+
+def _scan_game_records_stats(
     records_dir: Path,
     baseline_files: Set[str],
     player_prefix: str = "yf1_",
     teammate_prefix: str = "yf2_",
-) -> int:
-    """本 Run 新增成对局数：优先同 game_id，否则同 game_round（仅统计 baseline 之后新文件）。
-    player_prefix/teammate_prefix 用于区分系列（默认 yf1_/yf2_，同时覆盖 m1/m2）。"""
+) -> GameRecordsStats:
+    """扫描新增 JSON：成对 game_id、GUA-025 match key、旧 round-only 口径（仅诊断）。"""
     if not records_dir.is_dir():
-        return 0
+        return GameRecordsStats()
     by_id_p1: Set[str] = set()
     by_id_p2: Set[str] = set()
     by_round_p1: Set[str] = set()
     by_round_p2: Set[str] = set()
+    match_sides: dict = {}
     try:
         for p in records_dir.glob("*.json"):
             if p.name in baseline_files:
@@ -60,19 +68,57 @@ def _count_new_paired_games(
                     by_id_p1.add(gid)
                 elif tag.startswith(teammate_prefix):
                     by_id_p2.add(gid)
-            m2 = _GAME_RECORD_ROUND_PATTERN.match(p.name)
-            if m2:
-                tag, rnd = m2.group(2), m2.group(4)
-                if tag.startswith(player_prefix):
-                    by_round_p1.add(rnd)
-                elif tag.startswith(teammate_prefix):
-                    by_round_p2.add(rnd)
+            mk = _GAME_RECORD_MATCH_KEY_RE.match(p.name)
+            if mk:
+                player_name = mk.group(2)
+                key = (mk.group(3), mk.group(4), mk.group(5))
+                if player_name.startswith(player_prefix):
+                    match_sides.setdefault(key, set()).add("p1")
+                    by_round_p1.add(mk.group(4))
+                elif player_name.startswith(teammate_prefix):
+                    match_sides.setdefault(key, set()).add("p2")
+                    by_round_p2.add(mk.group(4))
     except OSError as e:
         logging.getLogger("batch_executor").warning(
             "扫描 game_records 失败: %s: %s", records_dir, e
         )
+        return GameRecordsStats()
+    paired_match_key = sum(
+        1 for sides in match_sides.values() if "p1" in sides and "p2" in sides
+    )
+    return GameRecordsStats(
+        paired_game_id=len(by_id_p1 & by_id_p2),
+        paired_match_key=paired_match_key,
+        legacy_round_only_pairs=len(by_round_p1 & by_round_p2),
+    )
+
+
+def _count_new_paired_games(
+    records_dir: Path,
+    baseline_files: Set[str],
+    player_prefix: str = "yf1_",
+    teammate_prefix: str = "yf2_",
+) -> int:
+    """旧 max(game_id, round) 口径，仅保留供测试对比；不得写入 completed_games。"""
+    stats = _scan_game_records_stats(
+        records_dir, baseline_files, player_prefix, teammate_prefix
+    )
+    return max(stats.paired_game_id, stats.legacy_round_only_pairs)
+
+
+def _increment_completed_after_batch(
+    state: "ExecutionState",
+    batch_games: int,
+    *,
+    server_terminated_by_kill: bool,
+) -> int:
+    """方案 A：正常结束的批次按 batch_games 累加台账；强杀批次不加。"""
+    if server_terminated_by_kill or batch_games <= 0:
         return 0
-    return max(len(by_id_p1 & by_id_p2), len(by_round_p1 & by_round_p2))
+    added = min(batch_games, state.target_games - state.completed_games)
+    state.completed_games += added
+    state.last_update = datetime.now()
+    return added
 
 
 def _count_new_paired_m1_games(
@@ -183,7 +229,7 @@ class SignalHandler:
         Args:
             state_file: 状态保存文件路径
             logger: 日志记录器（可选）
-            on_before_save: 保存状态前回调（例如从 game_records 同步 completed_games）
+            on_before_save: 保存状态前回调（例如刷新 game_records 诊断日志）
         """
         self.state_file = state_file
         self.logger = logger or logging.getLogger(__name__)
@@ -431,33 +477,54 @@ class BatchExecutor:
         
         self.logger.info("=" * 60 + "\n")
     
-    def _sync_completed_from_game_records(self, state: ExecutionState) -> None:
-        """
-        用项目根目录下 game_records 的本 Run 新增「成对 game_id」数量更新 completed_games。
-        同时支持 yf1_m1/yf2_m1 和 yf1_m2/yf2_m2 等系列。
-        """
+    def _get_game_records_stats(self) -> GameRecordsStats:
         if self._game_records_files_baseline is None:
-            return
-        records_dir = self.project_root / "game_records"
-        session_done = _count_new_paired_games(
-            records_dir, self._game_records_files_baseline
+            return GameRecordsStats()
+        return _scan_game_records_stats(
+            self.project_root / "game_records",
+            self._game_records_files_baseline,
         )
-        capped = min(session_done, state.target_games)
-        state.completed_games = capped
+
+    def _log_game_records_diagnostics(
+        self,
+        state: ExecutionState,
+        *,
+        batch_games: Optional[int] = None,
+        batch_start_stats: Optional[GameRecordsStats] = None,
+    ) -> None:
+        """方案 C：落盘诊断（match key / game_id），不写入 completed_games。"""
+        stats = self._get_game_records_stats()
         state.last_update = datetime.now()
+        batch_new_match_keys = None
+        if batch_start_stats is not None:
+            batch_new_match_keys = stats.paired_match_key - batch_start_stats.paired_match_key
         self.logger.info(
-            "game_records 台账：本 Run 新增成对局 %d 个（game_id 或 game_round），"
-            "completed_games=%d（目标 %d，目录 %s）",
-            session_done,
-            capped,
+            "game_records 诊断：成对 game_id=%d，成对 match_key(opponent+round+level)=%d，"
+            "legacy_round_only=%d；台账 completed_games=%d/%d",
+            stats.paired_game_id,
+            stats.paired_match_key,
+            stats.legacy_round_only_pairs,
+            state.completed_games,
             state.target_games,
-            records_dir,
         )
-    
+        if batch_games is not None and batch_new_match_keys is not None:
+            self.logger.info(
+                "本批落盘：batch_games=%d，新增 match_key=%d",
+                batch_games,
+                batch_new_match_keys,
+            )
+            if batch_games > 0 and batch_new_match_keys > batch_games * 3:
+                self.logger.warning(
+                    "本批 match_key 增量(%d) 远大于 batch_games(%d)；"
+                    "落盘副数不等于平台批次数，分析 PASS/胜率时请区分口径。",
+                    batch_new_match_keys,
+                    batch_games,
+                )
+
     def _sync_state_before_persist(self) -> None:
-        """供信号处理 / stop 前调用，使落盘的 completed_games 与 game_records 一致。"""
-        if self._current_state is not None and self._game_records_files_baseline is not None:
-            self._sync_completed_from_game_records(self._current_state)
+        """供信号处理 / stop 前调用：刷新诊断日志，不改动 completed_games。"""
+        if self._current_state is not None:
+            self._log_game_records_diagnostics(self._current_state)
     
     def _acquire_run_lock(self) -> None:
         """防止多个 batch_executor 同时抢占端口 23456 并互相杀进程。"""
@@ -734,6 +801,7 @@ class BatchExecutor:
                 client_monitor_ready_at = start_time + client_monitor_grace_seconds
                 server_terminated_by_kill = False  # 超时强杀则不计入 completed_games（见下方）
                 low_client_strikes = 0
+                batch_start_stats = self._get_game_records_stats()
                 
                 try:
                     # 使用混合方式：同时读取stdout和监控进程状态
@@ -753,7 +821,6 @@ class BatchExecutor:
                         "setting",
                         "curtimes",
                     )
-                    batch_start_completed = state.completed_games
                     
                     def read_stdout():
                         """在单独线程中读取stdout"""
@@ -829,29 +896,6 @@ class BatchExecutor:
                         except queue.Empty:
                             pass
                         
-                        # game_records 已达到本批目标：即使服务端日志编码异常，也可判定完成并收尾
-                        try:
-                            if self._game_records_files_baseline is not None:
-                                session_done = min(
-                                    _count_new_paired_games(
-                                        self.project_root / "game_records",
-                                        self._game_records_files_baseline,
-                                    ),
-                                    state.target_games,
-                                )
-                                batch_done = session_done - batch_start_completed
-                                if batch_done >= batch_games:
-                                    server_reported_done = True
-                                    if done_detected_at is None:
-                                        done_detected_at = time.time()
-                                        self.logger.info(
-                                            "检测到 game_records 本批已达标（+%d/%d），等待进程退出...",
-                                            batch_done,
-                                            batch_games,
-                                        )
-                        except Exception as e:
-                            self.logger.debug(f"按 game_records 判定批次完成失败（可忽略）: {e}")
-                        
                         # 服务端已明确完成但进程不退出：给几秒缓冲后主动结束，避免 m1.bat 一直无回传
                         if server_reported_done and done_detected_at is not None:
                             if time.time() - done_detected_at >= 8:
@@ -920,13 +964,30 @@ class BatchExecutor:
                     import traceback
                     traceback.print_exc()
                 
-                # completed_games 以 game_records 成对 game_id 为准（GUA-022 口径），避免与磁盘台账脱钩
+                # 方案 A：按平台批次累加台账；强杀批次不加
                 if server_terminated_by_kill:
                     self.logger.warning(
-                        "本批次因超时强杀结束；completed_games 仅以 game_records 中本 Run 新增成对 game_id 为准。"
+                        "本批次因超时强杀或客户端异常结束，不增加 completed_games。"
+                    )
+                else:
+                    added = _increment_completed_after_batch(
+                        state,
+                        batch_games,
+                        server_terminated_by_kill=False,
+                    )
+                    self.logger.info(
+                        "本批台账：batch_games=%d，本批计入=%d，completed_games=%d/%d",
+                        batch_games,
+                        added,
+                        state.completed_games,
+                        state.target_games,
                     )
                 time.sleep(1.5)
-                self._sync_completed_from_game_records(state)
+                self._log_game_records_diagnostics(
+                    state,
+                    batch_games=batch_games,
+                    batch_start_stats=batch_start_stats,
+                )
                 
                 # 从服务器输出读取本批次战绩
                 # 服务器输出格式: "达到设定场次, 其中0号位胜利X次，1号位胜利Y次，2号位胜利Z次，3号位胜利W次"
@@ -996,6 +1057,11 @@ class BatchExecutor:
                     last_completed_games = state.completed_games
                     state.restart_count += 1
                     state.current_batch += 1
+                    state.last_update = datetime.now()
+                    try:
+                        state.save(self.state_file)
+                    except Exception as e:
+                        self.logger.error(f"保存数据失败: {e}", exc_info=True)
                     self.logger.info(f"准备重启，已完成 {state.completed_games}/{state.target_games} 场")
                 else:
                     self.logger.info("所有游戏已完成!")

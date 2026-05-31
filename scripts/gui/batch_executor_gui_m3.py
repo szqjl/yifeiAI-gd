@@ -101,7 +101,7 @@ class BatchExecutorGUIM3:
         self.target_games_var = tk.StringVar(value="10")
         games_spinbox = ttk.Spinbox(games_frame, from_=1, to=100, textvariable=self.target_games_var, width=10)
         games_spinbox.pack(side=tk.LEFT, padx=5)
-        ttk.Label(games_frame, text="（每副含多回合升级，建议10~20副）").pack(side=tk.LEFT, padx=10)
+        ttk.Label(games_frame, text="（平台局数，1局含多副，建议10~20局）").pack(side=tk.LEFT, padx=10)
 
         version_frame = ttk.LabelFrame(main_frame, text="版本信息", padding="5")
         version_frame.pack(fill=tk.X, pady=5)
@@ -246,7 +246,7 @@ class BatchExecutorGUIM3:
             "M3版本使用说明：\n\n"
             "1. 选择服务器可执行文件路径\n"
             "2. 确认客户端脚本路径（默认yf1_m3/yf2_m3 + lalala client3/client4）\n"
-            "3. 设置目标场次数（建议10~20副）\n"
+            "3. 设置目标场次数（平台局数，建议10~20局）\n"
             "4. 点击「开始对战」启动批量对战\n\n"
             "M3核心改进（对比M2）：\n"
             "- 完整移植lalala规则引擎，含顺子检测\n"
