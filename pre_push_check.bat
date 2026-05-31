@@ -18,8 +18,22 @@ python -c "import os, subprocess; files = []; [files.extend([(line[3:].strip(), 
 del temp_untracked.txt 2>nul
 
 echo.
-echo 3. 验证.gitignore配置...
-python verify_gitignore.py
+echo 3. 治理校验（分支 + Layer 2）...
+python scripts/hooks/pre_push_validate.py
+if errorlevel 1 (
+    echo.
+    echo 校验失败。见 docs/guandan-brain/AGENT_PUSH_CHECKLIST.md
+    pause
+    exit /b 1
+)
+
+echo.
+echo 4. 验证.gitignore配置（若存在 verify_gitignore.py）...
+if exist verify_gitignore.py (
+    python verify_gitignore.py
+) else (
+    echo   跳过 verify_gitignore.py（未找到）
+)
 
 echo.
 echo ============================================================

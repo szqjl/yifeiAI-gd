@@ -1,6 +1,7 @@
 # 掼蛋 AI 迭代大脑（项目真源）
 
-> **新开 Agent？** 复制 **[`AGENT_FIRST_MESSAGE.md`](AGENT_FIRST_MESSAGE.md)** 里那句话，粘贴给新 Agent 作为第一句。
+> **新开 Agent？** 复制 **[`AGENT_FIRST_MESSAGE.md`](AGENT_FIRST_MESSAGE.md)** 里那句话，粘贴给新 Agent 作为第一句。  
+> **提交 / 推送？** 复制 **[`AGENT_PUSH_CHECKLIST.md`](AGENT_PUSH_CHECKLIST.md)** 里默认第一句。
 
 本目录与代码同仓，用于**可追溯**的缺陷、版本修复、评测与迭代焦点。通用知识库见 `docs/knowledge/`；**解读离线平台 `victoryNum` / 批跑台账**见 [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md)；此处只记**本仓库版本—问题—验收**相关事实。
 

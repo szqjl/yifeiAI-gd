@@ -168,7 +168,8 @@ M2 客户端在 `yf1_m2.py` / `yf2_m2.py` 里做 **副级 + 局级** 追踪：�
 2. [快速开始](#快速开始) → 装依赖、配 `config.yaml`
 3. [M/V 治理方案](docs/governance/M-V-Series-治理方案.md) → 分支 `m-dev`、目录约定
 4. [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md) → 改 AI 行为前必读  
-   - **新开 Agent**：复制 [AGENT_FIRST_MESSAGE.md](docs/guandan-brain/AGENT_FIRST_MESSAGE.md) 里那句话，粘贴给 Agent 第一句
+   - **新开 Agent**：复制 [AGENT_FIRST_MESSAGE.md](docs/guandan-brain/AGENT_FIRST_MESSAGE.md) 里那句话，粘贴给 Agent 第一句  
+   - **提交推送**：复制 [AGENT_PUSH_CHECKLIST.md](docs/guandan-brain/AGENT_PUSH_CHECKLIST.md) 默认第一句；本机一次性跑 `scripts/hooks/install-hooks.bat`
 5. 跑 M1：`START_M1_GUI.bat` 或 [M1 测试指南](docs/development/M1测试指南.md)
 
 ---

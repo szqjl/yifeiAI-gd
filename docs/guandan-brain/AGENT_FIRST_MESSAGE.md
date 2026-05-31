@@ -19,6 +19,7 @@
 | 只分析 log / 胜率 | `先读 README §Agent 批跑数据入门 和 platform-data-interpretation §1～3，自测通过后再解读数据。` |
 | 换机接续 | `按 handoff 接续：先 README §Agent 批跑数据入门 自测，再读 ITERATIONS 最新一行 + docs/analysis/handoffs/ 最新一篇。` |
 | 只改决策/策略 | `改 AI 前先读 ISSUES open、ITERATIONS 最新一行、EVAL；局/副口径见 README §Agent 批跑数据入门。` |
+| **提交 / 推送** | 见 **[`AGENT_PUSH_CHECKLIST.md`](./AGENT_PUSH_CHECKLIST.md)** 默认第一句 |
 
 ---
 

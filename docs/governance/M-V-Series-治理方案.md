@@ -408,6 +408,7 @@ __pycache__/
 
 ### 8.2 合并检查清单（改 M → `m-dev`）
 
+- [ ] 已读本文 §4/§6/§8；执行 Agent 另见 [`AGENT_PUSH_CHECKLIST.md`](../guandan-brain/AGENT_PUSH_CHECKLIST.md)
 - [ ] 通过 **M 冒烟套件**（§7.3）
 - [ ] 若行为变更：30 局回归 diff 已跑或 CI 已挂接
 - [ ] 未引入大文件进 Git
