@@ -1,6 +1,8 @@
 import copy
 from random import random, randint
 from .m3_utils import *
+from game_logic.trick_state import resolve_effective_greater
+from game_logic.platform_act import clamp_act_index, normalize_play_act_fields
 
 ENG2CH = {
     "Single": "单张",
@@ -8,6 +10,7 @@ ENG2CH = {
     "Trips": "三张",
     "ThreePair": "三连对",
     "ThreeWithTwo": "三带二",
+    "TripsPair": "三带对",
     "TwoTrips": "钢板",
     "Straight": "顺子",
     "StraightFlush": "同花顺",
@@ -21,6 +24,209 @@ class M3DecisionEngine:
     def __init__(self, player_id):
         self.player_id = player_id
         self._reset_state()
+
+    def _dbg(self, msg: str):
+        """Detailed debug for M3 PASS investigation.
+        Outputs to both console (visible in client windows) and the standard log files.
+        """
+        print(f"[M3DBG-P{self.player_id}] {msg}")
+        # Also send to the logging system so it appears in logs/yf1_m3_*.log and yf2_m3_*.log
+        import logging
+        logging.getLogger(f"M3.P{self.player_id}").info(f"[M3DBG] {msg}")
+
+    def _ensure_list(self, val):
+        """Safely convert possibly stringified action (e.g. "['Single', 'J', ['DJ']]") to Python list.
+        This was the root cause of M3 always returning 0 (PASS) in passive dispatch.
+        """
+        if isinstance(val, (list, tuple)):
+            return list(val)
+        if isinstance(val, str):
+            try:
+                import ast
+                parsed = ast.literal_eval(val)
+                if isinstance(parsed, (list, tuple)):
+                    return list(parsed)
+            except Exception:
+                pass
+        return val
+
+    def _uses_level_rank_cards(self, cards, rank_card):
+        """任一牌点等于本级（含逢人配与同点 C/S/D/H）。"""
+        rank_char = rank_card[-1]
+        for card in cards:
+            if card[-1] == rank_char:
+                return True
+        return False
+
+    def _three_with_two_protect_ok(self, action_cards, bomb_member, rank_card):
+        """GUA-026：三带二不拆炸弹、不消耗级牌。"""
+        if len(set(action_cards) & set(bomb_member)) != 0:
+            return False
+        if self._uses_level_rank_cards(action_cards, rank_card):
+            return False
+        return True
+
+    def _pick_three_with_two(
+        self,
+        three2_actionList,
+        trip_member,
+        pair_member,
+        bomb_member,
+        rank_card,
+        card_val,
+        *,
+        allow_split_trips=False,
+        split_trips_min_pair=10,
+        prefer_low=True,
+    ):
+        """从合法三带二中选一手；优先不拆结构、不带级牌。"""
+        ordered = sorted(
+            three2_actionList,
+            key=lambda item: card_val[item[1][1]],
+            reverse=not prefer_low,
+        )
+        for tag, action in ordered:
+            cards = action[2]
+            if not self._three_with_two_protect_ok(cards, bomb_member, rank_card):
+                continue
+            trip = cards[0]
+            pair = cards[3]
+            if trip in trip_member and pair in pair_member and card_val[pair[-1]] <= 13:
+                return tag
+        if allow_split_trips:
+            for tag, action in ordered:
+                cards = action[2]
+                if not self._three_with_two_protect_ok(cards, bomb_member, rank_card):
+                    continue
+                trip = cards[0]
+                pair = cards[3]
+                if trip in trip_member and pair in trip_member and card_val[pair[-1]] >= split_trips_min_pair:
+                    return tag
+        return -1
+
+    def _is_teammate_greater(self, myPos, greaterPos):
+        """GUA-029 R5：队友控牌时不炸。"""
+        return (myPos + 2) % 4 == greaterPos
+
+    def _gua031_passive_teammate_yield(self, myPos, greaterPos, numofmy):
+        """GUA-031 P-F02：队友控牌且非残局冲刺（>10 张）→ 让道 PASS。"""
+        if not self._is_teammate_greater(myPos, greaterPos):
+            return False
+        if numofmy <= 10:
+            return False
+        return True
+
+    def _gua031_active_min_single(self, actionList, single_actionlist, card_val):
+        """GUA-031 PASS-P02：队友剩 1 张 → 出最小 Single。"""
+        if not single_actionlist:
+            return -1
+        for item in single_actionlist:
+            card = item[1] if isinstance(item[1], str) else item[1][0]
+            candidate = ["Single", item[0], [card]]
+            try:
+                return actionList.index(candidate)
+            except ValueError:
+                continue
+        best_idx = -1
+        best_val = 999
+        for i, action in enumerate(actionList):
+            if i == 0 or action[0] != "Single":
+                continue
+            val = card_val.get(action[1], 99)
+            if val < best_val:
+                best_val = val
+                best_idx = i
+        return best_idx
+
+    def _gua031_filter_singles_for_next1(self, single_actionlist, card_val, numofnext):
+        """GUA-031 PASS-P03：下家剩 1 张时禁过小单（< T）。"""
+        if numofnext != 1:
+            return single_actionlist
+        floor = 10
+        return [s for s in single_actionlist if card_val.get(s[0], 0) >= floor]
+
+    def _gua031_active_feed_five(self, actionList, pair_actionlist, threetwo_actionlist, card_val, cur):
+        """GUA-031 PASS-P04：队友剩 5 张 → 优先 Pair / ThreeWithTwo。"""
+        pair_ceiling = cur[5]
+        best_idx = -1
+        best_val = 999
+        for i, action in enumerate(actionList):
+            if i == 0 or action[0] != "Pair":
+                continue
+            val = card_val.get(action[1], 99)
+            if val < pair_ceiling and val < best_val:
+                best_val = val
+                best_idx = i
+        if best_idx > 0:
+            return best_idx
+        for i, action in enumerate(actionList):
+            if i == 0 or action[0] != "ThreeWithTwo":
+                continue
+            return i
+        if pair_actionlist and card_val[pair_actionlist[0][0]] < pair_ceiling:
+            idx = getindex("Pair", pair_actionlist, actionList)
+            if idx > 0:
+                return idx
+        if threetwo_actionlist:
+            idx = getindex("ThreeWithTwo", threetwo_actionlist, actionList)
+            if idx > 0:
+                return idx
+        return -1
+
+    def _collect_bomb_action_list(self, actionList):
+        bomb_actionList = []
+        tag = 0
+        for action in actionList[1:]:
+            tag += 1
+            if action[0] in ("Bomb", "StraightFlush"):
+                bomb_actionList.append((tag, action))
+        return bomb_actionList
+
+    def _gua029_r4_allows_bomb(self, numofgreaterPos, numofmy, actionList):
+        """GUA-029 R4：对手剩 4 张默认不炸（炸不打四），白名单例外。"""
+        if numofgreaterPos != 4:
+            return True
+        for action in actionList[1:]:
+            if action[0] in ("Bomb", "StraightFlush") and len(action[2]) == numofmy:
+                return True
+        non_pass = [a for a in actionList[1:] if a[0] != "PASS"]
+        if non_pass and all(a[0] in ("Bomb", "StraightFlush") for a in non_pass):
+            return True
+        return False
+
+    def _gua029_try_bomb(self, actionList, handcards, rank_card, card_val, myPos, greaterPos, numofplayers):
+        """GUA-029：统一 choose_bomb，含 R4/R5 守卫。"""
+        if greaterPos < 0 or greaterPos > 3:
+            return -1
+        if self._is_teammate_greater(myPos, greaterPos):
+            return -1
+        numofmy = numofplayers[myPos]
+        numofgreaterPos = numofplayers[greaterPos]
+        if not self._gua029_r4_allows_bomb(numofgreaterPos, numofmy, actionList):
+            self._dbg("GUA-029 R4 block bomb (opp remain=4)")
+            return -1
+        sorted_cards, bomb_info = combine_handcards(handcards, rank_card[-1], card_val)
+        bomb_actionList = self._collect_bomb_action_list(actionList)
+        if not bomb_actionList:
+            return -1
+        index = choose_bomb(bomb_actionList, handcards, sorted_cards, bomb_info, rank_card, card_val)
+        if index != -1:
+            self._dbg(f"GUA-029 choose_bomb -> {index}")
+        return index
+
+    def _gua029_passive_sprint_bomb(
+        self, actionList, handcards, rank_card, card_val, myPos, greaterPos, numofplayers, beatAction,
+    ):
+        """GUA-029 R3：对手 ≤7 张且本分支已 PASS 时兜底出炸。"""
+        if beatAction and beatAction[0] in ("Bomb", "StraightFlush"):
+            return -1
+        if greaterPos < 0 or greaterPos > 3:
+            return -1
+        if numofplayers[greaterPos] > 7:
+            return -1
+        return self._gua029_try_bomb(
+            actionList, handcards, rank_card, card_val, myPos, greaterPos, numofplayers,
+        )
 
     def _reset_state(self):
         self.history = {
@@ -44,7 +250,8 @@ class M3DecisionEngine:
 
     def _update_play_state(self, data):
         curPos = data.get("curPos")
-        curAction = data.get("curAction")
+        curAction = self._ensure_list(data.get("curAction"))
+        data["curAction"] = curAction  # ensure downstream sees list
         if (
             curPos is not None
             and curAction is not None
@@ -83,6 +290,31 @@ class M3DecisionEngine:
                 else:
                     self.my_pass_num = 0
 
+    def _sync_remain_from_public_info(self, data):
+        """act 时用 publicInfo[].rest 对齐剩牌数（v1006 平台真源）。"""
+        public_info = data.get("publicInfo")
+        if not isinstance(public_info, list):
+            return
+        synced = 0
+        for i, info in enumerate(public_info):
+            if i > 3 or not isinstance(info, dict):
+                continue
+            rest = info.get("rest")
+            if rest is None:
+                continue
+            try:
+                n = int(rest)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= n <= 27:
+                key = str(i)
+                if key in self.history and self.history[key]["remain"] != n:
+                    self._dbg(f"sync remain pos{i}: {self.history[key]['remain']} -> {n}")
+                self.history[key]["remain"] = n
+                synced += 1
+        if synced:
+            self._dbg(f"publicInfo.rest synced {synced} players")
+
     def on_message(self, data):
         stage = data.get("stage", "")
         msg_type = data.get("type", "")
@@ -90,8 +322,38 @@ class M3DecisionEngine:
         if stage in ("beginning", "episodeOver", "gameOver"):
             self._reset_state()
 
+        # Normalize possibly stringified action fields (root cause of persistent PASS)
+        if stage == "play":
+            if "curAction" in data:
+                data["curAction"] = self._ensure_list(data.get("curAction"))
+            if "greaterAction" in data:
+                data["greaterAction"] = self._ensure_list(data.get("greaterAction"))
+            if "actionList" in data and isinstance(data["actionList"], list):
+                data["actionList"] = [self._ensure_list(a) for a in data["actionList"]]
+
         if stage == "play" and msg_type == "notify":
             self._update_play_state(data)
+
+        if stage == "play" and msg_type == "act":
+            normalize_play_act_fields(data)
+            self._sync_remain_from_public_info(data)
+            resolved = resolve_effective_greater(
+                cur_pos=data.get("curPos"),
+                cur_action=data.get("curAction"),
+                greater_pos=data.get("greaterPos", -1),
+                greater_action=data.get("greaterAction"),
+                public_info=data.get("publicInfo"),
+                cur_rank=data.get("curRank", "2"),
+            )
+            if resolved["corrected"]:
+                self._dbg(
+                    "GUA-027 greater corrected "
+                    f"src={resolved['source']} pos {data.get('greaterPos')}->{resolved['greater_pos']} "
+                    f"act {data.get('greaterAction')}->{resolved['greater_action']}"
+                )
+            data["greaterPos"] = resolved["greater_pos"]
+            data["greaterAction"] = resolved["greater_action"]
+            data["_beat_action"] = resolved["beat_action"]
 
         if stage == "tribute" and msg_type == "notify":
             self.tribute_result = data.get("result")
@@ -99,20 +361,24 @@ class M3DecisionEngine:
         if "actionList" in data and data["actionList"]:
             action_list = data["actionList"]
             idx = self._rule_parse(data)
-            if idx < 0:
-                return 0
-            if idx >= len(action_list):
-                return len(action_list) - 1
+            idx = clamp_act_index(idx, action_list, data.get("indexRange"))
+            chosen = action_list[idx] if 0 <= idx < len(action_list) else None
+            self._dbg(f"on_message FINAL decision idx={idx} action={chosen}")
             return idx
         return -1
 
     def _rule_parse(self, data):
         action_list = data["actionList"]
         if len(action_list) == 1:
+            self._dbg("only 1 action -> return 0 (PASS)")
             return 0
 
         stage = data.get("stage")
         mypos = self.player_id
+        gpos = data.get("greaterPos", -1)
+        cpos = data.get("curPos", -1)
+        alen = len(action_list)
+        self._dbg(f"ENTER _rule_parse | stage={stage} mypos={mypos} greaterPos={gpos} curPos={cpos} actionList_len={alen}")
 
         if stage == "play" and data.get("greaterPos") != mypos and data.get("curPos") != -1:
             numofplayers = [self.history['0']["remain"], self.history['1']["remain"],
@@ -123,9 +389,17 @@ class M3DecisionEngine:
             else:
                 numofpre = numofplayers[(mypos - 1) % 4]
                 print("下家已完牌，上家还有{}张牌".format(numofpre))
-            return self._passive(data)
+            self._dbg("BRANCH: passive")
+            idx = self._passive(data)
+            self._dbg(f"passive -> return {idx}")
+            return idx
 
-        elif stage == "play" and (data.get("greaterPos") == -1 or data.get("curPos") == -1):
+        elif stage == "play" and (
+            data.get("greaterPos") == -1
+            or data.get("curPos") == -1
+            or data.get("greaterPos") == mypos
+        ):
+            self._dbg("BRANCH: active (first-to-play or greaterPos==mypos)")
             numofplayers = [self.history['0']["remain"], self.history['1']["remain"],
                             self.history['2']["remain"], self.history['3']["remain"]]
             numofnext = numofplayers[(mypos + 1) % 4]
@@ -133,14 +407,29 @@ class M3DecisionEngine:
                 print("下家还有{}张牌".format(numofnext))
             else:
                 numofpre = numofplayers[(mypos - 1) % 4]
-            return self._active(data)
+            idx = self._active(data)
+            self._dbg(f"active -> return {idx}")
+            return idx
 
         elif stage == "back":
+            self._dbg("BRANCH: back")
             return self._back_action(data)
 
         elif stage == "tribute":
+            self._dbg("BRANCH: tribute")
             return self._tribute(data)
 
+        elif stage == "play":
+            self._dbg("BRANCH: fallback play (indexRange or active)")
+            index_range = data.get("indexRange")
+            if index_range is not None:
+                self._dbg(f"fallback indexRange -> randint(0, {index_range})")
+                return randint(0, index_range)
+            idx = self._active(data)
+            self._dbg(f"fallback active -> return {idx}")
+            return idx
+
+        self._dbg("FALLTHROUGH -> return 0")
         return 0
 
     def _passive(self, data):
@@ -158,6 +447,26 @@ class M3DecisionEngine:
         my_pass_num = self.my_pass_num
         remain_cards_classbynum = self.remain_cards_classbynum
 
+        beatAction = data.get("_beat_action")
+        if not beatAction:
+            resolved = resolve_effective_greater(
+                cur_pos=data.get("curPos"),
+                cur_action=curAction,
+                greater_pos=greaterPos,
+                greater_action=greaterAction,
+                public_info=data.get("publicInfo"),
+                cur_rank=rank,
+            )
+            greaterPos = resolved["greater_pos"]
+            greaterAction = resolved["greater_action"]
+            beatAction = resolved["beat_action"]
+        else:
+            beatAction = self._ensure_list(beatAction)
+
+        self._dbg(f"_passive ENTRY | curAction={curAction} greaterAction={greaterAction} "
+                  f"beatAction={beatAction} numofplayers={numofplayers} pass_num={pass_num} "
+                  f"my_pass_num={my_pass_num} greaterPos={greaterPos}")
+
         rank_card = 'H' + str(rank)
         restcards = rest_cards(handcards, remaincards, rank)
 
@@ -165,49 +474,61 @@ class M3DecisionEngine:
         card_val[rank_card[-1]] = 15
 
         actIndex = 0
-        if curAction[0] == "PASS":
-            curAction = greaterAction
-        print(curAction)
+        print(beatAction)
         numofmy = numofplayers[myPos]
         if numofmy <= 10:
             numofnext = numofplayers[(myPos + 1) % 4]
             actIndex = one_hand(numofmy, numofnext, actionList, myPos, greaterPos, 7,
                                 restcards, card_val, rank_card)
             if actIndex != -1:
+                self._dbg(f"one_hand early exit -> {actIndex}")
                 return actIndex
 
-        if curAction[0] == "Single":
-            actIndex = self._Single(actionList, curAction, rank_card, handcards, numofplayers, restcards,
+        self._dbg(f"_passive dispatch | beatAction_type={beatAction[0] if beatAction else None} "
+                  f"type={type(beatAction).__name__} [0]_repr={repr(beatAction[0]) if beatAction else None}")
+        if beatAction[0] == "Single":
+            actIndex = self._Single(actionList, beatAction, rank_card, handcards, numofplayers, restcards,
                                     card_val, myPos, greaterPos, pass_num, my_pass_num)
-        elif curAction[0] == "Pair":
-            actIndex = self._Pair(actionList, curAction, rank_card, handcards, numofplayers, restcards,
+        elif beatAction[0] == "Pair":
+            actIndex = self._Pair(actionList, beatAction, rank_card, handcards, numofplayers, restcards,
                                   card_val, myPos, greaterPos, pass_num, my_pass_num)
-        elif curAction[0] == "Trips":
-            actIndex = self._Trips(actionList, curAction, rank_card, handcards, numofplayers, restcards,
+        elif beatAction[0] == "Trips":
+            actIndex = self._Trips(actionList, beatAction, rank_card, handcards, numofplayers, restcards,
                                    card_val, myPos, greaterPos, pass_num, my_pass_num)
-        elif curAction[0] == "ThreeWithTwo":
-            actIndex = self._ThreeWithTwo(actionList, curAction, rank_card, handcards, numofplayers, restcards,
+        elif beatAction[0] in ("ThreeWithTwo", "TripsPair"):
+            actIndex = self._ThreeWithTwo(actionList, beatAction, rank_card, handcards, numofplayers, restcards,
                                           card_val, myPos, greaterPos, pass_num, my_pass_num)
-        elif curAction[0] == "ThreePair":
-            actIndex = self._ThreePair(actionList, curAction, rank_card, handcards, numofplayers, restcards,
+        elif beatAction[0] == "ThreePair":
+            actIndex = self._ThreePair(actionList, beatAction, rank_card, handcards, numofplayers, restcards,
                                        card_val, myPos, greaterPos, pass_num, my_pass_num)
-        elif curAction[0] == "TwoTrips":
-            actIndex = self._TwoTrips(actionList, curAction, rank_card, handcards, numofplayers, restcards,
+        elif beatAction[0] == "TwoTrips":
+            actIndex = self._TwoTrips(actionList, beatAction, rank_card, handcards, numofplayers, restcards,
                                       card_val, myPos, greaterPos, pass_num, my_pass_num)
-        elif curAction[0] == "Straight":
-            actIndex = self._Straight(actionList, curAction, rank_card, handcards, numofplayers,
+        elif beatAction[0] == "Straight":
+            actIndex = self._Straight(actionList, beatAction, rank_card, handcards, numofplayers,
                                       card_val, pass_num, my_pass_num, myPos, greaterPos)
-        elif curAction[0] == "Bomb" or curAction[0] == "StraightFlush":
-            actIndex = self._Bomb(actionList, curAction, rank_card, handcards, numofplayers, restcards,
+        elif beatAction[0] == "Bomb" or beatAction[0] == "StraightFlush":
+            actIndex = self._Bomb(actionList, beatAction, rank_card, handcards, numofplayers, restcards,
                                   card_val, myPos, greaterPos)
 
+        if actIndex == 0:
+            sprint_idx = self._gua029_passive_sprint_bomb(
+                actionList, handcards, rank_card, card_val, myPos, greaterPos, numofplayers, beatAction,
+            )
+            if sprint_idx != -1:
+                actIndex = sprint_idx
+                self._dbg(f"GUA-029 R3 sprint bomb -> {actIndex}")
+
+        self._dbg(f"_passive FINAL return actIndex={actIndex} (0 means PASS)")
         return actIndex
 
     def _Single(self, actionList, curAction, rank_card, handcards, numofplayers, rest_cards_list, card_val, myPos, greaterPos, pass_num, my_pass_num):
+        self._dbg(f"_Single ENTRY | curAction={curAction} greaterPos={greaterPos} pass_num={pass_num} my_pass_num={my_pass_num}")
         numofnext = numofplayers[(myPos + 1) % 4]
         numofgreaterPos = numofplayers[greaterPos]
         numoffri = numofplayers[(myPos + 2) % 4]
         numofpre = numofplayers[(myPos - 1) % 4]
+        self._dbg(f"_Single nums | numofnext={numofnext} numofgreaterPos={numofgreaterPos} numoffri={numoffri} numofpre={numofpre}")
 
         sorted_cards, bomb_info = combine_handcards(handcards, rank_card[-1], card_val)
 
@@ -238,29 +559,35 @@ class M3DecisionEngine:
             else:
                 bomb_actionList.append((tag, action))
 
-        curVal = card_val[curAction[-1]]
+        curVal = card_val[curAction[1]]
 
         max_val = card_val[rest_cards_list[-1][0][-1]]
+
+        self._dbg(f"_Single VALUES | curVal={curVal} max_val_from_remain={max_val} "
+                  f"len(single_actionList)={len(single_actionList)} len(bomb_actionList)={len(bomb_actionList)} "
+                  f"single_member_top5={[c[1] for c in single_member[:5]] if single_member else []}")
 
         if numofnext == 0:
             numofnext = numofplayers[(myPos - 1) % 4]
 
         if numofnext <= 4 or (numofpre <= 3 and numofpre >= 1):
             if (myPos + 2) % 4 == greaterPos and curVal >= max_val:
+                self._dbg("_Single early teammate protect (curVal >= max_val) -> 0")
                 return 0
             if (myPos + 2) % 4 == greaterPos and curVal >= 15 and numofnext != 1:
+                self._dbg("_Single early teammate protect (curVal>=15) -> 0")
                 return 0
 
             for action in single_actionList:
                 Index = action[0]
                 action = action[1]
-                if card_val[action[-1]] >= max_val and action[2][0] in single_member and rank_card not in action[2]:
+                if card_val[action[1]] >= max_val and action[2][0] in single_member and rank_card not in action[2]:
                     return Index
 
             for action in single_actionList:
                 Index = action[0]
                 action = action[1]
-                if card_val[action[-1]] >= max_val and action[2][0] not in bomb_member and rank_card not in action[2]:
+                if card_val[action[1]] >= max_val and action[2][0] not in bomb_member and rank_card not in action[2]:
                     if is_inStraight(action, straight_member):
                         continue
                     return Index
@@ -272,7 +599,7 @@ class M3DecisionEngine:
             for action in single_actionList:
                 Index = action[0]
                 action = action[1]
-                if card_val[action[-1]] >= max_val - 2 and action[2][0] not in bomb_member and rank_card not in action[2]:
+                if card_val[action[1]] >= max_val - 2 and action[2][0] not in bomb_member and rank_card not in action[2]:
                     if is_inStraight(action, straight_member):
                         continue
                     return Index
@@ -287,7 +614,7 @@ class M3DecisionEngine:
             for action in single_actionList:
                 Index = action[0]
                 action = action[1]
-                if (action[2][0] in single_member or card_val[action[-1]] >= 15) and rank_card not in action[2]:
+                if (action[2][0] in single_member or card_val[action[1]] >= 15) and rank_card not in action[2]:
                     return Index
             return -1
 
@@ -311,7 +638,7 @@ class M3DecisionEngine:
                 if curVal <= 10:
                     return index
                 else:
-                    if card_val[actionList[index][-1]] == curVal + 1:
+                    if card_val[actionList[index][1]] == curVal + 1:
                         return index
             else:
                 index = normal(single_actionList, single_member, rank_card)
@@ -340,15 +667,20 @@ class M3DecisionEngine:
                     if index != -1:
                         return index
                     else:
+                        self._dbg("_Single bomb not chosen under high pass_num -> 0")
                         return 0
 
+        self._dbg("_Single reached final return 0 (no branch taken) - possible reasons: no playable single >= required value, no good bomb, strict teammate protection, or pass_num thresholds")
+        self._dbg(f"_Single FINAL STATE | curVal={curVal} max_val={max_val} pass_num={pass_num} my_pass_num={my_pass_num} numofgreaterPos={numofgreaterPos} numofnext={numofnext}")
         return 0
 
     def _Pair(self, actionList, curAction, rank_card, handcards, numofplayers, rest_cards_list, card_val, myPos, greaterPos, pass_num, my_pass_num):
+        self._dbg(f"_Pair ENTRY | curAction={curAction} greaterPos={greaterPos} pass_num={pass_num} my_pass_num={my_pass_num}")
         numofnext = numofplayers[(myPos + 1) % 4]
         numofgreaterPos = numofplayers[greaterPos]
         numoffri = numofplayers[(myPos + 2) % 4]
         numofpre = numofplayers[(myPos - 1) % 4]
+        self._dbg(f"_Pair nums | numofnext={numofnext} numofgreaterPos={numofgreaterPos}")
         sorted_cards, bomb_info = combine_handcards(handcards, rank_card[-1], card_val)
 
         bomb_member = []
@@ -378,7 +710,7 @@ class M3DecisionEngine:
             else:
                 bomb_actionList.append((tag, action))
 
-        curVal = card_val[curAction[-1]]
+        curVal = card_val[curAction[1]]
         rest_cards_list = rest_cards_list[::-1]
         max_val = 0
         for cards in rest_cards_list:
@@ -397,13 +729,13 @@ class M3DecisionEngine:
             for action in pair_actionList:
                 Index = action[0]
                 action = action[1]
-                if card_val[action[-1]] >= max_val and action[2][0] in pair_member and rank_card not in action[2]:
+                if card_val[action[1]] >= max_val and action[2][0] in pair_member and rank_card not in action[2]:
                     return Index
 
             for action in pair_actionList:
                 Index = action[0]
                 action = action[1]
-                if card_val[action[-1]] >= max_val and action[2][0] not in bomb_member and rank_card not in action[2]:
+                if card_val[action[1]] >= max_val and action[2][0] not in bomb_member and rank_card not in action[2]:
                     if is_inStraight(action, straight_member):
                         continue
                     return Index
@@ -415,7 +747,7 @@ class M3DecisionEngine:
             for action in pair_actionList[::-1]:
                 Index = action[0]
                 action = action[1]
-                if card_val[action[-1]] >= max_val - 2 and action[2][0] not in bomb_member and rank_card not in action[2]:
+                if card_val[action[1]] >= max_val - 2 and action[2][0] not in bomb_member and rank_card not in action[2]:
                     if is_inStraight(action, straight_member):
                         continue
                     return Index
@@ -425,10 +757,10 @@ class M3DecisionEngine:
             for action in pair_actionList:
                 index = action[0]
                 action = action[1]
-                if rank_card in action[2] and card_val[action[-1]] > max_match and action[2][0] not in bomb_member:
+                if rank_card in action[2] and card_val[action[1]] > max_match and action[2][0] not in bomb_member:
                     if is_inStraight(action, straight_member):
                         continue
-                    max_match = card_val[action[-1]]
+                    max_match = card_val[action[1]]
                     max_match_index = index
             if max_match_index != -1 and max_match >= max_val - 2:
                 return max_match_index
@@ -461,7 +793,7 @@ class M3DecisionEngine:
                 if curVal <= 10:
                     return index
                 else:
-                    if card_val[actionList[index][-1]] == curVal + 1:
+                    if card_val[actionList[index][1]] == curVal + 1:
                         return index
             else:
                 index = normal(pair_actionList, pair_member, rank_card)
@@ -525,12 +857,12 @@ class M3DecisionEngine:
 
         for action in actionList[1:]:
             tag += 1
-            if (action[0] == 'ThreeWithTwo'):
+            if action[0] in ('ThreeWithTwo', 'TripsPair'):
                 three2_actionList.append((tag, action))
             else:
                 bomb_actionList.append((tag, action))
 
-        curVal = card_val[curAction[-1]]
+        curVal = card_val[curAction[1]]
         max_val = 0
         for cards in rest_cards_list[::-1]:
             if len(cards) >= 3:
@@ -546,43 +878,34 @@ class M3DecisionEngine:
             if (myPos + 2) % 4 == greaterPos and curVal >= 11 and numofnext != 5:
                 return 0
 
-            three2_sorted = sorted(three2_actionList, key=lambda item: card_val[item[1][-1]], reverse=True)
-            for action in three2_sorted:
-                index = action[0]
-                action = action[1]
-                trip = action[2][0]
-                pair = action[2][3]
-                if trip in trip_member and pair in pair_member and rank_card not in action[2] and card_val[pair[-1]] <= 13:
-                    return index
-
-            for action in three2_sorted:
-                index = action[0]
-                action = action[1]
-                trip = action[2][0]
-                pair = action[2][3]
-                if trip in trip_member and pair in trip_member and rank_card not in action[2] and card_val[pair[-1]] >= 10:
-                    return index
+            index = self._pick_three_with_two(
+                three2_actionList,
+                trip_member,
+                pair_member,
+                bomb_member,
+                rank_card,
+                card_val,
+                allow_split_trips=(numofnext <= 6),
+                prefer_low=False,
+            )
+            if index != -1:
+                return index
 
             index = choose_bomb(bomb_actionList, handcards, sorted_cards, bomb_info, rank_card, card_val)
             if index != -1:
                 return index
-            for action in three2_sorted:
-                index = action[0]
-                action = action[1]
-                trip = action[2][0]
-                pair = action[2][3]
-                if trip in pair_member and pair in pair_member and rank_card in action[2]:
-                    return index
 
         def normal(three2_actionList, trip_member, pair_member, rank_card):
-            for action in three2_actionList:
-                index = action[0]
-                action = action[1]
-                trip = action[2][0]
-                pair = action[2][3]
-                if trip in trip_member and pair in pair_member and rank_card not in action[2] and card_val[pair[-1]] <= 13:
-                    return index
-            return -1
+            return self._pick_three_with_two(
+                three2_actionList,
+                trip_member,
+                pair_member,
+                bomb_member,
+                rank_card,
+                card_val,
+                allow_split_trips=False,
+                prefer_low=True,
+            )
 
         if (myPos + 2) % 4 == greaterPos:
             if curVal >= 14 or curVal >= max_val - 2:
@@ -594,7 +917,7 @@ class M3DecisionEngine:
                 if curVal <= 10:
                     return index
                 else:
-                    if card_val[actionList[index][-1]] == curVal + 1:
+                    if card_val[actionList[index][1]] == curVal + 1:
                         return index
             else:
                 index = normal(three2_actionList, trip_member, pair_member, rank_card)
@@ -618,7 +941,9 @@ class M3DecisionEngine:
                     if index != -1:
                         return index
                     else:
+                        self._dbg("_ThreeWithTwo high-pass bomb not taken -> 0")
                         return 0
+        self._dbg("_ThreeWithTwo reached final return 0")
         return 0
 
     def _Trips(self, actionList, curAction, rank_card, handcards, numofplayers, rest_cards_list, card_val, myPos, greaterPos, pass_num, my_pass_num):
@@ -626,6 +951,10 @@ class M3DecisionEngine:
         numofgreaterPos = numofplayers[greaterPos]
         numoffri = numofplayers[(myPos + 2) % 4]
         numofpre = numofplayers[(myPos - 1) % 4]
+        numofmy = numofplayers[myPos]
+        if self._gua031_passive_teammate_yield(myPos, greaterPos, numofmy):
+            self._dbg("GUA-031 P-F02 _Trips teammate yield -> 0")
+            return 0
 
         sorted_cards, bomb_info = combine_handcards(handcards, rank_card[-1], card_val)
 
@@ -656,7 +985,7 @@ class M3DecisionEngine:
             else:
                 bomb_actionList.append((tag, action))
 
-        curVal = card_val[curAction[-1]]
+        curVal = card_val[curAction[1]]
         rest_cards_list = rest_cards_list[::-1]
         max_val = 0
         for cards in rest_cards_list:
@@ -676,7 +1005,7 @@ class M3DecisionEngine:
             for action in trip_actionList:
                 Index = action[0]
                 action = action[1]
-                if card_val[action[-1]] >= max_val and action[2][0] in trip_member and action[2] and rank_card not in action[2]:
+                if card_val[action[1]] >= max_val and action[2][0] in trip_member and action[2] and rank_card not in action[2]:
                     return Index
 
             index = choose_bomb(bomb_actionList, handcards, sorted_cards, bomb_info, rank_card, card_val)
@@ -686,7 +1015,7 @@ class M3DecisionEngine:
             for action in trip_actionList[::-1]:
                 Index = action[0]
                 action = action[1]
-                if card_val[action[-1]] >= max_val - 2 and action[2][0] in trip_member and rank_card not in action[2]:
+                if card_val[action[1]] >= max_val - 2 and action[2][0] in trip_member and rank_card not in action[2]:
                     if is_inStraight(action, straight_member):
                         continue
                     return Index
@@ -695,10 +1024,10 @@ class M3DecisionEngine:
             for action in trip_actionList:
                 index = action[0]
                 action = action[1]
-                if rank_card in action[2] and card_val[action[-1]] > max_match and action[2][0] not in bomb_member:
+                if rank_card in action[2] and card_val[action[1]] > max_match and action[2][0] not in bomb_member:
                     if is_inStraight(action, straight_member):
                         continue
-                    max_match = card_val[action[-1]]
+                    max_match = card_val[action[1]]
                     max_match_index = index
             if max_match_index != -1:
                 return max_match_index
@@ -721,7 +1050,7 @@ class M3DecisionEngine:
                 if curVal <= 10:
                     return index
                 else:
-                    if card_val[actionList[index][-1]] == curVal + 1:
+                    if card_val[actionList[index][1]] == curVal + 1:
                         return index
             else:
                 index = normal(trip_actionList, trip_member, rank_card)
@@ -752,6 +1081,10 @@ class M3DecisionEngine:
         numofgreaterPos = numofplayers[greaterPos]
         numoffri = numofplayers[(myPos + 2) % 4]
         numofpre = numofplayers[(myPos - 1) % 4]
+        numofmy = numofplayers[myPos]
+        if self._gua031_passive_teammate_yield(myPos, greaterPos, numofmy):
+            self._dbg("GUA-031 P-F02 _ThreePair teammate yield -> 0")
+            return 0
         sorted_cards, bomb_info = combine_handcards(handcards, rank_card[-1], card_val)
 
         card_origin = CARD_ORIGIN.copy()
@@ -786,7 +1119,7 @@ class M3DecisionEngine:
             else:
                 bomb_actionList.append((tag, action))
 
-        curVal = card_val[curAction[-1]]
+        curVal = card_val[curAction[1]]
         max_val = 0
         val_list = []
         for cards in rest_cards_list:
@@ -856,7 +1189,7 @@ class M3DecisionEngine:
                 if curVal <= 7:
                     return index
                 else:
-                    if card_val[actionList[index][-1]] == curVal + 1:
+                    if card_val[actionList[index][1]] == curVal + 1:
                         return index
             else:
                 index = normal(pair3_actionList, pair_member, rank_card)
@@ -892,6 +1225,10 @@ class M3DecisionEngine:
     def _Straight(self, actionList, curAction, rank_card, handcards, numofplayers, card_val, pass_num, my_pass_num, myPos, greaterPos):
         numofnext = numofplayers[(myPos + 1) % 4]
         numofpre = numofplayers[(myPos - 1) % 4]
+        numofmy = numofplayers[myPos]
+        if self._gua031_passive_teammate_yield(myPos, greaterPos, numofmy):
+            self._dbg("GUA-031 P-F02 _Straight teammate yield -> 0")
+            return 0
         if numofnext == 0:
             numofnext = numofplayers[(myPos - 1) % 4]
 
@@ -901,7 +1238,7 @@ class M3DecisionEngine:
         card_val['A'] = 1
         card_val[rank_card[-1]] = card_origin[rank_card[-1]]
 
-        curVal = card_val[curAction[-1]]
+        curVal = card_val[curAction[1]]
 
         bomb_member = []
         pair_member = []
@@ -975,6 +1312,10 @@ class M3DecisionEngine:
         numofnext = numofplayers[(myPos + 1) % 4]
         numofgreaterPos = numofplayers[greaterPos]
         numoffri = numofplayers[(myPos + 2) % 4]
+        numofmy = numofplayers[myPos]
+        if self._gua031_passive_teammate_yield(myPos, greaterPos, numofmy):
+            self._dbg("GUA-031 P-F02 _TwoTrips teammate yield -> 0")
+            return 0
 
         sorted_cards, bomb_info = combine_handcards(handcards, rank_card[-1], card_val)
 
@@ -1010,7 +1351,7 @@ class M3DecisionEngine:
             else:
                 bomb_actionList.append((tag, action))
 
-        curVal = card_val[curAction[-1]]
+        curVal = card_val[curAction[1]]
         max_val = 0
         val_list = []
         for cards in rest_cards_list:
@@ -1045,7 +1386,7 @@ class M3DecisionEngine:
                 if curVal <= 10:
                     return index
                 else:
-                    if card_val[actionList[index][-1]] == curVal + 1:
+                    if card_val[actionList[index][1]] == curVal + 1:
                         return index
             else:
                 index = normal(twoTripsList, trip_member, rank_card)
@@ -1073,47 +1414,18 @@ class M3DecisionEngine:
         return 0
 
     def _Bomb(self, actionList, curAction, rank_card, handcards, numofplayers, rest_cards_list, card_val, myPos, greaterPos):
-        numofnext = numofplayers[(myPos + 1) % 4]
-        numofgreaterPos = numofplayers[greaterPos]
-        if (myPos + 2) % 4 == greaterPos:
+        """GUA-029 R2：对 Bomb/SF 必回炸（最小够用）。"""
+        if self._is_teammate_greater(myPos, greaterPos):
             return 0
-
-        sorted_cards, bomb_info = combine_handcards(handcards, rank_card[-1], card_val)
-        cur_Bomb_num = cal_bomb_num(sorted_cards, handcards, rank_card)
-
-        bomb_member = []
-        pair_member = []
-        trip_member = []
-        single_member = sorted_cards["Single"]
-        straight_member = []
-        if len(sorted_cards["Straight"]) != 0:
-            straight_member += sorted_cards["Straight"][0]
-        if len(sorted_cards["StraightFlush"]) != 0:
-            straight_member += sorted_cards["StraightFlush"][0]
-
-        for pair in sorted_cards["Pair"]:
-            pair_member += pair
-        for trip in sorted_cards["Trips"]:
-            trip_member += trip
-        for bomb in sorted_cards["Bomb"]:
-            bomb_member += bomb
-        bomb_actionList = []
-        tag = 0
-        for action in actionList[1:]:
-            tag += 1
-            bomb_actionList.append((tag, action))
-        if cur_Bomb_num >= 3:
-            index = choose_bomb(bomb_actionList, handcards, sorted_cards, bomb_info, rank_card, card_val)
-            if index != -1:
-                return index
-        elif numofgreaterPos <= 18:
-            index = choose_bomb(bomb_actionList, handcards, sorted_cards, bomb_info, rank_card, card_val)
-            if index != -1:
-                return index
-
+        index = self._gua029_try_bomb(
+            actionList, handcards, rank_card, card_val, myPos, greaterPos, numofplayers,
+        )
+        if index != -1:
+            return index
         return 0
 
     def _active(self, data):
+        self._dbg("ENTER _active (first-to-play or own greater)")
         actionList = data["actionList"]
         handcards = data["handCards"]
         rank = data.get("curRank", "2")
@@ -1124,13 +1436,32 @@ class M3DecisionEngine:
 
         restcards = rest_cards(handcards, remaincards, rank)
         rank_card = 'H' + rank
+        card_val = CARD_VALUE_S2V.copy()
+        card_val[rank] = 15
         numofnext = numofplayers[(mypos + 1) % 4]
         if numofnext == 0:
             numofnext = numofplayers[(mypos - 1) % 4]
 
+        numofmy = numofplayers[mypos]
+        greater_pos = data.get("greaterPos", mypos)
+        if greater_pos is None or greater_pos < 0:
+            greater_pos = mypos
+
+        if numofmy <= 10:
+            oh = one_hand(
+                numofmy, numofnext, actionList, mypos, greater_pos, 7, restcards, card_val, rank_card,
+            )
+            if oh != -1:
+                self._dbg(f"GUA-029 R6 one_hand active -> {oh}")
+                return oh
+            for i, action in enumerate(actionList):
+                if i == 0:
+                    continue
+                if action[0] in ("Bomb", "StraightFlush") and len(action[2]) == numofmy:
+                    self._dbg(f"GUA-029 R6 bomb finish active -> {i}")
+                    return i
+
         cur = [9, 10, 9, 8, 10, 10, 2]
-        card_val = CARD_VALUE_S2V.copy()
-        card_val[rank] = 15
 
         card_val2 = CARD_VALUE_S2V2.copy()
 
@@ -1141,15 +1472,34 @@ class M3DecisionEngine:
 
         max_val = card_val[restcards[-1][0][-1]]
 
+        numoffri = numofplayers[(mypos + 2) % 4]
+        single_for_play = self._gua031_filter_singles_for_next1(
+            single_actionlist, card_val, numofnext,
+        )
+
+        if numoffri == 1:
+            idx = self._gua031_active_min_single(actionList, single_actionlist, card_val)
+            if idx > 0:
+                self._dbg(f"GUA-031 P02 min single -> {idx}")
+                return idx
+
+        if numoffri == 5:
+            idx = self._gua031_active_feed_five(
+                actionList, pair_actionlist, threetwo_actionlist, card_val, cur,
+            )
+            if idx > 0:
+                self._dbg(f"GUA-031 P04 feed pair/tw2 -> {idx}")
+                return idx
+
         for i in actionList:
             if len(handcards) == len(i[2]):
                 return actionList.index(i)
 
-        if len(single_actionlist) and card_val[single_actionlist[0][0]] < cur[0]:
+        if len(single_for_play) and card_val[single_for_play[0][0]] < cur[0]:
             if numofnext == 1:
                 pass
             else:
-                return getindex("Single", single_actionlist, actionList)
+                return getindex("Single", single_for_play, actionList)
 
         if len(threepair_actionlist) or len(twotrips_actionlist):
             index = rankfour(twotrips_actionlist, threepair_actionlist, actionList, cur[1], cur[2])
@@ -1187,14 +1537,17 @@ class M3DecisionEngine:
                 now_max_act_key = 0
                 for acti in range(len(actionList)):
                     if actionList[acti][0] == 'Single' and actionList[acti][-1][0] in sorted_cards['Single']:
-                        if card_val[actionList[acti][-1]] > now_max_act_value:
-                            now_max_act_value = card_val[actionList[acti][-1]]
+                        if card_val[actionList[acti][1]] > now_max_act_value:
+                            now_max_act_value = card_val[actionList[acti][1]]
                             now_max_act_key = acti
 
                 return now_max_act_key
 
-            return getindex("Single", single_actionlist, actionList)
+            if single_for_play:
+                return getindex("Single", single_for_play, actionList)
+            return 0
         else:
+            self._dbg("_active else branch -> 0")
             return 0
 
     def _get_list(self, handcards, rank):

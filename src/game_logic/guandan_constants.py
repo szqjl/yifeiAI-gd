@@ -72,6 +72,7 @@ RANK_NAMES = {
 WINNING_RANKS = (RANK_FIRST, RANK_SECOND)
 
 # ---------- 概念说明（与规则文档对应，仅作注释） ----------
-# 一副牌：从抓牌开始到一方打完并决定胜负结束 → 代码中一局 game（start_game ~ end_game）
+# 一副牌（episode）：108 张发完 →（第二副起进贡/还贡或抗贡）→ 多圈出牌 → 四人完牌顺序确定 → 升级
+# 代码对应：game_recorder start_game ~ end_game / episodeOver（变量名 game 指一副，勿与「一局」混淆）
 # 一手牌：牌手一次打出的一组牌 → 代码中 actionList 的一个元素
-# 一圈牌：四人依次出牌直到无人出牌 → 代码中由 curAction、greater_pos 及 act 流程体现
+# 一圈牌：四人依次出牌直到连续三人过牌 → 代码中由 curAction、greater_pos 及 act 流程体现

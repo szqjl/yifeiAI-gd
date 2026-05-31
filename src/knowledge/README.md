@@ -97,9 +97,8 @@ class BasicGuandanClient:
 知识库位于 `docs/knowledge/`，包含：
 
 - **rules/**: 游戏规则知识
-  - `01_basic_rules/`: 基础规则
-  - `02_advanced_rules/`: 高级规则
-  - `02_competition_rules/`: 比赛规则
+  - `01_basic_rules/`: 基础规则（进贡见 `06_game_flow.md`）
+  - `02_competition_rules/`: 实体赛规则
 
 - **skills/**: 技能策略知识
   - `01_foundation/`: 基础技能

@@ -101,3 +101,32 @@ def test_decision_provider_adapter():
 @pytest.mark.unit
 def test_m1_handler_import_from_package():
     assert OpeningPassiveHandler is not None
+
+
+@pytest.mark.unit
+def test_m3_passive_uses_action_rank_not_cards_list():
+    """回归：移植时 curAction[1]/action[1] 误写为 [-1] 会 TypeError，客户端兜底成 PASS。"""
+    engine = M3DecisionEngine(player_id=0)
+    data = {
+        "stage": "play",
+        "greaterPos": 1,
+        "curPos": 1,
+        "curRank": "2",
+        "curAction": ["Single", "8", ["D8"]],
+        "greaterAction": ["Single", "8", ["D8"]],
+        "handCards": [
+            "C2", "S3", "D3", "S4", "H4", "D4", "D4", "D5", "H6", "C6",
+            "S7", "S7", "S8", "S8", "H8", "C8", "D9", "HT", "DT", "SJ",
+            "HJ", "SQ", "HQ", "CK", "CA", "DA", "SB",
+        ],
+        "actionList": [
+            ["PASS", "PASS", "PASS"],
+            ["Single", "9", ["D9"]],
+            ["Single", "T", ["HT"]],
+            ["Single", "J", ["HJ"]],
+            ["Single", "Q", ["HQ"]],
+        ],
+    }
+    idx = engine._rule_parse(data)
+    assert idx > 0
+    assert data["actionList"][idx][0] == "Single"

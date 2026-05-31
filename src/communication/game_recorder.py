@@ -7,6 +7,7 @@
 
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Union, Any, List, Any, Optional
@@ -15,6 +16,11 @@ try:
     from game_logic.guandan_constants import CARDS_PER_PLAYER
 except ImportError:
     CARDS_PER_PLAYER = 27  # 掼蛋每人27张，规则见 docs/archive/rules/牌张与基本概念.md
+
+# 文件名：YYYYMMDDHHMMSSffffff [player]-[opponent]-[round]-[level].json
+RECORD_FILENAME_RE = re.compile(
+    r"^(\d+) \[([^\]]+)\]-\[([^\]]+)\]-\[(\d+)\]-\[([^\]]*)\]\.json$"
+)
 
 
 def normalize_cards_to_string_list(cards: List) -> List[str]:
@@ -998,91 +1004,95 @@ class GameRecorder:
         game_data["all_players_hands"] = played_cards_by_player
     
     @staticmethod
+    def parse_record_filename(filepath: Union[str, Path]) -> Optional[Dict[str, Any]]:
+        """Parse standard game record filename into match keys for same-round merge."""
+        name = Path(filepath).name
+        m = RECORD_FILENAME_RE.match(name)
+        if not m:
+            return None
+        return {
+            "timestamp": int(m.group(1)),
+            "player_name": m.group(2),
+            "opponent": m.group(3),
+            "round": m.group(4),
+            "level": m.group(5),
+        }
+
+    @staticmethod
+    def _normalize_all_hands_keys(all_hands: Dict) -> Dict[str, List]:
+        """Normalize all_players_hands keys to str and card lists to string format."""
+        normalized: Dict[str, List] = {}
+        if not all_hands:
+            return normalized
+        for pos, cards in all_hands.items():
+            pos_str = str(pos)
+            if isinstance(cards, list) and cards:
+                normalized[pos_str] = normalize_cards_to_string_list(cards)
+            elif pos_str not in normalized:
+                normalized[pos_str] = []
+        return normalized
+
+    @staticmethod
     def _merge_same_game_records(game_data: Dict[str, Any], current_filepath: Path) -> Dict[str, Any]:
         """
-        合并同一局游戏的其他客户端记录，获取所有玩家的手牌
-        
-        Args:
-            game_data: 当前游戏记录
-            current_filepath: 当前文件路径
-            
-        Returns:
-            合并后的游戏数据
+        合并同一局游戏的其他客户端记录，获取所有玩家的手牌。
+
+        匹配规则（GUA-025）：文件名中的 opponent + round + level 必须一致；
+        不再使用 start_time 5 秒窗口（batch 多局会在 5 秒内产生误合并）。
+        同 round 多份记录时，取 game_id 时间戳最接近的队友/对手文件。
         """
-        # 获取当前记录的start_time
-        start_time_str = game_data.get('start_time')
-        if not start_time_str:
+        parsed = GameRecorder.parse_record_filename(current_filepath)
+        if not parsed:
             return game_data
-        
-        try:
-            from datetime import datetime
-            current_start_time = datetime.fromisoformat(start_time_str)
-        except:
-            return game_data
-        
-        # 在同一个目录下查找其他记录文件
+
+        all_hands = GameRecorder._normalize_all_hands_keys(game_data.get("all_players_hands", {}))
+        my_pos = game_data.get("player_id")
+        if my_pos is not None:
+            my_pos_str = str(my_pos)
+            if my_pos_str not in all_hands or not all_hands[my_pos_str]:
+                initial = normalize_cards_to_string_list(game_data.get("initial_hand", []))
+                if initial:
+                    all_hands[my_pos_str] = initial
+
         record_dir = current_filepath.parent
-        all_hands = game_data.get('all_players_hands', {}).copy()
-        if not all_hands:
-            # 如果没有all_players_hands，从initial_hand创建
-            my_pos = game_data.get('player_id')
-            if my_pos is not None:
-                # 规范化my_pos为整数
-                if isinstance(my_pos, str):
-                    try:
-                        my_pos = int(my_pos)
-                    except:
-                        pass
-                all_hands[my_pos] = game_data.get('initial_hand', [])
-        
-        # 查找时间接近的其他记录文件（时间差在5秒内）
-        for record_file in record_dir.glob('*.json'):
+        candidates = []
+        for record_file in record_dir.glob("*.json"):
             if record_file == current_filepath:
                 continue
-            
-            try:
-                with open(record_file, 'r', encoding='utf-8') as f:
-                    other_data = json.load(f)
-                
-                other_start_time_str = other_data.get('start_time')
-                if not other_start_time_str:
-                    continue
-                
-                other_start_time = datetime.fromisoformat(other_start_time_str)
-                time_diff = abs((current_start_time - other_start_time).total_seconds())
-                
-                # 如果时间差在5秒内，认为是同一局游戏
-                if time_diff < 5:
-                    other_hands = other_data.get('all_players_hands', {})
-                    if not other_hands:
-                        # 从initial_hand创建
-                        other_pos = other_data.get('player_id')
-                        if other_pos is not None:
-                            # 规范化other_pos为整数
-                            if isinstance(other_pos, str):
-                                try:
-                                    other_pos = int(other_pos)
-                                except:
-                                    continue
-                            other_hands = {other_pos: other_data.get('initial_hand', [])}
-                    
-                    # 合并手牌信息
-                    for pos, hand_cards in other_hands.items():
-                        # 规范化pos为整数
-                        if isinstance(pos, str):
-                            try:
-                                pos = int(pos)
-                            except:
-                                continue
-                        # 如果该位置的手牌还没有记录，或者当前记录为空，则使用其他记录
-                        if pos not in all_hands or not all_hands.get(pos):
-                            all_hands[pos] = hand_cards
-            except Exception as e:
-                # 忽略读取失败的文件
+            other_parsed = GameRecorder.parse_record_filename(record_file)
+            if not other_parsed:
                 continue
-        
-        # 更新game_data
-        game_data['all_players_hands'] = all_hands
+            if (
+                other_parsed["opponent"] != parsed["opponent"]
+                or other_parsed["round"] != parsed["round"]
+                or other_parsed["level"] != parsed["level"]
+            ):
+                continue
+            ts_diff = abs(other_parsed["timestamp"] - parsed["timestamp"])
+            candidates.append((ts_diff, record_file))
+
+        candidates.sort(key=lambda item: item[0])
+
+        for _, record_file in candidates:
+            try:
+                with open(record_file, "r", encoding="utf-8") as f:
+                    other_data = json.load(f)
+            except Exception:
+                continue
+
+            other_hands = GameRecorder._normalize_all_hands_keys(other_data.get("all_players_hands", {}))
+            if not other_hands:
+                other_pos = other_data.get("player_id")
+                if other_pos is not None:
+                    initial = normalize_cards_to_string_list(other_data.get("initial_hand", []))
+                    if initial:
+                        other_hands[str(other_pos)] = initial
+
+            for pos_str, hand_cards in other_hands.items():
+                if hand_cards and (pos_str not in all_hands or not all_hands.get(pos_str)):
+                    all_hands[pos_str] = hand_cards
+
+        game_data["all_players_hands"] = all_hands
         return game_data
     
     @staticmethod

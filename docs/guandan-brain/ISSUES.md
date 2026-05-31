@@ -31,6 +31,15 @@
 | GUA-021 | closed | P1 | policy | m1 | M1 「问题 PASS」仍偏多（复盘） | 改后新局 3 个成对 `game_id` 合并：近似问题 PASS **0**（见 `ITERATIONS`「GUA-021 共用层收紧」行） | `phase_handlers`、`stage_router`、`rule_based_decision_engine_m1`、`intelligent_router` | `closed_in` 2026-04-21；全量 `game_records` 若混改前旧局，合并合计仍可能 **>0**，评测建议按「改后 `game_id`」子集统计 |
 | GUA-022 | open | P1 | policy | m1 | M1 对 lalala **队胜率过低**（YiFei 0+2 长期不胜） | 多局 `victoryNum` 为 `[0,3,0,3]`；需队级策略与配合 | 共用决策层、队友/压制、残局；与 **GUA-014** 可联动 | 指挥/看板见 [`AGENT_HUB.md`](AGENT_HUB.md)；迭代见 `ITERATIONS`「下一轮指挥」行 |
 | GUA-023 | open | P1 | observation, infra | agent-hub | Kanban worker 经 OpenCode ACP 无法执行（0 tool calls → crash 循环） | `copilot-acp` + `opencode acp`：Hermes 收不到 `<tool_call>`，worker 未 `kanban_complete` 即退出；例 `t_b53fc45b` | Hermes `copilot_acp_client`、profile `opencode-eng` | 根因与处置见 [`AGENT_HUB.md`](AGENT_HUB.md)「方案 A」「接下来要做的（2026-05-21）」；与 **GUA-022** 策略无关（Kanban 任务误标 GUA-022 测试） |
+| GUA-024 | closed | P1 | policy | m3 | M3 play 阶段几乎全 PASS | 两轮根因：（1）`curAction[-1]` 误用；（2）**细化 debug 发现** `curAction`/`greaterAction` 偶发 **str** → dispatch 全 miss → 恒 PASS；已加 `_ensure_list` 规范化 | `m3_decision_engine` | `closed_in` 2026-05-29～30；541958 验证 dispatch 100% list、100+ 非 0 决策 |
+| GUA-025 | closed | P1 | observation | infra | 回放 yf1 初始手牌与出牌流水不一致 | `_merge_same_game_records` 用 start_time **5 秒窗口**，batch 多局误把 round 12 手牌合并进 round 19；表现为「出了没有的牌 / 出牌后手牌扣不对 / 误显 4 个 3 炸弹」 | `game_recorder._merge_same_game_records`、`yf_replay` | `closed_in` 2026-05-30；改按文件名 opponent+round+level 匹配；`tests/test_game_recorder_merge.py` 4 passed |
+| GUA-026 | open | P2 | policy | m3 | M3 三带二/拆牌策略偏激进 | round 19 真实记录 yf1 出 555+22、QQQ33 等（非回放 bug）；**2026-05-30**：`_ThreeWithTwo` 增级牌/炸弹保护、禁拆 trips 常态路径、移除逢人配三带二 fallback | `m3_decision_engine` | `test_m3_gua026.py` 3 passed；[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) §二十 **主战术真源**；[`06_red_heart_usage.md`](../knowledge/skills/04_common_skills/06_red_heart_usage.md) §十六 逢人配子集；待新批跑验证 |
+| GUA-027 | closed | **P0** | observation, policy | m3 | M3 对 WebSocket 场态消息用法不完整/不准确 | 对照 v1006 说明书：**被动比牌应信 `greaterAction` + `publicInfo.playArea`**；M3 仅在 `curAction==PASS` 时用 greater，否则用 `curAction[1]` 算强度；playArea 未参与决策。19 局审计 ~40% 单牌步 greater 与「本圈最大」不一致 | `m3_decision_engine`、`game_logic/trick_state.py`、`yf_replay` | `closed_in` 2026-05-30；`resolve_effective_greater` + `TrickSequenceTracker`；**7+22 pytest passed** |
+| GUA-028 | closed | P1 | observation, rules | m3 | M3 与 v1006 说明书三项未对齐 | **TripsPair** 未分派致 PASS；**indexRange** 未 clamp 回包；**publicInfo.rest** 未同步剩牌 | `platform_act.py`、`m3_decision_engine`、`yf1_m3`/`yf2_m3` | `closed_in` 2026-05-30；`test_m3_platform_align_gua028.py` 5 passed |
+| GUA-029 | closed | **P0** | policy, rules | m3 | M3 炸弹可执行规则包（R1–R6） | 回放 `20260530172743739854` 曾现 yf1 **5×8** 全程未出；根因 `choose_bomb` 读 `action[-1]` → TypeError → PASS | `m3_utils.choose_bomb`、`m3_decision_engine` | **`closed_in` 2026-05-31**：R1–R6 + `test_m3_gua029` **8 passed**；净盘批跑 **10/10**（`logs/batch_executor_20260531_141658.log`）；炸弹 yf1 **175** + yf2 **152**；yf2 PASS **58.0%→49.5%**。队胜率仍 **GUA-022**。规则 [`01_bomb_techniques.md`](../knowledge/skills/02_main_attack/01_bomb_techniques.md) |
+| GUA-030 | closed | P2 | docs, policy | m3, v5 | **原则+战略映射表**：`01_basic_principles` / `02_strategy_overview` / `03_basic_strategy` → 引擎归属（**P0→M3**，**P1+→V5**） | 无代码缺陷；需将 skills 落实为可测 guard / V5 知识层，避免整篇硬编码进 M3 | [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md)；真源见 §一–§七 | `closed_in` 2026-05-31；三篇映射评审通过；M3 P0/P1 实现由 GUA-029 及后续迭代跟踪 |
+| GUA-031 | closed | P1 | policy | m3 | M3 传牌 `numof*` guard + 队友让道扩全牌型 | 被动仅 `_Single/_Pair` 等部分牌型做队友 PASS；`_active` 无 `numoffri==1` 送小单 / `numoffri==5` 喂牌；`numofnext==1` 防小单不完整 | `m3_decision_engine`（`_active`、`_passive`、各 `_Xxx` handler） | **`closed_in` 2026-05-31**：P-F02 扩 `_Trips/_ThreePair/_TwoTrips/_Straight`；PASS-P02/P03/P04；`test_m3_gua031.py` **7 passed**；GUA-026/027/028/029 回归 **31 passed** |
+| GUA-032 | open | P1 | observation, policy | m3 | M3 **记牌+算牌**确定性规则 + `remain_cards_classbynum` 同步 | 文档 §14–§15、§18–§20、**§二十二**（孤张定律 CG-T06、口诀 13）；5/10 法则、顺/夯点位预判（**CALC-M03/M04**）；`remain_cards_classbynum` stale | `m3_decision_engine._update_play_state`、`m3_utils`；[`04_calculation_skills.md`](../knowledge/skills/04_common_skills/04_calculation_skills.md)、[`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md)、[`08_straight_skills.md`](../knowledge/skills/04_common_skills/08_straight_skills.md)、[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) | **2026-05-31 登记**（待实施）：MEM-M01/M02 + CALC-M01/M02/M03；与 **GUA-031/029** 正交 |
 
 ---
 
@@ -40,6 +49,75 @@
 |----|----------|
 | GUA-022 | [`AGENT_HUB.md`](AGENT_HUB.md) — 多 Agent / Kanban 编排（cursor → opencode-eng） |
 | GUA-023 | [`AGENT_HUB.md`](AGENT_HUB.md) — OpenCode ACP 桥接不兼容、GUA-022 联调任务 `t_b53fc45b` 结论 |
+| GUA-029 | [`01_bomb_techniques.md`](../knowledge/skills/02_main_attack/01_bomb_techniques.md)、[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG5；样例局 `replay_word.md` / `game_records/20260530172743739854 [yf1_m3]-…` |
+| GUA-030 | [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md)、[`01_basic_principles.md`](../knowledge/skills/01_foundation/01_basic_principles.md)、[`02_strategy_overview.md`](../knowledge/skills/01_foundation/02_strategy_overview.md)、[`03_basic_strategy.md`](../knowledge/skills/01_foundation/03_basic_strategy.md)、[`M-V-Series-治理方案.md`](../governance/M-V-Series-治理方案.md) §3 |
+| GUA-031 | [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §8.4、§十七–§二十二、[`01_passing_skills.md`](../knowledge/skills/03_assist_attack/01_passing_skills.md)、[`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md)、[`07_two_trips_skills.md`](../knowledge/skills/04_common_skills/07_two_trips_skills.md)–[`11_trips_skills.md`](../knowledge/skills/04_common_skills/11_trips_skills.md)；与 GUA-029 R5（队友不炸）互补 |
+| GUA-032 | [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §14–§15、§18–§22（CALC-M03/M04/M05、**CG-T06**）、[`04_calculation_skills.md`](../knowledge/skills/04_common_skills/04_calculation_skills.md)、[`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md)、[`05_memory_skills.md`](../knowledge/skills/04_common_skills/05_memory_skills.md)、[`08_straight_skills.md`](../knowledge/skills/04_common_skills/08_straight_skills.md)、[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md)、[`card_tracking.py`](../../src/game_logic/card_tracking.py) |
+| GUA-026 | [`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md) §二十二（**组牌总纲**）；[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) §二十（**三带二主真源**）；[`11_trips_skills.md`](../knowledge/skills/04_common_skills/11_trips_skills.md) §二十一（拆 trips 边界）；[`06_red_heart_usage.md`](../knowledge/skills/04_common_skills/06_red_heart_usage.md) §十六（逢人配子集） |
+
+---
+
+## GUA-029 完成定义（炸弹可执行规则包 R1–R6）
+
+> 从 `01_bomb_techniques.md` 提炼、与 M3 现有观测字段对齐；**互不打架**，可写进 if-then，避免与 GUA-026 拆牌保护混淆。
+
+| 规则 | 条件（M3 可观测） | 动作 | 文档依据 | 涉及模块 |
+|------|-------------------|------|----------|----------|
+| **R1** | `actionList` 含 `Bomb`/`StraightFlush` 且进入 `choose_bomb` | **先修** `choose_bomb`：点数读 `action[1]`（对齐 `first_prize/utils.py`），同花顺分支一并查；单元测 v1006 格式 `['Bomb','8',[…]]` | 前置；不修则 R2–R6 均可能异常→PASS | `m3_utils.choose_bomb` |
+| **R2** | `beatAction[0] in (Bomb, StraightFlush)` 且 `choose_bomb != -1` | **必回炸**（最小够用炸弹） | §二.3 追炸；§二.6 炸对手炸弹 | `_Bomb`；取消/绕过 `cur_Bomb_num>=3` 硬门槛 |
+| **R3** | `numofplayers[greaterPos] <= 7` 且当前牌型分支无可跟牌 且 `choose_bomb != -1` | **必炸**（防冲刺/听牌） | §三.5.3 剩 5–7 张；§五.2 逢 5 必防 | 各 `_Single`/`_Pair`/`_ThreeWithTwo`/… 统一兜底 |
+| **R4** | `numofplayers[greaterPos] == 4` | **默认不炸**；白名单：① 我剩 ≤2 手且炸后一手走完；② 仅炸弹能压且炸后可接风领出 | §五.1 炸不打四 | `_Bomb` 与各被动分支 guard |
+| **R5** | `(myPos+2)%4 == greaterPos` | **禁止出炸**（全局 guard，各分支统一） | §二.3 不压队友（默认） | `_Bomb`、`_ThreeWithTwo` 等 |
+| **R6** | `numofmy <= 10` 且 `actionList` 存在炸弹/SF **一手清牌** | **优先 bomb/SF 冲刺**（扩 `one_hand` + `_active` 首段） | §二.5 残局冲刺；§五.3 尾炸+一手 | `_passive`/`_active`/`one_hand` |
+
+**验收**：① `pytest` 新增 `test_m3_gua029.py`（R1 格式 + R2 回炸 + R3 ≤7 阻断，用样例局 step46/74 构造）；② 异常兜底不再无脑 `send_action(0)` 掩盖炸弹分支（或 bomb 分支内不抛异常）；③ 净盘 M3 批跑 ≥10 对：炸弹出牌次数 >0、队胜率或 PASS 率有方向性改善（记录在 `ITERATIONS.md`）。
+
+**与 GUA-026 边界**：GUA-026 禁止三带二**拆炸弹/耗级牌**；GUA-029 要求在**应炸场景主动出整炸**，二者不冲突。
+
+## GUA-030 完成定义（原则映射 · 文档）
+
+> 真源文档 [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md)。**本轮仅登记与映射，不实现 V5 代码。**
+
+| 项 | 完成标准 |
+|----|----------|
+| 映射表 | 原则条目有 ID（P-C/J/G/F/H）、战略条目有 ID（S-PR/ST/BS）、优先级、归属（M3/M1/V5+）、M3 现状 |
+| P0 清单 | M3 可执行子集单独列出，与 GUA-029 边界说明 |
+| 交叉引用 | 链到 `01_basic_principles.md`、`02_strategy_overview.md`、`03_basic_strategy.md`、`guandan-knowledge.mdc`、`06_game_flow.md` |
+| 代码 | **不要求**；后续 M3 P0 另开迭代行，V5 待挂接条件满足 |
+
+**关单条件（GUA-030）**：映射表评审通过 + 在 `ITERATIONS.md` 登记；M3/V 实现进度由 **GUA-029** 及未来 V5 条目跟踪，**不阻塞 GUA-030 closed**。
+
+> **已关单**（2026-05-31）：用户确认三篇映射表 OK。
+
+## GUA-031 完成定义（传牌 guard + 队友让道 · M3）
+
+> 真源 [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §8.4、§十七 **TT-P10**、[`01_passing_skills.md`](../knowledge/skills/03_assist_attack/01_passing_skills.md)、[`07_two_trips_skills.md`](../knowledge/skills/04_common_skills/07_two_trips_skills.md)。**与 GUA-029 正交**（不放宽炸弹/三带二拆牌保护）。
+
+| 项 | ID | 完成标准 |
+|----|-----|----------|
+| 队友让道 | **P-F02 / PASS-P01** | 被动：`_Trips`、`_ThreePair`、`_TwoTrips`、`_Straight`、`_StraightFlush` 在 `_is_teammate_greater` 且非冲刺场景 **return 0**（与 `_Single/_Pair/_ThreeWithTwo` 对齐） |
+| 送小单 | **PASS-P02** | `_active`：`numoffri==1` 且 actionList 含 `Single` → 出 **最小点** Single（非 PASS） |
+| 防送炸 | **PASS-P03** | `_active`：`numofnext==1` → 禁出过小单（首发与末段 `single_actionlist` 均覆盖）；无更大牌型时才 fallback |
+| 逢五喂队友 | **PASS-P04** | `_active`：`numoffri==5` → `Pair`/`ThreeWithTwo` 升权于 `Single`/小顺（弱推断，`confidence=low`） |
+| 测试 | — | 新增 `tests/test_m3_gua031.py`（≥6 case：P02/P03/P04 + 至少 2 牌型 P-F02）；GUA-026/027/028/029 回归 **不回归** |
+| 批跑 | — | 可选：净盘 M3 ≥5 对，记录 `numoffri∈{1,5}` / `numofnext==1` 步决策分布 |
+
+**关单条件**：上述 4 条 guard + pytest 通过；**不要求**队胜率达标（队胜率仍归 **GUA-022** / M3 批跑观测）。
+
+## GUA-032 完成定义（记牌 + 算牌 · M3）
+
+> 真源 [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) **§十四（怎么算）**、**§十五（记什么）**、**§二十二（孤张定律 CG-T06）**；[`04_calculation_skills.md`](../knowledge/skills/04_common_skills/04_calculation_skills.md)、[`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md)、[`05_memory_skills.md`](../knowledge/skills/04_common_skills/05_memory_skills.md)。
+
+| 项 | ID | 完成标准 |
+|----|-----|----------|
+| 基建 | — | `_update_play_state` 后 **`remain_cards_classbynum` 与 `remain_cards` 一致**（2468 计数法可派生） |
+| 记炸 | **MEM-M02** | 每 `[pos]` 维护 `has_bomb` / `max_bomb_rank`（扫 `history.send`） |
+| 排除四炸 | **CALC-M01**（=MEM-M04） | 某点数外剩 ≤3 张 → 被动不回该点 `Bomb` |
+| 5/10 关键张 | **CALC-M03**（=MEM-M03） | 点数十外剩 0 → 降权大顺；点五外剩 0 → 降权小顺 |
+| 进贡无级牌 | **CALC-M02** | 进贡无级牌对手 + `numofnext==1` → `_active` 禁过小单（可合并 **P-H01**） |
+| 测试 | — | `tests/test_m3_gua032.py`（≥5 case，含 MEM+CALC）；GUA-027/028/029/031 回归不失败 |
+
+**关单条件**：基建 + M01/M03 必达；M02 可与 **P-H01** 迭代合并关单。**不要求** V5 级完整算牌（§14.3）。
 
 
 ## 来自「比赛汇总」的说明（非缺陷）

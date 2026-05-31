@@ -1,8 +1,85 @@
 # M3 完整诊断报告：22副0胜根因
 
 > M 系列代际文档 · 与 [M2_OPTIMIZATION.md](M2_OPTIMIZATION.md)、[M1_ARCHITECTURE.md](M1_ARCHITECTURE.md) 同级  
-> 分析日期: 2026-05-27
-测试数据: 4整局22副 / M3(vs lalala) / 0胜0平22负 / 对手均升至A级
+> 分析日期: 2026-05-27（初版）；**2026-05-30 增补「场态消息用法」重大发现**  
+> 测试数据: 4整局22副 / M3(vs lalala) / 0胜0平22负 / 对手均升至A级
+
+---
+
+## ⚠️ 重大发现（2026-05-30）：M3 对服务器 WebSocket 消息「用法不完整、不够准确」
+
+> **登记**：[`ISSUES.md`](ISSUES.md) **GUA-027**  
+> **依据**：[`docs/gdrules/掼蛋平台使用说明书1006.md`](../gdrules/掼蛋平台使用说明书1006.md)（v1006）、`offline_platform/guandan_offline_v1006/clients/state.py`、19 局 yf1/yf2 录制审计（`scripts/tools/audit_greater_in_records.py`）
+
+### 结论（一句话）
+
+M3 **不是**「读错字段名」或「漏读 act 键」；而是 **读到了 `curAction` / `greaterAction` / `publicInfo`，却没有按平台完整语义使用**——被动决策偏依赖 `curAction` 算牌力，**未始终以 `greaterAction` 为「本圈要压的目标」**，也 **未用 `publicInfo[].playArea` 校验或重算本圈最大**。这会导致场态理解偏差，进而影响出牌；与 lalala 同源逻辑，属于 **observation + policy** 双层问题。
+
+### 平台说明书语义（v1006 真源）
+
+| 字段 | 含义 |
+|------|------|
+| `curPos` / `curAction` | **刚发生的那一步**：谁出牌、出了什么（含 PASS） |
+| `greaterPos` / `greaterAction` | **本圈当前最大一手**：被动出牌时要压的目标 |
+| 接风 / 领出 | `curPos=-1`，`greaterPos=-1`，动作为 `None` |
+| `publicInfo[].playArea`（**act**） | 各玩家当前出牌区；说明书 act 示例中与「最大动作」文字描述一致，是更贴近「场上真相」的状态 |
+
+**notify 示例**（1 号出单张 2）：`cur` 与 `greater` 相同——因为 **刚出的牌恰好成为本圈最大**，并非「两字段永远同义」。
+
+**act 示例**（说明书 §play）：文字写「当前动作为 X 号-…，**最大动作为** Y 号-…」，并给出四家 `playArea`。接风/率先出牌时 `curPos=-1`、`greaterPos=-1`。
+
+### M3 现状：读了什么、用了什么
+
+**客户端 `yf1_m3` / `yf2_m3`（act）已读取**：
+
+- `curPos` / `curAction`、`greaterPos` / `greaterAction`
+- `publicInfo`（含 `playArea`）、`actionList`、`handCards`、`curRank` 等
+
+**决策引擎 `m3_decision_engine`（`src/m/m3/`）实际用法**：
+
+| 说明书要求 | M3 现状 | 风险 |
+|-----------|---------|------|
+| 被动比牌以 `greaterAction` 为准 | 仅在 `curAction[0]=="PASS"` 时把 `curAction` 替换为 `greaterAction`；否则 `_Single/_Pair/...` 用 **`curAction[1]`** 算 `curVal` | 上一手出了牌但未压过本圈最大时，会把「上一手点数」当成要压的目标 |
+| `publicInfo.playArea` 参与场态 | **决策路径中未使用**（仅录制 context 可能带上） | 无法交叉校验 greater；服务器 greater 错时无兜底 |
+| notify 与 act 一致性 | 未校验 | 录制 JSON 的 greater 可能与决策时刻 act 不一致时无感知 |
+
+**典型代码路径**（与 lalala `action.py` 同源）：
+
+```python
+# m3_decision_engine._passive
+if curAction[0] == "PASS":
+    curAction = greaterAction   # 仅 PASS 时改用 greater
+# 否则仍用 curAction 分发并算 curVal
+curVal = card_val[curAction[1]]  # 应用 greaterAction[1] 的场景未覆盖
+```
+
+### 审计证据（2026-05-30，19 局 yf1/yf2 录制）
+
+运行 `python scripts/tools/audit_greater_in_records.py`：
+
+- 非 PASS 步：**100%** `cur_pos == greater_pos`（notify 录制）
+- 可比对单牌步（约 582 步）：**~40.5%** 出现「按 `playArea`/上一手 greater 推断的本圈最大」与 **notify 中 `greaterAction` 不一致**（例：A 为本圈最大后，1 号出 9，greater 仍被记为 9 而非 A）
+- M3 实战读 **WebSocket act**，不读 JSON；act 日志中同一步 **`greaterAction` 亦为 9** → 不单是「录制读错」，而是 **协议字段赋值或语义** 与说明书「本圈最大」不一致，且 **M3 未用 playArea 自救**
+
+### 与 GUA-024 的关系
+
+**GUA-024（已关闭）** 修的是 `curAction[-1]` 误用、字符串化 dispatch、记牌 PASS 等——让 M3 **能出牌**。  
+**GUA-027（本发现）** 是更上一层：**在能出牌的前提下，场态（要跟哪一手）可能算错**，属于 observation/信息集问题，会传导到 policy（该压 A 却以为只须压 9 → 错误 PASS 或乱出）。
+
+### 修复方向（尚未实施，供下轮迭代）
+
+| 优先级 | 项 | 说明 |
+|--------|-----|------|
+| ~~**P0**~~ | ~~被动 `_Single/_Pair/_Trips/...`~~ | **已实现 2026-05-30（GUA-027 closed）**：`game_logic/trick_state.py` + M3 `_passive` 用 `beatAction` |
+| ~~**P0**~~ | ~~`publicInfo.playArea`~~ | **已实现**：`resolve_effective_greater`；回放 `TrickSequenceTracker` |
+| P1 | 回放 `yf_replay` | 与 M3 共用 trick_state（**已接入**显示「本圈最大(重算)」） |
+| P2 | 协议侧 | 向平台确认 notify/act 中 greater 语义；离线服「错误动作不处理」与 greater 赋值关系 |
+
+### 非本问题的误判
+
+- ❌ 「JSON 字段名读错」（如 `greaterPos` vs 说明书 OCR 笔误 `qreaterPos`）
+- ❌ 「仅回放 bug」（M3 决策不读录制文件）
+- ❌ 「服务器单独帮 lalala 改 greater」（lalala 与 M3 同源字段用法；现有证据更像 **全场同一套消息 + 客户端未用全 playArea**）
 
 ---
 
@@ -122,13 +199,15 @@ M3 的炸弹使用条件非常保守:
 ## 🔧 修复优先级
 
 | 优先级 | Bug | 修复难度 | 预期提升 |
-|---|---|---|---|---|
+|---|---|---|---|
+| **P0** | **BUG6: 场态消息用法（GUA-027）** | 中等（greaterAction + playArea 重算） | 被动跟牌/压牌正确率；减少「以为压 9 实际须压 A」类失误 |
 | P0 | BUG1: index -1 → 1 | 改1行 | 消除残局崩溃, 恢复关键出牌机会 |
 | P0 | BUG2: 两手牌组合 | 移植 ~15行 | 残局规划能力恢复 |
 | P1 | BUG4: 配合策略 | 较大 | 长期竞争力 |
 | P1 | BUG5: 炸弹策略 | 调阈值 | 恢复控场能力 |
 
-> BUG3 ("2"=2) 已确认为正确规则，移出列表。详见上方勘误。
+> BUG3 ("2"=2) 已确认为正确规则，移出列表。详见上方勘误。  
+> **BUG6** 详见文首「重大发现（2026-05-30）」；与 GUA-024 互补，不重复。
 
 ---
 

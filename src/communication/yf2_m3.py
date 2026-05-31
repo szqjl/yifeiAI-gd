@@ -22,6 +22,7 @@ from communication.game_recorder import (
     ensure_my_pos_int,
 )
 from communication.websocket_manager import WebSocketManager
+from game_logic.platform_act import clamp_act_index
 try:
     from game_logic.guandan_constants import CARDS_PER_PLAYER
 except ImportError:
@@ -107,7 +108,23 @@ class YF2_M3_Client:
                 if not action_list:
                     self.logger.warning("act message without actionList, skip send")
                     return
-                action_idx = max(0, min(action_idx, len(action_list) - 1))
+                action_idx = clamp_act_index(action_idx, action_list, data.get("indexRange"))
+                selected_action = action_list[action_idx]
+                self.game_recorder.record_decision(
+                    action_idx,
+                    selected_action,
+                    context={
+                        "myPos": data.get("myPos", self.player_id),
+                        "curPos": data.get("curPos", -1),
+                        "greaterPos": data.get("greaterPos", -1),
+                        "actionList_size": len(action_list),
+                        "selfRank": data.get("selfRank", self.current_self_rank),
+                        "oppoRank": data.get("oppoRank", self.current_oppo_rank),
+                        "curRank": data.get("curRank", self.current_cur_rank),
+                        "version": "m3",
+                        "series": "M",
+                    },
+                )
                 await self.send_action(action_idx)
 
         except Exception as e:
@@ -127,6 +144,43 @@ class YF2_M3_Client:
         elif notification_key in ("gameOver", "gameResult", "episodeOver"):
             data["notification_key"] = notification_key
             self._handle_game_over(data)
+        elif notification_key == "act" or (stage == "play" and notify_type == ""):
+            self._handle_act_notification(data)
+
+    def _handle_act_notification(self, data: dict):
+        hand_cards = data.get("handCards", [])
+        if hand_cards and len(hand_cards) <= CARDS_PER_PLAYER:
+            self.hand_cards = normalize_cards_to_string_list(hand_cards)
+
+        cur_pos = data.get("curPos", -1)
+        cur_action = data.get("curAction", [])
+        greater_pos = data.get("greaterPos", -1)
+        greater_action = data.get("greaterAction", [])
+
+        if cur_pos == -1 or not cur_action:
+            return
+
+        if isinstance(cur_action, str):
+            try:
+                import ast
+                cur_action = ast.literal_eval(cur_action)
+            except Exception:
+                pass
+        if isinstance(greater_action, str):
+            try:
+                import ast
+                greater_action = ast.literal_eval(greater_action)
+            except Exception:
+                pass
+
+        context = {
+            "publicInfo": data.get("publicInfo", []),
+            "selfRank": data.get("selfRank", self.current_self_rank),
+            "oppoRank": data.get("oppoRank", self.current_oppo_rank),
+            "curRank": data.get("curRank", self.current_cur_rank),
+            "restCards": data.get("restCards", []),
+        }
+        self.game_recorder.record_action(cur_pos, cur_action, greater_pos, greater_action, context)
 
     def _handle_act(self, data: dict):
         self.decision_count += 1

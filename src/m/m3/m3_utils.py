@@ -308,6 +308,7 @@ def rest_cards(handcards, remaincards, rank):
 
 
 def choose_bomb(bomb_actionList, handcards, sorted_cards, bomb_info, rank_card, card_val):
+    """Pick smallest usable bomb; v1006 actions use rank at action[1]."""
     new_card_val = copy.deepcopy(card_val)
     new_card_val['A'] = 14
     new_card_val[rank_card[-1]] = 15
@@ -324,7 +325,7 @@ def choose_bomb(bomb_actionList, handcards, sorted_cards, bomb_info, rank_card, 
         index = action[0]
         action = action[1]
         if action[0] == "Bomb":
-            if action[-1] == rank_card[-1]:
+            if action[1] == rank_card[-1]:
                 prior = 0
                 rank_card_num = 0
                 for card in action[2]:
@@ -335,24 +336,24 @@ def choose_bomb(bomb_actionList, handcards, sorted_cards, bomb_info, rank_card, 
                 elif rank_card_num == 2:
                     prior = 16
                 l = len(action[2])
-                bomb_res.append((index, new_card_val[action[-1]] + (l - 4) * 16 + prior))
+                bomb_res.append((index, new_card_val[action[1]] + (l - 4) * 16 + prior))
             else:
-                if action[-1] in bomb_info:
-                    if bomb_info[action[-1]] == len(action[2]) and rank_card not in action[2]:
+                if action[1] in bomb_info:
+                    if bomb_info[action[1]] == len(action[2]) and rank_card not in action[2]:
                         l = len(action[2])
-                        bomb_res.append((index, new_card_val[action[-1]] + (l - 4) * 16))
+                        bomb_res.append((index, new_card_val[action[1]] + (l - 4) * 16))
                     elif len(sorted_cards["Trips"]) == 0:
-                        if len(action[2]) > bomb_info[action[-1]] and rank_card in action[2]:
+                        if len(action[2]) > bomb_info[action[1]] and rank_card in action[2]:
                             l = len(action[2])
-                            rank_card_num = len(action[2]) - bomb_info[action[-1]]
+                            rank_card_num = len(action[2]) - bomb_info[action[1]]
                             prior = 0
                             if rank_card_num == 1:
                                 prior = 3
                             elif rank_card_num == 2:
                                 prior = 16
-                            bomb_res.append((index, new_card_val[action[-1]] + (l - 4) * 16 + prior))
+                            bomb_res.append((index, new_card_val[action[1]] + (l - 4) * 16 + prior))
 
-                elif action[-1] not in bomb_info and rank_card in action[2]:
+                elif action[1] not in bomb_info and rank_card in action[2]:
                     if is_inStraight(action, straight_member):
                         continue
                     prior = 0
@@ -365,18 +366,17 @@ def choose_bomb(bomb_actionList, handcards, sorted_cards, bomb_info, rank_card, 
                     elif rank_card_num == 2:
                         prior = 16
                     l = len(action[2])
-                    bomb_res.append((index, new_card_val[action[-1]] + (l - 4) * 16 + prior))
+                    bomb_res.append((index, new_card_val[action[1]] + (l - 4) * 16 + prior))
         elif action[0] == "StraightFlush":
             if len(sorted_cards["StraightFlush"]) > 0:
                 curStraight = sorted_cards["StraightFlush"][0][0][-1]
-                if curStraight == action[-1] and rank_card not in action[2]:
-                    bomb_res.append((index, new_card_val[action[-1]] + 32))
+                if curStraight == action[1] and rank_card not in action[2]:
+                    bomb_res.append((index, new_card_val[action[1]] + 32))
 
     if len(bomb_res) == 0:
         return -1
-    else:
-        bomb_res = sorted(bomb_res, key=lambda item: item[1])
-        return bomb_res[0][0]
+    bomb_res = sorted(bomb_res, key=lambda item: item[1])
+    return bomb_res[0][0]
 
 
 def one_hand(numofmy, numofnext, actionList, myPos, greaterPos, cards_num, restcards, card_val, rank_card):
@@ -411,9 +411,9 @@ def one_hand(numofmy, numofnext, actionList, myPos, greaterPos, cards_num, restc
             if (action[0] == "Bomb" or action[0] == "StraightFlush") and numofmy == len(action[2]):
                 if action[0] == "Bomb":
                     l = len(action[2])
-                    cur_level = card_val[action[-1]] + (l - 4) * 14
+                    cur_level = card_val[action[1]] + (l - 4) * 14
                 else:
-                    cur_level = card_val[action[-1]] + 14
+                    cur_level = card_val[action[1]] + 14
                 if numofnext > cards_num and cur_level > max_bomb:
                     return 0
                 else:
