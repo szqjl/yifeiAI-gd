@@ -24,8 +24,17 @@ def check_config():
         print("❌ 错误：配置文件不存在")
         return False
     
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
+    config = None
+    for encoding in ("utf-8", "utf-8-sig", "gbk", "gb18030"):
+        try:
+            with open(config_path, "r", encoding=encoding) as f:
+                config = yaml.safe_load(f)
+            break
+        except UnicodeDecodeError:
+            continue
+    if config is None:
+        print("❌ 错误：无法读取配置文件（尝试 utf-8 / gbk 均失败）")
+        return False
     
     print("✅ 配置文件读取成功")
     
