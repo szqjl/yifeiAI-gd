@@ -23,6 +23,8 @@ last_updated: 2025-11-26 14:51:29
 
 **重要性**：组牌不仅是减少手数、优化牌型必要手段，更是决定后续出牌策略基础。合理高效组牌，可以形成更有威力牌型组合，增加获胜机会。
 
+> **引擎映射**：[`PRINCIPLES_MAPPING.md`](../../../guandan-brain/PRINCIPLES_MAPPING.md) **§二十二 ★** — **P-G01 组牌总纲**；M3 仅 `combine_handcards` 单路径 + **CG-G01/B03/B05** 可选 P2；**V5+** `enumerate_groupings` + 牌力分（CG-R01–R07）；行牌 guard → **GUA-026/031/032**；专篇 → §十六–§二十一。
+
 **平台变量名**：
 - `Bomb`：炸弹
 - `StraightFlush`：同花顺

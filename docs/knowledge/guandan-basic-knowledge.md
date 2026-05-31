@@ -8,7 +8,7 @@
 ## 一、掼蛋基本规则（队际对战）
 
 - **队伍**：4人对战，**0号位+2号位为一队，1号位+3号位为另一队**。连接顺序决定座位号。
-- **一副（一轮）**：一次发牌→出牌→全部完牌。打完根据名次升级。
+- **一副牌**：108 张发完、每人 27 张 →（第二副起：进贡→还贡或抗贡）→ 多圈出牌 → 四人完牌顺序确定（`order` 四名；双上时可有 `restCards`）→ 按名次升级并决定下一副进贡关系。**一副 ≠ 一圈 ≠ 比赛一轮 ≠ 一局**。
 - **一局**：从2打起，打到A并在A级取得**双上**（头游+二游），才算赢下一局。
 - **完赛名次**：头游（第1名）→二游（第2名）→三游（第3名）→末游（第4名）。
 
@@ -28,14 +28,13 @@
 
 ## 二、离线平台（v1006）参数字义
 
-详见 `offline_platform/掼蛋平台使用说明书v1006.pdf`
+详见 `offline_platform/掼蛋平台使用说明书v1006.pdf`。**解读 `victoryNum`、批跑台账、队胜率** → [platform-data-interpretation.md](platform-data-interpretation.md)（真源，分析/迭代均适用）。
 
 - **服务器参数**：`guandan_offline_v1006.exe N`
-- 文档描述 N 为"游戏次数（一方从2打到A，并且双下）"
-- **实际v1006表现**：N = 副数（每副独立发牌），非完整局数。服务器跑完 N 副即退出。
+- 说明书称 N 为「**游戏次数**」：**N = 平台局数**（`target-games` / `completed_games`），一次「游戏」= 一方 A 级双上过关，**内含多副**；**1 平台局 ≠ 1 副**（实测 `target-games 1` → 59 副，2026-05-31）。全文 → [platform-data-interpretation.md](platform-data-interpretation.md)
 - **关键协议字段**：
-  - `episodeOver.order`：[头游, 二游, 三游, 末游] — 四位玩家的完赛座位号
-  - `gameResult.victoryNum`：[P0胜场, P1胜场, P2胜场, P3胜场] — 累计胜场
+  - `episodeOver.order`：[头游, 二游, 三游, 末游] — **一副**结束
+  - `gameResult.victoryNum`：平台下发；每 **整局** 结束赢方 +1；**`[0]` vs `[1]`** = 各队本批 **赢几局**（不是副数）
   - `gameResult.draws`：[P0平局, P1平局, P2平局, P3平局] — 累计平局
   - `act.stage.play.curRank` — 当前打几
   - `act.stage.play.selfRank` — 我方等级

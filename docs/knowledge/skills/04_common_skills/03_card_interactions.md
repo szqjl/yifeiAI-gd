@@ -16,6 +16,8 @@ last_updated: 2025-01-27 17:00:00
 
 木生火，火生土，水克火，火克金，相生相克是古代阴阳五行学中一个重要理论基础，万事万物之间，不是相互滋生，相互促进，就是相互制约，相互克制。掼蛋中也蕴含相生相克的属性，顺子 (`Straight`) 和三带二 (`ThreeWithTwo`) 相克，三张 (`Trips`) 和对子 (`Pair`) 相克，三带二 (`ThreeWithTwo`) 一般情况下和对子 (`Pair`) 相克，顺子和对子既相生又相克。
 
+> **引擎映射**：[`PRINCIPLES_MAPPING.md`](../../../guandan-brain/PRINCIPLES_MAPPING.md) §十三 — **M3 无硬编码**；喂牌方向（IX-P04/P05）→ **V5+** / 未来 **PASS-P05**；全文 **V5+** 知识图谱。
+
 **平台变量名**：
 - `Straight`：顺子
 - `ThreeWithTwo`：三带二

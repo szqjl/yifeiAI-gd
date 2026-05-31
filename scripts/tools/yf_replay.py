@@ -27,12 +27,16 @@ RECORD_NAME_RE = re.compile(r"^(\d+) \[([^\]]+)\]-\[([^\]]+)\]-\[(\d+)\]-\[([^\]
 
 # 显示用 rank 大小顺序（左→右，大→小）：大王 R、小王 B、A、K、Q、J、10、9...2
 RANK_DISPLAY_ORDER = ['R', 'B', 'A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2']
+# 1312 手牌列序：级牌抽出后，其余牌从 A 往 2 排
+RANK_ORDER_AFTER_LEVEL = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2']
 SUIT_ORDER_IDX = {'H': 0, 'S': 1, 'D': 2, 'C': 3}
 SUIT_DISPLAY = {'S': '♠', 'H': '♥', 'D': '♦', 'C': '♣'}
 RANK_DISPLAY = {'T': '10', 'J': 'J', 'Q': 'Q', 'K': 'K', 'A': 'A',
                 '2': '2', 'B': 'B', 'R': 'R', '1': 'A'}
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+JOKER_SMALL_IMG = REPO_ROOT / "assets" / "replay" / "joker_small.png"
+JOKER_BIG_IMG = REPO_ROOT / "assets" / "replay" / "joker_big.png"
 sys.path.insert(0, str(REPO_ROOT / "src"))
 os.environ['PYTHONPATH'] = str(REPO_ROOT / "src")
 
@@ -71,9 +75,13 @@ class YiFeiReplayGUI:
         self.teammate_name = ""
         self.opp_label_pair = ("对手", "对手")
 
-        # 级数（本方/对方），来自 game_info；缺失时默认 '2'
+        # 级数（当前等级/本方/对方），来自 act·play context；缺失时默认 '2'
+        self.cur_rank = '2'
         self.self_level = '2'
         self.opp_level = '2'
+
+        # 牌面贴图缓存（PhotoImage 须保持引用，防 GC）
+        self._card_image_cache = {}
         
         # 初始化界面
         self._setup_ui()
@@ -495,36 +503,47 @@ class YiFeiReplayGUI:
             labels[p] = f"玩家{p} ({opp_name})"
         return labels
 
-    def _resolve_levels(self):
-        """读级数，优先级：game_info → my_decisions[].context → actions[].context；全缺 fallback '2'。
-
-        Why fallback：yf1_m1/yf2_m1 在 record_decision() 写入 my_decisions[].context 时才会带
-        selfRank/oppoRank/curRank（act 消息里有）；广播 notify/play 不带级牌，导致 actions[].context
-        与 game_info 大概率是 None。
-        """
+    def _play_context_levels(self):
+        """本副 play 阶段 act 下发的三字段（整副固定；不读 game_info / beginning 快照）。"""
         data = self.current_game_data or {}
-        gi = data.get('game_info') or {}
-        self_level = gi.get('selfRank')
-        opp_level = gi.get('oppoRank')
+        for d in data.get('my_decisions') or []:
+            ctx = d.get('context') or {}
+            if ctx.get('curRank') or ctx.get('selfRank') or ctx.get('oppoRank'):
+                return ctx
+        for a in data.get('actions') or []:
+            ctx = a.get('context') or {}
+            if ctx.get('curRank') or ctx.get('selfRank') or ctx.get('oppoRank'):
+                return ctx
+        return {}
 
-        if not self_level or not opp_level:
-            for d in data.get('my_decisions') or []:
-                ctx = d.get('context') or {}
-                self_level = self_level or ctx.get('selfRank')
-                opp_level = opp_level or ctx.get('oppoRank')
-                if self_level and opp_level:
-                    break
+    def _normalize_rank_char(self, rank_str):
+        r = str(rank_str or '2').strip().upper()
+        if r in ('10', 'T'):
+            return 'T'
+        if r == '1':
+            return 'A'
+        return r
 
-        if not self_level or not opp_level:
-            for a in data.get('actions') or []:
-                ctx = a.get('context') or {}
-                self_level = self_level or ctx.get('selfRank')
-                opp_level = opp_level or ctx.get('oppoRank')
-                if self_level and opp_level:
-                    break
+    def _hand_column_rank_order(self):
+        """1312 列序：R、B、级牌、A…2（级牌列在小王之后）。"""
+        level = self._normalize_rank_char(self.cur_rank)
+        order = ['R', 'B']
+        if level and level not in ('R', 'B'):
+            order.append(level)
+        for rank in RANK_ORDER_AFTER_LEVEL:
+            if rank != level:
+                order.append(rank)
+        return order
 
-        self.self_level = str(self_level or '2')
-        self.opp_level = str(opp_level or '2')
+    def _resolve_levels(self):
+        """读级数：my_decisions[].context → actions[].context；全缺 fallback '2'。
+
+        回放一打开即 play，整副只用 act·play 三字段，不用 game_info（beginning 快照）。
+        """
+        ctx = self._play_context_levels()
+        self.cur_rank = str(ctx.get('curRank') or '2')
+        self.self_level = str(ctx.get('selfRank') or '2')
+        self.opp_level = str(ctx.get('oppoRank') or '2')
 
     def _organize_hand_columns(self, cards):
         """把手牌按 rank 分组，返回按显示顺序排好的 [(rank, [cards])]。"""
@@ -538,12 +557,13 @@ class YiFeiReplayGUI:
                 card = card[0] + 'A'
             by_rank.setdefault(rank, []).append(card)
         cols = []
-        for rank in RANK_DISPLAY_ORDER:
+        display_order = self._hand_column_rank_order()
+        for rank in display_order:
             if rank in by_rank:
                 group = sorted(by_rank[rank], key=lambda c: SUIT_ORDER_IDX.get(c[0], 99))
                 cols.append((rank, group))
-        # 兜底：未在 RANK_DISPLAY_ORDER 出现的（不应该有，但保险）
-        for rank in sorted(by_rank.keys() - set(RANK_DISPLAY_ORDER)):
+        # 兜底：未在 display_order 出现的（不应该有，但保险）
+        for rank in sorted(by_rank.keys() - set(display_order)):
             cols.append((rank, by_rank[rank]))
         return cols
 
@@ -752,16 +772,18 @@ class YiFeiReplayGUI:
         return dict(orientation='horizontal', x=w // 2, y=h // 2, label_y=h // 2)
 
     def _draw_level_badges(self):
-        """顶部左上角：本方 X / 对方 X，必要时再贴 过 标签。"""
+        """顶部左上角：当前等级 / 本方 / 对方（act·play 三字段，整副固定）。"""
         bx, by = 10, 10
-        self._draw_pill(bx, by, 95, 30, '本方', self.self_level)
-        self._draw_pill(bx, by + 36, 95, 30, '对方', self.opp_level)
+        pw = 110
+        self._draw_pill(bx, by, pw, 30, '当前等级', self.cur_rank)
+        self._draw_pill(bx, by + 36, pw, 30, '本方', self.self_level)
+        self._draw_pill(bx, by + 72, pw, 30, '对方', self.opp_level)
 
         if 0 < self.current_step <= self.total_steps:
             cur = self.actions[self.current_step - 1]
             ainfo = self._parse_action(cur.get('cur_action'))
             if ainfo and (ainfo[0] or '').upper() == 'PASS':
-                px = bx + 110
+                px = bx + pw + 8
                 self.card_canvas.create_rectangle(px, by, px + 56, by + 30,
                                                   fill="#fff8c8", outline="black")
                 self.card_canvas.create_text(px + 28, by + 15, text="过",
@@ -853,6 +875,47 @@ class YiFeiReplayGUI:
 
     def _draw_player_hand(self, player_pos):
         pass
+
+    def _joker_rank(self, card):
+        """识别大小王：HR/SB 等格式返回 'R' 或 'B'。"""
+        if not isinstance(card, str) or len(card) < 2:
+            return None
+        rank = card[1:]
+        if rank == '1':
+            rank = 'A'
+        if rank in ('R', 'B'):
+            return rank
+        return None
+
+    def _get_joker_photo(self, img_path, cache_key, width, height):
+        """加载并缩放大小王贴图。"""
+        if not img_path.is_file():
+            return None
+        key = (cache_key, width, height)
+        if key in self._card_image_cache:
+            return self._card_image_cache[key]
+        try:
+            from PIL import Image, ImageTk
+            img = Image.open(img_path).convert("RGBA")
+            img = img.resize((max(1, width), max(1, height)), Image.LANCZOS)
+            photo = ImageTk.PhotoImage(img)
+            self._card_image_cache[key] = photo
+            return photo
+        except Exception:
+            return None
+
+    def _draw_joker_fallback(self, x, y, width, height, rank):
+        """贴图不可用时的矢量兜底。"""
+        self.card_canvas.create_rectangle(x, y, x + width, y + height,
+                                          fill="#FFFFFF", outline="black", width=1)
+        joker_color = "red" if rank == 'R' else "black"
+        big_char = "大" if rank == 'R' else "小"
+        for i, ch in enumerate("JOKER"):
+            self.card_canvas.create_text(x + 5, y + 3 + i * 12, text=ch, anchor=tk.NW,
+                                         font=('Arial', 9, 'bold'), fill=joker_color)
+        self.card_canvas.create_text(x + width * 0.66, y + height * 0.55,
+                                     text=big_char, anchor=tk.CENTER,
+                                     font=('Microsoft YaHei', 20, 'bold'), fill=joker_color)
     
     def _draw_card_normal(self, x, y, width, height, card, is_back=False):
         """绘制普通水平方向的牌（小尺寸，按 rank 堆叠场景）"""
@@ -866,6 +929,20 @@ class YiFeiReplayGUI:
         if not isinstance(card, str) or len(card) < 2:
             return
 
+        joker_rank = self._joker_rank(card)
+        if joker_rank:
+            img_path = JOKER_BIG_IMG if joker_rank == 'R' else JOKER_SMALL_IMG
+            cache_key = 'big' if joker_rank == 'R' else 'small'
+            photo = self._get_joker_photo(img_path, cache_key, width, height)
+            if photo:
+                self.card_canvas.create_rectangle(x, y, x + width, y + height,
+                                                  fill="#FFFFFF", outline="black", width=1)
+                self.card_canvas.create_image(x + width / 2, y + height / 2,
+                                              image=photo, anchor=tk.CENTER)
+                return
+            self._draw_joker_fallback(x, y, width, height, joker_rank)
+            return
+
         suit = card[0]
         rank = card[1:]
         if rank == '1':
@@ -877,20 +954,6 @@ class YiFeiReplayGUI:
 
         cx_mid = x + width / 2
         cy_mid_lower = y + height * 0.66  # 中间大花色稍偏下，避免和顶部 rank 挤
-
-        # 大小王特殊渲染：左上竖排 JOKER（红/黑）+ 中间放大的"大/小" + 底部 JOKER 横排
-        if rank in ('R', 'B'):
-            joker_color = "red" if rank == 'R' else "black"
-            big_char = "大" if rank == 'R' else "小"
-            # 竖排 JOKER（左上，5 个字符纵向排列；堆叠时露顶部 J 就能识别）
-            for i, ch in enumerate("JOKER"):
-                self.card_canvas.create_text(x+5, y+3 + i*12, text=ch, anchor=tk.NW,
-                                              font=('Arial', 9, 'bold'), fill=joker_color)
-            # 中间放大字（右半部分，避开左侧竖排 JOKER）
-            self.card_canvas.create_text(x + width*0.66, y + height*0.55,
-                                          text=big_char, anchor=tk.CENTER,
-                                          font=('Microsoft YaHei', 20, 'bold'), fill=joker_color)
-            return
 
         display_rank = RANK_DISPLAY.get(rank, rank)
         display_suit = SUIT_DISPLAY.get(suit, suit)

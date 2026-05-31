@@ -15,20 +15,15 @@ docs/knowledge/
 │   │   ├── 02_quick_start.md          # 快速入门
 │   │   ├── 04_card_types_guide.md     # 牌型指南
 │   │   ├── 05_card_distribution.md    # 牌张分配
-│   │   ├── 06_game_flow.md            # 游戏流程
+│   │   ├── 06_game_flow.md            # 游戏流程与进贡
 │   │   ├── 07_upgrade_rules.md        # 升级规则
-│   │   ├── 08_basic_concepts.md       # 基本概念
-│   │   ├── 09_basic_strategy.md       # 基础策略
-│   │   └── 10_practice_tips.md        # 练习建议
+│   │   └── 08_basic_concepts.md       # 基本概念（术语）
+│   │   # 入门策略/练习 → skills/01_foundation/03、04
 │   │
-│   ├── 02_competition_rules/          # 比赛规则
-│   │   ├── 01_competition_format.md   # 竞赛形式
-│   │   ├── 02_scoring.md              # 计分规则
-│   │   └── 03_violation_handling.md   # 违规处理
-│   │
-│   └── 03_advanced_rules/             # 高级规则
-│       ├── 01_tribute_rules.md        # 进贡规则
-│       └── 02_reporting_rules.md      # 报牌规则
+│   └── 02_competition_rules/          # 实体赛规则
+│       ├── 01_competition_format.md   # 竞赛形式
+│       ├── 02_scoring.md              # 计分规则
+│       └── 03_violation_handling.md   # 违规处理
 │
 ├── strategy/                          # 策略知识库（内存加载层）
 │   ├── README.md                      # 策略库说明
@@ -40,6 +35,10 @@ docs/knowledge/
 │
 └── skills/                            # 技巧知识库（按需查询层）
     ├── 01_foundation/                 # 基础技巧
+    │   ├── 01_basic_principles.md
+    │   ├── 02_strategy_overview.md
+    │   ├── 03_basic_strategy.md     # 入门策略
+    │   └── 04_practice_tips.md      # 练习建议
     ├── 02_main_attack/                # 主攻技巧
     ├── 03_assist_attack/              # 助攻技巧
     ├── 04_common_skills/              # 通用技巧

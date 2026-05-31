@@ -2,10 +2,10 @@
 title: 掼蛋游戏介绍
 type: rule
 category: Rules/Basic
-source: 掼蛋入门指南.txt, 江苏掼蛋规则.md
+source: 江苏掼蛋规则.md
 platform: 南京邮电大学平台
-version: 1.1
-last_updated: 2025-11-25 02:17:52
+version: 2.0
+last_updated: 2026-05-29
 tags: [规则, 游戏介绍, 基础]
 difficulty: 入门
 priority: 5
@@ -13,35 +13,26 @@ priority: 5
 
 # 掼蛋游戏介绍
 
+> 规则真源：[guandan-knowledge.mdc](../../../../.cursor/rules/guandan-knowledge.mdc) · 目录索引 [README.md](README.md)
+
 ## 概述
 
-掼蛋，是一种在中国尤其是江苏地区非常普及的扑克牌游戏。它结合了"跑得快"和"斗地主"等游戏精粹，既需要运气，也考验技巧。
+掼蛋是流行于江苏等地的四人结对扑克游戏，兼顾运气与配合，常用于竞技比赛。
 
-## 游戏特点
+## 特点
 
-- **普及性**：在中国尤其是江苏地区非常普及
-- **趣味性**：结合了"跑得快"和"斗地主"等游戏精粹
-- **策略性**：既需要运气，也考验技巧
-- **竞技性**：适合比赛和竞技
+- 四人两两结对，对面为队友
+- 从 2 级升级至 A，A 级双上赢局
+- 牌型丰富（顺子、同花顺、多级炸弹、逢人配等）
 
-## 游戏核心要素
+## 学习路径
 
-1. **基本规则**：牌张、牌手、贡牌、升级、牌型等
-2. **比赛流程**：局、场、轮的定义和比赛通则
-3. **实战技巧**：从规则到实战的全面掌握
+1. [08_basic_concepts.md](08_basic_concepts.md) — 术语  
+2. [04_card_types_guide.md](04_card_types_guide.md) — 牌型  
+3. [06_game_flow.md](06_game_flow.md) + [07_upgrade_rules.md](07_upgrade_rules.md)  
+4. [02_quick_start.md](02_quick_start.md) · 策略/练习 → [../../skills/01_foundation/](../../skills/01_foundation/)
 
-## 前置知识
+## 相关
 
-无（入门文档）
-
-## 后续知识
-
-- [掼蛋基本概念]
-- [掼蛋牌型指南]
-- [快速入门指南]
-
-## 相关知识点
-
-- [掼蛋基本规则]
-- [掼蛋比赛通则]
-
+- [06_game_flow.md](06_game_flow.md) — 流程与进贡  
+- [../../skills/](../../skills/) — 实战技巧（非规则真源）

@@ -1,21 +1,22 @@
 ---
 title: 掼蛋基础策略
-type: rule
-category: Rules/Basic
-source: 掼蛋入门指南.txt, 江苏掼蛋规则.md
+type: skill
+category: Skills/Foundation
+source: 掼蛋入门指南.txt
 platform: 南京邮电大学平台
-version: 1.1
-last_updated: 2025-11-25 02:17:52
-tags: [规则, 策略, 基础]
+version: 3.0
+last_updated: 2026-05-29
+tags: [策略, 入门]
 difficulty: 初级
 priority: 4
+game_phase: all
 ---
 
 # 掼蛋基础策略
 
-## 概述
+> **技巧文档，非规则真源。** 升级、过 A、牌型大小以 [guandan-knowledge.mdc](../../../../.cursor/rules/guandan-knowledge.mdc) 为准；规则见 [07_upgrade_rules.md](../../rules/01_basic_rules/07_upgrade_rules.md)。
 
-比赛中的掼蛋具有层级性和策略性，选手不仅要熟悉规则，还需灵活运用技巧。以下是一些关键的比赛规则和策略建议。
+> **引擎映射（只读规划）**：[`docs/guandan-brain/PRINCIPLES_MAPPING.md`](../../../guandan-brain/PRINCIPLES_MAPPING.md) §七 — **无 M3 P0**；主攻/助攻/三阶段归 **V5+ / M1**；贡还见 P-G03（[`GUA-030`](../../../guandan-brain/ISSUES.md)）。
 
 ## 核心策略要点
 
@@ -50,20 +51,11 @@ priority: 4
 
 ### 4. 升级与打级
 
-**核心原则**：上游和二游要及时沟通，确保尽早升级，掌握比赛主动权
-
-**升级规则**（依据江苏掼蛋规则）：
-- 只有上游方可以升级
-- 队友获得二游升3级
-- 队友获得三游升2级
-- 队友获得下游升1级
-- A级必打，获得上游，且队友获得二游或三游，才能打过A级
+**核心原则**：争取头游并帮队友争二游（双上）升档最快；A 级须**双上**才赢局（见 [07_upgrade_rules.md](../../rules/01_basic_rules/07_upgrade_rules.md)）。
 
 **策略要点**：
-- 级数从2至A共有13个级数，逐级晋升
-- 及时升级可以掌握比赛主动权
-- 需要与队友配合，确保升级成功
-- A级是必打级别，需要特别注意
+- 级数从 2 至 A；双上 +3 最快
+- A 级只有双上赢局，勿与「头游+三游可过 A」等非标准说法混淆
 
 ## 应用场景
 
@@ -91,19 +83,12 @@ priority: 4
 
 ## 前置知识
 
-- [掼蛋基本概念]
-- [掼蛋牌型指南]
-- [快速入门指南]
+- [08_basic_concepts.md](../../rules/01_basic_rules/08_basic_concepts.md)
+- [04_card_types_guide.md](../../rules/01_basic_rules/04_card_types_guide.md)
+- [02_quick_start.md](../../rules/01_basic_rules/02_quick_start.md)
 
 ## 后续知识
 
-- [主攻策略]
-- [助攻策略]
-- [出牌技巧]
-
-## 相关知识点
-
-- [出牌规则]
-- [升级规则]
-- [团队配合]
-
+- [02_strategy_overview.md](02_strategy_overview.md)
+- [../02_main_attack/](../02_main_attack/)
+- [../03_assist_attack/](../03_assist_attack/)
