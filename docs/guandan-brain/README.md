@@ -1,6 +1,8 @@
 # 掼蛋 AI 迭代大脑（项目真源）
 
-本目录与代码同仓，用于**可追溯**的缺陷、版本修复、评测与迭代焦点。通用知识库见 `docs/knowledge/`；此处只记**本仓库版本—问题—验收**相关事实。
+> **新开 Agent？** 复制 **[`AGENT_FIRST_MESSAGE.md`](AGENT_FIRST_MESSAGE.md)** 里那句话，粘贴给新 Agent 作为第一句。
+
+本目录与代码同仓，用于**可追溯**的缺陷、版本修复、评测与迭代焦点。通用知识库见 `docs/knowledge/`；**解读离线平台 `victoryNum` / 批跑台账**见 [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md)；此处只记**本仓库版本—问题—验收**相关事实。
 
 本目录在流程上即 **指挥系统**：负责 **规划、统筹、部署任务**（见 **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)**）；**不**替代本机离线对局与真实 `game_records` 生成。
 
@@ -27,13 +29,56 @@
 4. 阅读 [`EVAL.md`](EVAL.md) 中的评测入口与通过标准（含 **M1 yf1/yf2 已测结果表**）；改动后按该文档跑评测并更新 ITERATIONS。
 5. 可选：在 [`scenarios/`](scenarios/) 中为复杂局面添加最小复现（YAML/JSON/Markdown 均可）。
 
+## Agent 批跑数据入门（5 分钟）
+
+新 Agent / 换机接续时，**解读批跑胜率、PASS、`game_records` 落盘**须先统一「局 vs 副」口径，再写 `ITERATIONS` / `EVAL`。Cursor 已自动加载 [`.cursor/rules/guandan-context.mdc`](../../.cursor/rules/guandan-context.mdc)（含批跑对照表与 `victoryNum` 自检）；以下为刻意阅读的推荐顺序。
+
+### 阅读顺序
+
+1. **[`guandan-context.mdc`](../../.cursor/rules/guandan-context.mdc)** — 「解读批跑…」整段（约 1 分钟）：什么字段数**局**、什么数**副**、`victoryNum` 怎么读。
+2. **[`guandan-knowledge.mdc`](../../.cursor/rules/guandan-knowledge.mdc) §1** — 局 / 副 / 小局 / 整局 / `victoryNum` 完整定义（约 3 分钟）。
+3. **改客户端或批跑脚本时** — [`guandan-platform-v1006.mdc`](../../.cursor/rules/guandan-platform-v1006.mdc) §局与副：`episodeOver` vs `gameOver`、协议字段。
+4. **写 ITERATIONS / 分析报告时** — [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md) §1～§3（详版真源，含 `--target-games 1` → 59 副实测）。
+
+不必先读 PDF 或 `guandan-knowledge` §2～§8，除非任务涉及牌型、进贡或规则细节。
+
+### 三句定音（背这个就够开工）
+
+```text
+副（小局）= episodeOver = game_records 每条 JSON
+局（整局）= 2→A 双上过关；exe N / completed_games = N 局（≠ N 副）
+victoryNum[0] vs [1] = 各队赢几局；须 [0]=[2]、[1]=[3]；批跑 N 局时 [0]+[1]=N
+```
+
+关系：**局 ⊃ 多副**；**平台 1 局 ≠ 1 副**（实测 1 局可含数十副）。
+
+### 按任务跳转
+
+| 任务 | 必读 |
+|------|------|
+| 分析批跑胜率、填 ITERATIONS | `guandan-context` + `platform-data-interpretation` §3.3 |
+| 改 `yf*_m*.py`、落盘逻辑 | `guandan-platform-v1006` + `platform-data-interpretation` §3.4 |
+| 改决策 / 策略 | `guandan-knowledge` §1 + 相关规则节 |
+| 换机接续 | [分析接续-handoff](../governance/分析接续-handoff.md) + `ITERATIONS` 最新一行 |
+
+### 30 秒自测
+
+| 问题 | 答案 |
+|------|------|
+| `exe 3` 是 3 副还是 3 局？ | **3 局** |
+| `game_records` 一条 JSON 是什么？ | **1 副**（小局） |
+| 批跑 3 局、`[0,3,0,3]`（M3=0+2）谁赢？ | lalala **3 局**，M3 **0 局** |
+| `[1,2,1,0]` 能用来算胜率吗？ | **不能**（同队 `[0]` 与 `[2]` 不一致） |
+
+Hermes 派活时可在任务块 **【依据】** 中写一句：「解读数据按本 README §Agent 批跑数据入门；胜率只看批末 `victoryNum[0]` vs `[1]`。」
+
 ## M 系列代际文档（M1 / M2 / M3）
 
 | 文档 | 说明 |
 |------|------|
 | [M1_ARCHITECTURE.md](M1_ARCHITECTURE.md) | M1 架构与决策管线 |
 | [M2_OPTIMIZATION.md](M2_OPTIMIZATION.md) | M2 优化日志、跑分记录、根因分析 |
-| [M3_DIAGNOSIS.md](M3_DIAGNOSIS.md) | M3 完整诊断（22 副 0 胜根因、5 个 Bug 详析） |
+| [M3_DIAGNOSIS.md](M3_DIAGNOSIS.md) | M3 完整诊断（22 副 0 胜根因、Bug 详析；**2026-05-30 GUA-027 场态消息重大发现**） |
 | [../src/contracts/README.md](../../src/contracts/README.md) | M3 契约 `IDecisionProvider` **v1.0**（V 挂接门禁 ON） |
 | [../src/m/README.md](../../src/m/README.md) | M 系列目录映射（渐进迁移） |
 

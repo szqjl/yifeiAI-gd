@@ -62,9 +62,12 @@
 
 | 术语 | 含义 |
 |------|------|
-| **一副（一轮）** | 发牌 → 出牌 → 四人按顺序出完手牌；按名次决定本副谁「升级」 |
+| **一副牌** | 108 张发完、每人 27 张 →（第二副起：**进贡 → 还贡**，或 **抗贡**）→ 多**圈**出牌，直至四人完牌顺序确定（`episodeOver.order` 四名；双上时可有 `restCards`）→ 按名次升级，并决定下一副进贡关系 |
+| **一圈出牌** | 一人首发，三家跟压/过；连续三人过则结束，接风者下一圈首发。**一副内含多圈** |
 | **一局** | 从打 **2** 起，某队打到 **A** 且在 **A 级拿到双上**（头游+二游），才算赢下一局 |
 | **名次** | 头游（第 1）→ 二游 → 三游 → 末游（第 4） |
+
+**术语区分**：**一副 ≠ 一圈 ≠ 比赛一轮 ≠ 一局**（「比赛一轮」指编排上全体选手普遍出场一次，与一副牌无关）。
 
 **本队升级级数**（本副结束后，仅当本队有人拿头游时）：
 
@@ -86,20 +89,70 @@ guandan_offline_v1006.exe N
 
 | 项 | 说明 |
 |----|------|
-| 说明书里的 N | 文档写为「游戏次数」 |
-| **实际 v1006 行为** | **N = 副数**（每副独立发牌），跑满 N 副服务器即退出，**不等于**完整「从 2 打到 A 的一局」 |
-| 如何判断「一局结束」 | 客户端须**跨副跟踪** `curRank` 等字段，不能只看单副消息 |
+| 说明书里的 N | 「**游戏次数**」：一次「游戏」= 一方 A 级且本副 **双上** 过关（见 PDF `gameOver` 段注释） |
+| **本仓库称法** | **N = 平台局数**（`--target-games` / `completed_games` 同口径）；跑满 N 局即 `gameOver` |
+| **与规则「一副」** | **1 平台局 ≠ 1 副**。平台局内含多副；1 副 = 1 次 `episodeOver`。实测：`target-games 1` → **59 副**（2026-05-31）。详见 [platform-data-interpretation.md](docs/knowledge/platform-data-interpretation.md) |
+| 如何判断规则「一局结束」 | 与平台「一次游戏」同义；客户端跨副跟踪 `game_scores_m2.json`；**不能**用 `episodeOver` 次数当局数 |
 
 常用协议字段（日志 / JSON 里常见）：
 
-| 字段 | 含义 |
+| 字段 | 含义（与 [v1006 使用说明书](offline_platform/掼蛋平台使用说明书v1006.pdf) 用语一致） |
 |------|------|
 | `episodeOver.order` | 本副名次 `[头游, 二游, 三游, 末游]`（座位号 0–3） |
-| `gameResult.victoryNum` / `draws` | 各座位累计胜/平（平台侧） |
-| `act.stage.play.curRank` | 当前打几（2…9,T,J,Q,K,A） |
-| `act.stage.play.selfRank` / `oppoRank` | 我方 / 对方等级 |
+| `episodeOver.curRank` | 小局结束时**所打的当前等级**（说明书 § `episodeOver` 示例） |
+| `gameResult.victoryNum` / `draws` | 各队本批 **赢局数** / 平局（`[0]` vs `[1]` 比队胜负；**不是副数**） |
+| `act.*.selfRank` | **我方等级**（跨副累积） |
+| `act.*.oppoRank` | **对方等级**（跨副累积） |
+| `act.*.curRank` | **当前等级**（本副级牌点数；`play` 阶段即本副打几） |
 
-等级字符：`2,3,4,5,6,7,8,9,T,J,Q,K,A`（T=10）。`curRank` 多在每副**第一次** `act` 里出现；`beginning` **不含**等级。
+等级字符：`2,3,4,5,6,7,8,9,T,J,Q,K,A`（T=10）。
+
+#### `selfRank` / `oppoRank` / `curRank` 别混（`beginning` vs `act`）
+
+> **平台原文**：`act` · `stage=play` 示例的字段释义为「**我方等级：K，对方等级：9，当前等级 9**」。见 [掼蛋平台使用说明书 v1006](offline_platform/掼蛋平台使用说明书v1006.pdf) **第 5–7 页**（`tribute` / `back` / `play` 三阶段 `act` 示例）。  
+> **`notify` · `beginning` 官方示例仅含 `handCards`、`myPos`，不含三字段**（同 PDF 第 3 页）。本仓库 `game_info` 中的三字段来自客户端 `gameStart` 快照，非 PDF 中 `beginning` 示例结构。
+
+同一副牌里，**`gameStart` 快照与 `act` 上的三字段可能不一致**；回放、JSON 若只读 `game_info` 或只读 `actions[].context`，会误以为「当前等级 6 又 9」矛盾。按掼蛋规则与说明书应这样理解：
+
+| 字段 | 说明书用语 | 含义 |
+|------|------------|------|
+| **`selfRank`** | 我方等级 | 我方从 2 起按副升级后的等级（跨副累积） |
+| **`oppoRank`** | 对方等级 | 对方从 2 起按副升级后的等级（跨副累积） |
+| **`curRank`** | **当前等级** | 本副级牌点数（哪一点数是级牌）；`play` 阶段即本副打几 |
+
+**`gameStart` → `game_info`（本副开局快照，非 PDF `beginning` 示例字段）**
+
+- 表示**本副开始前**（通常是**上一副结束瞬间**）的我方等级、对方等级与当前等级上下文。
+- 例：`selfRank=8`，`oppoRank=6`，`curRank=6` → 上一副结束时我方等级 8、对方等级 6；`curRank=6` 反映**上一副**语境下的当前等级，**不等于**进贡还贡结束后本副 `play` 的当前等级。
+- 第二副起，本副开局后往往先 **进贡 / 还贡**（说明书 § `tribute` / `back`）；此阶段 `act` 仍带三字段，且 **`curRank` 常与 `selfRank` 相同**（还贡示例：我方等级 5、当前等级 5，系统跳过等级 5 的牌）。
+
+**`act` · `stage=play`（进贡还贡结束、正式出牌）**
+
+- 表示**本副出牌**时的我方等级、对方等级与**当前等级**；分析 AI 决策、比牌、级牌**以此时为准**（说明书：`我方等级 / 对方等级 / 当前等级` 三者可不同，如 K / 9 / 9）。
+- 升级在**上一副结束时**结算：仅当某队有人拿**头游**，该队才按名次表升级（双上 +3、头游+三游 +2、头游+末游 +1；无人头游则不升）。见上文「本队升级级数」表及 [江苏掼蛋规则](docs/gdrules/江苏掼蛋规则.md)「从而确定下轮的级牌」。
+- 例（与常见回放样例一致）：
+  - 上一副结束：我方等级 8、对方等级 6；**对方**头游+二游 → 对方 **+3** → 6→**9**；我方未拿头游 → **我方等级仍为 8**。
+  - 本副 `act` · `play`：`selfRank=8`，`oppoRank=9`，`curRank=9`（**当前等级 9**，9 为级牌）。
+  - 而 `game_info` 仍可能是 `8 / 6 / 6`——**不是**本副当前等级 6，而是**进贡还贡前**的快照未更新。
+- 进贡还贡结束后，由**进贡方**先出牌（上一副对方赢 → 我方进贡 → 还贡后常由我方首发）。
+
+**`notify` · `stage=play`（他人出牌广播）**
+
+- **不带** `selfRank` / `oppoRank` / `curRank`（说明书 `play` notify 示例仅含出牌字段）。
+- `game_records` 里 `actions[].context` 若出现三字段，多为客户端用**最近一次 `act` 缓存**填充，**不能**当作该条 notify 的服务器下发值。
+
+**读 JSON / 回放时**
+
+| 用途 | 优先读 |
+|------|--------|
+| 本副**当前等级**、级牌、比牌 | `my_decisions[].context` 或同副 **`act` · `play`** |
+| 本副开局前等级（参考） | `game_info` |
+| 逐步出牌里的三字段 | 勿单独信 `actions[].context`；notify 无真源 |
+
+文件名 `[6]` 等后缀来自保存时 `game_info.curRank`，**不能**代替本副 `act` · `play` 的当前等级。
+
+**离线平台数据解读（`victoryNum`、批跑台账、勿与规则一局混）** → [docs/knowledge/platform-data-interpretation.md](docs/knowledge/platform-data-interpretation.md)。  
+更细的副/局判定与 M2 追踪 → [docs/knowledge/guandan-basic-knowledge.md](docs/knowledge/guandan-basic-knowledge.md) 第三节；字段写入路径 → [docs/README.md](docs/README.md#selfrank--opporank--currank-写入位置2026-05-29)；平台 JSON 全文 → [offline_platform/掼蛋平台使用说明书v1006.pdf](offline_platform/掼蛋平台使用说明书v1006.pdf)。
 
 ### 本仓库如何记「副 / 局」胜负（M2）
 
@@ -114,7 +167,8 @@ M2 客户端在 `yf1_m2.py` / `yf2_m2.py` 里做 **副级 + 局级** 追踪：�
 1. 本节（规则 + 平台参义）
 2. [快速开始](#快速开始) → 装依赖、配 `config.yaml`
 3. [M/V 治理方案](docs/governance/M-V-Series-治理方案.md) → 分支 `m-dev`、目录约定
-4. [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md) → 改 AI 行为前必读
+4. [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md) → 改 AI 行为前必读  
+   - **新开 Agent**：复制 [AGENT_FIRST_MESSAGE.md](docs/guandan-brain/AGENT_FIRST_MESSAGE.md) 里那句话，粘贴给 Agent 第一句
 5. 跑 M1：`START_M1_GUI.bat` 或 [M1 测试指南](docs/development/M1测试指南.md)
 
 ---

@@ -9,6 +9,10 @@ alwaysApply: true
 
 以 **`docs/guandan-brain/`** 为真源（见 `guandan-context.mdc`），勿仅凭聊天历史假设。
 
+## 新开 Agent（人类第一句）
+
+复制 **`docs/guandan-brain/AGENT_FIRST_MESSAGE.md`** 里默认那句，粘贴给新 Agent 作为首条消息。
+
 ## 多步骤 / 换机接续
 
 - 索引：`docs/guandan-brain/ITERATIONS.md`（本轮目标与完成定义）

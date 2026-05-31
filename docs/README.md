@@ -116,19 +116,23 @@
 
 ### selfRank / oppoRank / curRank 写入位置（2026-05-29）
 
-平台 `act` 消息里有 `selfRank / oppoRank / curRank`（PDF 第 3 页明文），但 `notify/play` 广播不带，所以历史 `game_records/*.json` 里：
+> **语义（必读）**：平台用语为 **我方等级 / 对方等级 / 当前等级**（见 [v1006 使用说明书 PDF 第 5–7 页](../offline_platform/掼蛋平台使用说明书v1006.pdf) `act` 示例）。`game_info` 与 `act` · `play` 可能不一致（开局快照 vs 进贡还贡后真值）。详见 [项目 README「别混」一节](../README.md#selfrank--opporank--currank-别混beginning-vs-act)。
+
+平台 **`act` 消息**里有 `selfRank / oppoRank / curRank`（PDF 第 5 页起）；**`notify` · `play` 广播不带**（PDF 第 3 页示例），所以历史 `game_records/*.json` 里：
 
 | 写入路径 | 来源 | 历史情况 |
 |---|---|---|
 | `game_info` | `start_game(game_info=...)` 调用方传入 | 调用方传 None → 全 None |
-| `actions[].context` | `notify/play` 通知里的 data | 该消息不含级牌 → 全 None |
+| `actions[].context` | `notify/play` 通知里的 data | 该消息**不含**三字段 → 客户端用缓存填充，非服务器逐条下发 |
 | `my_decisions[].context` | yf1_m1.py:381 / yf2_m1.py:385 自建字典 | **历史压根没塞这三字段** ❌ |
 
 **修复**：[src/communication/yf1_m1.py](../src/communication/yf1_m1.py#L385-L391) 和 [src/communication/yf2_m1.py](../src/communication/yf2_m1.py#L385-L391) 的 `decision_context` 增加 `selfRank/oppoRank/curRank`，从下一次跑就有真实级牌。
 
 **消费侧**：[scripts/tools/yf_replay.py](../scripts/tools/yf_replay.py#L498-L527) 的 `_resolve_levels` 改成三层 fallback：`game_info → my_decisions[].context → actions[].context`，旧文件仍 fallback 到 `'2'`，不会破坏回放。
 
-实测新记录 `20260529003420492436 [yf1_m1]-[25].json`：`selfRank='2', oppoRank='A', curRank='A'`（对手升 A，与昨日 0 胜结论一致）。
+实测新记录 `20260529003420492436 [yf1_m1]-[25].json`：`selfRank='2', oppoRank='A', curRank='A'`（对方等级 A、当前等级 A，与 0 胜结论一致）。
+
+**平台字段对照**：`selfRank`=我方等级，`oppoRank`=对方等级，`curRank`=当前等级（`play` 阶段即本副打几）。
 
 ---
 
@@ -159,5 +163,5 @@
 
 ---
 
-**最后更新**: 2026-05-29（新增「selfRank/oppoRank/curRank 写入位置」一节）
+**最后更新**: 2026-05-30（增补「beginning vs act 等级语义」；见主 README）
 **维护者**: AI Assistant

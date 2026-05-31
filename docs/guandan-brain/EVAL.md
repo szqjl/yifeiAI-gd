@@ -28,6 +28,8 @@ python -m batch_executor --server-path "<SERVER_EXE>" --target-games 3 --clients
 
 将 `yf1_v5.py` / `yf2_v5.py` 换成 `yf1_v4.py` / `yf2_v4.py`、`yf1_v6.py` / `yf2_v6.py` 或 `yf1_m1.py` / `yf2_m1.py` 即对应版本。四元组金样例见 `scenarios/client_sets.json`。
 
+**批跑台账与胜率**：`completed_games` = 本批共打 **几局**；队胜负读批末 **`victoryNum[0]` vs `[1]`**（各队 **赢几局**，平台按整局结束计胜）。**副数** / PASS 看 `game_records`（**每条 = 一副**）或 `total_rounds`。
+
 仅诊断、不跑对局：
 
 ```bash

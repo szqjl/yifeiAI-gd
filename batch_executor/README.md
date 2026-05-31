@@ -259,8 +259,10 @@ python -m batch_executor ^
 **与 `game_records/` 的一致性（M1 / GUA-022 口径）**：
 
 - 一次完整执行 `--target-games N` 结束后，文件中的 **`target_games` 应等于本次传入的 N**（进程启动后即写入，不再沿用磁盘旧值）。
-- **`completed_games` 以项目根目录 `game_records/` 为准**：统计「本 Run 开始时」到「当前」**新增的**成对 **`game_id`**（同一 `game_id` 下同时存在 `yf1_m1` 与 `yf2_m1` 的 JSON 文件名各一份，计为 1 局）。与 `ITERATIONS.md` 评测统计口径一致。
-- 若某批次被超时强杀或客户端异常退出，只要未成对落盘，就不会把该场记为完成。
+- **`completed_games` = 平台局数累计**（每批正常结束 `+= batch_games`），与离线 exe 参数 `N`（每批 ≤3）同口径：**N 局 ≠ N 副**。副数看 `game_records` match_key 或 `game_scores.total_rounds`。
+- **胜率 / 队胜负**：读每批末 `gameResult.victoryNum`（**`[0]` vs `[1]`** = 各队本批 **赢局数**；平台整局结束计胜；同队只取一席）。**不是**副数。全文 → [docs/knowledge/platform-data-interpretation.md](../docs/knowledge/platform-data-interpretation.md)。
+- **副数 / PASS**：`game_records` **每条 JSON = 一副**；成对 match_key 或 `total_rounds`。
+- 若某批次被超时强杀或客户端异常退出，该批不计入 `completed_games`。
 
 **批等待超时（可选环境变量）**：
 
