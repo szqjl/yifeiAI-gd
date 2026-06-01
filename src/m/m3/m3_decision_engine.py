@@ -173,6 +173,59 @@ class M3DecisionEngine:
                 return idx
         return -1
 
+    def _is_solo_sprint(self, numofplayers, myPos):
+        """GUA-034 END-M01: 队友已走完 → 1v2 solo 冲刺。"""
+        return numofplayers[(myPos + 2) % 4] == 0
+
+    def _gua034_is_wind_active(self, data):
+        """接风首出：greaterPos==-1 或 curPos==-1。"""
+        return data.get("greaterPos", -1) == -1 or data.get("curPos", -1) == -1
+
+    def _gua034_solo_active_pick(
+        self, actionList, threetwo_actionlist, trips_actionlist, pair_actionlist,
+    ):
+        """GUA-034 END-M02: 接风优先整手牌型，不拆对出最小单。"""
+        if threetwo_actionlist:
+            idx = getindex("ThreeWithTwo", threetwo_actionlist, actionList)
+            if idx > 0:
+                self._dbg(f"GUA-034 END-M02 threetwo -> {idx}")
+                return idx
+        if trips_actionlist:
+            idx = getindex("Trips", trips_actionlist, actionList)
+            if idx > 0:
+                self._dbg(f"GUA-034 END-M02 trips -> {idx}")
+                return idx
+        if pair_actionlist:
+            idx = getindex("Pair", pair_actionlist, actionList)
+            if idx > 0:
+                self._dbg(f"GUA-034 END-M02 pair -> {idx}")
+                return idx
+        return -1
+
+    def _gua034_solo_beat_single(self, single_actionList, card_val, curVal, rank_card, bomb_member):
+        """GUA-034 END-M03: solo 下允许拆 trips 压对手小单。"""
+        for tag, action in single_actionList:
+            if card_val[action[1]] > curVal and rank_card not in action[2]:
+                if action[2][0] in bomb_member:
+                    continue
+                self._dbg(f"GUA-034 END-M03 beat single -> {tag}")
+                return tag
+        return -1
+
+    def _gua034_solo_beat_pair(
+        self, pair_actionList, card_val, curVal, rank_card, bomb_member, straight_member,
+    ):
+        """GUA-034 END-M04: solo 下允许拆 trips 凑更大对。"""
+        for tag, action in pair_actionList:
+            if card_val[action[1]] > curVal and rank_card not in action[2]:
+                if action[2][0] in bomb_member:
+                    continue
+                if is_inStraight(action, straight_member):
+                    continue
+                self._dbg(f"GUA-034 END-M04 beat pair -> {tag}")
+                return tag
+        return -1
+
     def _collect_bomb_action_list(self, actionList):
         bomb_actionList = []
         tag = 0
@@ -711,6 +764,13 @@ class M3DecisionEngine:
                 else:
                     return 0
         else:
+            if self._is_solo_sprint(numofplayers, myPos):
+                idx = self._gua034_solo_beat_single(
+                    single_actionList, card_val, curVal, rank_card, bomb_member,
+                )
+                if idx != -1:
+                    return idx
+                return 0
             index = normal(single_actionList, single_member, rank_card)
             if index != -1:
                 return index
@@ -866,6 +926,13 @@ class M3DecisionEngine:
                 else:
                     return 0
         else:
+            if self._is_solo_sprint(numofplayers, myPos):
+                idx = self._gua034_solo_beat_pair(
+                    pair_actionList, card_val, curVal, rank_card, bomb_member, straight_member,
+                )
+                if idx != -1:
+                    return idx
+                return 0
             index = normal(pair_actionList, pair_member, rank_card)
             if index != -1:
                 return index
@@ -1561,11 +1628,21 @@ class M3DecisionEngine:
                 self._dbg(f"GUA-031 P04 feed pair/tw2 -> {idx}")
                 return idx
 
+        solo = self._is_solo_sprint(numofplayers, mypos)
+        solo_wind = solo and numofmy <= 12 and self._gua034_is_wind_active(data)
+
         for i in actionList:
             if len(handcards) == len(i[2]):
                 return actionList.index(i)
 
-        if len(single_for_play) and card_val[single_for_play[0][0]] < cur[0]:
+        if solo_wind:
+            idx = self._gua034_solo_active_pick(
+                actionList, threetwo_actionlist, trips_actionlist, pair_actionlist,
+            )
+            if idx > 0:
+                return idx
+
+        if not solo_wind and len(single_for_play) and card_val[single_for_play[0][0]] < cur[0]:
             if numofnext == 1:
                 pass
             else:
@@ -1581,17 +1658,21 @@ class M3DecisionEngine:
         if len(straight_actionlist) and card_val2[straight_actionlist[0][0]] < cur[4]:
             return getindex("Straight", straight_actionlist, actionList)
 
-        if len(threetwo_actionlist):
+        if len(threetwo_actionlist) and not solo_wind:
             index = rankthree(single_actionlist, pair_actionlist, trips_actionlist, threetwo_actionlist, actionList,
                               numofnext, rank, cur[0], cur[3], cur[4], cur[5], cur[-1])
             if index is None:
                 pass
             else:
                 return index
-        if len(trips_actionlist):
+        if len(trips_actionlist) and not solo_wind:
             return rankone(single_actionlist, trips_actionlist, actionList, numofnext, rank)
-        if len(pair_actionlist):
+        if len(pair_actionlist) and not solo_wind:
             return ranktwo(handcards, single_actionlist, pair_actionlist, trips_actionlist, actionList, numofnext, rank, max_val)
+        if solo_wind and len(single_actionlist):
+            idx = getindex("Single", single_actionlist, actionList)
+            if idx > 0:
+                return idx
         if len(single_actionlist):
             if numofnext == 1 and len(trips_actionlist) == 0 and len(pair_actionlist) == 0 and rank_card in handcards:
                 for i in range(len(actionList)):

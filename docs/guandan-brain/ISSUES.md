@@ -63,7 +63,8 @@
 | GUA-031 | closed | P1 | policy | m3 | M3 传牌 `numof*` guard + 队友让道扩全牌型 | 被动仅 `_Single/_Pair` 等部分牌型做队友 PASS；`_active` 无 `numoffri==1` 送小单 / `numoffri==5` 喂牌；`numofnext==1` 防小单不完整 | `m3_decision_engine`（`_active`、`_passive`、各 `_Xxx` handler） | **`closed_in` 2026-05-31**：P-F02 扩 `_Trips/_ThreePair/_TwoTrips/_Straight`；PASS-P02/P03/P04；`test_m3_gua031.py` **7 passed**；GUA-026/027/028/029 回归 **31 passed** |
 | GUA-032 | closed | P1 | observation, policy | m3 | M3 **记牌+算牌**确定性规则 + `remain_cards_classbynum` 同步 | 文档 §14–§15、§18–§20、**§二十二**（孤张定律 CG-T06、口诀 13）；5/10 法则、顺/夯点位预判（**CALC-M03/M04**）；`remain_cards_classbynum` stale | `m3_decision_engine._update_play_state`、`m3_utils`；[`04_calculation_skills.md`](../knowledge/skills/04_common_skills/04_calculation_skills.md)、[`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md)、[`08_straight_skills.md`](../knowledge/skills/04_common_skills/08_straight_skills.md)、[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) | **`closed_in` 2026-05-31**：`sync_remain_cards_classbynum` + `_update_play_state` 同步；MEM-M02；CALC-M01（被动炸过滤）+ CALC-M03（5/10 顺子降权）；`test_m3_gua032.py` **6 passed**；GUA-029/031/033 回归 **34 passed**；**CALC-M02** 待 **P-H01** |
 | GUA-033 | closed | P1 | observation, rules | m3, infra | M3 **批末 `victoryNum` / `gameResult` 解析错误**（批级回填污染） | **客户端已修**；**平台根因**：本包 v1006 exe **argv 无效**，单次会话 **固定 3 局** → WebSocket `settingTimes=3`、`victoryNum` 常 `[0]+[1]=3`；须 **`batch_games` 校验 + fallback** | `yf1_m3.py`、`yf2_m3.py`、`game_result_utils.py`；真源 [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md) **§2** | **`closed_in` 2026-05-31**；`test_m3_gua033.py` **11 passed**；exe 探测 `scripts/tools/probe_exe_argv_ws.py` |
-| GUA-034 | open | P1 | policy | m3 | M3 **残局：队友走光后 rank 小牌首出 + 被动不拆结构压牌** | round **38** yf2：`20260601112040940931 …-[38]-[4].json` **102–107 步** — 接风 `_active` 拆对 **3** 出单；对手 **6/对6** 可压（9/10/拆三张）却 **PASS**；107 对手三带二 **5 张走完**。**根因**：`_active` 仍走 `rankone/ranktwo` 清小点；`_Single/_Pair.normal()` 只认 `single_member`/`pair_member`，不为压牌拆 trips；缺「队友 rest=0 → 1v2 拦头游」模式。**related** **GUA-014**（泛化拆牌）、**GUA-026**（禁拆 trips 边界）、**GUA-029 R3**（`_Pair` 或未触发 ≤7 阻断） | `m3_decision_engine`（`_active`、`rankone/ranktwo/rankthree`、`_Single`、`_Pair`）；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2 | 样例：`replay_word.md` 成对 yf2；本副 **curRank=7**（非文件名 `[4]`）。**不**整页重写 rankone 系列；按 guard 切片 |
+| GUA-034 | closed | P1 | policy | m3 | M3 **残局：队友走光后 rank 小牌首出 + 被动不拆结构压牌** | round **38** yf2：`20260601112040940931 …-[38]-[4].json` **102–107 步** — 接风 `_active` 拆对 **3** 出单；对手 **6/对6** 可压（9/10/拆三张）却 **PASS**；107 对手三带二 **5 张走完**。**根因**：`_active` 仍走 `rankone/ranktwo` 清小点；`_Single/_Pair.normal()` 只认 `single_member`/`pair_member`，不为压牌拆 trips；缺「队友 rest=0 → 1v2 拦头游」模式。**related** **GUA-014**（泛化拆牌）、**GUA-026**（禁拆 trips 边界）、**GUA-029 R3**（`_Pair` 或未触发 ≤7 阻断） | `m3_decision_engine`（`_active`、`rankone/ranktwo/rankthree`、`_Single`、`_Pair`）；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2 | **`closed_in` 2026-06-01**：方向 A — `_is_solo_sprint` + END-M02–M04；`test_m3_gua034.py` **6 passed**；GUA-026/029/031 回归 **24 passed** |
+| GUA-035 | open | P1 | policy | m3 | M3 **END-M02+：solo 接风按对手剩张过滤牌型** | GUA-034 END-M02 仅固定优先三带二/三张/对子；缺：**任一对手剩 1 张 → 不宜出小单**；剩 **2 张 → 不宜出对**；剩 **5 张 → 不宜出三带二**（「不宜」非绝对禁，无路可走仍出）。**related** **GUA-034** END-M02、**GUA-031** PASS-P03（下家剩 1 禁小单） | `m3_decision_engine._gua034_solo_active_pick`、`_active` solo_wind 分支 | **下轮 M3 priority**；见 §GUA-035 完成定义 |
 
 ---
 
@@ -79,7 +80,8 @@
 | GUA-032 | [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §14–§15、§18–§22（CALC-M03/M04/M05、**CG-T06**）、[`04_calculation_skills.md`](../knowledge/skills/04_common_skills/04_calculation_skills.md)、[`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md)、[`05_memory_skills.md`](../knowledge/skills/04_common_skills/05_memory_skills.md)、[`08_straight_skills.md`](../knowledge/skills/04_common_skills/08_straight_skills.md)、[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md)、[`card_tracking.py`](../../src/game_logic/card_tracking.py) |
 | GUA-033 | [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md) **§2 exe argv 实测**、§4.1–§4.3、[`guandan-platform-v1006.mdc`](../../.cursor/rules/guandan-platform-v1006.mdc) §局与副；**related** **GUA-008**（M1 `gameResult` 链路）、[`GAME_RECORD_SAVE_FIX.md`](../fixes/GAME_RECORD_SAVE_FIX.md)；探测 `scripts/tools/probe_exe_argv_ws.py`；矩阵 [`gua033-batch-matrix-2026-05-31.md`](../analysis/gua033-batch-matrix-2026-05-31.md) |
 | GUA-026 | [`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md) §二十二（**组牌总纲**）；[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) §二十（**三带二主真源**）；[`11_trips_skills.md`](../knowledge/skills/04_common_skills/11_trips_skills.md) §二十一（拆 trips 边界）；[`06_red_heart_usage.md`](../knowledge/skills/04_common_skills/06_red_heart_usage.md) §十六（逢人配子集） |
-| GUA-034 | [`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2（残局两手组合）；[`01_bomb_techniques.md`](../knowledge/skills/02_main_attack/01_bomb_techniques.md) §五 残局用炸；[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) §5 残局；**related** **GUA-014**、**GUA-026**、**GUA-029 R3**；样例 `replay_word.md` / `game_records/20260601112040940931 [yf2_m3]-…-[38]-[4].json` |
+| GUA-034 | [`GUA-034-方案评审.md`](GUA-034-方案评审.md)（**方向 A 已实施**）；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2；[`01_bomb_techniques.md`](../knowledge/skills/02_main_attack/01_bomb_techniques.md) §五；[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) §5 残局；**related** **GUA-014**、**GUA-026**、**GUA-029 R3**、**GUA-035**；样例 `replay_word.md` / `game_records/20260601112040940931 [yf2_m3]-…-[38]-[4].json` |
+| GUA-035 | **GUA-034** END-M02+；[`GUA-034-方案评审.md`](GUA-034-方案评审.md) 方向 E 前置；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2（两手枚举 → V5+）；[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) P-C01 / CALC-M05 |
 
 ---
 
@@ -194,6 +196,31 @@
 **关单条件**：END-M01–M04 + pytest 通过；**不要求**队胜率达标（队胜率以 M3 批跑观测为准）。
 
 **不在范围**：完整 lalala「两手牌组合枚举」（见 M3_DIAGNOSIS BUG2 全量移植 → **V5+ / 后续迭代**）。
+
+## GUA-035 完成定义（END-M02+ · solo 接风对手剩张过滤）
+
+> 登记 **2026-06-01**：GUA-034 END-M02 的 M3 续切片；**不**含两手规划（→ V5+）与「可回收单张」完整评分（→ V5+）。
+
+| 项 | ID | 完成标准 |
+|----|-----|----------|
+| 对手扫描 | **END-M02+-01** | solo_sprint + 接风 `_active`：取两家对手 `(myPos±1)%4` 的 `numofplayers`，非队友 `(myPos+2)%4` |
+| 剩 1 张 | **END-M02+-02** | 任一对手 `rest==1` → `_gua034_solo_active_pick` **跳过 Single**（及 rank 拆单路径）；仍允许三带二/三张/对子等整手 |
+| 剩 2 张 | **END-M02+-03** | 任一对手 `rest==2` → **跳过 Pair**；仍允许三带二/三张等 |
+| 剩 5 张 | **END-M02+-04** | 任一对手 `rest==5` → **优先跳过 ThreeWithTwo**；若过滤后无合法整手，**fallback** 仍出三带二 |
+| 测试 | — | `tests/test_m3_gua035.py`（≥4 case：1/2/5 张过滤 + fallback）；GUA-034/026/029/031 回归 **不回归** |
+| 验收 | — | 构造用例 + round 38 类 solo 接风 replay 片段；不要求队胜率关单 |
+
+**关单条件**：END-M02+-01–04 + pytest 通过。
+
+## V5+ priority（GUA-034 后续 · 不在 M3 本轮）
+
+> 登记 **2026-06-01**；与 [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) P1+→V5+ 对齐。
+
+| 优先级 | 主题 | 来源 | 说明 |
+|--------|------|------|------|
+| **V5+-01** | lalala **两手走完枚举 + 首出选优** | GUA-034 讨论 ②、[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2、方向 E/C | `numofmy<=12` 枚举 actionList 两手组合；选「第一手难被压、第二手清牌」（如 `99933`→`10101044`）。lalala 参考实现有 **sort 比较 bug + 候选未消费**（见 `reference/lalala/action.py:1117–1127`），移植须重写而非直抄 |
+| **V5+-02** | solo 接风 **可回收单张** 优先级 | GUA-034 讨论 ③ | 混型手牌：级牌/王/大单可先出试探；与 END-M02+-02（对手剩 1 禁小单）联合定优先级表 |
+| **V5+-03** | 方向 E 轻量模板 | [`GUA-034-方案评审.md`](GUA-034-方案评审.md) | `solo_sprint && numofmy<=8`：2–3 种固定两手模板（三带二+剩余等），介于 M3 guard 与 BUG2 全量之间 |
 
 ## 来自「比赛汇总」的说明（非缺陷）
 

@@ -124,6 +124,8 @@ if len(handcards) <= 12:
 
 这段代码在 ≤12 张时枚举"两手出完"的配对组合, 是掼蛋残局规划的核心。M3 完全没有移植此逻辑, 导致残局只会逐张出小牌。
 
+**勘误（2026-06-01）**：对照 `reference/lalala/action.py:1117–1127`——① `combine_list.sort(...) == handcards.sort(...)` 因 `sort()` 返回 `None`，比较**恒为假**，候选几乎不会入表；② `twohand_candidatelist` **构建后未被读取**，属 dead code。故 lalala 参考实现中该路径**可能从未生效**；M3 若移植须**重写**（正确 multiset 比较 + 消费候选 + 首出选优），而非直抄 ~15 行。
+
 ---
 
 ## ~~🐛 BUG 3（策略扭曲）~~ 已更正：此处非 bug
