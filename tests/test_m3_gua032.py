@@ -19,7 +19,7 @@ def _card_val(rank="2"):
 
 
 def _fill_hand(base, n=27):
-    filler = ["H4", "D4", "S6", "C6", "HT", "DT"] * 5
+    filler = ["H4", "D4", "S4", "C4"] * 8
     hand = list(base)
     for c in filler:
         if len(hand) >= n:
@@ -86,7 +86,7 @@ def test_calc_m01_allows_bomb_when_rank_outside_gt3(engine):
 
 @pytest.mark.unit
 def test_calc_m03_skips_straight_with_t_when_t_exhausted(engine):
-    """CALC-M03：点十外剩0 → 降权含 T 的大顺。"""
+    """CALC-M03：点十外剩0 → _active 首发仍降权；被动夺权见 GUA-036 CTRL-P02。"""
     hand = _fill_hand(["S6", "H7", "C8", "D9", "ST"])
     rank_card = "H2"
     card_val = _card_val()
@@ -100,30 +100,35 @@ def test_calc_m03_skips_straight_with_t_when_t_exhausted(engine):
     idx = engine._Straight(
         action_list, beat, rank_card, hand, numofplayers, card_val, 0, 0, 0, 1,
     )
-    assert idx == 0
+    assert idx == 1
 
 
 @pytest.mark.unit
 def test_calc_m03_skips_straight_with_5_when_5_exhausted(engine):
-    """CALC-M03：点五外剩0 → 降权含 5 的小顺。"""
+    """CALC-M03：点五外剩0 → 被动压顺仍可用（GUA-036 豁免）。"""
     hand = _fill_hand(["S5", "H6", "C7", "D8", "S9"])
     rank_card = "H2"
     card_val = _card_val()
     engine.remain_cards_classbynum[4] = 0
     action_list = [
         ["PASS", "PASS", "PASS"],
-        ["Straight", "5", ["S5", "H6", "C7", "D8", "S9"]],
+        ["Straight", "9", ["S5", "H6", "C7", "D8", "S9"]],
     ]
-    beat = ["Straight", "4", ["S4", "H5", "C6", "D7", "S8"]]
+    beat = ["Straight", "8", ["S4", "H5", "C6", "D7", "S8"]]
     numofplayers = [18, 10, 16, 9]
     idx = engine._Straight(
         action_list, beat, rank_card, hand, numofplayers, card_val, 0, 0, 0, 1,
     )
-    assert idx == 0
+    assert idx == 1
 
 
 @pytest.mark.unit
-def test_mem_m02_tracks_bomb_play(engine):
+def test_calc_m03_degraded_flag_active_only(engine):
+    """CALC-M03：降权标记仍对 _active 首发有效（passive_seize=False）。"""
+    engine.remain_cards_classbynum[9] = 0
+    cards = ["S6", "H7", "C8", "D9", "ST"]
+    assert engine._gua032_straight_degraded(cards) is True
+    assert engine._gua032_straight_degraded(cards, passive_seize=True) is False
     """MEM-M02：记录各家是否出过炸及最大炸弹点数。"""
     engine._update_play_state({
         "curPos": 2,

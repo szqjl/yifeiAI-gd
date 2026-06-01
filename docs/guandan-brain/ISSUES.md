@@ -22,6 +22,17 @@
 | **组牌 / 牌力 / 混合决策** | **V5+**（`src/v/`、V 挂接 `IDecisionProvider`） | 不在 M3 引擎内堆整篇策略；M3 保持 lalala 式 guard + 契约底座 |
 | **M1 共用层** | `src/decision/`（frozen） | 历史 PHASE2 与 V shim；**不接新开策略迭代** |
 
+### 复盘发现 → 实现 → 验收（定音 · 2026-06-01）
+
+掼蛋 **重配合、高策略、牌型多样**；108 张均分 4 家时，**两次发牌完全相同**的概率约 **\(10^{-58}\)** 量级（\((27!)^4/108!\)），**具体 replay 步数几乎不会复现**。因此：
+
+| 层级 | 该做什么 | 验收 |
+|------|----------|------|
+| **M3** | **原则型 guard**（夺权压顺、接风不拆结构、队友在时跟对/别乱单 等） | **`pytest` 构造态** + 回归；replay 仅作**发现缺陷的样例**，**不得**以「再跑某批某副牌」为关单 pass 标准 |
+| **V5+** | **222333+顺子+炸弹** 等 **整手结构** 与 **多步配合** / 搜索 | 组牌枚举 + 牌力；因局面几乎不重复，才需要 V 系列 |
+
+真源详表：[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §「复盘与验收理念」。
+
 **GUA-022**：**closed**（2026-05-31）；队胜率 KPI 自该日起迁 **M3**（见 [`ITERATIONS.md`](ITERATIONS.md)「M1 frozen 定音」行）。
 
 **批跑局数**：`--target-games` 须 **3 的倍数**（3 / 9 / 12）；见 [`EVAL.md`](EVAL.md)「批跑局数档位」。**勿新开 10 局**等非整批目标。
@@ -65,6 +76,7 @@
 | GUA-033 | closed | P1 | observation, rules | m3, infra | M3 **批末 `victoryNum` / `gameResult` 解析错误**（批级回填污染） | **客户端已修**；**平台根因**：本包 v1006 exe **argv 无效**，单次会话 **固定 3 局** → WebSocket `settingTimes=3`、`victoryNum` 常 `[0]+[1]=3`；须 **`batch_games` 校验 + fallback** | `yf1_m3.py`、`yf2_m3.py`、`game_result_utils.py`；真源 [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md) **§2** | **`closed_in` 2026-05-31**；`test_m3_gua033.py` **11 passed**；exe 探测 `scripts/tools/probe_exe_argv_ws.py` |
 | GUA-034 | closed | P1 | policy | m3 | M3 **残局：队友走光后 rank 小牌首出 + 被动不拆结构压牌** | round **38** yf2：`20260601112040940931 …-[38]-[4].json` **102–107 步** — 接风 `_active` 拆对 **3** 出单；对手 **6/对6** 可压（9/10/拆三张）却 **PASS**；107 对手三带二 **5 张走完**。**根因**：`_active` 仍走 `rankone/ranktwo` 清小点；`_Single/_Pair.normal()` 只认 `single_member`/`pair_member`，不为压牌拆 trips；缺「队友 rest=0 → 1v2 拦头游」模式。**related** **GUA-014**（泛化拆牌）、**GUA-026**（禁拆 trips 边界）、**GUA-029 R3**（`_Pair` 或未触发 ≤7 阻断） | `m3_decision_engine`（`_active`、`rankone/ranktwo/rankthree`、`_Single`、`_Pair`）；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2 | **`closed_in` 2026-06-01**：方向 A — `_is_solo_sprint` + END-M02–M04；`test_m3_gua034.py` **6 passed**；GUA-026/029/031 回归 **24 passed** |
 | GUA-035 | closed | P1 | policy | m3 | M3 **END-M02+：solo 接风按对手剩张过滤牌型** | GUA-034 END-M02 仅固定优先三带二/三张/对子；缺：**任一对手剩 1 张 → 不宜出小单**；剩 **2 张 → 不宜出对**；剩 **5 张 → 不宜出三带二**（「不宜」非绝对禁，无路可走仍出）。**related** **GUA-034** END-M02、**GUA-031** PASS-P03（下家剩 1 禁小单） | `m3_decision_engine._gua035_solo_wind_pick`、`_gua034_solo_active_pick` | **`closed_in` 2026-06-01**：END-M02+-01–04；`test_m3_gua035.py` **6 passed**；GUA-034/026/029/031 回归 **30 passed** |
+| GUA-036 | closed | P1 | policy | m3 | M3 **控权 + 接风配合**（非 solo） | batch7 round38 复盘：**①** 接风拆 2 打单，未跟队友对子线；**②** 敌出杂顺可压却 PASS，让权后对手连走。**根因**非「缺顺子函数」，而是 guard 缺口 + `_Straight` 过窄。**related** **GUA-031**（喂牌/让道）、**GUA-032** CALC-M03（被动夺权豁免）、**GUA-034/035**（仅 solo） | `m3_decision_engine`：`_active` 接风、`_Straight` | **closed_in** 2026-06-01（GUA-036 实施）；样例 `replay_word.md` / batch7 round38 **不作关单标准** |
 
 ---
 
@@ -82,6 +94,7 @@
 | GUA-026 | [`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md) §二十二（**组牌总纲**）；[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) §二十（**三带二主真源**）；[`11_trips_skills.md`](../knowledge/skills/04_common_skills/11_trips_skills.md) §二十一（拆 trips 边界）；[`06_red_heart_usage.md`](../knowledge/skills/04_common_skills/06_red_heart_usage.md) §十六（逢人配子集） |
 | GUA-034 | [`GUA-034-方案评审.md`](GUA-034-方案评审.md)（**方向 A 已实施**）；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2；[`01_bomb_techniques.md`](../knowledge/skills/02_main_attack/01_bomb_techniques.md) §五；[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) §5 残局；**related** **GUA-014**、**GUA-026**、**GUA-029 R3**、**GUA-035**；样例 `replay_word.md` / `game_records/20260601112040940931 [yf2_m3]-…-[38]-[4].json` |
 | GUA-035 | **GUA-034** END-M02+；[`GUA-034-方案评审.md`](GUA-034-方案评审.md) 方向 E 前置；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2（两手枚举 → V5+）；[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) P-C01 / CALC-M05 |
+| GUA-036 | batch7 round38 复盘（[`ITERATIONS.md`](ITERATIONS.md)「batch7 replay」行）；[`08_straight_skills.md`](../knowledge/skills/04_common_skills/08_straight_skills.md) §控权；[`01_passing_skills.md`](../knowledge/skills/03_assist_attack/01_passing_skills.md)；**related** **GUA-031**、**GUA-032**、**GUA-034/035**（solo 边界）；[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §复盘与验收理念 |
 
 ---
 
@@ -212,7 +225,28 @@
 
 **关单条件**：END-M02+-01–04 + pytest 通过。
 
-## V5+ priority（GUA-034 后续 · 不在 M3 本轮）
+## GUA-036 完成定义（控权压顺 + 接风配合 · M3 guard）
+
+> 登记 **2026-06-01**：batch7 round38 复盘立项；**replay 为发现样例**，关单 **仅** pytest 构造态 + GUA-026/029/031/032/034/035 回归。**不**要求 batch7 再赢或逐步对齐某 replay。
+
+| 项 | ID | 条件（M3 可观测） | 动作 | 文档 / 原则 |
+|----|-----|-------------------|------|-------------|
+| 被动夺权 | **CTRL-P01** | 被动 `_Straight`；`greaterPos` 为 **对手**（GUA-031 队友让道已 PASS 除外） | `actionList` 中任一 `Straight` **能压则压**，取 **最小够用**；**不**前置要求 `combine_handcards["Straight"]` 与 `action[-1]` 严格对齐 | 掼蛋 **控出牌权**；[`08_straight_skills.md`](../knowledge/skills/04_common_skills/08_straight_skills.md) |
+| CALC 豁免 | **CTRL-P02** | 同上，被动压敌顺 | **GUA-032 CALC-M03**（5/10 降权）**不**阻止被动夺权（降权保留给 `_active` 首发顺） | STG-D01 与夺权冲突时 **夺权优先** |
+| 接风禁拆 | **WIND-P01** | 接风（`greaterPos==myPos`）且 **`numoffri>0`**（**非** solo_sprint） | 若出单会 **拆 trips/钢板/炸弹成员**，且 `actionList` 有 **不拆结构** 的对/钢板/三带二 → **禁**该单，改出结构牌 | P-F02 配合；**GUA-026** 拆牌边界 |
+| 跟队友线 | **TEAM-P01** | 接风 + **`numoffri>0`** + 本圈队友末手为 **Pair 或 Bomb** 且全场过到己 | 若存在 **不拆结构** 的 `Pair` → **优先于 Single** | PASS-P02 / 配合让道扩展 |
+| 测试 | — | `tests/test_m3_gua036.py` | ≥4 case：**CTRL-P01**（敌顺+actionList 可压）、**WIND-P01**（接风禁拆 2）、**TEAM-P01**（跟对）、**CTRL-P02** 或队友顺子仍 yield **不回归** | 构造 `actionList`/`handcards`/`numofplayers`，**不**绑具体 game_id |
+| 回归 | — | `pytest test_m3_gua036 + test_m3_gua031 + test_m3_gua032 + test_m3_gua034 + test_m3_gua035` | 全 pass | — |
+
+**关单条件**：CTRL-P01–P02 + WIND-P01 + TEAM-P01 + pytest 通过。
+
+**不在范围（→ V5+）**：
+
+- **整手组牌**：222333 + 9–K 顺 + 444 配炸 + 多步配合规划 → **V5+-01/02**、[`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md) §二十二
+- 重写 `combine_handcards` 多顺子槽 / 红配杂顺全局最优
+- 「再跑 batch7 round38 须赢局或逐步一致」作 pass 标准
+
+## V5+ priority（GUA-034 / GUA-036 后续 · 不在 M3 本轮）
 
 > 登记 **2026-06-01**；与 [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) P1+→V5+ 对齐。
 
@@ -221,6 +255,7 @@
 | **V5+-01** | lalala **两手走完枚举 + 首出选优** | GUA-034 讨论 ②、[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2、方向 E/C | `numofmy<=12` 枚举 actionList 两手组合；选「第一手难被压、第二手清牌」（如 `99933`→`10101044`）。lalala 参考实现有 **sort 比较 bug + 候选未消费**（见 `reference/lalala/action.py:1117–1127`），移植须重写而非直抄 |
 | **V5+-02** | solo 接风 **可回收单张** 优先级 | GUA-034 讨论 ③ | 混型手牌：级牌/王/大单可先出试探；与 END-M02+-02（对手剩 1 禁小单）联合定优先级表 |
 | **V5+-03** | 方向 E 轻量模板 | [`GUA-034-方案评审.md`](GUA-034-方案评审.md) | `solo_sprint && numofmy<=8`：2–3 种固定两手模板（三带二+剩余等），介于 M3 guard 与 BUG2 全量之间 |
+| **V5+-04** | **整手结构组牌**（钢板+顺子+炸弹+单张协同） | **GUA-036** 复盘、[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §复盘与验收理念 | 局面几乎不重复 → 需 `enumerate_groupings` / 搜索；**不**在 M3 扩 `combine_handcards` |
 
 ## 来自「比赛汇总」的说明（非缺陷）
 

@@ -7,7 +7,7 @@
 
 本目录在流程上即 **指挥系统**：负责 **规划、统筹、部署任务**（见 **[COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)**）；**不**替代本机离线对局与真实 `game_records` 生成。
 
-**当前指挥（本轮）**：**M3** = 主交付 + `IDecisionProvider` 底座；队胜率 KPI **只看 M3 批跑**（open 策略 tag=`m3`）——以 [`ITERATIONS.md`](ITERATIONS.md) **最后一行**为准。**P0 guard** → `m3_decision_engine`；组牌/牌力 → **V5+**。**M1 frozen**（`GUA-022` closed）。详见 [`ISSUES.md`](ISSUES.md)「引擎维护策略」。任务见 **[`TASKS.md`](TASKS.md)**；本机批跑见 **[`LOCAL_EVAL_CHECKLIST.md`](LOCAL_EVAL_CHECKLIST.md)**。
+**当前指挥（本轮）**：**M3** = 主交付 + `IDecisionProvider` 底座；队胜率 KPI **只看 M3 批跑**（open 策略 tag=`m3`）——以 [`ITERATIONS.md`](ITERATIONS.md) **最后一行**为准。**P0 guard** → `m3_decision_engine`；组牌/牌力 → **V5+**。**M1 frozen**（`GUA-022` closed）。**GUA-036 closed**（2026-06-01）；**下轮** CALC-M04/M05 或 M3 净盘 KPI 观测。详见 [`ISSUES.md`](ISSUES.md)「引擎维护策略」。任务见 **[`TASKS.md`](TASKS.md)**；本机批跑见 **[`LOCAL_EVAL_CHECKLIST.md`](LOCAL_EVAL_CHECKLIST.md)**。
 
 ## 四角色概览
 

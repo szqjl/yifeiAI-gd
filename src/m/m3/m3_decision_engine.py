@@ -181,6 +181,126 @@ class M3DecisionEngine:
         """接风首出：greaterPos==-1 或 curPos==-1。"""
         return data.get("greaterPos", -1) == -1 or data.get("curPos", -1) == -1
 
+    def _gua036_straight_breaks_bomb(self, straight_cards, bomb_member):
+        """GUA-036：压顺若占用炸弹成员 → 不拆炸。"""
+        return len(set(straight_cards) & set(bomb_member)) > 0
+
+    def _gua036_pick_min_straight_beat(self, actionList, curAction, card_val, bomb_member, rank_card):
+        """GUA-036 CTRL-P01/P02：actionList 最小够用顺子压敌（被动豁免 CALC-M03）。"""
+        curVal = card_val.get(curAction[1], 0)
+        best_idx = -1
+        best_val = 999
+        for i, action in enumerate(actionList):
+            if i == 0 or action[0] != "Straight":
+                continue
+            beat_val = card_val.get(action[1], 0)
+            if beat_val <= curVal:
+                continue
+            if self._gua032_straight_degraded(action[2], passive_seize=True):
+                continue
+            if self._gua036_straight_breaks_bomb(action[2], bomb_member):
+                continue
+            if beat_val < best_val:
+                best_val = beat_val
+                best_idx = i
+        return best_idx
+
+    def _gua036_teammate_trick_anchor(self, data, mypos):
+        """本圈队友末手 Pair/Bomb（接风配合）。"""
+        mate = (mypos + 2) % 4
+        ga = self._ensure_list(data.get("greaterAction"))
+        gp = data.get("greaterPos", -1)
+        if gp == mate and ga and ga[0] in ("Pair", "Bomb", "StraightFlush"):
+            return ga
+        last = getattr(self, "_gua036_teammate_last", None)
+        if last and last[0] in ("Pair", "Bomb", "StraightFlush"):
+            return last
+        return None
+
+    def _gua036_single_splits_structure(self, card, sorted_cards, bomb_member):
+        """GUA-036 WIND-P01：出单是否拆 trips/对/钢板/炸弹。"""
+        if card in bomb_member:
+            return True
+        for trip in sorted_cards.get("Trips", []):
+            if card in trip:
+                return True
+        for pair in sorted_cards.get("Pair", []):
+            if card in pair:
+                return True
+        for steel in sorted_cards.get("TwoTrips", []):
+            if card in steel:
+                return True
+        for tp in sorted_cards.get("ThreePair", []):
+            if card in tp:
+                return True
+        return False
+
+    def _gua036_is_team_wind(self, data, numofplayers, mypos):
+        """接风且队友仍在（非 solo）。"""
+        if self._is_solo_sprint(numofplayers, mypos):
+            return False
+        if numofplayers[(mypos + 2) % 4] == 0:
+            return False
+        return (
+            self._gua034_is_wind_active(data)
+            or data.get("greaterPos") == mypos
+        )
+
+    def _gua036_team_wind_pick(
+        self, data, actionList, rank_card, card_val, sorted_cards,
+        single_actionlist, pair_actionlist, trips_actionlist, threetwo_actionlist,
+        threepair_actionlist, twotrips_actionlist, mypos,
+    ):
+        """GUA-036 TEAM-P01 + WIND-P01：接风跟队友线 / 禁拆结构出单。"""
+        bomb_member = []
+        for bomb in sorted_cards.get("Bomb", []):
+            bomb_member += bomb
+
+        anchor = self._gua036_teammate_trick_anchor(data, mypos)
+        if anchor and anchor[0] in ("Pair", "Bomb", "StraightFlush") and pair_actionlist:
+            idx = getindex("Pair", pair_actionlist, actionList)
+            if idx > 0:
+                self._dbg(f"GUA-036 TEAM-P01 pair over single -> {idx}")
+                return idx
+
+        if threetwo_actionlist:
+            idx = getindex("ThreeWithTwo", threetwo_actionlist, actionList)
+            if idx > 0:
+                self._dbg(f"GUA-036 WIND-P01 threetwo -> {idx}")
+                return idx
+        if twotrips_actionlist:
+            idx = getindex("TwoTrips", twotrips_actionlist, actionList)
+            if idx > 0:
+                self._dbg(f"GUA-036 WIND-P01 twotrips -> {idx}")
+                return idx
+        if threepair_actionlist:
+            idx = getindex("ThreePair", threepair_actionlist, actionList)
+            if idx > 0:
+                self._dbg(f"GUA-036 WIND-P01 threepair -> {idx}")
+                return idx
+        if trips_actionlist:
+            idx = getindex("Trips", trips_actionlist, actionList)
+            if idx > 0:
+                self._dbg(f"GUA-036 WIND-P01 trips -> {idx}")
+                return idx
+        if pair_actionlist:
+            idx = getindex("Pair", pair_actionlist, actionList)
+            if idx > 0:
+                self._dbg(f"GUA-036 WIND-P01 pair -> {idx}")
+                return idx
+
+        safe_singles = []
+        for s in single_actionlist:
+            card = s[1][0] if isinstance(s[1], list) else s[1]
+            if not self._gua036_single_splits_structure(card, sorted_cards, bomb_member):
+                safe_singles.append(s)
+        if safe_singles:
+            idx = getindex("Single", safe_singles, actionList)
+            if idx > 0:
+                self._dbg(f"GUA-036 WIND-P01 safe single -> {idx}")
+                return idx
+        return -1
+
     def _gua035_solo_opponent_rests(self, numofplayers, myPos):
         """GUA-035 END-M02+-01: solo 下两家对手剩张（上家、下家）。"""
         return [numofplayers[(myPos + 1) % 4], numofplayers[(myPos + 3) % 4]]
@@ -331,6 +451,7 @@ class M3DecisionEngine:
         self._player_bomb_mem = {
             str(i): {"has_bomb": False, "max_bomb_rank": 0} for i in range(4)
         }
+        self._gua036_teammate_last = None
 
     def _sync_remain_cards_classbynum(self):
         self.remain_cards_classbynum = sync_remain_cards_classbynum(self.remain_cards)
@@ -361,8 +482,10 @@ class M3DecisionEngine:
             filtered.append((tag, action))
         return filtered
 
-    def _gua032_straight_degraded(self, cards):
-        """CALC-M03: 5/10 法则 — 关键张出尽则降权对应顺子。"""
+    def _gua032_straight_degraded(self, cards, *, passive_seize=False):
+        """CALC-M03: 5/10 法则 — 关键张出尽则降权对应顺子（被动夺权豁免见 GUA-036）。"""
+        if passive_seize:
+            return False
         ranks = {str(c)[-1] for c in cards if len(str(c)) >= 2}
         if "T" in ranks and self.remain_cards_classbynum[9] == 0:
             return True
@@ -430,6 +553,13 @@ class M3DecisionEngine:
 
         self._sync_remain_cards_classbynum()
         self._refresh_bomb_memory(curPos, curAction)
+        teammate = (self.player_id + 2) % 4
+        if (
+            curPos == teammate
+            and curAction
+            and curAction[0] in ("Pair", "Bomb", "StraightFlush")
+        ):
+            self._gua036_teammate_last = list(curAction)
 
     def _sync_remain_from_public_info(self, data):
         """act 时用 publicInfo[].rest 对齐剩牌数（v1006 平台真源）。"""
@@ -1378,94 +1508,32 @@ class M3DecisionEngine:
         return 0
 
     def _Straight(self, actionList, curAction, rank_card, handcards, numofplayers, card_val, pass_num, my_pass_num, myPos, greaterPos):
-        numofnext = numofplayers[(myPos + 1) % 4]
-        numofpre = numofplayers[(myPos - 1) % 4]
         numofmy = numofplayers[myPos]
         if self._gua031_passive_teammate_yield(myPos, greaterPos, numofmy):
             self._dbg("GUA-031 P-F02 _Straight teammate yield -> 0")
             return 0
-        if numofnext == 0:
-            numofnext = numofplayers[(myPos - 1) % 4]
 
         sorted_cards, bomb_info = combine_handcards(handcards, rank_card[-1], card_val)
-
-        card_origin = CARD_ORIGIN.copy()
-        card_val['A'] = 1
-        card_val[rank_card[-1]] = card_origin[rank_card[-1]]
-
-        curVal = card_val[curAction[1]]
-
         bomb_member = []
-        pair_member = []
-        trip_member = []
-        single_member = sorted_cards["Single"]
-        straight_member = []
-        if len(sorted_cards["Straight"]) != 0:
-            straight_member += sorted_cards["Straight"][0]
-        if len(sorted_cards["StraightFlush"]) != 0:
-            straight_member += sorted_cards["StraightFlush"][0]
-
-        for pair in sorted_cards["Pair"]:
-            pair_member += pair
-        for trip in sorted_cards["Trips"]:
-            trip_member += trip
         for bomb in sorted_cards["Bomb"]:
             bomb_member += bomb
 
-        straight_actionList = []
-        bomb_actionList = []
-        tag = 0
-        for action in actionList[1:]:
-            tag += 1
-            if action[0] == 'Straight':
-                straight_actionList.append((tag, action))
-            else:
-                bomb_actionList.append((tag, action))
+        cmp_val = CARD_VALUE_S2V.copy()
+        cmp_val[rank_card[-1]] = 15
 
-        if len(sorted_cards["Straight"]) > 0:
-            curStraight = sorted_cards["Straight"][0][0][-1]
-            for action in straight_actionList:
-                Index = action[0]
-                action = action[1]
-                if self._gua032_straight_degraded(action[2]):
-                    self._dbg("GUA-032 CALC-M03 skip straight (5/10 depleted)")
-                    continue
-                if curStraight == action[-1] and rank_card not in action[2]:
-                    if (myPos + 2) % 4 == greaterPos:
-                        if curVal <= 7 or card_val[curStraight] - curVal <= 2:
-                            return Index
-                    else:
-                        return Index
-        elif (myPos + 2) != greaterPos:
-            for action in straight_actionList:
-                Index = action[0]
-                action = action[1]
-                if self._gua032_straight_degraded(action[2]):
-                    self._dbg("GUA-032 CALC-M03 skip straight (5/10 depleted)")
-                    continue
-                if rank_card in action[2] and len(trip_member) == 0:
-                    if len(set(action[2]).intersection(set(bomb_member))) != 0:
-                        continue
-                    if is_inStraight(action, straight_member):
-                        continue
-                    new_handcards = []
-                    for card in handcards:
-                        if card not in action[2]:
-                            new_handcards.append(card)
-
-                    new_card_val = copy.deepcopy(card_val)
-                    new_card_val['A'] = 14
-                    new_card_val[rank_card[-1]] = 15
-                    originSinglenum = len(single_member)
-                    new_sorted_cards, _ = combine_handcards(new_handcards, rank_card, new_card_val)
-                    curSinglenum = len(new_sorted_cards["Single"])
-                    if curSinglenum <= originSinglenum:
-                        return Index
-
-            if (numofnext <= 15 or curVal >= 9) or numofnext <= 10 or pass_num >= 5 or my_pass_num >= 3 or numofpre <= 5:
-                index = choose_bomb(bomb_actionList, handcards, sorted_cards, bomb_info, rank_card, card_val)
-                if index != -1:
-                    return index
+        if not self._is_teammate_greater(myPos, greaterPos):
+            idx = self._gua036_pick_min_straight_beat(
+                actionList, curAction, cmp_val, bomb_member, rank_card,
+            )
+            if idx > 0:
+                self._dbg(f"GUA-036 CTRL-P01 straight seize -> {idx}")
+                return idx
+            bomb_idx = self._gua029_try_bomb(
+                actionList, handcards, rank_card, cmp_val, myPos, greaterPos, numofplayers,
+            )
+            if bomb_idx > 0:
+                self._dbg(f"GUA-036 bomb over break-bomb straight -> {bomb_idx}")
+                return bomb_idx
 
         return 0
 
@@ -1671,6 +1739,15 @@ class M3DecisionEngine:
                 if idx > 0:
                     self._dbg(f"GUA-035 solo wind single -> {idx}")
                     return idx
+
+        if self._gua036_is_team_wind(data, numofplayers, mypos):
+            idx = self._gua036_team_wind_pick(
+                data, actionList, rank_card, card_val, sorted_cards,
+                single_actionlist, pair_actionlist, trips_actionlist, threetwo_actionlist,
+                threepair_actionlist, twotrips_actionlist, mypos,
+            )
+            if idx > 0:
+                return idx
 
         if not solo_wind and len(single_for_play) and card_val[single_for_play[0][0]] < cur[0]:
             if numofnext == 1:
