@@ -10,8 +10,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "src"))
+sys.path.insert(0, str(REPO / "scripts" / "tools"))
 
 from communication.game_recorder import GameRecorder  # noqa: E402
+from yf_replay import resolve_episode_levels  # noqa: E402
 
 RECORD_RE = re.compile(
     r"^(\d+) \[([^\]]+)\]-\[([^\]]+)\]-\[(\d+)\]-\[([^\]]*)\]\.json$"
@@ -29,23 +31,10 @@ def normalize_rank(rank_str):
 
 
 def resolve_cur_rank(data, filename):
-    gi = data.get("game_info") or {}
-    cur_rank = gi.get("curRank")
-    if not cur_rank:
-        for d in data.get("my_decisions") or []:
-            cur_rank = (d.get("context") or {}).get("curRank")
-            if cur_rank:
-                break
-    if not cur_rank:
-        for a in data.get("actions") or []:
-            cur_rank = (a.get("context") or {}).get("curRank")
-            if cur_rank:
-                break
+    levels = resolve_episode_levels(data, filename)
     m = RECORD_RE.match(filename)
     fn_level = m.group(5) if m else ""
-    if not cur_rank or str(cur_rank).lower() == "unknown":
-        cur_rank = fn_level or "2"
-    return str(cur_rank), fn_level
+    return levels["curRank"], fn_level
 
 
 def hand_column_rank_order(cur_rank):

@@ -9,8 +9,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "src"))
+sys.path.insert(0, str(REPO / "scripts" / "tools"))
 
 from communication.game_recorder import GameRecorder  # noqa: E402
+from yf_replay import resolve_episode_levels  # noqa: E402
 
 RECORD_RE = re.compile(
     r"^(\d+) \[([^\]]+)\]-\[([^\]]+)\]-\[(\d+)\]-\[([^\]]*)\]\.json$"
@@ -57,22 +59,8 @@ def beats_single(cur, prev, level):
 
 
 def resolve_cur_rank(data, filename):
-    gi = data.get("game_info") or {}
-    cur = gi.get("curRank")
-    if not cur:
-        for d in data.get("my_decisions") or []:
-            cur = (d.get("context") or {}).get("curRank")
-            if cur:
-                break
-    if not cur:
-        for a in data.get("actions") or []:
-            cur = (a.get("context") or {}).get("curRank")
-            if cur:
-                break
-    m = RECORD_RE.match(filename)
-    if (not cur or str(cur).lower() == "unknown") and m and m.group(5):
-        cur = m.group(5)
-    return norm_level(cur or "2")
+    levels = resolve_episode_levels(data, filename)
+    return norm_level(levels["curRank"])
 
 
 def audit_file(path: Path):

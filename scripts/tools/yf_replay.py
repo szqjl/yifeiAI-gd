@@ -105,6 +105,82 @@ def apply_tribute_back_to_hand(hand, my_decisions, player_id):
                         result.remove(card)
     return result
 
+
+def _context_has_rank_fields(ctx):
+    if not ctx:
+        return False
+    return bool(ctx.get("curRank") or ctx.get("selfRank") or ctx.get("oppoRank"))
+
+
+def resolve_episode_levels(data, filename=None):
+    """本副 selfRank / oppoRank / curRank，优先级对齐 guandan-platform-v1006.mdc §curRank 真值。
+
+    1. my_decisions · stage=play（优先 source=act）
+    2. my_decisions · tribute/back（优先 source=act）
+    3. result.curRank（episodeOver 落盘）
+    4. actions[].context（notify 缓存，可靠性低）
+    5. game_info（进贡前快照，常滞后）
+    6. 文件名 [level]（仅 curRank 兜底索引）
+    """
+    play_act = None
+    play_any = None
+    tb_act = None
+    tb_any = None
+
+    for d in data.get("my_decisions") or []:
+        ctx = d.get("context") or {}
+        if not _context_has_rank_fields(ctx):
+            continue
+        stage = str(ctx.get("stage") or "").lower()
+        source = str(ctx.get("source") or "act").lower()
+        if stage == "play":
+            if source == "act" and play_act is None:
+                play_act = ctx
+            elif play_any is None:
+                play_any = ctx
+        elif stage in ("tribute", "back"):
+            if source == "act" and tb_act is None:
+                tb_act = ctx
+            elif tb_any is None:
+                tb_any = ctx
+
+    ctx = play_act or play_any or tb_act or tb_any
+
+    if not ctx:
+        result = data.get("result") or {}
+        if result.get("curRank"):
+            ctx = {"curRank": result.get("curRank")}
+
+    if not ctx:
+        for action in data.get("actions") or []:
+            act_ctx = action.get("context") or {}
+            if _context_has_rank_fields(act_ctx):
+                ctx = act_ctx
+                break
+
+    if not ctx:
+        gi = data.get("game_info") or {}
+        if _context_has_rank_fields(gi):
+            ctx = gi
+
+    levels = {
+        "curRank": str((ctx or {}).get("curRank") or ""),
+        "selfRank": str((ctx or {}).get("selfRank") or ""),
+        "oppoRank": str((ctx or {}).get("oppoRank") or ""),
+    }
+
+    if (not levels["curRank"] or levels["curRank"].lower() == "unknown") and filename:
+        match = RECORD_NAME_RE.match(str(filename))
+        if match and match.group(5):
+            levels["curRank"] = str(match.group(5))
+
+    for key, default in (("curRank", "2"), ("selfRank", "2"), ("oppoRank", "2")):
+        if not levels[key] or levels[key].lower() == "unknown":
+            levels[key] = default
+
+    return levels
+
+
 class YiFeiReplayGUI:
     """YiFei AI 掼蛋回放系统 - 整合版"""
     
@@ -526,19 +602,6 @@ class YiFeiReplayGUI:
             labels[p] = f"玩家{p} ({opp_name})"
         return labels
 
-    def _play_context_levels(self):
-        """本副 play 阶段 act 下发的三字段（整副固定；不读 game_info / beginning 快照）。"""
-        data = self.current_game_data or {}
-        for d in data.get('my_decisions') or []:
-            ctx = d.get('context') or {}
-            if ctx.get('curRank') or ctx.get('selfRank') or ctx.get('oppoRank'):
-                return ctx
-        for a in data.get('actions') or []:
-            ctx = a.get('context') or {}
-            if ctx.get('curRank') or ctx.get('selfRank') or ctx.get('oppoRank'):
-                return ctx
-        return {}
-
     def _normalize_rank_char(self, rank_str):
         r = str(rank_str or '2').strip().upper()
         if r in ('10', 'T'):
@@ -559,14 +622,12 @@ class YiFeiReplayGUI:
         return order
 
     def _resolve_levels(self):
-        """读级数：my_decisions[].context → actions[].context；全缺 fallback '2'。
-
-        回放一打开即 play，整副只用 act·play 三字段，不用 game_info（beginning 快照）。
-        """
-        ctx = self._play_context_levels()
-        self.cur_rank = str(ctx.get('curRank') or '2')
-        self.self_level = str(ctx.get('selfRank') or '2')
-        self.opp_level = str(ctx.get('oppoRank') or '2')
+        """读级数：resolve_episode_levels（play 优先，不用 beginning/game_info 快照）。"""
+        fname = self.current_game.name if self.current_game else None
+        levels = resolve_episode_levels(self.current_game_data or {}, fname)
+        self.cur_rank = levels["curRank"]
+        self.self_level = levels["selfRank"]
+        self.opp_level = levels["oppoRank"]
 
     def _organize_hand_columns(self, cards):
         """把手牌按 rank 分组，返回按显示顺序排好的 [(rank, [cards])]。"""
