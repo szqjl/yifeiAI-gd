@@ -181,11 +181,19 @@ class M3DecisionEngine:
         """接风首出：greaterPos==-1 或 curPos==-1。"""
         return data.get("greaterPos", -1) == -1 or data.get("curPos", -1) == -1
 
+    def _gua035_solo_opponent_rests(self, numofplayers, myPos):
+        """GUA-035 END-M02+-01: solo 下两家对手剩张（上家、下家）。"""
+        return [numofplayers[(myPos + 1) % 4], numofplayers[(myPos + 3) % 4]]
+
+    def _gua035_any_opponent_rest(self, opponent_rests, rest):
+        return any(r == rest for r in opponent_rests)
+
     def _gua034_solo_active_pick(
         self, actionList, threetwo_actionlist, trips_actionlist, pair_actionlist,
+        *, allow_threetwo=True, allow_pair=True,
     ):
-        """GUA-034 END-M02: 接风优先整手牌型，不拆对出最小单。"""
-        if threetwo_actionlist:
+        """GUA-034 END-M02 / GUA-035 END-M02+-02~04: 接风优先整手牌型。"""
+        if allow_threetwo and threetwo_actionlist:
             idx = getindex("ThreeWithTwo", threetwo_actionlist, actionList)
             if idx > 0:
                 self._dbg(f"GUA-034 END-M02 threetwo -> {idx}")
@@ -195,12 +203,28 @@ class M3DecisionEngine:
             if idx > 0:
                 self._dbg(f"GUA-034 END-M02 trips -> {idx}")
                 return idx
-        if pair_actionlist:
+        if allow_pair and pair_actionlist:
             idx = getindex("Pair", pair_actionlist, actionList)
             if idx > 0:
                 self._dbg(f"GUA-034 END-M02 pair -> {idx}")
                 return idx
         return -1
+
+    def _gua035_solo_wind_pick(self, actionList, threetwo_actionlist, trips_actionlist, pair_actionlist, opponent_rests):
+        """GUA-035: 接风首出 — 按对手剩张过滤，三带二无整手时 fallback。"""
+        skip_tw = self._gua035_any_opponent_rest(opponent_rests, 5)
+        skip_pair = self._gua035_any_opponent_rest(opponent_rests, 2)
+        idx = self._gua034_solo_active_pick(
+            actionList, threetwo_actionlist, trips_actionlist, pair_actionlist,
+            allow_threetwo=not skip_tw, allow_pair=not skip_pair,
+        )
+        if idx <= 0 and skip_tw:
+            self._dbg("GUA-035 END-M02+-04 threetwo fallback")
+            idx = self._gua034_solo_active_pick(
+                actionList, threetwo_actionlist, trips_actionlist, pair_actionlist,
+                allow_threetwo=True, allow_pair=not skip_pair,
+            )
+        return idx, skip_tw, skip_pair, self._gua035_any_opponent_rest(opponent_rests, 1)
 
     def _gua034_solo_beat_single(self, single_actionList, card_val, curVal, rank_card, bomb_member):
         """GUA-034 END-M03: solo 下允许拆 trips 压对手小单。"""
@@ -1636,11 +1660,17 @@ class M3DecisionEngine:
                 return actionList.index(i)
 
         if solo_wind:
-            idx = self._gua034_solo_active_pick(
-                actionList, threetwo_actionlist, trips_actionlist, pair_actionlist,
+            opponent_rests = self._gua035_solo_opponent_rests(numofplayers, mypos)
+            idx, skip_tw, skip_pair, skip_single = self._gua035_solo_wind_pick(
+                actionList, threetwo_actionlist, trips_actionlist, pair_actionlist, opponent_rests,
             )
             if idx > 0:
                 return idx
+            if not skip_single and len(single_actionlist):
+                idx = getindex("Single", single_actionlist, actionList)
+                if idx > 0:
+                    self._dbg(f"GUA-035 solo wind single -> {idx}")
+                    return idx
 
         if not solo_wind and len(single_for_play) and card_val[single_for_play[0][0]] < cur[0]:
             if numofnext == 1:
@@ -1669,10 +1699,6 @@ class M3DecisionEngine:
             return rankone(single_actionlist, trips_actionlist, actionList, numofnext, rank)
         if len(pair_actionlist) and not solo_wind:
             return ranktwo(handcards, single_actionlist, pair_actionlist, trips_actionlist, actionList, numofnext, rank, max_val)
-        if solo_wind and len(single_actionlist):
-            idx = getindex("Single", single_actionlist, actionList)
-            if idx > 0:
-                return idx
         if len(single_actionlist):
             if numofnext == 1 and len(trips_actionlist) == 0 and len(pair_actionlist) == 0 and rank_card in handcards:
                 for i in range(len(actionList)):
