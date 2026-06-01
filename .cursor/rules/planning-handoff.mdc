@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## 改掼蛋 AI 行为前
 
-以 **`docs/guandan-brain/`** 为真源（见 `guandan-context.mdc`），勿仅凭聊天历史假设。
+以 **`docs/guandan-brain/`** 为真源（见 `guandan-context.mdc`），勿仅凭聊天历史假设。**改 M3 决策**前读 ISSUES open（m3）、ITERATIONS 最新一行；**M1 frozen** 不改策略。
 
 ## 新开 Agent（人类第一句）
 

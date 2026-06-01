@@ -13,6 +13,20 @@ CARD_INDEX = {"A": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5, "7": 6, "8": 7, "9
               "Q": 11, "K": 12, "R": 13, "B": 13}
 
 
+def sync_remain_cards_classbynum(remain_cards):
+    """Derive 2468 rank counts (+ jokers) from per-suit remain_cards matrix."""
+    counts = [0] * 13
+    for suit in ("S", "H", "C", "D"):
+        row = remain_cards.get(suit)
+        if not row:
+            continue
+        for idx in range(13):
+            counts[idx] += row[idx]
+    b_joker = remain_cards.get("S", [0] * 14)[13]
+    r_joker = remain_cards.get("H", [0] * 14)[13]
+    return counts + [b_joker, r_joker]
+
+
 def is_inStraight(action, straight_member):
     flag = 0
     if len(straight_member) != 0:

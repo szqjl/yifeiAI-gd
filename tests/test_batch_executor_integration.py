@@ -26,14 +26,14 @@ class TestBatchExecutorIntegration:
         try:
             # 创建BatchExecutor实例
             executor = BatchExecutor(
-                target_games=10,
+                target_games=12,
                 server_path=server_path,
                 client_scripts=['client1.py', 'client2.py'],
                 diagnose_only=True
             )
             
             # 验证属性设置正确
-            assert executor.target_games == 10
+            assert executor.target_games == 12
             assert executor.server_path == server_path
             assert len(executor.client_scripts) == 2
             assert executor.diagnose_only is True
@@ -76,6 +76,13 @@ class TestBatchExecutorIntegration:
                     client_scripts=[]
                 )
             
+            with pytest.raises(ValueError):
+                BatchExecutor(
+                    target_games=10,  # 非 3 的倍数
+                    server_path=server_path,
+                    client_scripts=[]
+                )
+            
         finally:
             # 清理临时文件
             if os.path.exists(server_path):
@@ -93,7 +100,7 @@ class TestBatchExecutorIntegration:
         try:
             # 创建BatchExecutor实例
             executor = BatchExecutor(
-                target_games=10,
+                target_games=12,
                 server_path=server_path,
                 client_scripts=[],
                 diagnose_only=True

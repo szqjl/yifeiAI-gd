@@ -10,7 +10,7 @@
 
 | 层级 | 叫什么 | 是什么 | 怎么数 |
 |------|--------|--------|--------|
-| **平台 / 批跑「局」** | **局**（平台局） | v1006 说明书「**游戏次数**」/`settingTimes`：一次「游戏」= 一方在 **A 级**、且本副以 **头游+二游（双上）** 完牌过关（见 PDF `gameOver` 段注释） | `exe N`、`--target-games N`、`completed_games`；`gameOver` 时 `curTimes` = `settingTimes` |
+| **平台 / 批跑「局」** | **局**（平台局） | v1006 说明书「**游戏次数**」/`settingTimes`：一次「游戏」= 一方在 **A 级**、且本副以 **头游+二游（双上）** 完牌过关（见 PDF `gameOver` 段注释） | `exe N`、`--target-games N`、`completed_games`；`gameOver` 时 `curTimes` = `settingTimes`。**例外**：本包 exe argv 实测见 **§2**（单次会话固定 3 局） |
 | **规则「副」** | **副**（一副牌） | 发牌 →（进贡还贡）→ 出牌 → `episodeOver` | `episodeOver` 次数；`game_scores_m2.json` 的 `total_rounds`；`game_records` 成对 match key |
 | **规则「一局」** | **局**（规则一局） | 从 2 打到 A 且 A 级双上通关 | `game_scores_m2.json` 的 `games[]`；日志「整局结束 Game=」 |
 
@@ -26,38 +26,85 @@
 
 ---
 
-## 2. 实锤验证（2026-05-31，M3 vs lalala）
+## 2. v1006 exe argv 实测（定音，2026-05-31）
 
-清空 `game_records/`、`logs/` 后执行：
+> **与 PDF 说明书不一致**：说明书约定 `guandan_offline_v1006.exe N` → `settingTimes=N`；**本仓库所附 v1006 离线 exe 在本机实测未按 argv 执行**。
+
+### 2.1 探测方法
+
+- **环境**：`offline_platform/guandan_offline_v1006/windows/` **仅含 exe**，无 `config.ini` / `config.json` 等覆盖 argv 的配置。
+- **启动 stdout**：`exe 1` / `3` / `10` / 无参均只打印 `Ready for connect.`，**不 echo N**。
+- **WebSocket 抓包**：`scripts/tools/probe_exe_argv_ws.py`（4 客户端连入，记录 `gameOver` / `gameResult`）。
 
 ```bash
-python -m batch_executor --server-path offline_platform/.../guandan_offline_v1006.exe \
-  --target-games 1 --clients yf1_m3.py ... lalala ...
+python scripts/tools/probe_exe_argv_ws.py --compare -o data/eval/exe_argv_compare.json
+python scripts/tools/probe_exe_argv_ws.py --n 10 -o data/eval/exe_argv_10.json
 ```
 
-| 指标 | 结果 |
-|------|------|
-| 台账 `completed_games` | **1**（平台 1 局） |
-| `game_scores_m2.json` → `total_rounds` | **59**（59 副） |
-| yf1 日志「本轮 … 副 x/59」 | **59** |
-| `game_records` 成对 match_key | **59** |
-| 服务端 stdout | 「达到设定游戏次数」→ `gameOver` |
+### 2.2 实测矩阵（同机、同 exe）
 
-**结论**：`exe 1` / `--target-games 1` 是 **1 局（一次平台游戏）**，不是 1 副；本例打了 **59 副** 才结束该会话。
+| exe argv | WebSocket `settingTimes` | `curTimes` 序列 | 本会话实际平台局数 | 批末 `victoryNum` `[0]+[1]` |
+|----------|--------------------------|-----------------|--------------------|-----------------------------|
+| **1** | **3** | 1 → 2 → 3 | **3 局**（非 1） | **3**（例 `[0,3,0,3]`） |
+| **3** | **3** | 1 → 2 → 3 | **3 局** | **3**（例 `[2,1,2,1]`） |
+| **10** | **3** | 1 → 2 → 3 | **仍只 3 局**（非 10） | **3** |
+
+**定音**：
+
+1. **单次 exe 会话固定跑满 3 个平台局**（`curTimes` 必到 3），与 argv **1 / 3 / 10 无关**（至少在本包 build 上 **N≠3 时 argv 无效或被忽略**）。
+2. WebSocket **`settingTimes` 恒为 3**；**不是**「字段陈旧」，而是 exe 内部会话上限为 3。
+3. **`gameResult.victoryNum` 按 3 局累计**，故 `batch_games=1` 时常出现 `[3,0,3,0]`、`[2,1,2,1]` 等 **`[0]+[1]=3≠1`**——须 GUA-033 校验 + fallback，**禁止裸信**。
+4. **`batch_executor` 的 `single_run_limit=3`** 是对该 exe 行为的适配，**不是** exe 听脚本的话。
+
+### 2.3 与批跑脚本的关系
+
+| 层 | 行为 |
+|----|------|
+| `restart_manager` | 正确执行 `[exe, str(batch_games)]`；日志「游戏场数: N」= **意图 N** |
+| 离线 exe | **实测忽略 argv**（或 N&lt;3 / N&gt;3 均钳制为 **3 局/会话**） |
+| `completed_games` | 按 **一次会话结束 +1**（与 `batch_games` 台账同口径），**不等于** WebSocket 内实际打的平台局数 |
+| 队胜 / 回填 | 以 **`current_batch.json` → `batch_games`** 为准，交叉校验 `victoryNum` |
+
+**满 12 局平台局**：须 **多批重启**（3+3+3+3），不能指望 `exe 12` 一次跑完。**勿设 `--target-games 10`** 等非 3 倍数（末批 1 局 → GUA-033 fallback）。
 
 ---
 
-## 3. 协议字段怎么读
+## 3. 批跑侧观测（2026-05-31，M3 vs lalala）
 
-### 3.1 `settingTimes` / exe N / `target-games`
+净盘 `--target-games 1`、`batch_games=1` 的一次批跑（修复前客户端仍可能误信服务器 vn）：
+
+| 指标 | 结果 | 解读 |
+|------|------|------|
+| 台账 `completed_games` | **1/1** | 批跑 **意图 1 批**；见 §2.3 |
+| WebSocket | `settingTimes=3`，`curTimes=1→3` | **实际平台 3 局**（§2.2） |
+| `game_records` 成对 match_key | **45**（例） | **副数**，≠ 局数 |
+| 服务端 stdout | 一次「达到设定游戏次数」 | 一次 **exe 会话**结束 |
+
+**结论**：`--target-games 1` 表示批跑 **台账 +1**，**不是**「平台只打 1 个平台局」；本包 exe 该会话内仍会打 **3 局、数十副**。
+
+---
+
+## 4. 协议字段怎么读
+
+### 4.1 `settingTimes` / exe N / `target-games` — **谁为准**
+
+| 优先级 | 来源 | 含义 | 可靠性 |
+|--------|------|------|--------|
+| **1（批级真源）** | `batch_executor/current_batch.json` → `batch_games` | 本批 **意图 N**（`restart_manager` 写入） | **高** — 校验 vn、回填、队胜口径 |
+| **2** | 环境变量 `BATCH_GAMES` | 与上同源 | **高** |
+| **3** | 日志「游戏场数: N」/ argv | **传给 exe 的意图 N** | **高（意图）** — **≠ exe 实际局数**（§2.2） |
+| **4（勿裸信）** | WebSocket `gameOver.settingTimes` | 协议字段 | **低** — 本包实测 **恒 3** |
+| **5（台账）** | `--target-games` / `execution_state.completed_games` | 多批 **会话完成次数**累计 | **高**（进度）；单批 N 仍看 `batch_games` |
+
+**结论**：批末校验、回填、胜率 **`batch_games` 为准**；**不得**用 `gameOver.settingTimes` 或裸信 `gameResult.victoryNum` 定本批 N。
 
 | 来源 | 含义 |
 |------|------|
-| `guandan_offline_v1006.exe N` | 本会话打 **N 局**（平台「游戏次数」，非 N 副） |
-| `--target-games 10` | 批跑台账目标 **10 局**（可多批 3+3+3+1） |
-| `completed_games` | 已累计 **平台局数**（与 exe N 同口径） |
+| `guandan_offline_v1006.exe N` | **意图** N 局；**本包 exe 实测单次会话固定 3 局**（§2） |
+| `--target-games 10` | 批跑台账目标 **10**（通常 3+3+3+1 四批） |
+| `completed_games` | 已完成 **批次数/会话数**（与 `batch_games` 累加同口径） |
 
-### 3.2 `episodeOver` vs `gameOver`
+### 4.2 `episodeOver` vs `gameOver`
 
 | 消息 | 含义 |
 |------|------|
@@ -65,16 +112,24 @@ python -m batch_executor --server-path offline_platform/.../guandan_offline_v100
 | `gameOver` | 本批 **`curTimes` 达到 `settingTimes`**（打满 N **局**） |
 | `gameResult` | 本批累计；含 `victoryNum`、`draws` |
 
-### 3.3 `victoryNum`（平台下发，按规则计 **局** 胜负）
+### 4.3 `victoryNum`（批末队胜 — **须校验，禁止裸信 WebSocket**）
 
-**服务器 `gameResult.victoryNum` 是正确的**：按掼蛋规则，每打完 **一整局**（一方 A 级本副双上过关），判定谁赢；**赢方记入赢 1 局**，累加到该队两席的计数上。
+> **GUA-033（2026-05-31）**：根因见 **§2**——exe 会话固定 3 局，`gameResult.victoryNum` 按 **3 局**累计；当 `batch_games=1` 时常为 `[3,0,3,0]` 等 **`[0]+[1]≠batch_games`**。**不得**未校验就落盘/回填/计胜率。
+
+| 优先级 | 来源 | 用法 |
+|--------|------|------|
+| **1** | 校验通过的 `gameResult.final` 或 `victoryNum` | `[0]+[1]==batch_games` 且 `[0]=[2]`、`[1]=[3]` |
+| **2** | 客户端本批 **`gameOver` 计数**（`curTimes≤batch_games`） | 服务器 vn 无效时的 fallback（`yf1_m3`/`yf2_m3`） |
+| **3** | `batch_executor/latest_victory_num.json` | executor 批末交叉验证；含 **`server_vn_raw`** / **`vn_source`** 对账（§4.3.1） |
+
+**语义**（校验通过后）：各队在本批会话内累计 **赢了几局**（不是副数）。
 
 | 项 | 说明 |
 |----|------|
 | **含义** | 本批会话内，各座位所属队累计 **赢了几局**（不是副数） |
 | **同队** | 0 与 2 一队、1 与 3 一队；同队两席数值相同 |
 | **队级读法** | 只取 **`[0]` vs `[1]`**（或 `[2]` vs `[3]`，等价）；**禁止四席相加**（会重复计同一队） |
-| **与批跑** | 批跑 `--target-games 3` → 本批共 3 局；批末 `victoryNum` 反映这 3 局谁赢了几局 |
+| **与批跑** | 本批 `batch_games=3` → 批末 **`[0]+[1]=3`**；`batch_games=1` → **`[0]+[1]=1`** |
 | **不是** | 副数（副数看 `episodeOver` / match_key）；单副胜负 |
 
 **示例（M3 在 0+2，lalala 在 1+3，批跑 3 局后）：**
@@ -90,11 +145,34 @@ victoryNum: [3, 0, 3, 0]
 → 0+2 队（M3）赢 3 局，1+3 队（lalala）赢 0 局
 ```
 
-批内 3 局也可能拆成例如 `[2,1,2,1]`（M3 赢 2 局、lalala 赢 1 局）；**`[0]` + `[1]` 应等于本批 `settingTimes`（局数）**。
+批内 3 局也可能拆成例如 `[2,1,2,1]`（M3 赢 2 局、lalala 赢 1 局）；**`[0]` + `[1]` 应等于本批 `batch_games`（非裸信 `settingTimes`）**。
 
 **与 `completed_games`**：台账记录本批跑了几个 **局**；`victoryNum` 记录这些局里 **各队赢了几个**。
 
-### 3.4 `game_records/`（每条 = 一副，不是一局）
+#### 4.3.1 fallback 语义：`batch_games=1` 只认领 `curTimes=1`
+
+本包 exe **单次会话固定 3 平台局**（§2），但第 4 批等场景 **`batch_games=1`**（10 局跑法的最后一个台账槽位）。此时：
+
+| 字段 / 行为 | 含义 |
+|-------------|------|
+| 服务器 `gameResult.victoryNum` | 本会话 **3 局合计**（例 `[3,0,3,0]`，`[0]+[1]=3`） |
+| 校验 | **拒绝**（`3 ≠ batch_games=1`），**禁止**回填到本批 JSON |
+| fallback | `gameOver` 仅在 **`curTimes ≤ batch_games`** 时计胜 → **`curTimes=1` 那一局** |
+| 落盘 `victoryNum` | 例 `[1,0,1,0]`：**台账口径下本批认领 1 局队胜**，不是会话 3 局合计 |
+| `latest_victory_num.json` | `victoryNum` = 采用值；**`server_vn_raw`** = WebSocket 原文；**`vn_source`** = `server` \| `fallback` |
+
+```text
+batch_games=1 的一批：
+  平台实际：gameOver curTimes 1 → 2 → 3（3 局、多副）
+  台账队胜：只取 curTimes=1 对应那一局的胜负 → [0]+[1]=1
+  对账：server_vn_raw 仍保留 [3,0,3,0] 等，便于与平台 RAW 对照
+```
+
+**勿混读**：fallback 后的 `[1,0,1,0]` **不是**「平台只打了 1 局」；**是**「在 `--target-games` 台账里这一批只计 1 个队胜槽位」。分析「本会话真实 3 局谁赢几局」请看 **`server_vn_raw`** 或 §2 矩阵，**不要**用 fallback 后的 `victoryNum` 当会话合计。
+
+**代码位置**：`yf1_m3` / `yf2_m3` 的 `_handle_game_over`（`curTimes <= expected`）；共享文件由 **`yf1_m3`** 写入 `batch_executor/latest_victory_num.json`。
+
+### 4.4 `game_records/`（每条 = 一副，不是一局）
 
 - **一条 JSON = 一副**（单座视角；平台 **小局** / `episodeOver` 后落盘）。
 - **文件数 / match_key 数 = 副数**（成对 yf1+yf2 去重），**≠ 局数**，**≠ `victoryNum`**。
@@ -102,7 +180,7 @@ victoryNum: [3, 0, 3, 0]
 
 ---
 
-## 4. 批跑台账 vs 牌谱分析
+## 5. 批跑台账 vs 牌谱分析
 
 ```
 --target-games 10  →  completed_games = 10  →  10 次平台「游戏」（10 局）
@@ -119,20 +197,24 @@ victoryNum: [3, 0, 3, 0]
 
 ---
 
-## 5. 常见误读
+## 6. 常见误读
 
 | 误读 | 正确 |
 |------|------|
-| `exe 1` = 打 1 副 | **1 局**；实测可打 **数十副**（2026-05-31：59 副） |
-| `episodeOver` 次数 = 平台局数 | `episodeOver` = **副数**；平台局看 `settingTimes`/`completed_games` |
+| `exe 1` = 平台只打 1 局 | **本包 exe 实测单次会话固定 3 局**（§2）；`batch_games=1` 是批跑 **意图** |
+| `exe 1` = 打 1 副 | **1 平台局 ≠ 1 副**；3 局会话可打 **数十副** |
+| `episodeOver` 次数 = 平台局数 | `episodeOver` = **副数**；平台局看 §2 / `batch_games`，勿裸信 `settingTimes` |
 | `victoryNum` 相加 = 局数 | 四席相加会重复计队；用 **`[0]` vs `[1]`** = 各队 **赢局数** |
+| 裸信 `gameResult.victoryNum` | 须 **`[0]+[1]==batch_games`**；失败则用 gameOver 计数 fallback（GUA-033） |
+| 裸信 `gameOver.settingTimes` | 本包实测 **恒 3**；批级 N 以 **`current_batch.json`** 为准 |
+| argv 传给 exe 就等于平台局数 | argv **可能无效**；以 WebSocket `curTimes` 序列 + §2 矩阵为准 |
 | `victoryNum` = 副数 | **局**胜负累计；**副**看 `game_records` / match_key |
 | 10 平台局 = 10 副 | 10 局 = 10 次「一次游戏」，副数通常 **远大于** 10 |
 | 1 个 JSON = 1 平台局 | **1 JSON = 1 副（单座）** |
 
 ---
 
-## 6. 工作示例（M3 vs lalala，2026-05-31，10 局批跑）
+## 7. 工作示例（M3 vs lalala，2026-05-31，10 局批跑）
 
 | 批次 | 平台局数 | M3 胜 | lalala 胜 | 批内胜率 |
 |------|----------|-------|-----------|----------|
@@ -146,8 +228,10 @@ victoryNum: [3, 0, 3, 0]
 
 ---
 
-## 7. 维护
+## 8. 维护
 
 改批跑台账、`game_recorder` 或客户端胜负逻辑时同步更新本文。Agent 分析 lalala 数据前先读本文 + [EVAL.md](../guandan-brain/EVAL.md)。
 
-**版本**：2026-05-31（修正：平台局 ≠ 副；补 `--target-games 1` 实测）
+复测 exe argv：`python scripts/tools/probe_exe_argv_ws.py --compare`。
+
+**版本**：2026-05-31（§4.3.1 fallback 语义 + `latest_victory_num.server_vn_raw`；§2 exe argv 实测定音）

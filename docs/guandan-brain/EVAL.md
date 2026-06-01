@@ -20,15 +20,35 @@
 
 ### 无头 CLI（可写进 CI / 脚本）
 
+**批跑局数**：`--target-games` 须为 **3 的倍数**（本包 exe 每会话固定 **3 局**）。**勿用 10 局**等非整批目标（末批 `batch_games=1` 易 fallback，队胜难对账）。档位见下节。
+
 模块入口与 `batch_executor.py` 一致：
 
 ```bash
-python -m batch_executor --server-path "<SERVER_EXE>" --target-games 3 --clients src/communication/yf1_v5.py src/communication/run_lalala_client3.py src/communication/yf2_v5.py src/communication/run_lalala_client4.py
+python -m batch_executor --server-path "<SERVER_EXE>" --target-games 3 --clients src/communication/yf1_m3.py src/communication/run_lalala_client3.py src/communication/yf2_m3.py src/communication/run_lalala_client4.py
 ```
 
-将 `yf1_v5.py` / `yf2_v5.py` 换成 `yf1_v4.py` / `yf2_v4.py`、`yf1_v6.py` / `yf2_v6.py` 或 `yf1_m1.py` / `yf2_m1.py` 即对应版本。四元组金样例见 `scenarios/client_sets.json`。
+将 `yf1_m3.py` / `yf2_m3.py` 换成其他版本客户端；四元组见 `scenarios/client_sets.json`。
 
 **批跑台账与胜率**：`completed_games` = 本批共打 **几局**；队胜负读批末 **`victoryNum[0]` vs `[1]`**（各队 **赢几局**，平台按整局结束计胜）。**副数** / PASS 看 `game_records`（**每条 = 一副**）或 `total_rounds`。
+
+### 批跑局数档位（v1006 · 定音）
+
+| 档位 | `--target-games` | 会话批次数 | 典型用途 |
+|------|------------------|------------|----------|
+| **小批** | **3** | 1×3 | 改代码后快速冒烟、GUA 单点验收 |
+| **中批** | **9** | 3×3 | 策略改动后稳定性抽查 |
+| **大批** | **12** | 4×3 | 队胜率 KPI、迭代关单、多样本观测 |
+
+更长压测用 **15 / 18 / …**（仍须 **3 的倍数**）。M3 主交付默认 **12**；历史 **10 局**样本仅作对照，**以后不再新开 10 局批跑**。
+
+M3 无头示例（净盘、大批）：
+
+```bash
+python -m batch_executor --server-path "<SERVER_EXE>" --target-games 12 \
+  --clients src/communication/yf1_m3.py src/communication/run_lalala_client3.py \
+            src/communication/yf2_m3.py src/communication/run_lalala_client4.py
+```
 
 仅诊断、不跑对局：
 

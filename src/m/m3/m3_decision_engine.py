@@ -209,6 +209,10 @@ class M3DecisionEngine:
         bomb_actionList = self._collect_bomb_action_list(actionList)
         if not bomb_actionList:
             return -1
+        bomb_actionList = self._gua032_filter_bomb_action_list(bomb_actionList, rank_card)
+        if not bomb_actionList:
+            self._dbg("GUA-032 CALC-M01 all bomb ranks filtered")
+            return -1
         index = choose_bomb(bomb_actionList, handcards, sorted_cards, bomb_info, rank_card, card_val)
         if index != -1:
             self._dbg(f"GUA-029 choose_bomb -> {index}")
@@ -247,6 +251,63 @@ class M3DecisionEngine:
         self.pass_num = 0
         self.my_pass_num = 0
         self.tribute_result = None
+        self._player_bomb_mem = {
+            str(i): {"has_bomb": False, "max_bomb_rank": 0} for i in range(4)
+        }
+
+    def _sync_remain_cards_classbynum(self):
+        self.remain_cards_classbynum = sync_remain_cards_classbynum(self.remain_cards)
+
+    def _rank_outside_count(self, rank_char):
+        idx = CARD_INDEX.get(rank_char)
+        if idx is None or idx >= 13:
+            return 0
+        return self.remain_cards_classbynum[idx]
+
+    def _gua032_skip_passive_bomb_rank(self, action, rank_card):
+        """CALC-M01: ≤3 cards of rank remain outside → passive skip that Bomb rank."""
+        if action[0] != "Bomb":
+            return False
+        if rank_card in action[2]:
+            return False
+        bomb_rank = action[1]
+        if bomb_rank not in CARD_INDEX:
+            return False
+        return self._rank_outside_count(bomb_rank) <= 3
+
+    def _gua032_filter_bomb_action_list(self, bomb_actionList, rank_card):
+        filtered = []
+        for tag, action in bomb_actionList:
+            if self._gua032_skip_passive_bomb_rank(action, rank_card):
+                self._dbg(f"GUA-032 CALC-M01 skip bomb rank {action[1]} (outside≤3)")
+                continue
+            filtered.append((tag, action))
+        return filtered
+
+    def _gua032_straight_degraded(self, cards):
+        """CALC-M03: 5/10 法则 — 关键张出尽则降权对应顺子。"""
+        ranks = {str(c)[-1] for c in cards if len(str(c)) >= 2}
+        if "T" in ranks and self.remain_cards_classbynum[9] == 0:
+            return True
+        if "5" in ranks and self.remain_cards_classbynum[4] == 0:
+            return True
+        return False
+
+    def _refresh_bomb_memory(self, cur_pos, cur_action):
+        """MEM-M02: track per-player bomb / straight-flush history."""
+        if cur_pos is None or not cur_action or cur_action[0] not in ("Bomb", "StraightFlush"):
+            return
+        pos = str(cur_pos)
+        mem = self._player_bomb_mem.setdefault(
+            pos, {"has_bomb": False, "max_bomb_rank": 0},
+        )
+        mem["has_bomb"] = True
+        rank_char = cur_action[1] if len(cur_action) > 1 else "2"
+        rank_val = CARD_VALUE_S2V.get(rank_char, 0)
+        if cur_action[0] == "StraightFlush":
+            rank_val += 32
+        if rank_val > mem["max_bomb_rank"]:
+            mem["max_bomb_rank"] = rank_val
 
     def _update_play_state(self, data):
         curPos = data.get("curPos")
@@ -289,6 +350,9 @@ class M3DecisionEngine:
                     self.my_pass_num += 1
                 else:
                     self.my_pass_num = 0
+
+        self._sync_remain_cards_classbynum()
+        self._refresh_bomb_memory(curPos, curAction)
 
     def _sync_remain_from_public_info(self, data):
         """act 时用 publicInfo[].rest 对齐剩牌数（v1006 平台真源）。"""
@@ -1272,6 +1336,9 @@ class M3DecisionEngine:
             for action in straight_actionList:
                 Index = action[0]
                 action = action[1]
+                if self._gua032_straight_degraded(action[2]):
+                    self._dbg("GUA-032 CALC-M03 skip straight (5/10 depleted)")
+                    continue
                 if curStraight == action[-1] and rank_card not in action[2]:
                     if (myPos + 2) % 4 == greaterPos:
                         if curVal <= 7 or card_val[curStraight] - curVal <= 2:
@@ -1282,6 +1349,9 @@ class M3DecisionEngine:
             for action in straight_actionList:
                 Index = action[0]
                 action = action[1]
+                if self._gua032_straight_degraded(action[2]):
+                    self._dbg("GUA-032 CALC-M03 skip straight (5/10 depleted)")
+                    continue
                 if rank_card in action[2] and len(trip_member) == 0:
                     if len(set(action[2]).intersection(set(bomb_member))) != 0:
                         continue

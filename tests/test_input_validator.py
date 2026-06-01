@@ -14,7 +14,7 @@ from batch_executor.input_validator import InputValidator
 class TestTargetGamesValidation:
     """测试目标场数验证功能"""
     
-    @given(target_games=st.integers(min_value=1, max_value=100000))
+    @given(target_games=st.integers(min_value=1, max_value=100000).filter(lambda n: n % 3 == 0))
     @settings(max_examples=100)
     def test_property_target_games_validation(self, target_games):
         """
@@ -55,6 +55,15 @@ class TestTargetGamesValidation:
         
         assert result == InputValidator.DEFAULT_TARGET_GAMES
         assert validator.target_games == InputValidator.DEFAULT_TARGET_GAMES
+    
+    def test_target_games_must_be_multiple_of_session_limit(self):
+        """v1006 批跑目标须为 single_run_limit（3）的倍数"""
+        validator = InputValidator()
+        with pytest.raises(ValueError) as exc_info:
+            validator.validate_target_games(10)
+        assert "倍数" in str(exc_info.value)
+        assert validator.validate_target_games(9) == 9
+        assert validator.validate_target_games(12) == 12
 
 
 class TestInvalidInputRejection:
@@ -146,13 +155,13 @@ class TestRestartCountCalculation:
         validator = InputValidator(single_run_limit=3)
         
         # 先验证并存储目标场数
-        validator.validate_target_games(100)
+        validator.validate_target_games(99)
         
         # 不传参数时应该使用已存储的值
         restart_count = validator.calculate_restart_count()
         
-        # 100场，每次3场，需要34次运行，33次重启
-        expected = math.ceil(100 / 3) - 1
+        # 99场，每次3场，需要33次运行，32次重启
+        expected = math.ceil(99 / 3) - 1
         assert restart_count == expected
     
     def test_restart_count_without_target_raises_error(self):
@@ -173,14 +182,11 @@ class TestRestartCountCalculation:
         # 3场：需要1次运行，0次重启
         assert validator.calculate_restart_count(3) == 0
         
-        # 4场：需要2次运行，1次重启
-        assert validator.calculate_restart_count(4) == 1
-        
-        # 6场：需要2次运行，1次重启
+        # 4场：须为 3 的倍数，validate 会拒绝；calculate_restart_count(6) 仍可用于数学
         assert validator.calculate_restart_count(6) == 1
         
-        # 7场：需要3次运行，2次重启
-        assert validator.calculate_restart_count(7) == 2
+        # 9场：需要3次运行，2次重启
+        assert validator.calculate_restart_count(9) == 2
         
-        # 100场：需要34次运行，33次重启
-        assert validator.calculate_restart_count(100) == 33
+        # 99场：需要33次运行，32次重启
+        assert validator.calculate_restart_count(99) == 32

@@ -99,6 +99,24 @@ N     =  连续 N 局（非 N 副）
 - `notify`·`play` **不带**三字段；`game_info` 快照可能滞后于进贡后本副 `act`·`play`
 - 分析级牌 / AI 决策：**优先**同副 `act`·`stage=play` 的 `curRank`
 
+### `curRank` 真值优先级（读 `game_records` / 回放 / 决策）
+
+**禁止**只读文件名 `[level]` 或 `game_info.curRank` 就定「本副打几」。
+
+| 优先级 | 来源 | 说明 |
+|--------|------|------|
+| **1** | 同副 `my_decisions` / `act` · `stage=play` 的 `curRank` | AI 决策与级牌规则**唯一可靠真值** |
+| **2** | 同副 `act` · `back` / `tribute` 的 `curRank` | 贡还阶段已有级牌；还贡后常与 play 一致 |
+| **3** | `episodeOver` 的 `curRank` | 本副结束快照 |
+| **4** | `game_info.curRank` | 落盘快照，**常滞后**（仍停在进贡前） |
+| **5（仅索引）** | 文件名 `…-[round]-[level].json` 的 `[level]` | **归档标签**，= 本副**开局/进贡前**落盘级；**≠** 还贡后出牌级 |
+
+**一副内可变化**（2026-06-01 实测 round 40）：进贡 `act` 时 `curRank=9`（`selfRank=J`，`oppoRank=9`）；还贡后 `act`·`play` 起 **`curRank=K`**（约 70/73 步）。文件名仍为 `[9]`，`game_info.curRank` 仍为 `9` — **三者不一致属正常**，分析/回放排序/级牌保护须用 **还贡后 `act`·`play` 的 K**。
+
+**`actions[].context`**：来自 `notify`·`play` 录制，**无**三等级字段；客户端写入的 context 可能混有邻副/滞后值，**低于** `my_decisions` 与原始 `act` 消息。
+
+**下发时机（摘要）**：`beginning` notify 无三字段 →（第二副起）`act`·tribute/back → 每条 **`act`·play** 均带三字段 → `episodeOver` 仅 `curRank`。详见 PDF / `state.py`。
+
 ## 常用字段速查
 
 | 字段 | 含义 |

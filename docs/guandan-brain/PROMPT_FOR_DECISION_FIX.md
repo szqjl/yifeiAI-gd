@@ -1,5 +1,7 @@
 # 给执行 AI 的说明（根据本轮评测改决策）
 
+> **定音（2026-05-31）**：主交付 **M3**（`src/m/m3/m3_decision_engine.py`、`yf1_m3`/`yf2_m3`）。改决策前先读 **ISSUES open（m3）**、**ITERATIONS 最新一行**、[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md)。**M1 frozen** — 下方正文为 **M1 历史模板**，勿再用于新开策略迭代。
+
 把下面**整段**复制到对话里，让改代码的 AI 按评测结论动手（仓库根路径以本机为准，当前主工作仓：`c:\yifeGDBOT`）。
 
 ---

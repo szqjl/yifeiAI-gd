@@ -87,7 +87,7 @@ pause
 echo ========================================
 echo 批量游戏执行系统
 echo ========================================
-python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --target-games 100 --clients src\communication\Test1.py src\communication\Test2.py client3.py client4.py
+python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --target-games 12 --clients src\communication\Test1.py src\communication\Test2.py client3.py client4.py
 pause
 ```
 
@@ -96,11 +96,14 @@ pause
 #### 基本用法
 
 ```bash
-# 执行100场游戏（默认）
+# 执行 12 场游戏（默认，须为 3 的倍数）
 python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe"
 
-# 执行200场游戏
-python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --target-games 200
+# 中批量验证（9 场 = 3 批 × 3 局）
+python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --target-games 9
+
+# 小批量快速验证（3 局）
+python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --target-games 3
 
 # 仅运行诊断
 python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --diagnose-only
@@ -111,7 +114,7 @@ python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan
 ```bash
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 100 ^
+    --target-games 12 ^
     --clients src\communication\Test1.py src\communication\Test2.py client3.py client4.py
 ```
 
@@ -120,7 +123,7 @@ python -m batch_executor ^
 ```bash
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 100 ^
+    --target-games 12 ^
     --clients client1.py client2.py client3.py client4.py ^
     --log-level DEBUG ^
     --log-dir logs ^
@@ -140,7 +143,7 @@ python -m batch_executor ^
 
 | 参数 | 说明 | 默认值 | 示例 |
 |------|------|--------|------|
-| `--target-games` | 目标游戏场数 | 100 | `--target-games 200` |
+| `--target-games` | 目标游戏场数（**须为 3 的倍数**；推荐 3/9/12） | 12 | `--target-games 12` |
 | `--clients` | 客户端脚本路径列表（空格分隔） | [] | `--clients c1.py c2.py c3.py c4.py` |
 | `--diagnose-only` | 仅运行诊断，不执行游戏 | False | `--diagnose-only` |
 | `--state-file` | 执行状态保存文件路径 | execution_state.json | `--state-file state.json` |
@@ -493,7 +496,7 @@ python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan
 ```bash
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 1000 ^
+    --target-games 999 ^
     --clients src\communication\Test1.py src\communication\Test2.py client3.py client4.py
 ```
 
@@ -504,7 +507,7 @@ python -m batch_executor ^
 ```bash
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 10 ^
+    --target-games 12 ^
     --log-level DEBUG
 ```
 
@@ -513,10 +516,10 @@ python -m batch_executor ^
 ### 场景4: 测试新客户端
 
 ```bash
-# 使用少量场次测试
+# 小批量快速验证（3 局）
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 10 ^
+    --target-games 3 ^
     --clients new_client.py client2.py client3.py client4.py ^
     --log-level DEBUG
 ```
@@ -529,7 +532,7 @@ python -m batch_executor ^
 echo 开始夜间批量执行...
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 1000 ^
+    --target-games 999 ^
     --clients src\communication\Test1.py src\communication\Test2.py client3.py client4.py ^
     --log-level INFO
 echo 执行完成！

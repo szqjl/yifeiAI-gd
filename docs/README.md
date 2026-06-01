@@ -19,7 +19,7 @@
 - **[guandan-brain 说明与索引](guandan-brain/README.md)** - 缺陷（ISSUES）、迭代日志（ITERATIONS）、评测（EVAL）；与代码同仓的真源台账
 - **[指挥系统（规划 / 统筹 / 部署）](guandan-brain/COMMAND_SYSTEM.md)** - 大脑与执行层分工、标准一轮流程
 - **[本机评测清单](guandan-brain/LOCAL_EVAL_CHECKLIST.md)** - 哪些须在你本机跑对局、哪些只维护文档
-- **[给执行 AI 的改决策说明](guandan-brain/PROMPT_FOR_DECISION_FIX.md)** - 复制整段让 AI 按评测结论改 `src/decision/`
+- **[给执行 AI 的改决策说明](guandan-brain/PROMPT_FOR_DECISION_FIX.md)** - 复制整段让 AI 按评测结论改 **`src/m/m3/`**（M1 已 frozen，见 ISSUES「引擎维护策略」）
 
 ### 📖 主要文档分类
 

@@ -40,8 +40,70 @@ JOKER_BIG_IMG = REPO_ROOT / "assets" / "replay" / "joker_big.png"
 sys.path.insert(0, str(REPO_ROOT / "src"))
 os.environ['PYTHONPATH'] = str(REPO_ROOT / "src")
 
-from communication.game_recorder import GameRecorder
+from communication.game_recorder import GameRecorder, normalize_cards_to_string_list
 from communication.server_log_parser import ServerLogParser
+
+
+def _canonical_replay_card(card):
+    """单张牌 → 大写 'S2'（与 yf1_m3 录牌一致）。"""
+    normalized = normalize_cards_to_string_list([card])
+    if not normalized:
+        return None
+    raw = normalized[0]
+    if isinstance(raw, str) and len(raw) >= 2:
+        return raw[0].upper() + raw[1:].upper()
+    return raw
+
+
+def _cards_from_tribute_back_action(action):
+    if len(action) < 3 or not isinstance(action[2], list):
+        return []
+    out = []
+    for card in action[2]:
+        canonical = _canonical_replay_card(card)
+        if canonical:
+            out.append(canonical)
+    return out
+
+
+def apply_tribute_back_to_hand(hand, my_decisions, player_id):
+    """
+    将 JSON 中贡前 initial_hand 按 my_decisions 调整为出牌前有效手牌。
+
+    - act·tribute / 无 source 的 tribute：移除进贡牌（outgoing）
+    - notify·tribute 且 receive_tribute_pos==player_id：加入收进贡牌
+    - act·back / 无 source 的 back：移除还贡牌（outgoing）
+    - notify·back 且 receive_back_pos==player_id：加入收还贡牌
+    """
+    result = list(hand or [])
+    pid = int(player_id)
+    for md in my_decisions or []:
+        action = md.get("action") or []
+        ctx = md.get("context") or {}
+        if len(action) < 3:
+            continue
+        kind = str(action[0]).lower()
+        if kind not in ("tribute", "back"):
+            continue
+        source = ctx.get("source", "act")
+        cards = _cards_from_tribute_back_action(action)
+        if not cards:
+            continue
+        if kind == "tribute":
+            if source == "notify" and ctx.get("receive_tribute_pos") == pid:
+                result.extend(cards)
+            elif source != "notify":
+                for card in cards:
+                    if card in result:
+                        result.remove(card)
+        elif kind == "back":
+            if source == "notify" and ctx.get("receive_back_pos") == pid:
+                result.extend(cards)
+            elif source != "notify":
+                for card in cards:
+                    if card in result:
+                        result.remove(card)
+    return result
 
 class YiFeiReplayGUI:
     """YiFei AI 掼蛋回放系统 - 整合版"""
@@ -155,14 +217,50 @@ class YiFeiReplayGUI:
         self.card_canvas.pack(fill=tk.BOTH, expand=True)
         # 拖动窗口时同步重绘（按 canvas 当前尺寸重新计算布局）
         self.card_canvas.bind("<Configure>", lambda e: self._draw_current_step())
+
+        # 右下角：可复制的本步出牌信息（宽 160px）
+        self.step_copy_frame = tk.Frame(
+            card_frame, width=160, height=68, bg="#f8f8f8",
+            highlightthickness=1, highlightbackground="#555555",
+        )
+        self.step_copy_frame.pack_propagate(False)
+        self.step_copy_text = tk.Text(
+            self.step_copy_frame,
+            width=1,
+            height=4,
+            wrap=tk.WORD,
+            font=("Consolas", 9),
+            relief=tk.FLAT,
+            bg="#f8f8f8",
+            padx=6,
+            pady=4,
+            borderwidth=0,
+            cursor="xterm",
+        )
+        self.step_copy_text.pack(fill=tk.BOTH, expand=True)
+        self.step_copy_text.bind("<Key>", self._step_copy_block_edit)
+        self.step_copy_frame.place(relx=1.0, rely=1.0, anchor=tk.SE, x=-10, y=-10)
+        self._update_step_copy_panel()
         
         # 4. 底部信息区
         info_frame = ttk.LabelFrame(main_frame, text="游戏信息", padding="5")
         info_frame.pack(fill=tk.X, pady=(10, 0))
         
-        # 信息标签
-        self.game_info_label = ttk.Label(info_frame, text="请选择一个游戏记录开始回放", justify=tk.LEFT)
-        self.game_info_label.pack(fill=tk.X, padx=5, pady=5)
+        # 可复制游戏信息（文件名 / 路径）
+        self.game_info_text = tk.Text(
+            info_frame,
+            height=1,
+            wrap=tk.WORD,
+            font=("Microsoft YaHei", 9),
+            relief=tk.FLAT,
+            padx=4,
+            pady=2,
+            borderwidth=0,
+            cursor="xterm",
+        )
+        self.game_info_text.pack(fill=tk.X, padx=5, pady=5)
+        self.game_info_text.bind("<Key>", self._step_copy_block_edit)
+        self._set_game_info_text("请选择一个游戏记录开始回放")
         
         # 状态栏
         self.status_bar = ttk.Label(self.root, text="就绪", anchor=tk.W)
@@ -228,12 +326,12 @@ class YiFeiReplayGUI:
         self.progress_var.set(0)
         
         # 显示游戏基本信息
-        game_info = f"游戏: {self.current_game.name}\n"
-        self.game_info_label.config(text=game_info)
+        self._set_game_info_text(self._format_game_info_text())
         
         # 清空画布，准备渲染
         self.card_canvas.delete("all")
         self._draw_current_step()
+        self._update_step_copy_panel()
         
         self.status_bar.config(text=f"已加载游戏: {self.current_game.name}")
     
@@ -256,12 +354,12 @@ class YiFeiReplayGUI:
         self.progress_var.set(0)
         
         # 显示游戏基本信息
-        game_info = f"游戏: {self.current_game.name}\n"
-        self.game_info_label.config(text=game_info)
+        self._set_game_info_text(self._format_game_info_text())
         
         # 清空画布，准备渲染
         self.card_canvas.delete("all")
         self._draw_current_step()
+        self._update_step_copy_panel()
         
         self.status_bar.config(text=f"已选择游戏: {self.current_game.name}")
     
@@ -277,104 +375,26 @@ class YiFeiReplayGUI:
         self.my_decisions = self.current_game_data.get('my_decisions', [])
         self.player_id = self.current_game_data.get('player_id', 0)
         self.total_steps = len(self.actions)
+        self.teammate_record_data = None
         
         # 保存初始手牌（所有玩家）
         self.initial_hands = {}
-        
-        # **关键修复**：先处理贡牌和还牌，调整初始手牌
-        # 贡牌和还牌发生在游戏开始之前，需要从my_decisions中获取并调整初始手牌
-        tribute_info = {}  # {from_pos: {to_pos: [cards]}}
-        back_info = {}     # {from_pos: {to_pos: [cards]}}
-        
-        # 从my_decisions中提取贡牌和还牌信息
-        if self.my_decisions:
-            for decision in self.my_decisions:
-                action = decision.get('action', [])
-                if not action or not isinstance(action, list):
-                    continue
-                
-                action_type = action[0] if len(action) > 0 else ""
-                action_type_upper = action_type.upper() if action_type else ""
-                
-                # 处理贡牌（tribute）
-                if action_type_upper == "TRIBUTE" or action_type == "tribute":
-                    # 贡牌格式：[tribute, tribute, [cards]]
-                    if len(action) >= 3 and isinstance(action[2], list):
-                        tribute_cards = action[2]
-                        from_pos = self.player_id
-                        # 贡牌通常是给上局输家，这里需要从游戏信息中获取
-                        # 暂时记录，后续可以通过其他信息补充
-                        if from_pos not in tribute_info:
-                            tribute_info[from_pos] = {}
-                        # 由于不知道接收者，先记录cards，后续处理
-                        tribute_info[from_pos]['cards'] = tribute_cards
-                
-                # 处理还牌（back）
-                elif action_type_upper == "BACK" or action_type == "back":
-                    # 还牌格式：[back, back, [cards]]
-                    if len(action) >= 3 and isinstance(action[2], list):
-                        back_cards = action[2]
-                        # 还牌是接收者给贡牌者的
-                        # 由于还牌信息可能不在my_decisions中，这里先记录
-        
-        # 1. 从initial_hand获取当前玩家的初始手牌（这是服务器分发后的手牌，已包含贡牌还牌）
+
+        # 1. 从initial_hand获取当前玩家的初始手牌（贡前快照，27 张）
         if 'initial_hand' in self.current_game_data:
             self.initial_hands[str(self.player_id)] = self.current_game_data['initial_hand'].copy()
-        
-        # 2. 从all_players_hands获取所有玩家的初始手牌（这是服务器分发后的手牌）
+
+        # 2. 从all_players_hands获取所有玩家的初始手牌
         if 'all_players_hands' in self.current_game_data:
             for pos, cards in self.current_game_data['all_players_hands'].items():
                 pos_str = str(pos)
-                # 添加类型检查，确保cards是列表类型
                 if isinstance(cards, list):
                     self.initial_hands[pos_str] = cards.copy()
                 else:
-                    # 如果不是列表，跳过或使用空列表
                     self.initial_hands[pos_str] = []
-        
-        # **关键修复**：根据贡牌还牌信息调整初始手牌
-        # initial_hand是服务器分发后的手牌（已包含贡牌还牌），这是正确的显示手牌
-        # 但我们需要知道贡牌还牌的过程，以便在_calculate_current_hands中正确处理
-        
-        # 保存贡牌还牌信息，用于后续处理
-        self.tribute_info = {}  # {from_pos: {cards: [cards], to_pos: None}}  # to_pos需要从游戏规则推断
-        self.back_info = {}     # {from_pos: {cards: [cards], to_pos: None}}
-        
-        # 从my_decisions中提取贡牌信息
-        if self.my_decisions:
-            for decision in self.my_decisions:
-                action = decision.get('action', [])
-                if not action or not isinstance(action, list):
-                    continue
-                
-                action_type = action[0] if len(action) > 0 else ""
-                action_type_upper = action_type.upper() if action_type else ""
-                
-                # 处理贡牌（tribute）
-                if action_type_upper == "TRIBUTE" or action_type == "tribute":
-                    # 贡牌格式：[tribute, tribute, [cards]]
-                    if len(action) >= 3 and isinstance(action[2], list):
-                        tribute_cards = action[2]
-                        from_pos = self.player_id
-                        self.tribute_info[from_pos] = {
-                            'cards': tribute_cards,
-                            'to_pos': None  # 需要从游戏规则推断（通常是上局输家）
-                        }
-                
-                # 处理还牌（back）
-                elif action_type_upper == "BACK" or action_type == "back":
-                    # 还牌格式：[back, back, [cards]]
-                    if len(action) >= 3 and isinstance(action[2], list):
-                        back_cards = action[2]
-                        # 还牌是接收者给贡牌者的
-                        # 由于还牌信息可能不在my_decisions中，这里先记录
-                        from_pos = self.player_id
-                        self.back_info[from_pos] = {
-                            'cards': back_cards,
-                            'to_pos': None  # 需要从游戏规则推断（通常是上局赢家）
-                        }
-        
-        # 3. 尝试使用服务器日志补充初始手牌
+
+        self.tribute_info = {}
+        self.back_info = {}
         try:
             server_log_path = Path("src/communication/Testscore/服务端")
             if server_log_path.exists():
@@ -401,11 +421,10 @@ class YiFeiReplayGUI:
         except Exception as e:
             self.status_bar.config(text=f"补充初始手牌失败: {e}")
         
-        # 4. 确保所有4个玩家都有正确的初始手牌数量（27张）
+        # 4. 确保所有4个玩家都有初始手牌字段
         for pos in range(4):
             pos_str = str(pos)
             if pos_str not in self.initial_hands or not self.initial_hands[pos_str]:
-                # 如果没有初始手牌或初始手牌数量不合理，初始化一个空列表
                 self.initial_hands[pos_str] = []
 
         # 5. 解析当前玩家 / 对手名字并合并队友（同一局另一份 JSON）的初始手牌
@@ -413,7 +432,10 @@ class YiFeiReplayGUI:
         self._try_load_teammate_record()
         self._resolve_levels()
 
-        # 6. 计算当前所有玩家的手牌
+        # 6. 所有手牌来源合并后，再按 my_decisions 调整贡/还（本家 + 已合并队友）
+        self._apply_tribute_back_to_initial_hands()
+
+        # 7. 计算当前所有玩家的手牌
         self.player_hands = self._calculate_current_hands()
         self.status_bar.config(text=f"游戏数据加载完成，共 {self.total_steps} 个动作，初始手牌: {len(self.initial_hands)} 个玩家")
     
@@ -479,6 +501,7 @@ class YiFeiReplayGUI:
 
         # 队友名字：哪怕手牌已被 GameRecorder.load_game 预填进 all_players_hands，名字也要落到 self.teammate_name 上
         self.teammate_name = teammate_data.get('player_name', teammate_name) or teammate_name
+        self.teammate_record_data = teammate_data
 
         if teammate_pos is None or not isinstance(teammate_hand, list) or not teammate_hand:
             return
@@ -567,9 +590,54 @@ class YiFeiReplayGUI:
             cols.append((rank, by_rank[rank]))
         return cols
 
+    def _apply_tribute_back_to_initial_hands(self):
+        """贡前 initial_hand 按 my_decisions 调整为出牌前有效手牌（本家 + 队友 JSON）。"""
+        self._apply_tribute_back_for_player(
+            str(self.player_id),
+            self.my_decisions,
+            self.player_id,
+        )
+        teammate_data = getattr(self, "teammate_record_data", None)
+        if teammate_data:
+            teammate_pos = teammate_data.get("player_id")
+            if teammate_pos is not None:
+                self._apply_tribute_back_for_player(
+                    str(teammate_pos),
+                    teammate_data.get("my_decisions", []),
+                    teammate_pos,
+                )
+        self._refresh_tribute_back_info()
+
+    def _apply_tribute_back_for_player(self, pos_str, my_decisions, player_id):
+        if pos_str not in self.initial_hands or not self.initial_hands[pos_str]:
+            return
+        self.initial_hands[pos_str] = apply_tribute_back_to_hand(
+            self.initial_hands[pos_str],
+            my_decisions,
+            player_id,
+        )
+
+    def _refresh_tribute_back_info(self):
+        """从 my_decisions 提取贡/还牌摘要，供界面展示。"""
+        self.tribute_info = {}
+        self.back_info = {}
+        for decision in self.my_decisions or []:
+            action = decision.get("action") or []
+            ctx = decision.get("context") or {}
+            if len(action) < 3 or not isinstance(action[2], list):
+                continue
+            kind = str(action[0]).lower()
+            cards = _cards_from_tribute_back_action(action)
+            if not cards:
+                continue
+            if kind == "tribute":
+                self.tribute_info.setdefault(self.player_id, []).extend(cards)
+            elif kind == "back":
+                self.back_info.setdefault(self.player_id, []).extend(cards)
+
     def _calculate_current_hands(self):
         """计算所有玩家的当前手牌（到当前步骤为止）"""
-        # 从初始手牌开始，确保所有4个玩家都有初始手牌记录
+        # 从 initial_hands 开始（本家已在 _load_game_data 中按贡/还牌调整）
         current_hands = {}
         
         # 初始化所有4个玩家的手牌，确保每个玩家都有合理的初始手牌
@@ -580,12 +648,6 @@ class YiFeiReplayGUI:
             else:
                 # 如果没有初始手牌，初始化一个空列表
                 current_hands[pos_str] = []
-        
-        # **关键修复**：处理贡牌和还牌
-        # 注意：initial_hand已经是服务器分发后的手牌（已包含贡牌还牌），所以不需要调整
-        # 但我们需要在显示时知道贡牌还牌的过程
-        # 由于initial_hand已经是正确的，这里不需要做任何调整
-        # 贡牌还牌信息已经保存在self.tribute_info和self.back_info中，用于显示
         
         # 处理当前步骤之前的所有动作
         for i in range(min(self.current_step, self.total_steps)):
@@ -715,6 +777,92 @@ class YiFeiReplayGUI:
         
         # 重新渲染当前步骤的牌面
         self._draw_current_step()
+        self._update_step_copy_panel()
+
+    def _step_copy_block_edit(self, event):
+        """只读：允许选择与复制，禁止改字。"""
+        if event.state & 0x4 and event.keysym.lower() in ("c", "a", "insert"):
+            return
+        if event.keysym in (
+            "Left", "Right", "Up", "Down", "Home", "End",
+            "Shift_L", "Shift_R", "Control_L", "Control_R",
+        ):
+            return
+        return "break"
+
+    def _format_game_info_text(self):
+        if not self.current_game:
+            return "请选择一个游戏记录开始回放"
+        return f"游戏: {self.current_game.name}"
+
+    def _set_game_info_text(self, text):
+        if not hasattr(self, "game_info_text"):
+            return
+        self.game_info_text.config(state=tk.NORMAL)
+        self.game_info_text.delete("1.0", tk.END)
+        self.game_info_text.insert("1.0", text)
+        self.game_info_text.config(state=tk.NORMAL)
+
+    def _format_card_display_name(self, card):
+        if not isinstance(card, str) or len(card) < 2:
+            return str(card)
+        suit = card[0]
+        rank = card[1:]
+        if rank == "1":
+            rank = "A"
+        display_rank = RANK_DISPLAY.get(rank, rank)
+        display_suit = SUIT_DISPLAY.get(suit, suit)
+        return f"{display_suit}{display_rank}"
+
+    def _short_player_name(self, pos):
+        """复制块用短名：yf1_m3 / client3 / 对手@1 …"""
+        try:
+            pos = int(pos)
+        except (TypeError, ValueError):
+            return f"pos{pos}"
+        labels = self._build_player_labels()
+        if not (0 <= pos < len(labels)):
+            return f"pos{pos}"
+        label = labels[pos]
+        if "(" in label and label.endswith(")"):
+            return label.split("(", 1)[1][:-1]
+        return label
+
+    def _format_step_play_copy_text(self):
+        """本步出牌可复制文本：n/total + 玩家名 + 牌名。"""
+        total = self.total_steps or 0
+        n = self.current_step
+        line1 = f"{n}/{total}"
+        if n <= 0 or not self.actions:
+            return f"{line1}\n—"
+        action = self.actions[n - 1]
+        player = self._short_player_name(action.get("cur_pos", -1))
+        action_info = self._parse_action(action.get("cur_action"))
+        if not action_info:
+            raw = action.get("cur_action", "")
+            return f"{line1}\n{player}\n{raw}"
+        action_type, _rank, cards = action_info
+        at = (action_type or "").upper()
+        if at == "PASS":
+            return f"{line1}\n{player}\n过"
+        if isinstance(cards, list) and cards:
+            names = [self._format_card_display_name(c) for c in cards]
+            return f"{line1}\n{player}\n{' '.join(names)}"
+        type_labels = {
+            "TRIBUTE": "进贡", "BACK": "还贡",
+            "DISPATCH": "发牌",
+        }
+        label = type_labels.get(at, action_type or "—")
+        return f"{line1}\n{player}\n{label}"
+
+    def _update_step_copy_panel(self):
+        if not hasattr(self, "step_copy_text"):
+            return
+        text = self._format_step_play_copy_text()
+        self.step_copy_text.config(state=tk.NORMAL)
+        self.step_copy_text.delete("1.0", tk.END)
+        self.step_copy_text.insert("1.0", text)
+        self.step_copy_text.config(state=tk.NORMAL)
     
     def _draw_current_step(self):
         """绘制当前步骤的牌面（1312 大牌风格：按 rank 堆叠 + 顶部级数标签）。"""
@@ -1012,8 +1160,8 @@ class YiFeiReplayGUI:
     def _draw_step_info(self):
         """绘制步骤信息"""
         if self.current_step == 0:
-            # 游戏开始，显示初始手牌信息
-            info = "游戏开始 - 初始手牌信息\n"
+            # 游戏开始，显示有效起手（已扣进贡/加收还贡）
+            info = "游戏开始 - 有效起手（已处理贡/还）\n"
             for pos in range(4):
                 pos_str = str(pos)
                 if pos_str in self.initial_hands:

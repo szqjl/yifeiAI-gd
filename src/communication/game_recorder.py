@@ -242,13 +242,20 @@ class GameRecorder:
         if not self.record_dir.exists():
             self.record_dir.mkdir(parents=True, exist_ok=True)
         
-    def backfill_victory_num(self, victory_num: list, pending_files: list) -> int:
+    def backfill_victory_num(
+        self,
+        victory_num: list,
+        pending_files: list,
+        *,
+        expected_batch_games: Optional[int] = None,
+    ) -> int:
         """
         回填 pending 记录文件的 victoryNum。
         读取每个文件，添加 victoryNum 到 result，写回。
         Args:
             victory_num: [pos0_wins, pos1_wins, pos2_wins, pos3_wins]
             pending_files: 待回填的文件路径列表
+            expected_batch_games: 本批 batch_games；若给出则校验 [0]+[1] 一致才回填
         Returns:
             成功回填的文件数
         """
@@ -256,8 +263,21 @@ class GameRecorder:
         import json
         import tempfile
         import os
+        from communication.game_result_utils import validate_batch_victory_num
+
         logger = logging.getLogger(f"GameRecorder.{self.player_name}")
         if not pending_files:
+            return 0
+
+        ok, reason = validate_batch_victory_num(victory_num, expected_batch_games)
+        if not ok:
+            logger.warning(
+                "跳过 victoryNum 回填: %s (vn=%s, batch_games=%s)",
+                reason,
+                victory_num,
+                expected_batch_games,
+            )
+            pending_files.clear()
             return 0
         flushed = 0
         for path in list(pending_files):

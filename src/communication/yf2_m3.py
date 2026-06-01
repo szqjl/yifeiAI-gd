@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 yf2_m3 - YiFei AI M3 Client (Player 2)
-M3版本：忠实移植lalala决策引擎
+M3 主交付客户端：M3DecisionEngine
 """
 
 import asyncio
@@ -20,6 +20,12 @@ from communication.game_recorder import (
     GameRecorder,
     normalize_cards_to_string_list,
     ensure_my_pos_int,
+)
+from communication.game_result_utils import (
+    build_game_result_payload,
+    build_local_batch_victory_num,
+    resolve_expected_batch_games,
+    validate_batch_victory_num,
 )
 from communication.websocket_manager import WebSocketManager
 from game_logic.platform_act import clamp_act_index
@@ -56,7 +62,7 @@ class YF2_M3_Client:
         self.ws_manager = WebSocketManager(self.user_info, use_local=use_local_websocket)
         self.websocket = None
 
-        self.logger.info("Initializing M3DecisionEngine (lalala port)")
+        self.logger.info("Initializing M3DecisionEngine")
         self.decision_engine = M3DecisionEngine(player_id)
 
         self.hand_cards = []
@@ -65,6 +71,10 @@ class YF2_M3_Client:
 
         self.game_recorder = GameRecorder(player_id, "yf2_m3")
         self.pending_result_files = []
+        self._batch_setting_times = None
+        self._batch_platform_wins = [0, 0]
+        self._last_episode_order = None
+        self._project_root = Path(__file__).parent.parent.parent
 
         self.round_counter = 0
         self.current_self_rank = None
@@ -113,17 +123,7 @@ class YF2_M3_Client:
                 self.game_recorder.record_decision(
                     action_idx,
                     selected_action,
-                    context={
-                        "myPos": data.get("myPos", self.player_id),
-                        "curPos": data.get("curPos", -1),
-                        "greaterPos": data.get("greaterPos", -1),
-                        "actionList_size": len(action_list),
-                        "selfRank": data.get("selfRank", self.current_self_rank),
-                        "oppoRank": data.get("oppoRank", self.current_oppo_rank),
-                        "curRank": data.get("curRank", self.current_cur_rank),
-                        "version": "m3",
-                        "series": "M",
-                    },
+                    context=self._decision_context_from_act(data),
                 )
                 await self.send_action(action_idx)
 
@@ -144,8 +144,160 @@ class YF2_M3_Client:
         elif notification_key in ("gameOver", "gameResult", "episodeOver"):
             data["notification_key"] = notification_key
             self._handle_game_over(data)
+        elif notification_key == "tribute":
+            self._handle_tribute_notification(data)
+        elif notification_key == "back":
+            self._handle_back_notification(data)
         elif notification_key == "act" or (stage == "play" and notify_type == ""):
             self._handle_act_notification(data)
+
+    def _normalize_tribute_back_card(self, card):
+        """贡/还牌单张 → 'S2' 大写字符串（与 normalize_cards_to_string_list 一致）。"""
+        if card is None:
+            return None
+        normalized = normalize_cards_to_string_list([card])
+        if not normalized:
+            return None
+        raw = normalized[0]
+        if isinstance(raw, str) and len(raw) >= 2:
+            return raw[0].upper() + raw[1:].upper()
+        return raw
+
+    def _decision_context_from_act(self, data: dict) -> dict:
+        return {
+            "myPos": data.get("myPos", self.player_id),
+            "curPos": data.get("curPos", -1),
+            "greaterPos": data.get("greaterPos", -1),
+            "actionList_size": len(data.get("actionList") or []),
+            "selfRank": data.get("selfRank", self.current_self_rank),
+            "oppoRank": data.get("oppoRank", self.current_oppo_rank),
+            "curRank": data.get("curRank", self.current_cur_rank),
+            "version": "m3",
+            "series": "M",
+            "source": "act",
+            "stage": data.get("stage", ""),
+        }
+
+    def _already_recorded_back(self, card_str):
+        for md in self.game_recorder.current_game.get("my_decisions", []) if self.game_recorder.current_game else []:
+            action = md.get("action") or []
+            if len(action) >= 3 and str(action[0]).lower() == "back":
+                existing = action[2]
+                if isinstance(existing, list) and card_str in existing:
+                    return True
+        return False
+
+    def _already_recorded_tribute_received(self, card_str, tribute_pos):
+        for md in self.game_recorder.current_game.get("my_decisions", []) if self.game_recorder.current_game else []:
+            action = md.get("action") or []
+            ctx = md.get("context") or {}
+            if len(action) >= 3 and str(action[0]).lower() == "tribute":
+                existing = action[2]
+                if (
+                    isinstance(existing, list)
+                    and card_str in existing
+                    and ctx.get("source") == "notify"
+                    and ctx.get("receive_tribute_pos") == self.player_id
+                    and ctx.get("tribute_pos") == tribute_pos
+                ):
+                    return True
+        return False
+
+    def _handle_tribute_notification(self, data: dict):
+        """进贡 notify：收贡方写入 my_decisions；进贡方 outgoing 已由 act 录牌。"""
+        result = data.get("result") or []
+        for item in result:
+            if not isinstance(item, (list, tuple)) or len(item) < 3:
+                continue
+            tribute_pos, receive_pos, card = item[0], item[1], item[2]
+            try:
+                tribute_pos_i = int(tribute_pos)
+                receive_pos_i = int(receive_pos)
+            except (TypeError, ValueError):
+                continue
+            card_str = self._normalize_tribute_back_card(card)
+            self.logger.info(
+                "进贡 notify: %s -> %s 牌 %s",
+                tribute_pos_i, receive_pos_i, card_str or card,
+            )
+            if receive_pos_i != self.player_id:
+                continue
+            if tribute_pos_i == self.player_id:
+                continue
+            if not card_str:
+                continue
+            if not self.game_recorder.current_game:
+                self.logger.warning("进贡 notify 时无 current_game，跳过录牌: %s", card_str)
+                continue
+            if self._already_recorded_tribute_received(card_str, tribute_pos_i):
+                self.logger.info("收进贡已记录，跳过重复: %s", card_str)
+                continue
+            self.game_recorder.record_decision(
+                0,
+                ["tribute", "tribute", [card_str]],
+                context={
+                    "myPos": self.player_id,
+                    "curPos": -1,
+                    "greaterPos": -1,
+                    "actionList_size": 0,
+                    "selfRank": self.current_self_rank,
+                    "oppoRank": self.current_oppo_rank,
+                    "curRank": self.current_cur_rank,
+                    "version": "m3",
+                    "series": "M",
+                    "source": "notify",
+                    "stage": "tribute",
+                    "tribute_pos": tribute_pos_i,
+                    "receive_tribute_pos": receive_pos_i,
+                },
+            )
+            self.logger.info("已录收进贡（notify）: %s from pos %s", card_str, tribute_pos_i)
+
+    def _handle_back_notification(self, data: dict):
+        """还贡 notify：对手还给我的牌写入 my_decisions（我方主动还贡仍走 act 录牌）。"""
+        result = data.get("result") or []
+        for item in result:
+            if not isinstance(item, (list, tuple)) or len(item) < 3:
+                continue
+            back_pos, receive_pos, card = item[0], item[1], item[2]
+            try:
+                receive_pos = int(receive_pos)
+            except (TypeError, ValueError):
+                continue
+            card_str = self._normalize_tribute_back_card(card)
+            if not card_str:
+                continue
+            self.logger.info(
+                "还贡 notify: %s -> %s 牌 %s", back_pos, receive_pos, card_str
+            )
+            if receive_pos != self.player_id:
+                continue
+            if not self.game_recorder.current_game:
+                self.logger.warning("还贡 notify 时无 current_game，跳过录牌: %s", card_str)
+                continue
+            if self._already_recorded_back(card_str):
+                self.logger.info("还贡已记录，跳过重复: %s", card_str)
+                continue
+            self.game_recorder.record_decision(
+                0,
+                ["back", "back", [card_str]],
+                context={
+                    "myPos": self.player_id,
+                    "curPos": -1,
+                    "greaterPos": -1,
+                    "actionList_size": 0,
+                    "selfRank": self.current_self_rank,
+                    "oppoRank": self.current_oppo_rank,
+                    "curRank": self.current_cur_rank,
+                    "version": "m3",
+                    "series": "M",
+                    "source": "notify",
+                    "stage": "back",
+                    "back_pos": back_pos,
+                    "receive_back_pos": receive_pos,
+                },
+            )
+            self.logger.info("已录还贡（notify）: %s", card_str)
 
     def _handle_act_notification(self, data: dict):
         hand_cards = data.get("handCards", [])
@@ -271,46 +423,121 @@ class YF2_M3_Client:
         return "loss"
 
     def _handle_game_over(self, data: dict):
-        self.game_count += 1
+        stage = data.get("stage", "")
+        notification_key = data.get("notification_key", "")
 
-        order = data.get("order")
-        if order and isinstance(order, list) and len(order) >= 4:
-            result_label = self._determine_game_result(order)
-            self.logger.info("本局结果: %s (yf1_m3 负责写入 score 文件)", result_label)
+        if stage == "gameOver" or notification_key == "gameOver":
+            st = data.get("settingTimes")
+            if st is not None:
+                self._batch_setting_times = int(st)
+            expected = resolve_expected_batch_games(
+                self._batch_setting_times, self._project_root
+            )
+            cur_times = data.get("curTimes")
+            try:
+                cur_times = int(cur_times) if cur_times is not None else None
+            except (TypeError, ValueError):
+                cur_times = None
+            if (
+                expected is not None
+                and cur_times is not None
+                and cur_times <= expected
+                and self._last_episode_order
+            ):
+                label = self._determine_game_result(self._last_episode_order)
+                if label == "win":
+                    self._batch_platform_wins[0] += 1
+                elif label == "loss":
+                    self._batch_platform_wins[1] += 1
+            self.logger.info(
+                "gameOver: curTimes={}, settingTimes={}, batch_wins={}, expected={}".format(
+                    data.get("curTimes"),
+                    data.get("settingTimes"),
+                    self._batch_platform_wins,
+                    expected,
+                )
+            )
+            return
 
-        result_data = data.get("result", [])
-        if isinstance(result_data, list) and len(result_data) >= 5:
-            victory_num = result_data[4] if len(result_data) > 4 else []
-            result = {"victoryNum": victory_num} if victory_num else {}
-        else:
-            result = data.get("result", {})
-            if not isinstance(result, dict):
-                result = {}
-        if not result.get("victoryNum"):
-            result["victoryNum"] = data.get("victoryNum", [])
-        victory_num = result.get("victoryNum", [])
-        has_victory = isinstance(victory_num, list) and len(victory_num) >= 4
-        if has_victory:
-            self.logger.info("Game {} over, victoryNum: {}".format(self.game_count, victory_num))
-        if self.game_recorder.current_game:
-            filepath = self.game_recorder.end_game(result)
-            if filepath:
-                if has_victory:
-                    self.logger.info("Game record saved: {}".format(filepath))
-                else:
+        if notification_key == "episodeOver" or stage == "episodeOver":
+            order = data.get("order")
+            if order and isinstance(order, list) and len(order) >= 4:
+                self._last_episode_order = order
+                result_label = self._determine_game_result(order)
+                self.logger.info("本局结果: %s (yf1_m3 负责写入 score 文件)", result_label)
+            if self.game_recorder.current_game:
+                filepath = self.game_recorder.end_game({})
+                if filepath:
                     self.pending_result_files.append(str(filepath))
-        else:
-            if has_victory:
-                self._flush_pending_records(result)
-        if has_victory:
-            self._flush_pending_records(result)
+            return
 
-    def _flush_pending_records(self, result: dict):
+        if stage == "gameResult" or notification_key == "gameResult":
+            self.logger.info(
+                "gameResult RAW: %s", json.dumps(data, ensure_ascii=False)
+            )
+            result = build_game_result_payload(data)
+            victory_num = result.get("victoryNum", [])
+            expected = resolve_expected_batch_games(
+                self._batch_setting_times, self._project_root
+            )
+            ok, reason = validate_batch_victory_num(victory_num, expected)
+            if victory_num and not ok:
+                local_vn = build_local_batch_victory_num(
+                    self._batch_platform_wins[0],
+                    self._batch_platform_wins[1],
+                )
+                ok_local, _ = validate_batch_victory_num(local_vn, expected)
+                if ok_local:
+                    self.logger.warning(
+                        "gameResult 服务器 vn 无效(%s)，改用本批 gameOver 计数: %s",
+                        reason,
+                        local_vn,
+                    )
+                    victory_num = local_vn
+                    result = {"victoryNum": local_vn}
+                    ok = True
+            has_victory = bool(victory_num) and ok
+            if victory_num and not ok:
+                self.logger.warning(
+                    "gameResult victoryNum 校验失败: %s (vn=%s, batch_games=%s)",
+                    reason,
+                    victory_num,
+                    expected,
+                )
+                self.pending_result_files.clear()
+                return
+
+            if has_victory:
+                self.logger.info("Game batch over, victoryNum: {}".format(victory_num))
+
+            if self.game_recorder.current_game:
+                filepath = self.game_recorder.end_game(result if has_victory else {})
+                if filepath:
+                    if has_victory:
+                        self.logger.info("Game record saved: {}".format(filepath))
+                    else:
+                        self.pending_result_files.append(str(filepath))
+            if has_victory:
+                self._flush_pending_records(result, expected)
+            return
+
+        self.logger.warning(
+            "未识别的结束通知: stage={}, notification_key={}".format(
+                stage, notification_key
+            )
+        )
+
+    def _flush_pending_records(self, result: dict, expected_batch_games=None):
         victory_num = result.get("victoryNum", [])
-        if victory_num:
-            updated = self.game_recorder.backfill_victory_num(victory_num, self.pending_result_files)
-            if updated:
-                self.logger.info("已回填 {} 个 pending 记录".format(updated))
+        if not victory_num:
+            return
+        updated = self.game_recorder.backfill_victory_num(
+            victory_num,
+            self.pending_result_files,
+            expected_batch_games=expected_batch_games,
+        )
+        if updated:
+            self.logger.info("已回填 {} 个 pending 记录".format(updated))
 
     async def send_action(self, action_idx: int):
         try:

@@ -1,5 +1,5 @@
 {
-  "comment": "项目根目录下相对路径；4 客户端顺序为坐位 0,1,2,3（0+2 一队，1+3 一队）。v6 文件名与 batch_executor_gui.py 中 default_clients_v6 一致；若当前分支无 yf1_v6/yf2_v6，请在检出含 V6 客户端的分支后再跑 GUA-002 的 v6 条。",
+  "comment": "项目根目录下相对路径；4 客户端顺序为坐位 0,1,2,3（0+2 一队，1+3 一队）。批跑 --target-games 须 3 的倍数（3/9/12），见 EVAL.md。",
   "opponent_lalala": [
     "src/communication/run_lalala_client3.py",
     "src/communication/run_lalala_client4.py"
@@ -32,6 +32,12 @@
     "src/communication/yf1_m2.py",
     "src/communication/run_lalala_client3.py",
     "src/communication/yf2_m2.py",
+    "src/communication/run_lalala_client4.py"
+  ],
+  "m3": [
+    "src/communication/yf1_m3.py",
+    "src/communication/run_lalala_client3.py",
+    "src/communication/yf2_m3.py",
     "src/communication/run_lalala_client4.py"
   ]
 }

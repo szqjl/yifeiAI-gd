@@ -48,7 +48,7 @@ def test_legacy_max_round_count_is_high_but_must_not_drive_progress(tmp_path):
     assert _count_new_paired_games(rd, baseline) == 39
 
     state = ExecutionState(
-        target_games=10,
+        target_games=12,
         completed_games=0,
         restart_count=0,
         current_batch=1,
@@ -58,7 +58,7 @@ def test_legacy_max_round_count_is_high_but_must_not_drive_progress(tmp_path):
     added = _increment_completed_after_batch(state, batch_games=3, server_terminated_by_kill=False)
     assert added == 3
     assert state.completed_games == 3
-    assert state.completed_games != min(_count_new_paired_games(rd, baseline), 10)
+    assert state.completed_games != min(_count_new_paired_games(rd, baseline), 12)
 
 
 @pytest.mark.unit
@@ -102,8 +102,8 @@ def test_killed_batch_does_not_increment_completed():
 @pytest.mark.unit
 def test_increment_respects_target_cap():
     state = ExecutionState(
-        target_games=10,
-        completed_games=9,
+        target_games=12,
+        completed_games=11,
         restart_count=3,
         current_batch=4,
         start_time=datetime.now(),
@@ -111,4 +111,4 @@ def test_increment_respects_target_cap():
     )
     added = _increment_completed_after_batch(state, batch_games=3, server_terminated_by_kill=False)
     assert added == 1
-    assert state.completed_games == 10
+    assert state.completed_games == 12

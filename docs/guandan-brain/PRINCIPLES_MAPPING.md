@@ -10,8 +10,8 @@
 
 | 归属 | 含义 |
 |------|------|
-| **M3 · P0** | 可写 if-guard、与 lalala 基线兼容、可 pytest + 回放验收 |
-| **M1 · P1** | 共用 `src/decision/` 被动 Handler 细化（非 M3 路径） |
+| **M3 · P0** | 可写 if-guard、可 pytest + 批跑验收；落点 **`m3_decision_engine.py`** | 与 lalala 基线兼容 |
+| ~~**M1 · P1**~~ | **frozen** — 历史 `src/decision/` 被动 Handler；**勿再新开策略 GUA** | 组牌/牌力类 **P1+** 归 **V5+** |
 | **V5+ · P1+** | 混合引擎 / 知识权重 / 角色与牌力 / 组牌与记牌模块 |
 | **文档** | 实体赛或线下-only，不进 v1006 客户端 |
 

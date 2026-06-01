@@ -13,15 +13,32 @@
 
 **说明**：离线服 **`guandan_offline_v1006.exe`** 可能已出现在你的工作区（常见为 `server/guandan_offline_v1006.exe`，或你从平台包解压/复制到任意路径）；也可能**未**纳入 Git、仅在本机某绝对路径——二者都正常。在 GUI 中选对该 exe，或无头 CLI 使用 `--server-path "<路径>"`。**IDE 里的助手**未必能索引到该二进制（忽略规则、沙箱或未同步），故仍以**你本机实际存在的路径**为准；`scripts/gui/batch_executor_gui_m1.py` 的 `possible_paths` 会依次探测若干默认位置。
 
-## 2. M1 批量对战（产出 `game_records`）
+## 2. M3 批量对战（主交付 · 产出 `game_records`）
+
+**局数档位**（`--target-games` **须为 3 的倍数**，见 [`EVAL.md`](EVAL.md)「批跑局数档位」）：
+
+| 档位 | 局数 | 用途 |
+|------|------|------|
+| 小批 | **3** | 改代码后快速验证 |
+| 中批 | **9** | 策略改动稳定性 |
+| 大批 | **12** | 队胜率 KPI / 关单 |
+
+```bash
+python -m batch_executor --server-path "<SERVER_EXE>" --target-games 12 \
+  --clients src/communication/yf1_m3.py src/communication/run_lalala_client3.py \
+            src/communication/yf2_m3.py src/communication/run_lalala_client4.py
+```
+
+净盘：跑前清空 `game_records/*.json`。批末 **`victoryNum[0]+[1]` = 该批 `batch_games`**（整批为 3 的倍数时各批均为 3，无尾批 fallback）。
+
+## 2b. M1 批量对战（frozen · 仅回归）
 
 任选其一：
 
-1. **GUI**：双击 **`START_M1_GUI.bat`**，或项目根执行：  
-   `python scripts/gui/batch_executor_gui_m1.py`（或根目录 stub / `START_M1_GUI.bat`）  
-2. **无头 CLI**（便于脚本化）：见 **`EVAL.md`**「无头 CLI」，四客户端使用 **`scenarios/client_sets.json`** 的 **`m1`** 四条路径。
+1. **GUI**：`START_M1_GUI.bat` 或 `python scripts/gui/batch_executor_gui_m1.py`  
+2. **无头 CLI**：`scenarios/client_sets.json` 的 **`m1`** 四客户端；局数仍须 **3 的倍数**。
 
-跑够 **`ITERATIONS.md`** 里本轮写的场次（例如 GUA-021：**≥5 个成对 `game_id`**）。
+跑够 **`ITERATIONS.md`** 里本轮写的场次。
 
 批量执行器在跑完后应满足：`execution_state.json` 的 `target_games` 与本次 `--target-games` 一致，**`completed_games` = 平台批次数累计**（非 `game_records` 文件数）；JSON 内 **`victoryNum` 为四座位累计胜场，不是局数**。落盘 PASS 分析可用成对 match key `(opponent, round, level)` 或 M1 成对 `game_id`。若单局极慢仍被误杀，可在运行前设置环境变量 `BATCH_EXECUTOR_SECONDS_PER_GAME_ESTIMATE`（默认 720）或 `BATCH_EXECUTOR_MIN_BATCH_SECONDS`（默认 180），见 `batch_executor/README.md`。
 

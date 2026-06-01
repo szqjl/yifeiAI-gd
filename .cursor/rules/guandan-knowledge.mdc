@@ -2,6 +2,7 @@
 description: 掼蛋完整规则知识库（对局层级、等级、牌型、进贡、过 A）；改规则/决策/知识库时必读
 globs:
   - src/decision/**
+  - src/m/m3/**
   - src/game_logic/**
   - docs/knowledge/**
   - docs/gdrules/**
@@ -44,7 +45,7 @@ v1006 说明书「**游戏次数**」；从 **2 级**打起，双方连续打**�
 |----|------|
 | **是什么** | 一次「从 2 打到 A 并双上过关」的完整过程（平台称「一次游戏」/ **整局**） |
 | **怎么数** | `exe N`、`--target-games N`、`completed_games`；`gameOver` 时 `curTimes` = `settingTimes` |
-| **何时用** | 批跑进度、胜率台账（例：「批跑 10 局，M3 8 胜 2 负」） |
+| **何时用** | 批跑进度、胜率台账（例：「批跑 12 局，M3 11 胜 1 负」） |
 | **客户端追踪** | `game_scores_m2.json` → `games[]`；日志「整局结束 Game=」 |
 
 **平台「一次游戏」/ 整局与规则「一局」同义**；二者都不是 `episodeOver` 的 **小局（副）**。

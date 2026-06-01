@@ -521,6 +521,66 @@ class BatchExecutor:
                     batch_games,
                 )
 
+    def _write_current_batch_context(self, state: ExecutionState, batch_games: int) -> None:
+        """供 M3 客户端读取本批 batch_games（GUA-033）。"""
+        payload = {
+            "batch": state.current_batch,
+            "batch_games": batch_games,
+            "timestamp": datetime.now().isoformat(),
+        }
+        path = self.project_root / "batch_executor" / "current_batch.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.environ["BATCH_GAMES"] = str(batch_games)
+
+    def _validate_batch_victory_num(self, batch_games: int) -> None:
+        """批末交叉验证：latest_victory_num.json 与 batch_games / RAW gameResult 口径。"""
+        shared = self.project_root / "batch_executor" / "latest_victory_num.json"
+        if not shared.exists():
+            self.logger.warning(
+                "批末未找到 latest_victory_num.json，无法交叉验证 victoryNum（batch_games=%d）",
+                batch_games,
+            )
+            return
+        try:
+            payload = json.loads(shared.read_text(encoding="utf-8"))
+            vn = payload.get("victoryNum", [])
+            if not isinstance(vn, list) or len(vn) < 4:
+                self.logger.warning("latest_victory_num.json 格式无效: %s", payload)
+                return
+            team_total = int(vn[0]) + int(vn[1])
+            raw = payload.get("server_vn_raw")
+            if raw and isinstance(raw, list) and len(raw) >= 4:
+                raw_sum = int(raw[0]) + int(raw[1])
+                if raw_sum != team_total:
+                    self.logger.info(
+                        "批末对账：采用 vn=%s (vn_source=%s)，服务器 RAW=%s",
+                        vn,
+                        payload.get("vn_source", "?"),
+                        raw,
+                    )
+            if team_total != batch_games:
+                self.logger.warning(
+                    "批末 victoryNum 与 batch_games 不一致: vn=%s [0]+[1]=%d, batch_games=%d；"
+                    "本批队胜不计入 tracker",
+                    vn,
+                    team_total,
+                    batch_games,
+                )
+                return
+            if int(vn[0]) != int(vn[2]) or int(vn[1]) != int(vn[3]):
+                self.logger.warning("批末 victoryNum 同队不一致: %s", vn)
+                return
+            self.logger.info(
+                "批末 victoryNum 校验通过: vn=%s, batch_games=%d, Team0=%d Team1=%d",
+                vn,
+                batch_games,
+                int(vn[0]),
+                int(vn[1]),
+            )
+        except (json.JSONDecodeError, TypeError, ValueError, OSError) as e:
+            self.logger.warning("读取 latest_victory_num.json 失败: %s", e)
+
     def _sync_state_before_persist(self) -> None:
         """供信号处理 / stop 前调用：刷新诊断日志，不改动 completed_games。"""
         if self._current_state is not None:
@@ -696,6 +756,7 @@ class BatchExecutor:
                 batch_games = min(remaining, self.validator.single_run_limit)
                 
                 self.logger.info(f"开始批次 {state.current_batch}，执行 {batch_games} 场游戏")
+                self._write_current_batch_context(state, batch_games)
                 
                 # 清理之前的进程
                 self.restart_manager.cleanup()
@@ -988,6 +1049,8 @@ class BatchExecutor:
                     batch_games=batch_games,
                     batch_start_stats=batch_start_stats,
                 )
+                if not server_terminated_by_kill:
+                    self._validate_batch_victory_num(batch_games)
                 
                 # 从服务器输出读取本批次战绩
                 # 服务器输出格式: "达到设定场次, 其中0号位胜利X次，1号位胜利Y次，2号位胜利Z次，3号位胜利W次"
