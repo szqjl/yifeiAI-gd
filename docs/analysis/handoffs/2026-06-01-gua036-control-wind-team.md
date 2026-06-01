@@ -4,7 +4,7 @@
 |------|------|
 | 日期 | 2026-06-01 |
 | 分支 | m-dev @ **31328b5**（GUA-036 **未 commit**，工作区有改动） |
-| 状态 | **已结论待验证**（pytest 关单 pass；批跑 KPI / Git 推送待本机） |
+| 状态 | **已 push**（`ccd1091`）；pytest 关单 pass；**9/12 局 KPI 已回填 ITERATIONS** |
 | 真源 | [`ISSUES.md`](../../guandan-brain/ISSUES.md) §GUA-036、[`ITERATIONS.md`](../../guandan-brain/ITERATIONS.md) 最后一行 |
 
 ## 背景（2～3 句）
@@ -25,8 +25,8 @@ batch7（24 局批跑 vn `[1,2,1,2]`）round38 复盘定音：**①** yf2 接风
 
 ## 未完成 / 进行中
 
-- [ ] **Git commit + push** — GUA-036 改动**尚未提交**（见下方「待提交文件」）
-- [ ] **净盘 KPI 观测**（可选验收）— 9/12 局 M3 vs lalala，对比 GUA-034/035 后 **75.0%** / **88.9%** 样本是否稳定
+- [x] **Git commit + push** — `ccd1091` on `m-dev`
+- [x] **净盘 KPI 观测** — 9 局 **4/9（44.4%）**；12 局 **5/12（41.7%）** → `ITERATIONS.md`
 - [ ] **V5+** — 整手组牌（222333+顺+炸）→ **V5+-04**，**不在 M3**
 
 ## 关键结论（有据）
@@ -70,13 +70,7 @@ b29854d feat(m3): GUA-034 solo sprint END-M01–M04
 
 ## 下一步唯一动作
 
-**提交并 push GUA-036**（仅核心文件），建议 commit message：
-
-```text
-feat(m3): GUA-036 passive straight seize + team wind guards
-```
-
-推送后可选：净盘 `--target-games 9` 填 `ITERATIONS.md` KPI 行（**不要求** batch7 再赢）。
+**CALC-M04/M05** 或再跑一轮净盘 12 局观测方差；**不要**以 batch7 round38 逐步对齐作 pass 标准。
 
 ## 不要重做
 
