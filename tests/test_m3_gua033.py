@@ -138,7 +138,10 @@ def test_game_result_handler_logs_raw_and_backfills(tmp_path):
         "final": [1, 0, 1, 0],
     }
     with patch.object(client, "_save_victory_num_to_shared_file"):
-        client._handle_game_over(data)
+        with patch(
+            "communication.yf1_m3.resolve_expected_batch_games", return_value=1
+        ):
+            client._handle_game_over(data)
 
     saved = json.loads(pending_file.read_text(encoding="utf-8"))
     assert saved["result"]["victoryNum"] == [1, 0, 1, 0]
