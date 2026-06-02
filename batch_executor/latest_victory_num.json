@@ -1,10 +1,18 @@
 {
   "victoryNum": [
-    0,
-    3,
-    0,
-    3
+    2,
+    1,
+    2,
+    1
   ],
-  "timestamp": "2026-02-27T21:02:47.549262",
-  "player": "yf2_m1"
+  "batch_games": 3,
+  "vn_source": "server",
+  "timestamp": "2026-06-02T19:44:28.388527",
+  "player": "yf1_m3",
+  "server_vn_raw": [
+    2,
+    1,
+    2,
+    1
+  ]
 }

@@ -285,6 +285,2775 @@
       "selfRank": "2",
       "oppoRank": "A",
       "result": "loss"
+    },
+    {
+      "round": 23,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 24,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "3",
+      "selfRank": "3",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 25,
+      "order": [
+        2,
+        1,
+        3,
+        0
+      ],
+      "curRank": "5",
+      "selfRank": "3",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 26,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "4",
+      "selfRank": "4",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 27,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "7",
+      "selfRank": "7",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 28,
+      "order": [
+        1,
+        2,
+        0,
+        3
+      ],
+      "curRank": "T",
+      "selfRank": "T",
+      "oppoRank": "5",
+      "result": "draw"
+    },
+    {
+      "round": 29,
+      "order": [
+        2,
+        1,
+        3,
+        0
+      ],
+      "curRank": "6",
+      "selfRank": "T",
+      "oppoRank": "6",
+      "result": "win"
+    },
+    {
+      "round": 30,
+      "order": [
+        0,
+        1,
+        3,
+        2
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "6",
+      "result": "win"
+    },
+    {
+      "round": 31,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "Q",
+      "selfRank": "Q",
+      "oppoRank": "6",
+      "result": "win"
+    },
+    {
+      "round": 32,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "6",
+      "result": "win"
+    },
+    {
+      "round": 33,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 34,
+      "order": [
+        0,
+        3,
+        1,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 35,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "3",
+      "selfRank": "3",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 36,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "6",
+      "selfRank": "6",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 37,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "9",
+      "selfRank": "9",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 38,
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "9",
+      "oppoRank": "8",
+      "result": "win"
+    },
+    {
+      "round": 39,
+      "order": [
+        1,
+        2,
+        0,
+        3
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "8",
+      "result": "draw"
+    },
+    {
+      "round": 40,
+      "order": [
+        3,
+        0,
+        1,
+        2
+      ],
+      "curRank": "9",
+      "selfRank": "J",
+      "oppoRank": "9",
+      "result": "loss"
+    },
+    {
+      "round": 41,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "J",
+      "result": "win"
+    },
+    {
+      "round": 42,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "Q",
+      "selfRank": "Q",
+      "oppoRank": "J",
+      "result": "win"
+    },
+    {
+      "round": 43,
+      "order": [
+        1,
+        2,
+        0,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "J",
+      "result": "draw"
+    },
+    {
+      "round": 44,
+      "order": [
+        0,
+        3,
+        1,
+        2
+      ],
+      "curRank": "Q",
+      "selfRank": "A",
+      "oppoRank": "Q",
+      "result": "win"
+    },
+    {
+      "round": 45,
+      "order": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "Q",
+      "result": "draw"
+    },
+    {
+      "round": 46,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "K",
+      "selfRank": "2",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 47,
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 48,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "7",
+      "selfRank": "7",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 49,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "T",
+      "selfRank": "T",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 50,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "K",
+      "selfRank": "K",
+      "oppoRank": "K",
+      "result": "loss"
+    },
+    {
+      "round": 51,
+      "order": [
+        1,
+        2,
+        0,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "K",
+      "oppoRank": "A",
+      "result": "draw"
+    },
+    {
+      "round": 52,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "K",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 53,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "5",
+      "selfRank": "K",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 54,
+      "order": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "5",
+      "result": "draw"
+    },
+    {
+      "round": 55,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "6",
+      "selfRank": "A",
+      "oppoRank": "6",
+      "result": "win"
+    },
+    {
+      "round": 56,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "6",
+      "result": "loss"
+    },
+    {
+      "round": 57,
+      "order": [
+        2,
+        1,
+        3,
+        0
+      ],
+      "curRank": "9",
+      "selfRank": "2",
+      "oppoRank": "9",
+      "result": "win"
+    },
+    {
+      "round": 58,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "3",
+      "selfRank": "3",
+      "oppoRank": "9",
+      "result": "win"
+    },
+    {
+      "round": 59,
+      "order": [
+        1,
+        0,
+        2,
+        3
+      ],
+      "curRank": "6",
+      "selfRank": "6",
+      "oppoRank": "9",
+      "result": "draw"
+    },
+    {
+      "round": 60,
+      "order": [
+        0,
+        3,
+        1,
+        2
+      ],
+      "curRank": "T",
+      "selfRank": "6",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 61,
+      "order": [
+        0,
+        3,
+        2,
+        1
+      ],
+      "curRank": "7",
+      "selfRank": "7",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 62,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "9",
+      "selfRank": "9",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 63,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "Q",
+      "selfRank": "Q",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 64,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 65,
+      "order": [
+        1,
+        2,
+        0,
+        3
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "draw"
+    },
+    {
+      "round": 66,
+      "order": [
+        1,
+        0,
+        3,
+        2
+      ],
+      "curRank": "3",
+      "selfRank": "2",
+      "oppoRank": "3",
+      "result": "loss"
+    },
+    {
+      "round": 67,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "5",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 68,
+      "order": [
+        1,
+        2,
+        0,
+        3
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "5",
+      "result": "draw"
+    },
+    {
+      "round": 69,
+      "order": [
+        3,
+        0,
+        1,
+        2
+      ],
+      "curRank": "6",
+      "selfRank": "5",
+      "oppoRank": "6",
+      "result": "loss"
+    },
+    {
+      "round": 70,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "8",
+      "selfRank": "5",
+      "oppoRank": "8",
+      "result": "loss"
+    },
+    {
+      "round": 71,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "J",
+      "selfRank": "5",
+      "oppoRank": "J",
+      "result": "win"
+    },
+    {
+      "round": 72,
+      "order": [
+        2,
+        3,
+        0,
+        1
+      ],
+      "curRank": "8",
+      "selfRank": "8",
+      "oppoRank": "J",
+      "result": "win"
+    },
+    {
+      "round": 73,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "T",
+      "selfRank": "T",
+      "oppoRank": "J",
+      "result": "loss"
+    },
+    {
+      "round": 74,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "T",
+      "oppoRank": "A",
+      "result": "win"
+    },
+    {
+      "round": 75,
+      "order": [
+        0,
+        3,
+        2,
+        1
+      ],
+      "curRank": "K",
+      "selfRank": "K",
+      "oppoRank": "A",
+      "result": "win"
+    },
+    {
+      "round": 76,
+      "order": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "A",
+      "result": "draw"
+    },
+    {
+      "round": 77,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "A",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 78,
+      "order": [
+        0,
+        3,
+        1,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "A",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 79,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 80,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "2",
+      "oppoRank": "8",
+      "result": "win"
+    },
+    {
+      "round": 81,
+      "order": [
+        2,
+        1,
+        3,
+        0
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "8",
+      "result": "win"
+    },
+    {
+      "round": 82,
+      "order": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "curRank": "6",
+      "selfRank": "6",
+      "oppoRank": "8",
+      "result": "draw"
+    },
+    {
+      "round": 83,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "9",
+      "selfRank": "6",
+      "oppoRank": "9",
+      "result": "win"
+    },
+    {
+      "round": 84,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "7",
+      "selfRank": "7",
+      "oppoRank": "9",
+      "result": "win"
+    },
+    {
+      "round": 85,
+      "order": [
+        2,
+        3,
+        0,
+        1
+      ],
+      "curRank": "T",
+      "selfRank": "T",
+      "oppoRank": "9",
+      "result": "win"
+    },
+    {
+      "round": 86,
+      "order": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "curRank": "Q",
+      "selfRank": "Q",
+      "oppoRank": "9",
+      "result": "draw"
+    },
+    {
+      "round": 87,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "T",
+      "selfRank": "Q",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 88,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 89,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 90,
+      "order": [
+        0,
+        1,
+        3,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 91,
+      "order": [
+        0,
+        1,
+        3,
+        2
+      ],
+      "curRank": "6",
+      "selfRank": "6",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 92,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "7",
+      "selfRank": "7",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 93,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "T",
+      "selfRank": "T",
+      "oppoRank": "T",
+      "result": "loss"
+    },
+    {
+      "round": 94,
+      "order": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "curRank": "K",
+      "selfRank": "T",
+      "oppoRank": "K",
+      "result": "loss"
+    },
+    {
+      "round": 95,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "A",
+      "selfRank": "T",
+      "oppoRank": "A",
+      "result": "win"
+    },
+    {
+      "round": 96,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "A",
+      "result": "loss"
+    },
+    {
+      "round": 97,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "J",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 98,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "J",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 99,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "8",
+      "selfRank": "J",
+      "oppoRank": "8",
+      "result": "loss"
+    },
+    {
+      "round": 100,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "J",
+      "result": "win"
+    },
+    {
+      "round": 101,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "J",
+      "result": "win"
+    },
+    {
+      "round": 102,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 103,
+      "order": [
+        1,
+        0,
+        3,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 104,
+      "order": [
+        2,
+        1,
+        3,
+        0
+      ],
+      "curRank": "7",
+      "selfRank": "2",
+      "oppoRank": "7",
+      "result": "win"
+    },
+    {
+      "round": 105,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "3",
+      "selfRank": "3",
+      "oppoRank": "7",
+      "result": "win"
+    },
+    {
+      "round": 106,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "4",
+      "selfRank": "4",
+      "oppoRank": "7",
+      "result": "win"
+    },
+    {
+      "round": 107,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "7",
+      "selfRank": "7",
+      "oppoRank": "7",
+      "result": "loss"
+    },
+    {
+      "round": 108,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "T",
+      "selfRank": "7",
+      "oppoRank": "T",
+      "result": "loss"
+    },
+    {
+      "round": 109,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "K",
+      "selfRank": "7",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 110,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "T",
+      "selfRank": "T",
+      "oppoRank": "K",
+      "result": "loss"
+    },
+    {
+      "round": 111,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "A",
+      "selfRank": "T",
+      "oppoRank": "A",
+      "result": "win"
+    },
+    {
+      "round": 112,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "A",
+      "result": "win"
+    },
+    {
+      "round": 113,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "A",
+      "result": "win"
+    },
+    {
+      "round": 114,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 115,
+      "order": [
+        3,
+        0,
+        1,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 116,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "7",
+      "selfRank": "2",
+      "oppoRank": "7",
+      "result": "loss"
+    },
+    {
+      "round": 117,
+      "order": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "curRank": "T",
+      "selfRank": "2",
+      "oppoRank": "T",
+      "result": "draw"
+    },
+    {
+      "round": 118,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "J",
+      "selfRank": "2",
+      "oppoRank": "J",
+      "result": "loss"
+    },
+    {
+      "round": 119,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "A",
+      "selfRank": "2",
+      "oppoRank": "A",
+      "result": "loss"
+    },
+    {
+      "round": 120,
+      "order": [
+        0,
+        3,
+        2,
+        1
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 121,
+      "order": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "curRank": "4",
+      "selfRank": "4",
+      "oppoRank": "2",
+      "result": "draw"
+    },
+    {
+      "round": 122,
+      "order": [
+        2,
+        1,
+        3,
+        0
+      ],
+      "curRank": "3",
+      "selfRank": "4",
+      "oppoRank": "3",
+      "result": "win"
+    },
+    {
+      "round": 123,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "3",
+      "result": "loss"
+    },
+    {
+      "round": 124,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "6",
+      "selfRank": "5",
+      "oppoRank": "6",
+      "result": "loss"
+    },
+    {
+      "round": 125,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "9",
+      "selfRank": "5",
+      "oppoRank": "9",
+      "result": "win"
+    },
+    {
+      "round": 126,
+      "order": [
+        1,
+        0,
+        2,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "8",
+      "oppoRank": "9",
+      "result": "draw"
+    },
+    {
+      "round": 127,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "T",
+      "selfRank": "8",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 128,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "T",
+      "result": "loss"
+    },
+    {
+      "round": 129,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "K",
+      "selfRank": "J",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 130,
+      "order": [
+        0,
+        3,
+        2,
+        1
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 131,
+      "order": [
+        1,
+        0,
+        2,
+        3
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "K",
+      "result": "draw"
+    },
+    {
+      "round": 132,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "A",
+      "selfRank": "2",
+      "oppoRank": "A",
+      "result": "loss"
+    },
+    {
+      "round": 133,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 134,
+      "order": [
+        1,
+        0,
+        3,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 135,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "4",
+      "selfRank": "5",
+      "oppoRank": "4",
+      "result": "win"
+    },
+    {
+      "round": 136,
+      "order": [
+        0,
+        1,
+        3,
+        2
+      ],
+      "curRank": "6",
+      "selfRank": "6",
+      "oppoRank": "4",
+      "result": "win"
+    },
+    {
+      "round": 137,
+      "order": [
+        0,
+        1,
+        3,
+        2
+      ],
+      "curRank": "7",
+      "selfRank": "7",
+      "oppoRank": "4",
+      "result": "win"
+    },
+    {
+      "round": 138,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "8",
+      "oppoRank": "4",
+      "result": "win"
+    },
+    {
+      "round": 139,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "4",
+      "result": "win"
+    },
+    {
+      "round": 140,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "4",
+      "result": "win"
+    },
+    {
+      "round": 141,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 142,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 143,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "8",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 144,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 145,
+      "order": [
+        0,
+        3,
+        1,
+        2
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 146,
+      "order": [
+        0,
+        3,
+        1,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 147,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "3",
+      "selfRank": "3",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 148,
+      "order": [
+        0,
+        3,
+        2,
+        1
+      ],
+      "curRank": "6",
+      "selfRank": "6",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 149,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "8",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 150,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 151,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 152,
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 153,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "4",
+      "selfRank": "4",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 154,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "7",
+      "selfRank": "7",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 155,
+      "order": [
+        0,
+        3,
+        2,
+        1
+      ],
+      "curRank": "T",
+      "selfRank": "T",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 156,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "Q",
+      "selfRank": "Q",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 157,
+      "order": [
+        0,
+        3,
+        2,
+        1
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 158,
+      "order": [
+        1,
+        0,
+        2,
+        3
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "draw"
+    },
+    {
+      "round": 159,
+      "order": [
+        2,
+        1,
+        0,
+        3
+      ],
+      "curRank": "3",
+      "selfRank": "2",
+      "oppoRank": "3",
+      "result": "win"
+    },
+    {
+      "round": 160,
+      "order": [
+        2,
+        1,
+        3,
+        0
+      ],
+      "curRank": "4",
+      "selfRank": "4",
+      "oppoRank": "3",
+      "result": "win"
+    },
+    {
+      "round": 161,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "3",
+      "result": "win"
+    },
+    {
+      "round": 162,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "8",
+      "oppoRank": "3",
+      "result": "win"
+    },
+    {
+      "round": 163,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "3",
+      "result": "win"
+    },
+    {
+      "round": 164,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "3",
+      "result": "win"
+    },
+    {
+      "round": 165,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "3",
+      "result": "win"
+    },
+    {
+      "round": 166,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "3",
+      "result": "win"
+    },
+    {
+      "round": 167,
+      "order": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "curRank": "8",
+      "selfRank": "8",
+      "oppoRank": "3",
+      "result": "loss"
+    },
+    {
+      "round": 168,
+      "order": [
+        2,
+        1,
+        3,
+        0
+      ],
+      "curRank": "5",
+      "selfRank": "8",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 169,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "9",
+      "selfRank": "9",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 170,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "Q",
+      "selfRank": "Q",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 171,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 172,
+      "order": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "draw"
+    },
+    {
+      "round": 173,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "3",
+      "selfRank": "2",
+      "oppoRank": "3",
+      "result": "win"
+    },
+    {
+      "round": 174,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "3",
+      "result": "win"
+    },
+    {
+      "round": 175,
+      "order": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "curRank": "8",
+      "selfRank": "8",
+      "oppoRank": "3",
+      "result": "draw"
+    },
+    {
+      "round": 176,
+      "order": [
+        3,
+        0,
+        1,
+        2
+      ],
+      "curRank": "4",
+      "selfRank": "8",
+      "oppoRank": "4",
+      "result": "loss"
+    },
+    {
+      "round": 177,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "6",
+      "selfRank": "8",
+      "oppoRank": "6",
+      "result": "loss"
+    },
+    {
+      "round": 178,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "9",
+      "selfRank": "8",
+      "oppoRank": "9",
+      "result": "loss"
+    },
+    {
+      "round": 179,
+      "order": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "curRank": "Q",
+      "selfRank": "8",
+      "oppoRank": "Q",
+      "result": "loss"
+    },
+    {
+      "round": 180,
+      "order": [
+        0,
+        3,
+        2,
+        1
+      ],
+      "curRank": "A",
+      "selfRank": "8",
+      "oppoRank": "A",
+      "result": "win"
+    },
+    {
+      "round": 181,
+      "order": [
+        1,
+        2,
+        0,
+        3
+      ],
+      "curRank": "T",
+      "selfRank": "T",
+      "oppoRank": "A",
+      "result": "draw"
+    },
+    {
+      "round": 182,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "T",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 183,
+      "order": [
+        0,
+        3,
+        1,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "T",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 184,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 185,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 186,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 187,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 188,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "2",
+      "oppoRank": "8",
+      "result": "win"
+    },
+    {
+      "round": 189,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "8",
+      "result": "win"
+    },
+    {
+      "round": 190,
+      "order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "8",
+      "oppoRank": "8",
+      "result": "win"
+    },
+    {
+      "round": 191,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "T",
+      "selfRank": "T",
+      "oppoRank": "8",
+      "result": "win"
+    },
+    {
+      "round": 192,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "K",
+      "selfRank": "K",
+      "oppoRank": "8",
+      "result": "win"
+    },
+    {
+      "round": 193,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "8",
+      "result": "win"
+    },
+    {
+      "round": 194,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 195,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 196,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "8",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 197,
+      "order": [
+        2,
+        1,
+        0,
+        3
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 198,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "K",
+      "selfRank": "K",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 199,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 200,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "5",
+      "selfRank": "A",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 201,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 202,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "8",
+      "selfRank": "2",
+      "oppoRank": "8",
+      "result": "loss"
+    },
+    {
+      "round": 203,
+      "order": [
+        0,
+        1,
+        3,
+        2
+      ],
+      "curRank": "J",
+      "selfRank": "2",
+      "oppoRank": "J",
+      "result": "win"
+    },
+    {
+      "round": 204,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "3",
+      "selfRank": "3",
+      "oppoRank": "J",
+      "result": "win"
+    },
+    {
+      "round": 205,
+      "order": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "curRank": "4",
+      "selfRank": "4",
+      "oppoRank": "J",
+      "result": "draw"
+    },
+    {
+      "round": 206,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "Q",
+      "selfRank": "4",
+      "oppoRank": "Q",
+      "result": "loss"
+    },
+    {
+      "round": 207,
+      "order": [
+        1,
+        0,
+        3,
+        2
+      ],
+      "curRank": "A",
+      "selfRank": "4",
+      "oppoRank": "A",
+      "result": "loss"
+    },
+    {
+      "round": 208,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "2",
+      "selfRank": "4",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 209,
+      "order": [
+        2,
+        1,
+        3,
+        0
+      ],
+      "curRank": "7",
+      "selfRank": "7",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 210,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "8",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 211,
+      "order": [
+        2,
+        3,
+        0,
+        1
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "2",
+      "result": "win"
+    },
+    {
+      "round": 212,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "K",
+      "selfRank": "K",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 213,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "5",
+      "selfRank": "K",
+      "oppoRank": "5",
+      "result": "win"
+    },
+    {
+      "round": 214,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 215,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "8",
+      "selfRank": "A",
+      "oppoRank": "8",
+      "result": "win"
+    },
+    {
+      "round": 216,
+      "order": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "8",
+      "result": "draw"
+    },
+    {
+      "round": 217,
+      "order": [
+        1,
+        0,
+        2,
+        3
+      ],
+      "curRank": "9",
+      "selfRank": "2",
+      "oppoRank": "9",
+      "result": "draw"
+    },
+    {
+      "round": 218,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "T",
+      "selfRank": "2",
+      "oppoRank": "T",
+      "result": "loss"
+    },
+    {
+      "round": 219,
+      "order": [
+        0,
+        1,
+        3,
+        2
+      ],
+      "curRank": "K",
+      "selfRank": "2",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 220,
+      "order": [
+        0,
+        2,
+        1,
+        3
+      ],
+      "curRank": "3",
+      "selfRank": "3",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 221,
+      "order": [
+        0,
+        3,
+        1,
+        2
+      ],
+      "curRank": "6",
+      "selfRank": "6",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 222,
+      "order": [
+        0,
+        3,
+        2,
+        1
+      ],
+      "curRank": "7",
+      "selfRank": "7",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 223,
+      "order": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "curRank": "9",
+      "selfRank": "9",
+      "oppoRank": "K",
+      "result": "win"
+    },
+    {
+      "round": 224,
+      "order": [
+        1,
+        0,
+        2,
+        3
+      ],
+      "curRank": "T",
+      "selfRank": "T",
+      "oppoRank": "K",
+      "result": "draw"
+    },
+    {
+      "round": 225,
+      "order": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "curRank": "A",
+      "selfRank": "T",
+      "oppoRank": "A",
+      "result": "draw"
+    },
+    {
+      "round": 226,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "T",
+      "oppoRank": "2",
+      "result": "loss"
+    },
+    {
+      "round": 227,
+      "order": [
+        1,
+        0,
+        3,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "T",
+      "oppoRank": "5",
+      "result": "loss"
+    },
+    {
+      "round": 228,
+      "order": [
+        2,
+        1,
+        3,
+        0
+      ],
+      "curRank": "7",
+      "selfRank": "T",
+      "oppoRank": "7",
+      "result": "win"
+    },
+    {
+      "round": 229,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "J",
+      "selfRank": "J",
+      "oppoRank": "7",
+      "result": "win"
+    },
+    {
+      "round": 230,
+      "order": [
+        2,
+        1,
+        0,
+        3
+      ],
+      "curRank": "A",
+      "selfRank": "A",
+      "oppoRank": "7",
+      "result": "win"
+    },
+    {
+      "round": 231,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "7",
+      "result": "loss"
+    },
+    {
+      "round": 232,
+      "order": [
+        2,
+        0,
+        1,
+        3
+      ],
+      "curRank": "T",
+      "selfRank": "2",
+      "oppoRank": "T",
+      "result": "win"
+    },
+    {
+      "round": 233,
+      "order": [
+        3,
+        1,
+        0,
+        2
+      ],
+      "curRank": "5",
+      "selfRank": "5",
+      "oppoRank": "T",
+      "result": "loss"
+    },
+    {
+      "round": 234,
+      "order": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "curRank": "K",
+      "selfRank": "5",
+      "oppoRank": "K",
+      "result": "draw"
+    },
+    {
+      "round": 235,
+      "order": [
+        1,
+        3,
+        0,
+        2
+      ],
+      "curRank": "A",
+      "selfRank": "5",
+      "oppoRank": "A",
+      "result": "loss"
     }
   ],
   "games": [
@@ -311,17 +3080,83 @@
       "start_round": 18,
       "end_round": 22,
       "result": "loss"
+    },
+    {
+      "game": 5,
+      "start_round": 1,
+      "end_round": 32,
+      "result": "win"
+    },
+    {
+      "game": 6,
+      "start_round": 33,
+      "end_round": 55,
+      "result": "win"
+    },
+    {
+      "game": 7,
+      "start_round": 56,
+      "end_round": 96,
+      "result": "loss"
+    },
+    {
+      "game": 8,
+      "start_round": 1,
+      "end_round": 113,
+      "result": "win"
+    },
+    {
+      "game": 9,
+      "start_round": 114,
+      "end_round": 119,
+      "result": "loss"
+    },
+    {
+      "game": 10,
+      "start_round": 120,
+      "end_round": 132,
+      "result": "loss"
+    },
+    {
+      "game": 11,
+      "start_round": 1,
+      "end_round": 140,
+      "result": "win"
+    },
+    {
+      "game": 12,
+      "start_round": 141,
+      "end_round": 151,
+      "result": "win"
+    },
+    {
+      "game": 13,
+      "start_round": 1,
+      "end_round": 185,
+      "result": "win"
+    },
+    {
+      "game": 14,
+      "start_round": 186,
+      "end_round": 215,
+      "result": "win"
+    },
+    {
+      "game": 15,
+      "start_round": 216,
+      "end_round": 235,
+      "result": "loss"
     }
   ],
-  "total_rounds": 22,
-  "round_wins": 0,
-  "round_draws": 0,
-  "round_losses": 22,
-  "total_games": 4,
-  "game_wins": 0,
+  "total_rounds": 235,
+  "round_wins": 132,
+  "round_draws": 26,
+  "round_losses": 77,
+  "total_games": 15,
+  "game_wins": 7,
   "game_draws": 0,
-  "game_losses": 4,
-  "current_game_start_round": 23,
-  "current_level_self": "2",
+  "game_losses": 8,
+  "current_game_start_round": 236,
+  "current_level_self": "5",
   "current_level_oppo": "A"
 }
