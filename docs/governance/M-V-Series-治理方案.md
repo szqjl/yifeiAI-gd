@@ -282,6 +282,7 @@ START_M1_GUI.bat          → 仅 3 行：cd 仓库根 + call scripts\launchers\
 | `versions/` | MATRIX、V 归档说明 |
 | `usage/`、`quickstart/` | 工具与上手 |
 | `project/` | 历程、里程碑 |
+| `reasearch/` | 调研文档、竞品分析、技术研判（Git 同步） |
 | `archive/` | implementation、旧 skill/rules、一次性报告 |
 | 根 | **仅** `README.md`、`DOCUMENTATION_INDEX.md`、`_redirects/`（可选） |
 
@@ -509,3 +510,4 @@ __pycache__/
 | v1.2 | 2026-05-28 | Phase 4 脚本收敛结案；`doc/` → `docs/guandan-brain/`；README 基础知识摘要；相关 handoff 见 `docs/analysis/handoffs/2026-05-28-仓库整理方案执行中.md` |
 | v1.3 | 2026-05-29 | `main` / `origin/main` 策略拍板；新增 [main-branch-policy.md](./main-branch-policy.md) |
 | v1.7 | 2026-05-29 | §9 标「仓库整理已结案」；ITERATIONS Phase 5 治理结案行 |
+| v1.8 | 2026-06-02 | 新增 `docs/reasearch/` 调研文档目录说明（Git 同步） |
