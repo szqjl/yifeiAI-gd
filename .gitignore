@@ -69,6 +69,15 @@ trajectories/
 # Windows special files
 nul
 
-# Temporary JSON files
+# Temporary JSON files (Layer 2 runtime state — 治理 §6)
 execution_state.json
 game_scores.json
+game_scores_m2.json
+batch_executor/current_batch.json
+
+# Hypothesis property-test cache
+.hypothesis/
+
+# IDE / local scratch
+**/.idea/
+tmp_*.py
