@@ -80,4 +80,6 @@ batch_executor/current_batch.json
 
 # IDE / local scratch
 **/.idea/
+.cursor/hooks/         # Cursor IDE 钩子状态（continual-learning 等），按 M-V 治理 §5.5 不入仓
+.cursor/hooks/**
 tmp_*.py
