@@ -25,20 +25,33 @@ try:
         def load_default_config(self):
             """加载V7默认配置"""
             # 设置默认参数
-            self.target_games_var.set("10")  # 默认10场比赛
+            self.target_games_var.set("3")  # 默认3场（3的倍数）
+            
+            # 读取 v7_paths.yaml
+            _cfg = {}
+            _cfg_path = REPO_ROOT / "config" / "v7_paths.yaml"
+            if _cfg_path.exists():
+                try:
+                    import yaml
+                    with open(_cfg_path, encoding="utf-8") as _f:
+                        _cfg = yaml.safe_load(_f) or {}
+                except Exception:
+                    pass
+            _lalala_dir = os.environ.get("LALALA_DIR", "") or _cfg.get("lalala_dir", "").replace("%REPO_ROOT%", str(REPO_ROOT)) or str(REPO_ROOT / "reference" / "lalala")
             
             # 设置V7客户端配置
             v7_clients = [
-                "python src/communication/yf1_v7.py",  # V7客户端1 (位置0)
-                "python D:\\NYGD\\lalala\\client3.py",    # lalala客户端3 (位置1) 
-                "python src/communication/yf2_v7.py",  # V7客户端2 (位置2)
-                "python D:\\NYGD\\lalala\\client4.py"     # lalala客户端4 (位置3)
+                "python src/communication/yf1_v7.py",
+                f"python {_lalala_dir}\\client3.py",
+                "python src/communication/yf2_v7.py",
+                f"python {_lalala_dir}\\client4.py"
             ]
             
             self.clients_var.set(",".join(v7_clients))
             
             # 设置服务器配置
-            self.server_path_var.set("D:\\guandanscore\\guandan_offline_v1006\\windows\\guandan_offline_v1006.exe 10")
+            _server_exe = os.environ.get("SERVER_EXE", "") or _cfg.get("server_exe", "").replace("%REPO_ROOT%", str(REPO_ROOT)) or str(REPO_ROOT / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
+            self.server_path_var.set(f"{_server_exe} 10")
             
             # 在日志区域显示V7配置信息
             self.log_text.insert(tk.END, "=" * 60 + "\n")

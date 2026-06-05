@@ -1,0 +1,21 @@
+# V7 路径配置模板
+# 优先级：环境变量 > 本文件默认值
+# 所有路径可基于 %REPO_ROOT%（仓库根目录）或绝对路径
+
+# lalala 目录（含 client3.py / client4.py）
+# 环境变量 LALALA_DIR 优先生效
+lalala_dir: "%REPO_ROOT%/reference/lalala"
+
+# 离线服务器 exe 路径
+# 环境变量 SERVER_EXE 优先生效
+server_exe: "%REPO_ROOT%/offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe"
+
+# 模型权重目录
+# 环境变量 MODEL_DIR 优先生效
+model_dir: "%REPO_ROOT%/models/v-nn"
+
+# 默认模型文件名
+model_file: "bc_model_ultimate_win_rate.pth"
+
+# 默认服务器参数（传给 exe 的 argv）
+server_args: "10"
