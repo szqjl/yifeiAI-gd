@@ -28,6 +28,7 @@
 - 支持自我对弈和数据收集
 - 可扩展的架构设计
 - 平台动态信息监控
+- **V7 引擎**: 基于深度学习的终极胜率导向决策引擎
 
 ### 平台信息
 - **平台名称**: 南京邮电大学掼蛋AI算法对抗平台
@@ -315,120 +316,44 @@ if hour == 12:  # ❌ 错误，应该从系统时间获取
 
 ## 🌿 分支说明
 
-本项目采用**双分支并行开发**策略，用于独立训练和对比不同 AI 模型效果。
-
 ### 当前分支
 
 - **`main`**: 主分支，用于最终合并和发布
-- **`m-dev`**: M1 系列硬编码规则引擎分支（本地开发）
-  - 包含：`yf1_m1.py`, `yf2_m1.py`, `rule_based_decision_engine_m1.py`
-  - 特点：全新的硬编码规则引擎，5阶段细分路由
-- **`m1-dev-clean`**: M1 系列干净分支（已推送，推荐用于训练）
-  - 轻量级干净分支，不含模型文件和游戏记录
-  - 适合远程训练和协作
-- **`v6-dev`**: V6 系列优化分支
-  - 包含：`yf1_v6.py`, `yf2_v6.py` 及相关优化
-  - 特点：基于现有架构的优化版本
+- **`m-dev`**: M 系列（M1-M3）硬编码规则引擎开发线
+  - 包含：`yf1_m1.py`/`yf2_m1.py`、`rule_based_decision_engine_m1.py`
+  - 特点：5阶段细分路由规则引擎，长期稳定对战线
+- **`v7-dev`**: **V7 深度学习引擎实验线**（本分支）
+  - 包含：`yf1_v7.py`/`yf2_v7.py`、`ultimate_win_rate_engine_v7.py`
+  - 特点：基于训练模型的终极胜率导向决策，四头网络输出
+  - 启动：`START_V7_GUI.bat` / `START_V7_AUTO.bat` / `start_v7_gui.py`
 
-### 分支使用
+> V6 系列已归档（tag `archive/v6-dev-closed`），`v6-dev` 分支已删除。详见 [M/V 治理方案](docs/governance/M-V-Series-治理方案.md)。
+
+### 切换分支
 
 ```bash
-# 切换到 M1 分支
+# M 系列规则引擎
 git checkout m-dev
-
-# 切换到 V6 分支
-git checkout v6-dev
-
-# 切换回主分支
-git checkout main
-```
-
-**⚠️ 重要提醒**：测试不同版本时必须切换分支！
-- 测试 M1：必须在 `m-dev` 分支运行 `yf1_m1.py`
-- 测试 V6：必须在 `v6-dev` 分支运行 `yf1_v6.py`
-
-### M1 系列使用说明
-
-**M1 不是机器学习模型，而是硬编码规则引擎**，基于阶段细分路由的决策系统。
-
-#### M1 文件结构
-- `src/decision/rule_based_decision_engine_m1.py` - M1决策引擎（主入口）
-- `src/communication/yf1_m1.py` - M1客户端1（Player 0）
-- `src/communication/yf2_m1.py` - M1客户端2（Player 2）
-
-#### 运行 M1
-
-1. **切换到 M1 分支**
-```bash
-git checkout m-dev
-```
-
-2. **运行 M1 客户端**
-```bash
-# 运行客户端1（Player 0）
 python src/communication/yf1_m1.py
 
-# 运行客户端2（Player 2，需要新开终端）
-python src/communication/yf2_m1.py
+# V7 深度学习引擎
+git checkout v7-dev
+python start_v7_gui.py
 ```
 
-3. **M1 特性**
-- ✅ 5阶段细分路由（开局、中局前期、中局后期、残局前期、残局后期）
-- ✅ 主动/被动出牌分离
-- ✅ 策略引擎集成（队友保护、优先级系统、牌值系统）
-- ✅ 手牌结构分析器增强
-- ✅ 残局策略类（RushStrategy, DefendStrategy等）
+---
 
-#### M1 架构说明
+## 🧠 决策引擎概述
 
-M1 采用分层架构：
-```
-RuleBasedDecisionEngineM1 (主入口)
-  ├── StageRouter (阶段路由器)
-  │   ├── OpeningActiveHandler / OpeningPassiveHandler
-  │   ├── MidEarlyActiveHandler / MidEarlyPassiveHandler
-  │   ├── MidLateActiveHandler / MidLatePassiveHandler
-  │   ├── EndgameEarlyActiveHandler / EndgameEarlyPassiveHandler
-  │   └── EndgameLateActiveHandler / EndgameLatePassiveHandler
-  ├── StrategyEngine (策略引擎)
-  │   ├── TeammateProtectionStrategy (队友保护)
-  │   ├── PrioritySystem (优先级系统)
-  │   └── CardValueSystem (牌值系统)
-  └── HandStructureAnalyzer (手牌结构分析器)
-```
+本项目同时维护两种决策引擎：
 
-### 测试 M1
+| 引擎 | 类型 | 分支 | 核心文件 |
+|------|------|------|----------|
+| **M 系列** | 硬编码规则引擎 | `m-dev` | `src/decision/rule_based_decision_engine_m1.py` |
+| **V7** | 深度学习胜率引擎 | `v7-dev` | `src/decision/ultimate_win_rate_engine_v7.py` |
 
-详细测试步骤请参考 [M1测试指南](docs/development/M1测试指南.md)
-
-**方式1：GUI批量测试（推荐，最简单）**：
-```bash
-# 1. 切换到 M1 分支
-git checkout m-dev
-
-# 2. 启动M1测试GUI
-START_M1_GUI.bat
-
-# 3. 在GUI中配置参数并开始测试
-```
-
-**方式2：手动测试**：
-```bash
-# 1. 切换到 M1 分支
-git checkout m-dev
-
-# 2. 启动第一个客户端（Player 0）
-python src/communication/yf1_m1.py
-
-# 3. 新开终端，启动第二个客户端（Player 2）
-python src/communication/yf2_m1.py
-```
-
-详细说明请参考：
-- [分支开发指南](docs/development/分支开发指南.md) - M1/V6分支使用说明
-- [M1测试指南](docs/development/M1测试指南.md) - M1详细测试步骤
-- [YF硬编码完整提升计划优化版](docs/training/YF硬编码完整提升计划优化版.md) - M1实施计划
-
+- M 系列测试：`START_M1_GUI.bat`（详见 [M1 测试指南](docs/development/M1测试指南.md)）
+- V7 引擎测试：`START_V7_GUI.bat`（详见 [V7-实施方案](docs/guandan-brain/V7-实施方案.md)）
 ---
 
 ## ⚠️ 模型文件管理（重要）
@@ -483,12 +408,15 @@ guandan_ai_client/
 │
 ├── src/
 │   ├── communication/      # 通信模块
-│   │   ├── yf1_m1.py      # M1系列客户端1（m-dev分支）
-│   │   ├── yf2_m1.py      # M1系列客户端2（m-dev分支）
-│   │   ├── yf1_v6.py       # V6系列客户端1（v6-dev分支）
-│   │   └── yf2_v6.py       # V6系列客户端2（v6-dev分支）
+│   │   ├── yf1_m1.py / yf2_m1.py    # M1客户端（m-dev分支）
+│   │   ├── yf1_v7.py / yf2_v7.py    # V7客户端（v7-dev分支）
 │   ├── game_logic/         # 游戏逻辑模块
 │   ├── decision/           # 决策引擎模块
+│   │   ├── rule_based_decision_engine_m1.py  # M1规则引擎
+│   │   ├── ultimate_win_rate_engine_v7.py    # V7深度学习引擎
+│   │   ├── dynamic_grouping_optimizer.py     # V7动态分组优化
+│   ├── rl_agent/           # RL智能体模块
+│   │   └── dynamic_strategy_adjuster.py  # V7策略调整器
 │   ├── data/               # 数据收集模块
 │   ├── monitor/            # 信息监控模块
 │   └── utils/              # 工具模块
@@ -724,6 +652,7 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 ### 技术文档
 - [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md) - 缺陷、版本、评测台账（与 [文档目录首页](docs/README.md) 中的入口一致）
 - [M/V 系列仓库治理方案](docs/governance/M-V-Series-治理方案.md) - **分支、冒烟、产物与 M/V 分层（执行基准）**
+- [V7 引擎实施方案](docs/guandan-brain/V7-实施方案.md) - V7 深度学习引擎开发与部署计划
 - [腾讯云 COS 接入指南](docs/governance/COS-接入指南.md) - **回归 replay 上传/拉取**
 - [版本与分支状态矩阵](docs/versions/MATRIX.md)
 - [详细架构方案](docs/architecture/掼蛋AI客户端架构方案.md)
@@ -802,7 +731,8 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 
 ---
 
-**最后更新**: 2025年1月  
-**文档版本**: v1.0  
-**平台版本**: v1006
+**最后更新**: 2026年6月  
+**文档版本**: v1.1  
+**平台版本**: v1006  
+**当前引擎**: M 系列（规则） + V7（深度学习）
 
