@@ -12,7 +12,7 @@ alwaysApply: true
 ## 动手前必须（按顺序，不可跳过）
 
 1. 阅读 **`docs/governance/M-V-Series-治理方案.md`**：**§4** 分支/远程、**§6** Layer 2 产物、**§8** Commit/PR 规范、**§7** 门禁（行为变更时）。
-2. 阅读 **`docs/governance/main-branch-policy.md`** — 只推 **`m-dev`**，**禁止** `git push origin main`。
+2. 阅读 **`docs/governance/main-branch-policy.md`** — 禁止 `git push origin main`。
 3. 打开 **`docs/guandan-brain/AGENT_PUSH_CHECKLIST.md`**，逐项勾选后再 staging。
 
 ## 硬性约束
@@ -29,7 +29,7 @@ alwaysApply: true
 
 1. **`pre_push_check.bat`**（或 `python scripts/hooks/pre_push_validate.py`）
 2. 改 M 行为：治理 §8.2 — M 冒烟；行为变更另说明 30 局 regression（§7.1）是否已跑
-3. 推送前向用户 **一句话确认**：已读治理 §4/§6/§8、`pre_push` 通过、目标 **`origin/m-dev`**
+3. 推送前向用户 **一句话确认**：已读治理 §4/§6/§8、`pre_push` 通过、目标 **`origin/<当前分支>`**（m-dev 或 v7-dev）
 
 ## 禁止
 
