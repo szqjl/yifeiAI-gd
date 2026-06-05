@@ -35,9 +35,29 @@ def check_port_listening(port, timeout=30):
     print(f"✗ 端口 {port} 在 {timeout} 秒内未监听")
     return False
 
+def _resolve_path(key, default, env_var=""):
+    """从 v7_paths.yaml 解析路径，优先级：环境变量 > config > 默认值"""
+    import yaml
+    # 1) 环境变量
+    if env_var:
+        val = os.environ.get(env_var, "")
+        if val:
+            return val
+    # 2) config/v7_paths.yaml
+    cfg_path = Path(__file__).resolve().parents[2] / "config" / "v7_paths.yaml"
+    if cfg_path.exists():
+        with open(cfg_path, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+        val = cfg.get(key, "")
+        if val:
+            return val.replace("%REPO_ROOT%", str(Path(__file__).resolve().parents[2]))
+    # 3) 默认值
+    return default
+
 def start_server():
     """启动服务器"""
-    server_path = "D:\\guandanscore\\guandan_offline_v1006\\windows\\guandan_offline_v1006.exe"
+    _default_exe = str(Path(__file__).resolve().parents[2] / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
+    server_path = _resolve_path("server_exe", _default_exe, "SERVER_EXE")
     
     if not os.path.exists(server_path):
         print(f"✗ 服务器文件不存在: {server_path}")
@@ -98,12 +118,15 @@ def main():
     print("=" * 60)
     
     # 检查必要文件
+    _default_lalala = str(Path(__file__).resolve().parents[2] / "reference" / "lalala")
+    _lalala_dir = _resolve_path("lalala_dir", _default_lalala, "LALALA_DIR")
+    _default_exe = str(Path(__file__).resolve().parents[2] / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
     required_files = [
-        "D:\\guandanscore\\guandan_offline_v1006\\windows\\guandan_offline_v1006.exe",
+        _resolve_path("server_exe", _default_exe, "SERVER_EXE"),
         "src/communication/yf1_v7.py",
-        "D:\\NYGD\\lalala\\client3.py",
+        os.path.join(_lalala_dir, "client3.py"),
         "src/communication/yf2_v7.py",
-        "D:\\NYGD\\lalala\\client4.py"
+        os.path.join(_lalala_dir, "client4.py")
     ]
     
     print("检查必要文件...")
@@ -137,7 +160,8 @@ def main():
             clients.append(client1)
         
         # client3 (10秒内部延迟) - 等待yf1_v7连接后启动
-        client2 = start_client("D:\\NYGD\\lalala\\client3.py", delay=4, window_title="client3")
+        _lalala_dir = _resolve_path("lalala_dir", _default_lalala, "LALALA_DIR")
+        client2 = start_client(os.path.join(_lalala_dir, "client3.py"), delay=4, window_title="client3")
         if client2:
             clients.append(client2)
         
@@ -147,7 +171,7 @@ def main():
             clients.append(client3)
         
         # client4 (20秒内部延迟) - 等待yf2_v7连接后启动
-        client4 = start_client("D:\\NYGD\\lalala\\client4.py", delay=10, window_title="client4")
+        client4 = start_client(os.path.join(_lalala_dir, "client4.py"), delay=10, window_title="client4")
         if client4:
             clients.append(client4)
         
