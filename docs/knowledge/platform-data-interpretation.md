@@ -1,8 +1,32 @@
-# 离线平台对局数据解读（v1006）
+# 掼蛋规则与离线平台数据解读（v1006）
 
-> **真源用途**：解读 `guandan_offline_v1006.exe`、WebSocket 消息、`victoryNum`、`execution_state.json`、客户端日志与 `game_records/` 时**统一读本页**。适用于批跑分析、ITERATIONS/EVAL、Agent、代码注释与人工看客户端。
+> **真源用途**：掼蛋**基本规则**（队际、升级、局/副）、解读 `guandan_offline_v1006.exe`、WebSocket 消息、`victoryNum`、`execution_state.json`、客户端日志与 `game_records/` 时**统一读本页**。适用于批跑分析、ITERATIONS/EVAL、Agent、代码注释与人工看客户端。  
+> **新手摘要**亦见 [README.md § 掼蛋与平台基础知识](../../README.md#掼蛋与平台基础知识新手必读)。
 
-**相关**：规则层级 [guandan-knowledge.mdc](../../.cursor/rules/guandan-knowledge.mdc) §1 · 协议字段 [guandan-platform-v1006.mdc](../../.cursor/rules/guandan-platform-v1006.mdc) · PDF [offline_platform/掼蛋平台使用说明书v1006.pdf](../../offline_platform/掼蛋平台使用说明书v1006.pdf)
+**相关**：完整规则 [guandan-knowledge.mdc](../../.cursor/rules/guandan-knowledge.mdc) · 协议字段 [guandan-platform-v1006.mdc](../../.cursor/rules/guandan-platform-v1006.mdc) · PDF [offline_platform/掼蛋平台使用说明书v1006.pdf](../../offline_platform/掼蛋平台使用说明书v1006.pdf)
+
+---
+
+## 0. 掼蛋基本规则（队际对战）
+
+- **队伍**：4 人对战，**0 号位 + 2 号位为一队，1 号位 + 3 号位为另一队**。连接顺序决定座位号。
+- **一副牌（副）**：108 张发完、每人 27 张 →（第二副起：进贡 → 还贡或抗贡）→ 多圈出牌 → 四人完牌顺序确定（`order` 四名；双上时可有 `restCards`）→ 按名次升级并决定下一副进贡关系。**一副 ≠ 一圈 ≠ 比赛一轮 ≠ 一局**。
+- **一局（平台局 / 规则一局）**：从 2 打起，打到 A 并在 A 级取得**双上**（头游 + 二游），才算赢下一局。
+- **完赛名次**：头游（第 1 名）→ 二游（第 2 名）→ 三游（第 3 名）→ 末游（第 4 名）。
+
+### 0.1 升级规则
+
+| 本队名次 | 本队升级级数 | 示例 |
+|----------|-------------|------|
+| 头游 + 二游（双上） | **升 3 级** | 2→5 |
+| 头游 + 三游 | **升 2 级** | 2→4 |
+| 头游 + 末游 | **升 1 级** | 2→3 |
+| 无头游（对方双上 / 对方头游） | **不升级** | 保持当前级 |
+
+- 对方同理：若对方获得头游，对方按上表升级，本队不升级。
+- **A 级特殊规则**：打到 A 后，须在 A 级这副拿到**双上**才算赢一局。若 A 级连续 2 副未胜（含被对方双上），则**降回 2 级重打**。A↔2 循环满 50 次 → 平局。
+
+> 牌型、逢人配、进贡细则 → [guandan-knowledge.mdc](../../.cursor/rules/guandan-knowledge.mdc)。
 
 ---
 
@@ -66,6 +90,17 @@ python scripts/tools/probe_exe_argv_ws.py --n 10 -o data/eval/exe_argv_10.json
 | 队胜 / 回填 | 以 **`current_batch.json` → `batch_games`** 为准，交叉校验 `victoryNum` |
 
 **满 12 局平台局**：须 **多批重启**（3+3+3+3），不能指望 `exe 12` 一次跑完。**勿设 `--target-games 10`** 等非 3 倍数（末批 1 局 → GUA-033 fallback）。
+
+### 2.4 关键协议字段（速查）
+
+| 字段 | 含义 |
+|------|------|
+| `episodeOver.order` | [头游, 二游, 三游, 末游] — **一副**结束 |
+| `gameResult.victoryNum` | 批末各队 **赢几局**（`[0]` vs `[1]`，不是副数） |
+| `gameResult.draws` | [P0, P1, P2, P3] 累计平局 |
+| `act.stage.play.curRank` / `selfRank` / `oppoRank` | 当前级 / 我方级 / 对方级 |
+
+**需要跟踪升级过程才能知道一局何时结束**：客户端应记录每副 `curRank` 变化，当一方到 A 并双上时 = 一局结束。客户端实现见 **§8**。
 
 ---
 
@@ -228,10 +263,104 @@ batch_games=1 的一批：
 
 ---
 
-## 8. 维护
+## 8. M2 胜负追踪架构
+
+已在 `yf1_m2.py` / `yf2_m2.py` 中实现完整的「副级 + 局级」双重追踪；`yf1_m2.py` 负责写 `game_scores_m2.json`，`yf2_m2.py` 仅打日志（避免 race condition）。
+
+### 8.1 关键逻辑
+
+| 功能 | 函数/方法 | 所在文件 |
+|------|----------|----------|
+| 等级提取 | `_update_level_info()` | `yf1_m2.py` / `yf2_m2.py` |
+| 副结果判定 | `_determine_round_result(order, partner_pos)` | `yf1_m2.py` / `yf2_m2.py` |
+| 副存储 | `_save_round_result()` | `yf1_m2.py` |
+| 局检测 | `_detect_game_end(curRank, order, partner_pos)` | `yf1_m2.py` / `yf2_m2.py` |
+| 局存储 | `_save_game_end()` | `yf1_m2.py` |
+| JSON 读写 | `_load_scores()` / `_save_scores()` | `yf1_m2.py` |
+
+### 8.2 等级提取
+
+从 `handle_action_request`（`act.stage.play.curRank` / `selfRank` / `oppoRank`）、`_handle_tribute_action`、`_handle_back_action`、`_handle_game_start` 中捕获等级字段。服务端每副第一次 `act` 消息会携带 `curRank`。
+
+### 8.3 副结果判定
+
+`_determine_round_result(order, partner_pos)` 根据完赛名次数组判定：
+
+- `order` 是 `[头游, 二游, 三游, 末游]`（座位号），0-indexed
+- 本队两人在 `order` 中的索引之和 `<= 2`（头游 + 二游或头游 + 三游）→ **win**
+- 对方两人占据前两名 → **loss**
+- 其他（本队一人头游但队友末游等）→ **draw**
+
+### 8.4 局检测
+
+`_detect_game_end(curRank, order, partner_pos)`：
+
+- `curRank == "A"` 且本队**双上** → 本队赢一局
+- `curRank == "A"` 且对方双上 → 本队输一局
+- `curRank == "2"` 且上一副 `curRank` 为 `"A"` → 对方在 A 级双上（被降级），输一局
+
+### 8.5 `game_scores_m2.json` 格式
+
+```json
+{
+  "rounds": [
+    {
+      "round": 1,
+      "order": [1, 0, 2, 3],
+      "curRank": "2",
+      "selfRank": "2",
+      "oppoRank": "2",
+      "result": "draw"
+    }
+  ],
+  "games": [
+    {
+      "game": 1,
+      "start_round": 1,
+      "end_round": 7,
+      "result": "loss"
+    }
+  ],
+  "total_rounds": 21,
+  "round_wins": 1,
+  "round_draws": 4,
+  "round_losses": 16,
+  "total_games": 3,
+  "game_wins": 0,
+  "game_draws": 0,
+  "game_losses": 3,
+  "current_game_start_round": 22,
+  "current_level_self": "2",
+  "current_level_oppo": "A"
+}
+```
+
+### 8.6 相关脚本与注意点
+
+| 脚本 | 作用 |
+|------|------|
+| `yf1_m2.py` (Player 0) | 持久化（写 JSON），含等级追踪、副结果、局检测 |
+| `yf2_m2.py` (Player 2) | 同步等级追踪、副结果判定，仅打日志不写文件 |
+| `game_scores_m2.json` | 项目根目录，自动创建/更新 |
+| `batch_executor/executor.py` | `_count_new_paired_games()` 匹配 `yf1_` / `yf2_` 前缀统计场次 |
+
+- 服务端 `rank`：`2,3,4,5,6,7,8,9,T,J,Q,K,A`（T=10）
+- `curRank` 只在每副第一次 `act` 携带；`beginning` **不包含**等级
+- `selfRank` / `oppoRank` 可能为 `"X"`（未知），跳过不处理
+- 完整局判定依赖客户端跨副跟踪 `curRank`，而非单副消息
+
+---
+
+## 9. 维护与参考资料
 
 改批跑台账、`game_recorder` 或客户端胜负逻辑时同步更新本文。Agent 分析 lalala 数据前先读本文 + [EVAL.md](../guandan-brain/EVAL.md)。
 
 复测 exe argv：`python scripts/tools/probe_exe_argv_ws.py --compare`。
 
-**版本**：2026-05-31（§4.3.1 fallback 语义 + `latest_victory_num.server_vn_raw`；§2 exe argv 实测定音）
+| 资料 | 说明 |
+|------|------|
+| `offline_platform/掼蛋平台使用说明书v1006.pdf` | 离线平台协议、参数、数据结构 |
+| `docs/archive/skill/出炸弹要领.txt` | 炸弹使用规范（经验规则） |
+| `docs/guandan-brain/M2_OPTIMIZATION.md` | M2 优化日志、跑分记录、根因分析 |
+
+**版本**：2026-06-05（合并 `guandan-basic-knowledge.md`：§0 基本规则、§8 M2 追踪；原 `platform-data-interpretation` §1～§7 保留）
