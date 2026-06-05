@@ -80,6 +80,16 @@
 
 **统计检验 note（2026-06-02 补充，2026-06-02 夜 确认结论）**：GUA-034/035 26/33=78.8% vs GUA-036 36/69=52.2%（S9后），**差值 26.6pp，p=0.009（两比例 z 检验），统计显著**；95% CI [8pp, 45pp]。**关键差异**：`[0,3,0,3]` 在 GUA-036 出现 **2 次**（S8批5、S9批2），GUA-035 出现 **0 次**——GUA-036 下限更差，lalala 队有批能把 M3 队剃光头。批次均值 t 检验 p=0.048（边缘显著）。**结论**：GUA-036 **显著差于** GUA-035，非发牌随机波动可解释，待 CALC-M04/M05 修复。 |
 
+| GUA-037a | open | P0 | V-nn, v7 | v7 | V7 静态特征工程（state_牌态 124 维） | `_extract_features` 静态部分全零填充；需重写手牌 108 维 + 级牌/红心配 9 维 + 主动被动/阶段/炸弹/贡局/队友 6 维 + hand count 1 维 = 124 维；actionList 牌型 15 维后移 | `src/v/nn/ultimate_win_rate_engine_v7.py`、`src/v/nn/features/static_features.py` | 完成定义见 `V7-实施方案.md` §2 Phase 1 GUA-037a；关联评审 §Q1 / 研判 T3 |
+| GUA-037b | open | P1 | V-nn, v7 | v7 | V7 动态特征工程（LSTM 历史编码） | 在 037a 静态特征基础上叠加 LSTM 历史编码（出牌历史 + numof* 序列），目标总维度 188 维 | `src/v/nn/features/dynamic_features.py`、`src/v/nn/ultimate_win_rate_engine_v7.py` | 完成定义见 `V7-实施方案.md` §2 Phase 1 GUA-037b；可与 GUA-038 并行 |
+| GUA-038 | open | P1 | V-nn, v7 | v7 | V7 M3 知识蒸馏（BC 热启动） | V7-internal 录牌（不依赖 M3 录牌链路）→ 提取 (state, action) 标签对 → BC 训练 → 加载推理；teacher 数据源为 M3 离线 game_records | `src/v/nn/recorder/v7_recorder.py`、`src/v/nn/training/bc_dataset.py`、`src/v/nn/training/bc_trainer.py` | 完成定义见 `V7-实施方案.md` §2 Phase 2 GUA-038；**仅读** M3 game_records，**禁止 import** `src.m.m3.*` |
+| GUA-039a | open | P2 | V-nn, v7 | v7 | V7 自对弈 DMC + ZMQ 桥 + Actor 原型 | 搭建 V7 自对弈基础设施：DMC value net 训练 + ZMQ Actor-Learner 通信 + 单 Actor 与 v1006 平台交互原型 | `src/v/nn/training/actor.py`、`learner.py`、`replay_buffer.py`、`zmq_bridge.py`、`reward.py` | 完成定义见 `V7-实施方案.md` §2 Phase 3 GUA-039a；**关单前提**：评审后方可启动 GUA-039b |
+| GUA-039b | open | P2 | V-nn, v7 | v7 | V7 自对弈 top-K + PPO + 30 局评估 | 在 039a 基础上叠加 top-K=2 过滤 + PPO policy net + 两阶段 30 局 lalala 评估基线（含 fallback baseline） | `scripts/v7/eval_vs_lalala.py`、`src/v/nn/training/learner.py`（PPO 扩展） | 完成定义见 `V7-实施方案.md` §2 Phase 3 GUA-039b；仅在 GUA-039a 关单后启动 |
+| GUA-040 | open | P1 | V-nn, v7 | v7 | V7 模型权重管理（COS manifest + 版本切换） | 搭建 V7 模型权重的 COS 上传/下载/版本切换基建，遵循治理 §6.3 目录规范 | `models/v-nn/manifest.json`、`scripts/v7/weight_manager.py`、`scripts/cos/upload_v7_weights.py`、`download_v7_weights.py` | 完成定义见 `V7-实施方案.md` §2 Phase 1 并行 GUA-040；与 Phase 0 + Phase 1 全部并行 |
+| GUA-041 | open | P1 | V-nn, v7 | v7 | V7 路径债清理 | 消除 V7 客户端与启动器中的 D 盘硬编码路径债，使 V7 在本机任意目录 clone 后可开箱即用 | `lalala_adapter.py`、`scripts/v7/start_v7_gui.py`、`start_v7_complete.py`、`START_V7_AUTO.bat`、`START_V7_CLIENTS.bat` | 完成定义见 `V7-实施方案.md` §2 Phase 0 GUA-041；**建议从本条入手**（0.5 迭代） |
+| GUA-042 | open | P1 | V-nn, v7 | v7 | ABL-GD 168 伪动作评估（含开源可行性） | 调研 ABL-GD（CCFAI 2025）168 伪动作方案的可获取性与可移植性，给出采纳/弃用/备选结论；仅调研 + 写结论文档，不实施 | `docs/analysis/abl-gd-eval-2026-06.md` | 完成定义见 `V7-实施方案.md` §2 Phase 0 GUA-042；关联研判 T2.2 |
+| GUA-043 | open | P1 | V-nn, v7 | v7 | 专利规避设计审计（CN113018837A 边界） | 审计掼蛋 AI 算法专利 CN113018837A 的权利要求边界，识别 V7 Phase 1-3 实施中被覆盖的子模块，给出规避方案；仅调研，不改代码 | `docs/governance/patent-audit-cn113018837a.md` | 完成定义见 `V7-实施方案.md` §2 Phase 0 GUA-043；关联研判 T7 |
+
 ---
 
 ## 交叉引用
