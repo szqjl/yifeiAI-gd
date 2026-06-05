@@ -23,4 +23,8 @@ alwaysApply: true
 
 用户说「继续之前的任务」「按 handoff」「按迭代」时，先读上述文件再动手。
 
+关键词
+- **V7 引擎**：读 `docs/guandan-brain/V7-实施方案.md` + `ISSUES.md` V7 段落；引擎入口 `ultimate_win_rate_engine_v7.py::decide()`
+- **M 系列**：读 `ISSUES.md` 对应 tag + `ITERATIONS.md`
+
 用户说「提交」「推送」「commit」「push」「开 PR」时，先读 **`docs/guandan-brain/AGENT_PUSH_CHECKLIST.md`** 与 **`docs/governance/M-V-Series-治理方案.md`** §4/§6/§8；见 **`git-push-governance.mdc`**。

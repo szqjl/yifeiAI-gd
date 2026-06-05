@@ -12,7 +12,8 @@ alwaysApply: true
 1. 阅读 `docs/guandan-brain/ISSUES.md`，确认与本次改动相关的 **open** `GUA-xxx` 及标签（`rules` / `observation` / `policy`）。
 2. 阅读 `docs/guandan-brain/ITERATIONS.md` 中**最新一条**（或本轮草稿），对齐本轮目标与完成定义；若本轮未登记，先追加一条再改代码。
 3. 阅读 `docs/guandan-brain/EVAL.md` 中的评测入口与通过标准；改动后更新评测结果与 ITERATIONS（含回归：pass→fail）。
-4. **改 M3 决策**（`src/m/m3/`、`yf1_m3`/`yf2_m3`）：读 open 且 tag=`m3` 的 GUA、`PRINCIPLES_MAPPING.md` 相关 guard；**P0 guard 只改 `m3_decision_engine`**；组牌/牌力走 **V5+**。队胜率 KPI **只看 M3 批跑**。**M1 frozen**（`GUA-022` closed）：仅 bugfix / 协议 / 记录与 pytest 回归，**勿再开 M1 策略 GUA**（见 ISSUES「引擎维护策略」）。M1 **0/12** vs M3 **7/10** 为同机对照，非口径错误。
+4. **改 V7 引擎**（`ultimate_win_rate_engine_v7.py`、`src/rl_agent/`）：读 V7 open GUA、V7-实施方案.md；特征向量 512 维、有效特征 127 维。
+5. **改 M3 决策**（`src/m/m3/`、`yf1_m3`/`yf2_m3`）：读 open 且 tag=`m3` 的 GUA、`PRINCIPLES_MAPPING.md` 相关 guard；**P0 guard 只改 `m3_decision_engine`**；组牌/牌力走 **V5+**。队胜率 KPI **只看 M3 批跑**。**M1 frozen**（`GUA-022` closed）：仅 bugfix / 协议 / 记录与 pytest 回归，**勿再开 M1 策略 GUA**（见 ISSUES「引擎维护策略」）。
 
 ## 解读批跑 / 平台 / lalala 对局数据前必须
 

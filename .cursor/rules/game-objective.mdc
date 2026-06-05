@@ -2,15 +2,14 @@
 description: 掼蛋胜负目标与 context 字段（决策/策略/RL 对齐）
 globs:
   - src/decision/**
-  - src/m/**
-  - src/v/**
   - src/game_logic/**
 ---
 
 # 掼蛋胜负目标
 
 - **规则层**：`src/game_logic/guandan_constants.py` 中 `GAME_OBJECTIVE`（每副牌争头游，己方头游+二游即获胜）。
-- **主决策入口**：M1 / V5 / Stage5 注入目标到 **context** 或 **message**：
+- **主决策入口**：各代际注入目标到 **context**：
   - M1：`context['game_objective']`、`context['winning_ranks']`
-  - V5/Stage5：`message['_game_objective']`
-- **对齐方式**：策略与 RL 使用 `context.get('game_objective')` 或 `message.get('_game_objective')`。详见 `docs/archive/rules/胜负与目标.md`。
+  - V7：`game_state` 中的 `myPos`/`teammate_pos` 字段推断队属，`context` 传递胜负目标
+  - V7 引擎 (`ultimate_win_rate_engine_v7.py`) 的 `decide()` 读取 `game_state`，策略目标已嵌入模型训练目标（终极胜率）
+- **对齐方式**：策略与 RL 使用 `context.get('game_objective')`。详见 `docs/archive/rules/胜负与目标.md`。

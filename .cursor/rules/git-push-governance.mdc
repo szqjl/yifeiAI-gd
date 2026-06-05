@@ -19,9 +19,9 @@ alwaysApply: true
 
 | 项 | 要求 |
 |----|------|
-| 分支 | 日常 **`m-dev`**；禁止在 `main` 上提交功能代码 |
-| 远程 | **`git push origin m-dev`**（Gitee 真相源）；GitHub 用 `scripts/tools/sync_github_mirror.ps1`，非默认 push |
-| Commit 标题 | 治理 §8.1 前缀：`[docs]`、`[M-m2]`、`[M-m3]` 等 |
+| 分支 | 日常 **`m-dev`** 或 **`v7-dev`**；禁止在 `main` 上提交功能代码 |
+| 远程 | **`m-dev` → `git push origin m-dev`**，**`v7-dev` → `git push origin v7-dev`**；GitHub 用 `scripts/tools/sync_github_mirror.ps1`，非默认 push |
+| Commit 标题 | 治理 §8.1 前缀：`[docs]`、`[M-m2]`、`[M-m3]`、`[V-nn-v7]` 等 |
 | Layer 2 | 禁止提交：`models/*.pth`、`logs/`、`game_records/`、`game_scores_m2.json`、大体积 replay |
 | 禁止 | 改 git config、`--force`、跳过 hooks（除非用户明确要求） |
 
