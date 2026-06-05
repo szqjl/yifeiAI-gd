@@ -8,6 +8,7 @@
 ## 📋 目录
 
 - [项目简介](#项目简介)
+- [掼蛋与平台基础知识（新手必读）](#掼蛋与平台基础知识新手必读)
 - [快速开始](#快速开始)
 - [重要规则](#重要规则)
 - [功能特性](#功能特性)
@@ -36,6 +37,140 @@
   - 研究兴趣咨询: chenxg@njupt.edu.cn
   - 问题反馈: wuguduofeng@gmail.com
   - QQ: 519301156
+
+---
+
+## 🎴 掼蛋与平台基础知识（新手必读）
+
+> 本节摘自 [docs/knowledge/guandan-basic-knowledge.md](docs/knowledge/guandan-basic-knowledge.md)。**离线平台协议与字段以** `offline_platform/掼蛋平台使用说明书v1006.pdf` **为准**；下文帮助你在读代码、跑批、看日志前先建立共同语言。
+
+### 这是什么项目？
+
+本仓库是 **掼蛋 AI 客户端 + 批量对战/训练工具链**：通过 WebSocket 连本地或局域网 **v1006 离线平台**，4 个 Python 客户端自动出牌；当前主开发线是 **M 系列（硬编码规则引擎）** 对战 **lalala**，详见 [M/V 治理方案](docs/governance/M-V-Series-治理方案.md)。
+
+### 队伍与座位（必记）
+
+| 概念 | 说明 |
+|------|------|
+| **4 人两两组队** | **0 号 + 2 号** 一队，**1 号 + 3 号** 一队 |
+| **座位怎么定** | **连接顺序**决定座位号：第 1 个连入 → 0 号，依次 1、2、3 |
+| **和代码的关系** | 批跑 GUI / 客户端脚本里 4 条路径的顺序，必须对应上述座位 |
+
+这与 README 后文「第 1、3 连接一队」表述一致：**连接序 1→0 号、2→1 号、3→2 号、4→3 号**。
+
+### 一副、一局、升级（别混）
+
+| 术语 | 含义 |
+|------|------|
+| **一副牌** | 108 张发完、每人 27 张 →（第二副起：**进贡 → 还贡**，或 **抗贡**）→ 多**圈**出牌，直至四人完牌顺序确定（`episodeOver.order` 四名；双上时可有 `restCards`）→ 按名次升级，并决定下一副进贡关系 |
+| **一圈出牌** | 一人首发，三家跟压/过；连续三人过则结束，接风者下一圈首发。**一副内含多圈** |
+| **一局** | 从打 **2** 起，某队打到 **A** 且在 **A 级拿到双上**（头游+二游），才算赢下一局 |
+| **名次** | 头游（第 1）→ 二游 → 三游 → 末游（第 4） |
+
+**术语区分**：**一副 ≠ 一圈 ≠ 比赛一轮 ≠ 一局**（「比赛一轮」指编排上全体选手普遍出场一次，与一副牌无关）。
+
+**本队升级级数**（本副结束后，仅当本队有人拿头游时）：
+
+| 本队两人名次 | 升级 |
+|--------------|------|
+| 头游 + 二游（**双上**） | **+3 级**（例：2→5） |
+| 头游 + 三游 | **+2 级** |
+| 头游 + 末游 | **+1 级** |
+| 本队无人头游 | **不升级** |
+
+- **A 级特殊**：到 A 后须在本级一副 **双上** 才算赢局；若 A 级连续 2 副未胜（含被对手双上），**降回 2 重打**；A↔2 循环满 50 次可判平局。
+- **对方**拿头游时，对方按上表升级，本队不升。
+
+### 离线平台 v1006 怎么理解
+
+```bash
+guandan_offline_v1006.exe N
+```
+
+| 项 | 说明 |
+|----|------|
+| 说明书里的 N | 「**游戏次数**」：一次「游戏」= 一方 A 级且本副 **双上** 过关（见 PDF `gameOver` 段注释） |
+| **本仓库称法** | **N = 平台局数**（`--target-games` / `completed_games` 同口径）；跑满 N 局即 `gameOver` |
+| **与规则「一副」** | **1 平台局 ≠ 1 副**。平台局内含多副；1 副 = 1 次 `episodeOver`。实测：`target-games 1` → **59 副**（2026-05-31）。详见 [platform-data-interpretation.md](docs/knowledge/platform-data-interpretation.md) |
+| 如何判断规则「一局结束」 | 与平台「一次游戏」同义；客户端跨副跟踪 `game_scores_m2.json`；**不能**用 `episodeOver` 次数当局数 |
+
+常用协议字段（日志 / JSON 里常见）：
+
+| 字段 | 含义（与 [v1006 使用说明书](offline_platform/掼蛋平台使用说明书v1006.pdf) 用语一致） |
+|------|------|
+| `episodeOver.order` | 本副名次 `[头游, 二游, 三游, 末游]`（座位号 0–3） |
+| `episodeOver.curRank` | 小局结束时**所打的当前等级**（说明书 § `episodeOver` 示例） |
+| `gameResult.victoryNum` / `draws` | 各队本批 **赢局数** / 平局（`[0]` vs `[1]` 比队胜负；**不是副数**） |
+| `act.*.selfRank` | **我方等级**（跨副累积） |
+| `act.*.oppoRank` | **对方等级**（跨副累积） |
+| `act.*.curRank` | **当前等级**（本副级牌点数；`play` 阶段即本副打几） |
+
+等级字符：`2,3,4,5,6,7,8,9,T,J,Q,K,A`（T=10）。
+
+#### `selfRank` / `oppoRank` / `curRank` 别混（`beginning` vs `act`）
+
+> **平台原文**：`act` · `stage=play` 示例的字段释义为「**我方等级：K，对方等级：9，当前等级 9**」。见 [掼蛋平台使用说明书 v1006](offline_platform/掼蛋平台使用说明书v1006.pdf) **第 5–7 页**（`tribute` / `back` / `play` 三阶段 `act` 示例）。  
+> **`notify` · `beginning` 官方示例仅含 `handCards`、`myPos`，不含三字段**（同 PDF 第 3 页）。本仓库 `game_info` 中的三字段来自客户端 `gameStart` 快照，非 PDF 中 `beginning` 示例结构。
+
+同一副牌里，**`gameStart` 快照与 `act` 上的三字段可能不一致**；回放、JSON 若只读 `game_info` 或只读 `actions[].context`，会误以为「当前等级 6 又 9」矛盾。按掼蛋规则与说明书应这样理解：
+
+| 字段 | 说明书用语 | 含义 |
+|------|------------|------|
+| **`selfRank`** | 我方等级 | 我方从 2 起按副升级后的等级（跨副累积） |
+| **`oppoRank`** | 对方等级 | 对方从 2 起按副升级后的等级（跨副累积） |
+| **`curRank`** | **当前等级** | 本副级牌点数（哪一点数是级牌）；`play` 阶段即本副打几 |
+
+**`gameStart` → `game_info`（本副开局快照，非 PDF `beginning` 示例字段）**
+
+- 表示**本副开始前**（通常是**上一副结束瞬间**）的我方等级、对方等级与当前等级上下文。
+- 例：`selfRank=8`，`oppoRank=6`，`curRank=6` → 上一副结束时我方等级 8、对方等级 6；`curRank=6` 反映**上一副**语境下的当前等级，**不等于**进贡还贡结束后本副 `play` 的当前等级。
+- 第二副起，本副开局后往往先 **进贡 / 还贡**（说明书 § `tribute` / `back`）；此阶段 `act` 仍带三字段，且 **`curRank` 常与 `selfRank` 相同**（还贡示例：我方等级 5、当前等级 5，系统跳过等级 5 的牌）。
+
+**`act` · `stage=play`（进贡还贡结束、正式出牌）**
+
+- 表示**本副出牌**时的我方等级、对方等级与**当前等级**；分析 AI 决策、比牌、级牌**以此时为准**（说明书：`我方等级 / 对方等级 / 当前等级` 三者可不同，如 K / 9 / 9）。
+- 升级在**上一副结束时**结算：仅当某队有人拿**头游**，该队才按名次表升级（双上 +3、头游+三游 +2、头游+末游 +1；无人头游则不升）。见上文「本队升级级数」表及 [江苏掼蛋规则](docs/gdrules/江苏掼蛋规则.md)「从而确定下轮的级牌」。
+- 例（与常见回放样例一致）：
+  - 上一副结束：我方等级 8、对方等级 6；**对方**头游+二游 → 对方 **+3** → 6→**9**；我方未拿头游 → **我方等级仍为 8**。
+  - 本副 `act` · `play`：`selfRank=8`，`oppoRank=9`，`curRank=9`（**当前等级 9**，9 为级牌）。
+  - 而 `game_info` 仍可能是 `8 / 6 / 6`——**不是**本副当前等级 6，而是**进贡还贡前**的快照未更新。
+- 进贡还贡结束后，由**进贡方**先出牌（上一副对方赢 → 我方进贡 → 还贡后常由我方首发）。
+
+**`notify` · `stage=play`（他人出牌广播）**
+
+- **不带** `selfRank` / `oppoRank` / `curRank`（说明书 `play` notify 示例仅含出牌字段）。
+- `game_records` 里 `actions[].context` 若出现三字段，多为客户端用**最近一次 `act` 缓存**填充，**不能**当作该条 notify 的服务器下发值。
+
+**读 JSON / 回放时**
+
+| 用途 | 优先读 |
+|------|--------|
+| 本副**当前等级**、级牌、比牌 | `my_decisions[].context` 或同副 **`act` · `play`** |
+| 本副开局前等级（参考） | `game_info` |
+| 逐步出牌里的三字段 | 勿单独信 `actions[].context`；notify 无真源 |
+
+文件名 `[6]` 等后缀来自保存时 `game_info.curRank`，**不能**代替本副 `act` · `play` 的当前等级。
+
+**离线平台数据解读（`victoryNum`、批跑台账、勿与规则一局混）** → [docs/knowledge/platform-data-interpretation.md](docs/knowledge/platform-data-interpretation.md)。  
+更细的副/局判定与 M2 追踪 → [docs/knowledge/guandan-basic-knowledge.md](docs/knowledge/guandan-basic-knowledge.md) 第三节；字段写入路径 → [docs/README.md](docs/README.md#selfrank--opporank--currank-写入位置2026-05-29)；平台 JSON 全文 → [offline_platform/掼蛋平台使用说明书v1006.pdf](offline_platform/掼蛋平台使用说明书v1006.pdf)。
+
+### 本仓库如何记「副 / 局」胜负（M2）
+
+M2 客户端在 `yf1_m2.py` / `yf2_m2.py` 里做 **副级 + 局级** 追踪：队长 `yf1_m2` 写入根目录 `game_scores_m2.json`，队友 `yf2_m2` 只打日志避免写文件冲突。批跑统计场次见 `batch_executor/`。
+
+新手只需知道：**看胜率 / 回归别只数「副数」**——平台参数 N、批跑 `target-games` 与「完整局」可能不一致；分析时优先看 `game_scores_m2.json` 或治理文档中的 **30 局回归集**（[COS 拉取](docs/governance/COS-接入指南.md)）。
+
+更细的判定函数、JSON 格式与注意点 → [docs/knowledge/guandan-basic-knowledge.md](docs/knowledge/guandan-basic-knowledge.md) 第三节。
+
+### 新手建议阅读顺序
+
+1. 本节（规则 + 平台参义）
+2. [快速开始](#快速开始) → 装依赖、配 `config.yaml`
+3. [M/V 治理方案](docs/governance/M-V-Series-治理方案.md) → 分支 `m-dev`、目录约定
+4. [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md) → 改 AI 行为前必读  
+   - **新开 Agent**：复制 [AGENT_FIRST_MESSAGE.md](docs/guandan-brain/AGENT_FIRST_MESSAGE.md) 里那句话，粘贴给 Agent 第一句  
+   - **提交推送**：复制 [AGENT_PUSH_CHECKLIST.md](docs/guandan-brain/AGENT_PUSH_CHECKLIST.md) 默认第一句；本机一次性跑 `scripts/hooks/install-hooks.bat`
+5. 跑 M1：`START_M1_GUI.bat` 或 [M1 测试指南](docs/development/M1测试指南.md)
 
 ---
 
@@ -185,7 +320,7 @@ if hour == 12:  # ❌ 错误，应该从系统时间获取
 ### 当前分支
 
 - **`main`**: 主分支，用于最终合并和发布
-- **`m1-dev`**: M1 系列硬编码规则引擎分支（本地开发）
+- **`m-dev`**: M1 系列硬编码规则引擎分支（本地开发）
   - 包含：`yf1_m1.py`, `yf2_m1.py`, `rule_based_decision_engine_m1.py`
   - 特点：全新的硬编码规则引擎，5阶段细分路由
 - **`m1-dev-clean`**: M1 系列干净分支（已推送，推荐用于训练）
@@ -199,7 +334,7 @@ if hour == 12:  # ❌ 错误，应该从系统时间获取
 
 ```bash
 # 切换到 M1 分支
-git checkout m1-dev
+git checkout m-dev
 
 # 切换到 V6 分支
 git checkout v6-dev
@@ -209,10 +344,9 @@ git checkout main
 ```
 
 **⚠️ 重要提醒**：测试不同版本时必须切换分支！
-- 测试 M1：必须在 `m1-dev` 分支运行 `yf1_m1.py`
+- 测试 M1：必须在 `m-dev` 分支运行 `yf1_m1.py`
 - 测试 V6：必须在 `v6-dev` 分支运行 `yf1_v6.py`
 
-<<<<<<< HEAD
 ### M1 系列使用说明
 
 **M1 不是机器学习模型，而是硬编码规则引擎**，基于阶段细分路由的决策系统。
@@ -226,7 +360,7 @@ git checkout main
 
 1. **切换到 M1 分支**
 ```bash
-git checkout m1-dev
+git checkout m-dev
 ```
 
 2. **运行 M1 客户端**
@@ -270,7 +404,7 @@ RuleBasedDecisionEngineM1 (主入口)
 **方式1：GUI批量测试（推荐，最简单）**：
 ```bash
 # 1. 切换到 M1 分支
-git checkout m1-dev
+git checkout m-dev
 
 # 2. 启动M1测试GUI
 START_M1_GUI.bat
@@ -281,7 +415,7 @@ START_M1_GUI.bat
 **方式2：手动测试**：
 ```bash
 # 1. 切换到 M1 分支
-git checkout m1-dev
+git checkout m-dev
 
 # 2. 启动第一个客户端（Player 0）
 python src/communication/yf1_m1.py
@@ -310,7 +444,7 @@ python src/communication/yf2_m1.py
 
 2. **检查模型文件是否会被推送**：
    ```bash
-   python check_models_before_push.py
+   python scripts/checks/check_models_before_push.py
    ```
 
 3. **如果发现模型文件被跟踪，执行以下命令移除**（保留本地文件）：
@@ -323,7 +457,7 @@ python src/communication/yf2_m1.py
 
 每次推送前建议运行检查脚本：
 ```bash
-python check_models_before_push.py
+python scripts/checks/check_models_before_push.py
 ```
 
 如果脚本显示 ✅，说明模型文件不会被推送，可以安全推送。
@@ -340,6 +474,7 @@ guandan_ai_client/
 ├── README.md              # 说明文档（本文件）
 │
 ├── docs/                    # 文档目录
+│   ├── guandan-brain/      # 迭代大脑：缺陷/迭代/评测台账（改代码前先读 README）
 │   ├── development/        # 开发文档
 │   │   └── 分支开发指南.md  # M1/V6分支使用说明
 │   ├── 掼蛋AI客户端架构方案.md
@@ -348,8 +483,8 @@ guandan_ai_client/
 │
 ├── src/
 │   ├── communication/      # 通信模块
-│   │   ├── yf1_m1.py      # M1系列客户端1（m1-dev分支）
-│   │   ├── yf2_m1.py      # M1系列客户端2（m1-dev分支）
+│   │   ├── yf1_m1.py      # M1系列客户端1（m-dev分支）
+│   │   ├── yf2_m1.py      # M1系列客户端2（m-dev分支）
 │   │   ├── yf1_v6.py       # V6系列客户端1（v6-dev分支）
 │   │   └── yf2_v6.py       # V6系列客户端2（v6-dev分支）
 │   ├── game_logic/         # 游戏逻辑模块
@@ -365,7 +500,7 @@ guandan_ai_client/
 └── logs/                   # 日志目录
 ```
 
-详细结构说明请参考 [架构方案文档](docs/掼蛋AI客户端架构方案.md)
+详细结构说明请参考 [架构方案文档](docs/architecture/掼蛋AI客户端架构方案.md)
 
 ---
 
@@ -403,7 +538,7 @@ info_monitor:
 ```
 
 ### 配置说明
-- 详细配置说明请参考 [架构方案文档 - 配置管理](docs/掼蛋AI客户端架构方案.md#六配置管理)
+- 详细配置说明请参考 [架构方案文档 - 配置管理](docs/architecture/掼蛋AI客户端架构方案.md#六配置管理)
 
 ---
 
@@ -542,7 +677,8 @@ pip install -r requirements.txt
 ### 开发流程
 
 1. **阅读文档**
-   - 阅读 [架构方案文档](docs/掼蛋AI客户端架构方案.md)
+   - 若涉及 AI 行为/规则/训练改动：先读 [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md)（`ISSUES` / `ITERATIONS` / `EVAL`）
+   - 阅读 [架构方案文档](docs/architecture/掼蛋AI客户端架构方案.md)
    - 理解游戏规则和JSON格式
    - 了解平台要求
 
@@ -580,14 +716,20 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 - **使用说明书**: 对应版本v1006
 
 ### 游戏规则
+- [掼蛋与平台基础知识（本文档摘要）](#掼蛋与平台基础知识新手必读)
+- [掼蛋基础知识（完整版）](docs/knowledge/guandan-basic-knowledge.md) — 升级规则、v1006 协议、M2 胜负追踪与 `game_scores_m2.json`
 - 江苏省体育局掼蛋竞赛简易规则
 - v1006版本特殊规则（抗贡规则调整）
 
 ### 技术文档
-- [详细架构方案](docs/掼蛋AI客户端架构方案.md)
+- [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md) - 缺陷、版本、评测台账（与 [文档目录首页](docs/README.md) 中的入口一致）
+- [M/V 系列仓库治理方案](docs/governance/M-V-Series-治理方案.md) - **分支、冒烟、产物与 M/V 分层（执行基准）**
+- [腾讯云 COS 接入指南](docs/governance/COS-接入指南.md) - **回归 replay 上传/拉取**
+- [版本与分支状态矩阵](docs/versions/MATRIX.md)
+- [详细架构方案](docs/architecture/掼蛋AI客户端架构方案.md)
 - [开发规范](docs/DEVELOPMENT_RULES.md) - **重要：包含时间处理规则**
 - [参赛指南](docs/掼蛋AI比赛参赛指南.md)
-- [比赛汇总](docs/掼蛋AI相关比赛汇总.md)
+- [比赛汇总](docs/competition/掼蛋AI相关比赛汇总.md)
 
 ### 技术参考
 - WebSocket协议文档
@@ -614,6 +756,7 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 欢迎提交Issue和Pull Request！
 
 ### 贡献指南
+- 默认向 **`m-dev`** 提交 PR；规范见 [M/V 系列仓库治理方案](docs/governance/M-V-Series-治理方案.md)
 1. Fork 本项目: https://gitee.com/Philsz/yifei-ai-gd
 2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
