@@ -30,7 +30,11 @@
 - **Git 推送**: `m-dev` 和 `v7-dev` 均推 Gitee origin，禁止推 `main`
 - **认证**: `credential.helper store` + `.git-credentials`
 
-## V7 引擎架构
+## 🧠 决策引擎概述
+
+参考 [README.md 决策引擎概述](../README.md#决策引擎概述) 获取完整说明。
+
+### V7 引擎 (本分支)
 
 V7 采用深度学习胜率导向决策引擎，替代 M 系列硬编码规则引擎。
 
@@ -45,13 +49,24 @@ V7 采用深度学习胜率导向决策引擎，替代 M 系列硬编码规则�
 | 启动 GUI | `start_v7_gui.py` / `START_V7_GUI.bat` | 一键启动 GUI 对战 |
 | 启动 Auto | `START_V7_AUTO.bat` | 自动启动服务器+客户端 |
 
-### 特征工程
+#### 特征工程
 
 - 输入特征：512 维（有效特征 127 维，利用率 ~25%）
 - 特征类别：位置/手牌/等级/公共信息/动作列表
 - 模型输出：action_logits (softmax) 参与决策，其余三个头暂未使用
 
-## 治理方案要点
+## 参考资料
+
+参考 [README.md 参考资料](../README.md#参考资料) 获取完整文档索引。
+
+### 核心文档
+- [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md) - 缺陷、版本、评测台账
+- [M/V 系列仓库治理方案](docs/governance/M-V-Series-治理方案.md) - 分支、冒烟、产物与 M/V 分层
+- [V7 引擎实施方案](docs/guandan-brain/V7-实施方案.md) - V7 开发与部署计划
+- [详细架构方案](docs/architecture/掼蛋AI客户端架构方案.md)
+- [版本与分支状态矩阵](docs/versions/MATRIX.md)
+
+### 治理要点
 
 参考 `docs/governance/M-V-Series-治理方案.md` (origin/m-dev)：
 
@@ -93,13 +108,17 @@ V7 采用深度学习胜率导向决策引擎，替代 M 系列硬编码规则�
 - WebSocket 端口 23456
 - 模型：`bc_model_ultimate_win_rate.pth`，分数 84.3%
 
-## 分支策略
+## 🌿 分支说明
 
-| 分支 | 用途 | 推送 |
-|------|------|------|
-| `m-dev` | M 系列主开发线 | ✅ 推 Gitee origin |
-| `v7-dev` | V7 深度学习引擎实验线 | ✅ 推 Gitee origin |
-| `main` | 治理前基线 | ❌ 禁止推 |
+参考 [README.md 分支说明](../README.md#分支说明) 获取完整说明。
+
+### 本分支 (v7-dev)
+
+- **当前开发主线**: V7 深度学习引擎实验线
+- **包含**: `yf1_v7.py`/`yf2_v7.py`、`ultimate_win_rate_engine_v7.py`
+- **特点**: 基于训练模型的终极胜率导向决策，四头网络输出
+
+> V6 系列已归档（tag `archive/v6-dev-closed`），`v6-dev` 分支已删除。
 
 ## 常用命令
 
