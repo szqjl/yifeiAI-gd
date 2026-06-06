@@ -136,6 +136,11 @@ python3 -m py_compile path/to/file.py
 start_v7_gui.py          # Linux
 START_V7_GUI.bat         # Windows GUI 对战
 
+# V7 vs lalala 批跑（队胜率 KPI；局数须为 3 的倍数）
+RUN_V7_VS_LALALA.bat          # 默认 3 局
+RUN_V7_VS_LALALA.bat 12       # 12 局
+python run_v7_vs_lalala_games.py --games 9
+
 # V7 测试
 python tests/test_v7_engine_load.py   # 引擎加载测试
 
