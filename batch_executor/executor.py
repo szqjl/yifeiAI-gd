@@ -379,10 +379,6 @@ class BatchExecutor:
         self.tracker.total_games = 0
         self.logger.info("已清空之前的战绩，开始新的对战")
         
-        # 记录初始战绩，用于计算增量
-        initial_team_a = 0
-        initial_team_b = 0
-        
         # 主执行循环
         try:
             self.logger.info("=" * 80)
@@ -766,6 +762,7 @@ class BatchExecutor:
                 # 从共享文件或游戏记录文件中读取本批次战绩
                 # victoryNum 格式: [0, 3, 0, 3]
                 # 表示: [0号位胜利次数, 1号位胜利次数, 2号位胜利次数, 3号位胜利次数]
+                # 注意：服务器每批重置计数，所以 victoryNum 是本批的局级结果，不是累计值
                 try:
                     import time
                     # 等待游戏记录文件保存完成（客户端可能在游戏结束后才保存）
@@ -829,6 +826,7 @@ class BatchExecutor:
 
                     if victory_num and len(victory_num) >= 4:
                         # victoryNum 格式: [0号位胜利, 1号位胜利, 2号位胜利, 3号位胜利]
+                        # 这是本批的局级结果，需要直接累加到 tracker
                         wins = {
                             0: int(victory_num[0]) if victory_num[0] is not None else 0,
                             1: int(victory_num[1]) if victory_num[1] is not None else 0,
@@ -847,33 +845,29 @@ class BatchExecutor:
                         self.logger.info(f"  3号位胜利: {wins[3]}次")
                         self.logger.info("")
 
+                        # 计算本批各队胜场（同队席位胜利数应一致，取最大值）
                         if wins[0] == wins[2]:
-                            current_team_a = wins[0]
+                            batch_team_a = wins[0]
                         else:
-                            current_team_a = max(wins[0], wins[2])
+                            batch_team_a = max(wins[0], wins[2])
 
                         if wins[1] == wins[3]:
-                            current_team_b = wins[1]
+                            batch_team_b = wins[1]
                         else:
-                            current_team_b = max(wins[1], wins[3])
+                            batch_team_b = max(wins[1], wins[3])
 
-                        self.logger.info("组队胜负统计:")
-                        self.logger.info(f"  Team A (0号+2号): {current_team_a}胜 (0号位{wins[0]}次, 2号位{wins[2]}次)")
-                        self.logger.info(f"  Team B (1号+3号): {current_team_b}胜 (1号位{wins[1]}次, 3号位{wins[3]}次)")
+                        self.logger.info("本批组队胜负统计:")
+                        self.logger.info(f"  Team A (0号+2号): {batch_team_a}胜 (0号位{wins[0]}次, 2号位{wins[2]}次)")
+                        self.logger.info(f"  Team B (1号+3号): {batch_team_b}胜 (1号位{wins[1]}次, 3号位{wins[3]}次)")
                         self.logger.info("=" * 60)
 
-                        delta_a = current_team_a - initial_team_a
-                        delta_b = current_team_b - initial_team_b
-
-                        for _ in range(delta_a):
+                        # 直接累加本批胜场（不是增量计算）
+                        for _ in range(batch_team_a):
                             self.tracker.record_game("team_a")
-                        for _ in range(delta_b):
+                        for _ in range(batch_team_b):
                             self.tracker.record_game("team_b")
 
-                        initial_team_a = current_team_a
-                        initial_team_b = current_team_b
-
-                        self.logger.info(f"本批次增量: Team A +{delta_a}, Team B +{delta_b}")
+                        self.logger.info(f"本批次新增: Team A +{batch_team_a}, Team B +{batch_team_b}")
                         self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
                     else:
                         self.logger.warning("⚠ 未能读取 victoryNum 数据")
@@ -883,17 +877,13 @@ class BatchExecutor:
                                 matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
                                 if matches:
                                     wins = {int(pos): int(count) for pos, count in matches}
-                                    current_team_a = wins.get(0, 0) + wins.get(2, 0)
-                                    current_team_b = wins.get(1, 0) + wins.get(3, 0)
-                                    delta_a = current_team_a - initial_team_a
-                                    delta_b = current_team_b - initial_team_b
-                                    for _ in range(delta_a):
+                                    batch_team_a = wins.get(0, 0) + wins.get(2, 0)
+                                    batch_team_b = wins.get(1, 0) + wins.get(3, 0)
+                                    for _ in range(batch_team_a):
                                         self.tracker.record_game("team_a")
-                                    for _ in range(delta_b):
+                                    for _ in range(batch_team_b):
                                         self.tracker.record_game("team_b")
-                                    initial_team_a = current_team_a
-                                    initial_team_b = current_team_b
-                                    self.logger.info(f"从服务器输出解析: Team A +{delta_a}, Team B +{delta_b}")
+                                    self.logger.info(f"从服务器输出解析: Team A +{batch_team_a}, Team B +{batch_team_b}")
                                     break
                 except Exception as e:
                     self.logger.warning(f"读取战绩失败: {e}")
