@@ -1,90 +1,78 @@
+# -*- coding: utf-8 -*-
+
 import os
-import yaml
-import tempfile
 from pathlib import Path
 
+import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def _make_cfg(**overrides):
-    """Return config dict with overrides applied."""
-    d = {
-        "lalala_dir": "%REPO_ROOT%/reference/lalala",
-        "server_exe": "%REPO_ROOT%/offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe",
-        "model_dir": "%REPO_ROOT%/models/v-nn",
-        "model_file": "bc_model_ultimate_win_rate.pth",
-        "server_args": "10",
-    }
-    d.update(overrides)
-    return d
+from src.utils import v7_paths
 
 
-def _write_cfg(cfg, path):
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(cfg, f)
-    return path
+def test_get_server_exe_prefers_existing_candidate(tmp_path, monkeypatch):
+    exe = tmp_path / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_bytes(b"stub")
+    monkeypatch.setenv("SERVER_EXE", "")
+    monkeypatch.setattr(v7_paths, "V7_PATHS_FILE", tmp_path / "missing.yaml")
+    assert v7_paths.get_server_exe(repo_root=tmp_path) == str(exe)
 
 
-def test_default_config():
-    """默认配置：所有路径基于 %REPO_ROOT% 可解析"""
-    cfg = _make_cfg()
-    assert "%REPO_ROOT%" in cfg["lalala_dir"]
-    resolved = cfg["lalala_dir"].replace("%REPO_ROOT%", str(REPO_ROOT))
-    resolved_exe = cfg["server_exe"].replace("%REPO_ROOT%", str(REPO_ROOT))
-    assert resolved != cfg["lalala_dir"]
-    assert Path(resolved).is_dir() or True  # 不强制目录存在
-    assert resolved_exe.endswith(".exe")
+def test_get_lalala_dir_missing_returns_yaml_or_candidate(tmp_path, monkeypatch):
+    monkeypatch.setenv("LALALA_DIR", "")
+    cfg = tmp_path / "config" / "v7_paths.yaml"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text('lalala_dir: "%REPO_ROOT%/reference/lalala"\n', encoding="utf-8")
+    monkeypatch.setattr(v7_paths, "V7_PATHS_FILE", cfg)
+    v7_paths.load_v7_paths_config.cache_clear()
+    assert v7_paths.get_lalala_dir(repo_root=tmp_path).endswith(
+        os.path.join("reference", "lalala")
+    )
 
 
-def test_lalala_dir_env_override():
-    """环境变量 LALALA_DIR 优先生效"""
-    cfg = _make_cfg(lalala_dir="D:/custom/lalala")
-    assert cfg["lalala_dir"] == "D:/custom/lalala"
+def test_get_model_file_env_override(tmp_path, monkeypatch):
+    model = tmp_path / "custom.pth"
+    model.write_bytes(b"x")
+    monkeypatch.setenv("V7_MODEL_PATH", str(model))
+    assert v7_paths.get_model_file(repo_root=tmp_path) == str(model)
 
 
-def test_server_exe_env_override():
-    """环境变量 SERVER_EXE 优生产效"""
-    cfg = _make_cfg(server_exe="D:/custom/server.exe")
-    assert cfg["server_exe"] == "D:/custom/server.exe"
+def test_normalize_client_script_entry_strips_python_prefix(tmp_path, monkeypatch):
+    script = tmp_path / "src" / "communication" / "yf1_v7.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# stub", encoding="utf-8")
+    monkeypatch.setattr(v7_paths, "REPO_ROOT", tmp_path)
+    got = v7_paths.normalize_client_script_entry(
+        f"python src/communication/yf1_v7.py", repo_root=tmp_path
+    )
+    assert got == str(script.resolve())
 
 
-def test_config_yaml_readable(tmp_path):
-    """v7_paths.yaml 可被 yaml.safe_load 读且字段齐全"""
-    cfg = _make_cfg()
-    p = _write_cfg(cfg, tmp_path / "v7_paths.yaml")
-    with open(p, encoding="utf-8") as f:
-        loaded = yaml.safe_load(f)
-    for k in ("lalala_dir", "server_exe", "model_dir", "model_file", "server_args"):
-        assert k in loaded
+def test_get_server_exe_fallback_when_offline_platform_missing(tmp_path, monkeypatch):
+    """yaml 指向 offline_platform 不存在时，回退仓库根 guandan_offline_v1006。"""
+    legacy = (
+        tmp_path
+        / "guandan_offline_v1006"
+        / "windows"
+        / "guandan_offline_v1006.exe"
+    )
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"stub")
+    cfg = tmp_path / "config" / "v7_paths.yaml"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(
+        'server_exe: "%REPO_ROOT%/offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SERVER_EXE", "")
+    monkeypatch.setattr(v7_paths, "V7_PATHS_FILE", cfg)
+    v7_paths.load_v7_paths_config.cache_clear()
+    assert v7_paths.get_server_exe(repo_root=tmp_path) == str(legacy)
 
 
-def test_lalala_adapter_imports():
-    """验证 lalala_adapter.py 的路径解析逻辑可导入（不报语法错误）"""
-    import ast
-    src = REPO_ROOT / "src" / "communication" / "lalala_adapter.py"
-    with open(src, encoding="utf-8") as f:
-        ast.parse(f.read())
-    # 验证无硬编码 D:\\NYGD（仅允许作为 fallback default 参数值）
-    content = src.read_text(encoding="utf-8")
-    docstring_marker = 'r"D:\\NYGD\\lalala"'
-    if docstring_marker in content:
-        lines = content.splitlines()
-        for i, line in enumerate(lines):
-            if docstring_marker in line:
-                assert "DEFAULT" not in line.upper() or "fallback" in line.lower(), f"hardcoded D:\\NYGD at line {i+1}"
-
-
-def test_no_d_hardcode_in_v7_python():
-    """scripts/v7/ 下的 Python 文件不应含 D:\\NYGD 或 D:\\guandanscore 字面量"""
-    v7_dir = REPO_ROOT / "scripts" / "v7"
-    if not v7_dir.is_dir():
-        return
-    for py in v7_dir.glob("*.py"):
-        content = py.read_text(encoding="utf-8")
-        # 允许 _resolve_path 调用的 fallback default 参数
-        if "D:\\\\NYGD" in content or "D:\\\\guandanscore" in content:
-            lines = content.splitlines()
-            for line in lines:
-                if ("D:\\\\NYGD" in line or "D:\\\\guandanscore" in line) and "_resolve_path" not in line:
-                    raise AssertionError(f"{py} has hardcoded D: path: {line.strip()}")
+def test_parse_server_field_splits_exe_and_argv(tmp_path, monkeypatch):
+    exe = tmp_path / "guandan_offline_v1006.exe"
+    exe.write_bytes(b"stub")
+    monkeypatch.setattr(v7_paths, "REPO_ROOT", tmp_path)
+    path, argv = v7_paths.parse_server_field(f"{exe} 12", repo_root=tmp_path)
+    assert path == str(exe.resolve())
+    assert argv == "12"

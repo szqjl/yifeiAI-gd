@@ -21,8 +21,13 @@ from communication.game_recorder import (
     normalize_cards_to_string_list,
     normalize_action_list,
     ensure_my_pos_int,
+    unwrap_platform_payload,
+    process_platform_game_end_notify,
+    normalize_act_message_fields,
+    is_ws_debug_enabled,
 )
 from communication.websocket_manager import WebSocketManager
+from config_loader import get_config
 
 # Configure logging
 log_dir = Path(__file__).parent.parent.parent / "logs"
@@ -42,7 +47,7 @@ logging.basicConfig(
 )
 
 # Connection delay to ensure proper position assignment
-DELAY_BEFORE_CONNECT = 3  # seconds
+DELAY_BEFORE_CONNECT = 2  # seconds — 批跑 restart_manager 已按序间隔启动
 
 
 class YF1_V7_Client:
@@ -72,6 +77,11 @@ class YF1_V7_Client:
         
         # Initialize game recorder
         self.game_recorder = GameRecorder(player_id, "yf1_v7")
+
+        self.max_decision_time = float(
+            get_config().get("decision.max_decision_time", 0.8)
+        )
+        self.ws_debug = is_ws_debug_enabled()
         
         self.logger.info(f"✓ yf1_v7 initialized (Player {player_id})")
         self.logger.info(f"  - Ultimate Win Rate Engine V7: Loaded")
@@ -103,13 +113,9 @@ class YF1_V7_Client:
         """Process a message from the server"""
         message_type = data.get("type", "")
         
-        if message_type in ["notify", "act"]:
-            import json
+        if self.ws_debug and message_type in ("notify", "act"):
             print(f"\n[服务器消息调试] 收到 {message_type} 消息:")
             print(f"完整消息: {json.dumps(data, indent=2, ensure_ascii=False)[:1500]}...")
-            print(f"[服务器消息调试] 消息类型: {message_type}")
-            if "data" in data:
-                print(f"[服务器消息调试] 数据字段: {list(data['data'].keys()) if isinstance(data['data'], dict) else type(data['data'])}")
         
         if message_type == "act":
             await self.handle_action_request(data)
@@ -119,20 +125,29 @@ class YF1_V7_Client:
     def handle_notification(self, data: dict):
         """Handle notification from server"""
         try:
-            # Extract notification data
-            notification_data = data.get("data", {})
-            
-            # Handle different notification types
-            if "stage" in notification_data:
-                stage = notification_data["stage"]
-                if stage == "gameStart":
-                    self.handle_game_start(notification_data)
-                elif stage == "gameEnd":
-                    self.handle_game_end(notification_data)
-            
+            notification_data = unwrap_platform_payload(data)
+            stage = notification_data.get("stage", "")
+            notify_type = notification_data.get("notifyType", "")
+            key = notify_type or stage
+
+            if key in ("gameStart", "beginning"):
+                self.handle_game_start(notification_data)
+            elif key in ("gameEnd", "gameOver", "gameResult", "episodeOver"):
+                self.handle_game_end(notification_data)
+            elif (
+                "gameOver" in notification_data
+                or "gameResult" in notification_data
+                or "episodeOver" in notification_data
+                or notification_data.get("result")
+            ):
+                self.handle_game_end(notification_data)
+            elif "handCards" in notification_data and not self.game_recorder.current_game:
+                self.logger.info("检测到 handCards 且无 current_game，按游戏开始处理")
+                self.handle_game_start(notification_data)
+
             if "handCards" in notification_data:
                 self.hand_cards = normalize_cards_to_string_list(notification_data["handCards"])
-                
+
         except Exception as e:
             self.logger.error(f"✗ Notification handling error: {e}", exc_info=True)
     
@@ -157,50 +172,59 @@ class YF1_V7_Client:
             self.logger.error(f"✗ Game start handling error: {e}", exc_info=True)
     
     def handle_game_end(self, data: dict):
-        """Handle game end notification"""
+        """Handle game end notification (episodeOver / gameResult / gameOver)"""
         try:
-            result = data.get("result", {})
-            
-            # Save game record
-            self.game_recorder.end_game(result)
-            
-            # Print statistics
+            process_platform_game_end_notify(
+                data,
+                self.game_recorder,
+                self.logger,
+                self.user_info,
+                self.decision_count,
+                self.game_count,
+            )
+
             stats = self.decision_engine.get_statistics()
             self.logger.info(f"🏁 游戏结束 #{self.game_count}")
             self.logger.info(f"  - 总决策次数: {stats['total_decisions']}")
             self.logger.info(f"  - 模型决策: {stats['model_decisions']}")
             self.logger.info(f"  - 规则回退: {stats['fallback_decisions']}")
             self.logger.info(f"  - 模型使用率: {stats['model_usage_rate']:.1%}")
-            
+
         except Exception as e:
             self.logger.error(f"✗ Game end handling error: {e}", exc_info=True)
     
     async def handle_action_request(self, data: dict):
         """Handle action request from server"""
         self.decision_count += 1
-        
-        # Extract action data
-        action_data = data.get("data", {})
+
+        action_data = unwrap_platform_payload(data)
         
         # Check stage
         stage = action_data.get("stage", "")
         if stage == "tribute":
-            self._handle_tribute_action(action_data)
+            await self._handle_tribute_action(action_data)
+            return
         elif stage == "back":
-            self._handle_back_action(action_data)
-        else:
-            # Normal play stage
-            self_rank = action_data.get("selfRank", "?")
-            oppo_rank = action_data.get("oppoRank", "?")
-            cur_rank = action_data.get("curRank", "?")
-            
-            if self_rank != "?" or oppo_rank != "?" or cur_rank != "?":
-                print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
+            await self._handle_back_action(action_data)
+            return
+        
+        # Normal play stage
+        self_rank = action_data.get("selfRank", "?")
+        oppo_rank = action_data.get("oppoRank", "?")
+        cur_rank = action_data.get("curRank", "?")
+        
+        if self_rank != "?" or oppo_rank != "?" or cur_rank != "?":
+            print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
         
         action_list = action_data.get("actionList", [])
         
         if not action_list:
-            self.logger.warning("Empty action list, sending 0")
+            self.logger.warning(
+                "Empty actionList stage=%s myPos=%s curPos=%s — 回退 actIndex=0 避免平台超时",
+                stage,
+                action_data.get("myPos"),
+                action_data.get("curPos"),
+            )
             await self.send_action(0)
             return
         
@@ -214,12 +238,28 @@ class YF1_V7_Client:
                 "[座位排查] 来源=yf1_v7.handle_action_request, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
                 action_data.get("myPos"), action_data.get("playerPosition"), self.player_id
             )
-            if "handCards" in action_data and action_data["handCards"]:
-                action_data["handCards"] = normalize_cards_to_string_list(action_data["handCards"])
-            if "actionList" in action_data and action_data["actionList"]:
-                action_data["actionList"] = normalize_action_list(action_data["actionList"])
-            act_index = self.decision_engine.decide(action_data)
-            
+            normalize_act_message_fields(action_data)
+            t0 = time.perf_counter()
+            try:
+                act_index = await asyncio.wait_for(
+                    asyncio.to_thread(self.decision_engine.decide, action_data),
+                    timeout=self.max_decision_time,
+                )
+            except asyncio.TimeoutError:
+                elapsed = time.perf_counter() - t0
+                self.logger.warning(
+                    "决策超时 %.2fs (limit=%.2fs)，回退 actIndex=0",
+                    elapsed,
+                    self.max_decision_time,
+                )
+                act_index = 0
+            else:
+                elapsed = time.perf_counter() - t0
+                if elapsed > 1.0:
+                    self.logger.warning("决策偏慢 %.2fs myPos=%s actionList=%s", elapsed, my_pos, len(action_list))
+            print(f"[yf1_v7] 选择动作: {act_index}")
+            self.logger.info(f"选择动作: {act_index}")
+
             # Record decision
             selected_action = action_list[act_index] if act_index < len(action_list) else []
             self.game_recorder.record_decision(
@@ -245,49 +285,53 @@ class YF1_V7_Client:
             self.logger.error(f"✗ Decision error: {e}", exc_info=True)
             await self.send_action(0)
     
-    def _handle_tribute_action(self, data: dict):
-        """Handle tribute action"""
+    async def _handle_tribute_action(self, data: dict):
+        """Handle tribute action - 进贡阶段需要发送动作响应"""
         self_rank = data.get("selfRank", "?")
         oppo_rank = data.get("oppoRank", "?")
         cur_rank = data.get("curRank", "?")
-        print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
+        print(f"[进贡] 我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
         
         action_list = data.get("actionList", {})
-        if "tribute" in action_list:
+        if isinstance(action_list, dict) and "tribute" in action_list:
             tribute_cards = action_list["tribute"]
-            print("轮到自己进贡，可以进贡的牌有:")
-            print(tribute_cards)
+            print(f"[进贡] 轮到自己进贡，可以进贡的牌有: {tribute_cards}")
+            # 进贡阶段：选择第一张牌进贡（索引0）
+            await self.send_action(0)
+        else:
+            # actionList格式异常，发送0
+            self.logger.warning(f"[进贡] actionList格式异常: {action_list}")
+            await self.send_action(0)
     
-    def _handle_back_action(self, data: dict):
-        """Handle back action"""
+    async def _handle_back_action(self, data: dict):
+        """Handle back action - 还贡阶段需要发送动作响应"""
         self_rank = data.get("selfRank", "?")
         oppo_rank = data.get("oppoRank", "?")
         cur_rank = data.get("curRank", "?")
-        print(f"我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
+        print(f"[还贡] 我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
         
         action_list = data.get("actionList", {})
-        if "back" in action_list:
+        if isinstance(action_list, dict) and "back" in action_list:
             back_cards = action_list["back"]
-            print("轮到自己还贡，可以还贡的牌有:")
-            print(back_cards)
+            print(f"[还贡] 轮到自己还贡，可以还贡的牌有: {back_cards}")
+            # 还贡阶段：选择第一张牌还贡（索引0）
+            await self.send_action(0)
+        else:
+            # actionList格式异常，发送0
+            self.logger.warning(f"[还贡] actionList格式异常: {action_list}")
+            await self.send_action(0)
     
     def validate_action(self, action_index: int, action_list: list) -> bool:
         """Validate action index"""
         return 0 <= action_index < len(action_list)
     
     async def send_action(self, action_index: int):
-        """Send action to server"""
+        """Send action to server（平台标准格式：仅 actIndex）"""
         try:
-            message = {
-                "type": "action",
-                "data": {
-                    "actIndex": action_index
-                }
-            }
-            
+            message = {"actIndex": action_index}
             await self.ws_manager.send_json(message)
-            self.logger.debug(f"发送动作: {action_index}")
-            
+            self.logger.info(f"发送动作: actIndex={action_index}")
+
         except Exception as e:
             self.logger.error(f"✗ Send action error: {e}", exc_info=True)
 

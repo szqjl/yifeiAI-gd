@@ -1,6 +1,9 @@
 @echo off
 REM V7 Client Start Script - Sequential startup for proper team assignment
-REM Using Ultimate Win Rate Model
+
+set "REPO=%~dp0"
+if "%REPO:~-1%"=="\" set "REPO=%REPO:~0,-1%"
+cd /d "%REPO%"
 
 echo ========================================
 echo V7 Client Startup - Ultimate Win Rate
@@ -40,28 +43,28 @@ echo.
 
 REM 1. Start yf1_v7 (Position 0)
 echo [1/4] Starting yf1_v7 (Target: Position 0)...
-start "yf1_v7 (Pos 0)" cmd /k "cd /d %~dp0 && python src/communication/yf1_v7.py"
+start "yf1_v7 (Pos 0)" cmd /k "cd /d %REPO% && python src/communication/yf1_v7.py"
 echo   Waiting 3 seconds...
 timeout /t 3 /nobreak > nul
 echo.
 
 REM 2. Start lalala client3 (Position 1)
 echo [2/4] Starting lalala client3 (Target: Position 1)...
-start "lalala_client3 (Pos 1)" cmd /k "cd /d %~dp0 && python src/communication/run_lalala_client3.py"
+start "lalala_client3 (Pos 1)" cmd /k "cd /d %REPO% && python src/communication/run_lalala_client3.py"
 echo   Waiting 3 seconds...
 timeout /t 3 /nobreak > nul
 echo.
 
 REM 3. Start yf2_v7 (Position 2)
 echo [3/4] Starting yf2_v7 (Target: Position 2)...
-start "yf2_v7 (Pos 2)" cmd /k "cd /d %~dp0 && python src/communication/yf2_v7.py"
+start "yf2_v7 (Pos 2)" cmd /k "cd /d %REPO% && python src/communication/yf2_v7.py"
 echo   Waiting 3 seconds...
 timeout /t 3 /nobreak > nul
 echo.
 
 REM 4. Start lalala client4 (Position 3)
 echo [4/4] Starting lalala client4 (Target: Position 3)...
-start "lalala_client4 (Pos 3)" cmd /k "cd /d %~dp0 && python src/communication/run_lalala_client4.py"
+start "lalala_client4 (Pos 3)" cmd /k "cd /d %REPO% && python src/communication/run_lalala_client4.py"
 echo.
 
 echo ========================================

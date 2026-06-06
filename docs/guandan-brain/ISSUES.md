@@ -86,9 +86,10 @@
 | GUA-039a | open | P2 | V-nn, v7 | v7 | V7 自对弈 DMC + ZMQ 桥 + Actor 原型 | 搭建 V7 自对弈基础设施：DMC value net 训练 + ZMQ Actor-Learner 通信 + 单 Actor 与 v1006 平台交互原型 | `src/v/nn/training/actor.py`、`learner.py`、`replay_buffer.py`、`zmq_bridge.py`、`reward.py` | 完成定义见 `V7-实施方案.md` §2 Phase 3 GUA-039a；**关单前提**：评审后方可启动 GUA-039b |
 | GUA-039b | open | P2 | V-nn, v7 | v7 | V7 自对弈 top-K + PPO + 30 局评估 | 在 039a 基础上叠加 top-K=2 过滤 + PPO policy net + 两阶段 30 局 lalala 评估基线（含 fallback baseline） | `scripts/v7/eval_vs_lalala.py`、`src/v/nn/training/learner.py`（PPO 扩展） | 完成定义见 `V7-实施方案.md` §2 Phase 3 GUA-039b；仅在 GUA-039a 关单后启动 |
 | GUA-040 | open | P1 | V-nn, v7 | v7 | V7 模型权重管理（COS manifest + 版本切换） | 搭建 V7 模型权重的 COS 上传/下载/版本切换基建，遵循治理 §6.3 目录规范 | `models/v-nn/manifest.json`、`scripts/v7/weight_manager.py`、`scripts/cos/upload_v7_weights.py`、`download_v7_weights.py` | 完成定义见 `V7-实施方案.md` §2 Phase 1 并行 GUA-040；与 Phase 0 + Phase 1 全部并行 |
-| GUA-041 | open | P1 | V-nn, v7 | v7 | V7 路径债清理 | 消除 V7 客户端与启动器中的 D 盘硬编码路径债，使 V7 在本机任意目录 clone 后可开箱即用 | `lalala_adapter.py`、`scripts/v7/start_v7_gui.py`、`start_v7_complete.py`、`START_V7_AUTO.bat`、`START_V7_CLIENTS.bat` | 完成定义见 `V7-实施方案.md` §2 Phase 0 GUA-041；**建议从本条入手**（0.5 迭代） |
+| GUA-041 | **closed** ✅ | P1 | V-nn, v7 | v7 | V7 路径债清理 | 消除 V7 客户端与启动器中的 D 盘硬编码路径债，使 V7 在本机任意目录 clone 后可开箱即用 | `config/v7_paths.yaml`、`src/utils/v7_paths.py`、`start_v7_complete.py`、`START_V7_*.bat` | **`closed_in` 2026-06-05**：pytest 6/6 passed；D 盘硬编码在 GUA-041 范围内清零；跨平台 subprocess 由用户在 Windows 下批跑 |
 | GUA-042 | open | P1 | V-nn, v7 | v7 | ABL-GD 168 伪动作评估（含开源可行性） | 调研 ABL-GD（CCFAI 2025）168 伪动作方案的可获取性与可移植性，给出采纳/弃用/备选结论；仅调研 + 写结论文档，不实施 | `docs/analysis/abl-gd-eval-2026-06.md` | 完成定义见 `V7-实施方案.md` §2 Phase 0 GUA-042；关联研判 T2.2 |
 | GUA-043 | open | P1 | V-nn, v7 | v7 | 专利规避设计审计（CN113018837A 边界） | 审计掼蛋 AI 算法专利 CN113018837A 的权利要求边界，识别 V7 Phase 1-3 实施中被覆盖的子模块，给出规避方案；仅调研，不改代码 | `docs/governance/patent-audit-cn113018837a.md` | 完成定义见 `V7-实施方案.md` §2 Phase 0 GUA-043；关联研判 T7 |
+| GUA-044 | **closed** ✅ | P1 | observation, infra | v7, m1, m3, batch | **批跑四席未就绪即开局 + 首局空等卡顿** | **现象**（V7 批跑 `logs/v7_vs_lalala_20260606_102117.log`）：`wait_for_clients_connected` 在 Windows 新控制台启动下误报 **0/4** 仍继续；**第 4 席连上即开局**（v1006 规则），client4 ~10:22:10 连入、局 ~10:22:11 开始；yf2 `actIndex=9` 于 10:22:13 已回包后 **~51s** 无新 `act`（yf1 同步空窗），似等 lalala/平台。**根因**：批跑侧连接检测不可靠 + 末席连入前前三席未门闩。**非** V7 决策超时（无 `决策超时` 日志） | `batch_executor/client_ready.py`、`websocket_manager.py`、`lalala_adapter.py`、`restart_manager.py`、`executor.py` | **`closed_in` 2026-06-06**：四席就绪门闩 + 就绪表；`tests/test_client_ready.py` **3 passed**；见 `ITERATIONS` 2026-06-06 GUA-044 行、§GUA-044 完成定义 |
 
 ---
 
@@ -107,6 +108,24 @@
 | GUA-034 | [`GUA-034-方案评审.md`](GUA-034-方案评审.md)（**方向 A 已实施**）；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2；[`01_bomb_techniques.md`](../knowledge/skills/02_main_attack/01_bomb_techniques.md) §五；[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) §5 残局；**related** **GUA-014**、**GUA-026**、**GUA-029 R3**、**GUA-035**；样例 `replay_word.md` / `game_records/20260601112040940931 [yf2_m3]-…-[38]-[4].json` |
 | GUA-035 | **GUA-034** END-M02+；[`GUA-034-方案评审.md`](GUA-034-方案评审.md) 方向 E 前置；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2（两手枚举 → V5+）；[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) P-C01 / CALC-M05 |
 | GUA-036 | batch7 round38 复盘（[`ITERATIONS.md`](ITERATIONS.md)「batch7 replay」行）；[`08_straight_skills.md`](../knowledge/skills/04_common_skills/08_straight_skills.md) §控权；[`01_passing_skills.md`](../knowledge/skills/03_assist_attack/01_passing_skills.md)；**related** **GUA-031**、**GUA-032**、**GUA-034/035**（solo 边界）；[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §复盘与验收理念 |
+| GUA-044 | [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md) §局与副；[`服务器与客户端连接座位顺序排查.md`](../troubleshooting/服务器与客户端连接座位顺序排查.md)；**related** **GUA-033**（批跑 infra）、**GUA-008**（victoryNum 链路）；日志 `logs/yf2_v7_20260606_102201.log`（10:22:13→10:23:04 空窗） |
+
+---
+
+## GUA-044 完成定义（批跑四席就绪门闩）
+
+> **定音**：离线 v1006 **第 4 个 WebSocket 连上即自动开局**；批跑须保证 **按序连入 + 末席连入前前三席已登记就绪**，且批跑侧**不得**在就绪不足时继续。
+
+| 项 | 要求 |
+|----|------|
+| **就绪表** | `batch_executor/clients_ready.json`；每席 WS `connect` 成功后 `mark_client_ready(user_info)` |
+| **顺位门闩** | `CONNECT_ORDER_INDEX` + **按席位** `_peers_ready`（非纯计数）；client4 进程延迟 **11s**、末席连入前稳定 **7s**（2026-06-06 由 2s+5s）；`websocket_manager` + `lalala_adapter` 连前 `wait_for_connect_turn` |
+| **批跑等待** | `executor` 批次前 `clear_all_ready()`；`wait_for_clients_connected` 读就绪表；**四席未齐 → 中止本批**（不再「超时仍继续」） |
+| **验收** | `pytest tests/test_client_ready.py` pass；批跑日志含 `✓ 四席已全部连上，平台可安全开局` |
+| **复发排查** | 单席日志在 `发送动作` 后长时间无新 `act` → 先查**他席**是否未回包（非本席决策 hang）；对照四席就绪表时间戳 |
+| **手动单测** | `YF_SKIP_CONNECT_GATE=1` 可跳过门闩（仅本地调试） |
+
+**后续 Agent**：若再报「首局卡顿 ~30–60s」，先读就绪表与 yf1/yf2/lalala 四席日志时间线；若门闩已存在仍卡，另开 GUA 查 lalala `rule_parse` 慢路径（**非**本关单范围）。
 
 ---
 
@@ -116,7 +135,7 @@
 
 | 规则 | 条件（M3 可观测） | 动作 | 文档依据 | 涉及模块 |
 |------|-------------------|------|----------|----------|
-| **R1** | `actionList` 含 `Bomb`/`StraightFlush` 且进入 `choose_bomb` | **先修** `choose_bomb`：点数读 `action[1]`（对齐 `first_prize/utils.py`），同花顺分支一并查；单元测 v1006 格式 `['Bomb','8',[…]]` | 前置；不修则 R2–R6 均可能异常→PASS | `m3_utils.choose_bomb` |
+| **R1** | `actionList` 含 `Bomb`/`StraightFlush` 且进入 `choose_bomb` | **先修** `choose_bomb`：点数读 `action[1]`（对齐 lalala 参考实现），同花顺分支一并查；单元测 v1006 格式 `['Bomb','8',[…]]` | 前置；不修则 R2–R6 均可能异常→PASS | `m3_utils.choose_bomb` |
 | **R2** | `beatAction[0] in (Bomb, StraightFlush)` 且 `choose_bomb != -1` | **必回炸**（最小够用炸弹） | §二.3 追炸；§二.6 炸对手炸弹 | `_Bomb`；取消/绕过 `cur_Bomb_num>=3` 硬门槛 |
 | **R3** | `numofplayers[greaterPos] <= 7` 且当前牌型分支无可跟牌 且 `choose_bomb != -1` | **必炸**（防冲刺/听牌） | §三.5.3 剩 5–7 张；§五.2 逢 5 必防 | 各 `_Single`/`_Pair`/`_ThreeWithTwo`/… 统一兜底 |
 | **R4** | `numofplayers[greaterPos] == 4` | **默认不炸**；白名单：① 我剩 ≤2 手且炸后一手走完；② 仅炸弹能压且炸后可接风领出 | §五.1 炸不打四 | `_Bomb` 与各被动分支 guard |

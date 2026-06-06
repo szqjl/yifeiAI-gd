@@ -1,49 +1,27 @@
 @echo off
 chcp 65001 >nul
-REM V7 Ultimate Win Rate GUI - Complete System Startup
-REM Auto-start server and configure V7 vs lalala battle
+REM 启动 V7 批量测试 GUI（写法对标 START_M1_GUI.bat）
+REM 服务器由 batch_executor 自动拉起，勿在此 bat 里重复启动
+
+cd /d "%~dp0"
 
 echo ========================================
-echo V7 Ultimate Win Rate GUI - One-Click Start
+echo 掼蛋AI批量对战系统 - V7版本
 echo ========================================
 echo.
-echo Battle Config:
-echo   Team A: yf1_v7 + yf2_v7 (Ultimate Win Rate Engine)
-echo   Team B: lalala client3 + client4
-echo   Model: bc_model_ultimate_win_rate.pth (84.3%% score)
+echo 配置：YiFei V7 vs lalala一等奖AI
+echo 队伍A：yf1_v7 (0号) + yf2_v7 (2号)
+echo 队伍B：lalala client3 (1号) + client4 (3号)
 echo.
-
-REM Check model status
-if exist "models\bc_model_ultimate_win_rate.pth" (
-    echo ✓ Ultimate Win Rate Model: LOADED
-) else (
-    echo ✗ Ultimate Win Rate Model: NOT FOUND - Will use rule engine
-)
+echo 特性：终极胜率导向引擎 V7
+echo   - 模型决策 + 规则回退
+echo   - 路径见 config/v7_paths.yaml
+echo   - 批跑局数建议 3 / 9 / 12（须为 3 的倍数）
 echo.
-
-REM Check and start server
-echo Checking server status...
-netstat -an | findstr "23456" > nul
-if errorlevel 1 (
-    echo Starting server...
-    start "Guandan Server" /min cmd /c "D:\guandanscore\guandan_offline_v1006\windows\guandan_offline_v1006.exe 10"
-    timeout /t 8 /nobreak > nul
-    echo Server started.
-) else (
-    echo Server already running.
-)
-echo.
-
-REM Fix lalala client ports
-echo Configuring lalala clients for port 23456...
-powershell -Command "(Get-Content 'D:\NYGD\lalala\client3.py') -replace 'ws://127.0.0.1:9618/game/gd/client1', 'ws://127.0.0.1:23456/game/client3' | Set-Content 'D:\NYGD\lalala\client3.py'"
-powershell -Command "(Get-Content 'D:\NYGD\lalala\client4.py') -replace 'ws://127.0.0.1:9618/game/gd/client4', 'ws://127.0.0.1:23456/game/client4' | Set-Content 'D:\NYGD\lalala\client4.py'"
-echo Clients configured.
-echo.
-
-echo Starting V7 Ultimate Win Rate Battle GUI...
+echo 正在启动 GUI...
 echo ========================================
+echo.
 
-py start_v7_gui.py
+py batch_executor_gui_v7.py
 
 pause

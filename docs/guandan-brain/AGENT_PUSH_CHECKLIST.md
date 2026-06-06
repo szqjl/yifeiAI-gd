@@ -7,7 +7,7 @@
 ## 默认第一句（推送任务）
 
 ```text
-提交推送前先完成 docs/guandan-brain/AGENT_PUSH_CHECKLIST.md 全部勾选：必读 docs/governance/M-V-Series-治理方案.md §4/§6/§8 与 main-branch-policy.md，跑 pre_push_check.bat，按 §8.1 前缀 commit，最后 git push origin m-dev。
+提交推送前先完成 docs/guandan-brain/AGENT_PUSH_CHECKLIST.md 全部勾选：必读 AGENTS.md § 分支说明/§ 治理要点/§ Git 提交与推送规则，按前缀 commit，最后 git push origin m-dev（或 v7-dev）。
 ```
 
 ---
@@ -16,12 +16,11 @@
 
 ### A. 必读文档
 
-- [ ] `docs/governance/M-V-Series-治理方案.md` — §4 远程/分支、§6 产物、§8 Commit、§7 门禁
-- [ ] `docs/governance/main-branch-policy.md` — **只推 m-dev，禁止推 main**
+- [ ] `AGENTS.md` — § 分支说明、§ 治理要点、§ Git 提交与推送规则
 
 ### B. 环境与范围
 
-- [ ] 当前分支：`git branch -vv` → **`m-dev`**（非 main）
+- [ ] 当前分支：`git branch -vv` → **`m-dev`** 或 **`v7-dev`**（非 main）
 - [ ] 已 `git status` / `git diff --stat`，**未** `git add .` 盲加
 - [ ] 未纳入 Layer 2：`game_scores_m2.json`、`game_records/`、`models/*.pth`、`logs/`、大 replay
 
@@ -60,6 +59,5 @@
 
 ## 延伸阅读
 
-- [M-V-Series-治理方案.md](../governance/M-V-Series-治理方案.md)
-- [推送前检查指南.md](../development/推送前检查指南.md)
+- [AGENTS.md](../../AGENTS.md) — 项目操作手册（含 Git 提交/推送规则）
 - 安装 Git 钩子：`scripts/hooks/install-hooks.bat`（阻止推 main、Layer 2 大文件）

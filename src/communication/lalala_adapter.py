@@ -6,7 +6,7 @@ import websockets
 import json
 import ast
 import sys
-import os
+from pathlib import Path
 
 # 设置控制台编码为UTF-8
 if sys.platform == 'win32':
@@ -14,19 +14,23 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-# 添加lalala目录到路径（优先读环境变量 LALALA_DIR，fallback config/v7_paths.yaml）
-_LALALA_DIR = os.environ.get("LALALA_DIR", "")
-if not _LALALA_DIR:
-    import yaml
-    _cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "v7_paths.yaml")
-    if os.path.exists(_cfg_path):
-        with open(_cfg_path, encoding="utf-8") as _f:
-            _cfg = yaml.safe_load(_f)
-        _LALALA_DIR = _cfg.get("lalala_dir", "")
-        _LALALA_DIR = _LALALA_DIR.replace("%REPO_ROOT%", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if not _LALALA_DIR:
-    _LALALA_DIR = r"D:\NYGD\lalala"
-LALALA_PATH = _LALALA_DIR
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.utils.v7_paths import get_lalala_dir
+
+try:
+    from batch_executor.client_ready import mark_client_ready, wait_for_connect_turn
+except ImportError:
+    def mark_client_ready(_client_id: str) -> None:
+        pass
+
+    def wait_for_connect_turn(_client_id: str, *, timeout: float = 120.0, poll_interval: float = 0.5) -> bool:
+        return True
+
+LALALA_PATH = get_lalala_dir()
+print(f"[lalala_adapter] LALALA_PATH={LALALA_PATH}", flush=True)
 if LALALA_PATH not in sys.path:
     sys.path.insert(0, LALALA_PATH)
 
@@ -55,8 +59,22 @@ class LalalaWebsocketsClient:
     async def connect(self):
         uri = f"ws://127.0.0.1:23456/game/{self.user_info}"
         try:
-            self.websocket = await websockets.connect(uri)
-            print(f"[{self.user_info}] 连接成功!")
+            gate_ok = await asyncio.to_thread(
+                wait_for_connect_turn,
+                self.user_info,
+                timeout=120.0,
+            )
+            if not gate_ok:
+                print(f"[{self.user_info}] 前序席位未就绪，放弃连接")
+                return
+
+            self.websocket = await websockets.connect(
+                uri,
+                ping_interval=None,
+                ping_timeout=None,
+            )
+            mark_client_ready(self.user_info)
+            print(f"[{self.user_info}] 连接成功! 已登记就绪")
             await self.handle_messages()
         except Exception as e:
             print(f"[{self.user_info}] 连接错误: {e}")
@@ -177,58 +195,67 @@ class LalalaWebsocketsClient:
                             ]
         
         return data
+
+    def _preprocess_message(self, data: dict) -> dict:
+        for field in ("curAction", "greaterAction", "handCards"):
+            if field in data and isinstance(data[field], str):
+                try:
+                    data[field] = ast.literal_eval(data[field])
+                except (ValueError, SyntaxError):
+                    pass
+        return self.convert_card_format(data)
+
+    def _sync_parse_only(self, data: dict) -> None:
+        """仅更新 state（notify），不做决策。"""
+        self.state.parse(data)
+
+    def _decide_sync(self, data: dict):
+        """同步决策（在线程池运行，避免阻塞 asyncio 导致 ping 超时）。"""
+        self.state.parse(data)
+        if "actionList" not in data:
+            return None
+        return self.action.rule_parse(
+            data,
+            self.state._myPos,
+            self.state.remain_cards,
+            self.state.history,
+            self.state.remain_cards_classbynum,
+            self.state.pass_num,
+            self.state.my_pass_num,
+            self.state.tribute_result,
+        )
     
     async def handle_messages(self):
         try:
             async for message in self.websocket:
                 try:
                     data = json.loads(message)
-                    
-                    # 预处理：解析字符串形式的列表字段
-                    for field in ['curAction', 'greaterAction', 'handCards']:
-                        if field in data and isinstance(data[field], str):
-                            try:
-                                data[field] = ast.literal_eval(data[field])
-                            except:
-                                pass
-                    
-                    # 转换牌的格式
-                    data = self.convert_card_format(data)
-                    
-                    # 使用lalala的状态解析
+                    data = self._preprocess_message(data)
+                    msg_type = data.get("type", "")
+
+                    if msg_type == "notify":
+                        await asyncio.to_thread(self._sync_parse_only, data)
+                        continue
+
+                    if msg_type != "act":
+                        continue
+
                     try:
-                        self.state.parse(data)
+                        act_index = await asyncio.to_thread(self._decide_sync, data)
                     except IndexError as e:
                         print(f"[ERROR] IndexError in state.parse: {e}")
                         print(f"[ERROR] curAction: {data.get('curAction')}")
-                        if data.get('curAction') and len(data['curAction']) > 2:
+                        if data.get("curAction") and len(data["curAction"]) > 2:
                             print(f"[ERROR] curAction[2] type: {type(data['curAction'][2])}")
-                            if isinstance(data['curAction'][2], list) and len(data['curAction'][2]) > 0:
-                                print(f"[ERROR] curAction[2][0]: {data['curAction'][2][0]}, type: {type(data['curAction'][2][0])}")
                         print(f"[ERROR] greaterAction: {data.get('greaterAction')}")
-                        if data.get('greaterAction') and len(data['greaterAction']) > 2:
-                            print(f"[ERROR] greaterAction[2] type: {type(data['greaterAction'][2])}")
-                            if isinstance(data['greaterAction'][2], list) and len(data['greaterAction'][2]) > 0:
-                                print(f"[ERROR] greaterAction[2][0]: {data['greaterAction'][2][0]}, type: {type(data['greaterAction'][2][0])}")
                         raise
-                    
-                    # 如果需要做出动作选择
-                    if "actionList" in data:
-                        # 使用lalala的决策逻辑
-                        act_index = self.action.rule_parse(
-                            data,
-                            self.state._myPos,
-                            self.state.remain_cards,
-                            self.state.history,
-                            self.state.remain_cards_classbynum,
-                            self.state.pass_num,
-                            self.state.my_pass_num,
-                            self.state.tribute_result
-                        )
-                        
-                        print(f"[{self.user_info}] 选择动作: {act_index}")
-                        response = json.dumps({"actIndex": act_index})
-                        await self.websocket.send(response)
+
+                    if act_index is None:
+                        print(f"[{self.user_info}] actionList 缺失，回退 actIndex=0")
+                        act_index = 0
+
+                    print(f"[{self.user_info}] 选择动作: {act_index}")
+                    await self.websocket.send(json.dumps({"actIndex": act_index}))
                         
                 except json.JSONDecodeError:
                     print(f"[{self.user_info}] 无效的JSON")

@@ -5,6 +5,7 @@
 牌张与基本概念见：docs/rules/牌张与基本概念.md，常量见 game_logic.guandan_constants。
 """
 
+import ast
 import json
 import os
 from datetime import datetime
@@ -84,6 +85,171 @@ def ensure_my_pos_int(data: dict, fallback_player_id: int) -> int:
         return int(raw)
     except (TypeError, ValueError):
         return int(fallback_player_id)
+
+
+_PLATFORM_PAYLOAD_KEYS = frozenset({
+    "actionList",
+    "stage",
+    "handCards",
+    "myPos",
+    "curPos",
+    "curAction",
+    "greaterPos",
+    "greaterAction",
+    "publicInfo",
+    "selfRank",
+    "oppoRank",
+    "curRank",
+    "notifyType",
+    "result",
+    "victoryNum",
+})
+
+
+def unwrap_platform_payload(message: dict) -> dict:
+    """
+    v1006 平台 WebSocket 消息多为顶层字段（见 guandan_offline lalala/state.py）；
+    少数封装为 {"type": "...", "data": {...}}。
+    """
+    if not isinstance(message, dict):
+        return {}
+    nested = message.get("data")
+    if isinstance(nested, dict) and any(k in nested for k in _PLATFORM_PAYLOAD_KEYS):
+        return nested
+    return message
+
+
+def is_ws_debug_enabled() -> bool:
+    """是否打印 WebSocket 完整消息（YF_DEBUG_WS=1 开启）。"""
+    return os.environ.get("YF_DEBUG_WS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def normalize_act_message_fields(data: dict) -> dict:
+    """规范化 act 消息：字符串形式的 curAction/greaterAction 转列表。"""
+    for field in ("curAction", "greaterAction"):
+        value = data.get(field)
+        if isinstance(value, str):
+            try:
+                data[field] = ast.literal_eval(value)
+            except (ValueError, SyntaxError):
+                pass
+    if "handCards" in data and data["handCards"]:
+        data["handCards"] = normalize_cards_to_string_list(data["handCards"])
+    if data.get("actionList"):
+        data["actionList"] = normalize_action_list(data["actionList"])
+    return data
+
+
+def get_latest_victory_num_path() -> Path:
+    """batch_executor 读取的 victoryNum 共享文件路径。"""
+    return Path(__file__).parent.parent.parent / "batch_executor" / "latest_victory_num.json"
+
+
+def notify_end_kind(data: dict) -> str:
+    """区分副结束 (episode) 与局级结果 (session/gameResult)。"""
+    key = data.get("notifyType") or data.get("stage", "")
+    if key in ("gameResult", "gameEnd") or "victoryNum" in data:
+        return "session"
+    if key in ("episodeOver", "gameOver"):
+        return "episode"
+    return "unknown"
+
+
+def extract_notify_game_result(
+    data: dict,
+    decision_count: int = 0,
+    game_count: int = 0,
+) -> Dict[str, Any]:
+    """从 notify 提取写入 game_records.result 的字段。"""
+    result = data.get("result", {}) or {}
+    if not isinstance(result, dict):
+        result = {}
+
+    if data.get("stage") == "gameResult" or "victoryNum" in data:
+        victory_num = data.get("victoryNum") or result.get("victoryNum", [])
+        if victory_num:
+            return {
+                "victoryNum": victory_num,
+                "draws": data.get("draws", result.get("draws", [])),
+                "total_decisions": decision_count,
+                "game_count": game_count,
+            }
+        if not result:
+            return {
+                "draws": data.get("draws", []),
+                "total_decisions": decision_count,
+                "game_count": game_count,
+            }
+    return dict(result)
+
+
+def save_victory_num_shared(
+    victory_num: list,
+    player: str,
+    logger=None,
+    *,
+    vn_source: str = "gameResult",
+) -> bool:
+    """写入 latest_victory_num.json，供 batch_executor 批末对账。"""
+    if not victory_num or len(victory_num) < 4:
+        return False
+    try:
+        shared_file = get_latest_victory_num_path()
+        shared_file.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "victoryNum": victory_num,
+            "server_vn_raw": victory_num,
+            "vn_source": vn_source,
+            "timestamp": datetime.now().isoformat(),
+            "player": player,
+        }
+        with open(shared_file, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        if logger:
+            logger.info("✓ victoryNum 已保存到共享文件: %s → %s", shared_file, victory_num)
+        return True
+    except Exception as e:
+        if logger:
+            logger.warning("保存 victoryNum 到共享文件失败: %s", e)
+        return False
+
+
+def process_platform_game_end_notify(
+    data: dict,
+    game_recorder: "GameRecorder",
+    logger,
+    player_tag: str,
+    decision_count: int = 0,
+    game_count: int = 0,
+) -> None:
+    """
+    统一处理 episodeOver / gameResult 结束通知（M1/M3/V7 共用逻辑）。
+    - episodeOver：落盘当前副记录（可无 victoryNum）
+    - gameResult：写 latest_victory_num.json 并回填近期 game_records
+    """
+    key = data.get("notifyType") or data.get("stage", "")
+    kind = notify_end_kind(data)
+    result = extract_notify_game_result(data, decision_count, game_count)
+    victory_num = result.get("victoryNum")
+
+    if game_recorder.current_game:
+        filepath = game_recorder.end_game(result)
+        if filepath and logger:
+            logger.info("✓ 游戏记录已保存: %s", filepath)
+    elif kind == "episode":
+        if logger:
+            logger.info(
+                "游戏结束通知(%s)收到但 current_game 为空，副记录可能已保存；跳过 end_game",
+                key,
+            )
+    elif logger:
+        logger.info("局级结束通知(%s)，current_game 为空", key)
+
+    if kind == "session" and victory_num:
+        save_victory_num_shared(victory_num, player_tag, logger)
+        filled = game_recorder.backfill_victory_num(victory_num)
+        if logger and filled:
+            logger.info("✓ victoryNum 已回填 %s 条 game_records", filled)
 
 
 def _format_cards(action_cards: Any) -> str:
@@ -618,7 +784,35 @@ class GameRecorder:
             logger.error(f"✗ 保存游戏记录失败: {e}", exc_info=True)
             print(f"✗ 保存游戏记录失败: {e}")
             return None
-            return None
+    
+    def backfill_victory_num(self, victory_num: List, max_files: int = 50) -> int:
+        """将 victoryNum 补写入近期缺少该字段的本玩家 game_records。"""
+        if not victory_num or len(victory_num) < 4:
+            return 0
+        pattern = f"*{self.player_name}*.json"
+        files = sorted(
+            self.record_dir.glob(pattern),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
+        filled = 0
+        for filepath in files[:max_files]:
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    record = json.load(f)
+                existing = record.get("result")
+                if not isinstance(existing, dict):
+                    existing = {}
+                if existing.get("victoryNum"):
+                    continue
+                existing["victoryNum"] = victory_num
+                record["result"] = existing
+                with open(filepath, "w", encoding="utf-8") as f:
+                    json.dump(record, f, ensure_ascii=False, indent=2)
+                filled += 1
+            except Exception:
+                continue
+        return filled
     
     def _generate_filename(self, result: Dict) -> str:
         """

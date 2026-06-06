@@ -20,6 +20,21 @@ from batch_executor.logging_config import setup_logging
 
 class BatchExecutorGUI:
     """批量游戏执行系统图形界面"""
+
+    @property
+    def repo_root(self) -> Path:
+        return Path(__file__).resolve().parent
+
+    def _parse_server_field(self) -> tuple[str, str]:
+        from src.utils.v7_paths import parse_server_field
+
+        return parse_server_field(self.server_path_var.get(), self.repo_root)
+
+    def _parse_clients_field(self) -> list[str]:
+        from src.utils.v7_paths import normalize_client_script_entry
+
+        raw = [c.strip() for c in self.clients_var.get().split(",") if c.strip()]
+        return [normalize_client_script_entry(c, self.repo_root) for c in raw if c.strip()]
     
     def __init__(self, root):
         self.root = root
@@ -214,10 +229,28 @@ class BatchExecutorGUI:
     
     def load_default_config(self):
         """加载默认配置"""
+        try:
+            from src.utils.v7_paths import (
+                format_client_scripts_for_gui,
+                get_server_exe,
+                get_v7_client_scripts,
+            )
+
+            server_exe = get_server_exe(self.repo_root)
+            if server_exe and os.path.exists(server_exe):
+                self.server_path_var.set(server_exe)
+            v7_clients = get_v7_client_scripts(self.repo_root)
+            if all(os.path.exists(c) for c in v7_clients):
+                self.clients_var.set(format_client_scripts_for_gui(v7_clients, self.repo_root))
+                return
+        except Exception:
+            pass
+
         # 尝试找到服务器可执行文件
         possible_paths = [
             "../GDAI/离线平台/windows/guandan_offline_v1006.exe",  # 优先：标准位置
             "D:/GDAI/离线平台/windows/guandan_offline_v1006.exe",   # 绝对路径
+            "guandan_offline_v1006/windows/guandan_offline_v1006.exe",
             "guandan_offline_v1006.exe",
             "../guandan_offline_v1006.exe",
             "server/guandan_offline_v1006.exe"
@@ -469,24 +502,28 @@ class BatchExecutorGUI:
             messagebox.showerror("配置错误", f"目标场数无效: {e}")
             return False
         
-        server_path = self.server_path_var.get().strip()
+        server_path, _server_argv = self._parse_server_field()
         if not server_path:
             messagebox.showerror("配置错误", "请指定服务器路径")
             return False
-        
+
         if not os.path.exists(server_path):
             messagebox.showerror("配置错误", f"服务器文件不存在: {server_path}")
             return False
-        
-        clients = [c.strip() for c in self.clients_var.get().split(",") if c.strip()]
+
+        clients = self._parse_clients_field()
         if not clients and not self.diagnose_only_var.get():
             messagebox.showerror("配置错误", "请指定至少一个客户端脚本")
             return False
-        
-        for client in clients:
-            if not os.path.exists(client):
-                messagebox.showwarning("配置警告", f"客户端文件不存在: {client}")
-        
+
+        missing = [c for c in clients if not os.path.exists(c)]
+        if missing:
+            messagebox.showerror(
+                "配置错误",
+                "以下客户端脚本不存在:\n" + "\n".join(missing),
+            )
+            return False
+
         return True
     
     def start_execution(self):
@@ -521,8 +558,8 @@ class BatchExecutorGUI:
         try:
             # 获取配置
             target_games = int(self.target_games_var.get())
-            server_path = self.server_path_var.get().strip()
-            clients = [c.strip() for c in self.clients_var.get().split(",") if c.strip()]
+            server_path, _server_argv = self._parse_server_field()
+            clients = self._parse_clients_field()
             diagnose_only = self.diagnose_only_var.get()
             
             self.log_message(f"目标场数: {target_games}", "INFO")

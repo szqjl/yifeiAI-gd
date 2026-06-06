@@ -5,6 +5,7 @@ Ultimate Win Rate Decision Engine V7
 基于终极胜率导向训练模型的决策引擎
 """
 
+import os
 import torch
 import torch.nn as nn
 import numpy as np
@@ -12,6 +13,8 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 import sys
+
+from src.contracts.decision_provider import ActMessage, assert_v_integration_gate
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -29,9 +32,14 @@ class UltimateWinRateEngineV7:
     def __init__(self, player_id: int = 0):
         self.player_id = player_id
         self.logger = logging.getLogger(f"UltimateWinRateEngineV7.{player_id}")
+
+        # 批跑四进程并行时避免每进程占满 CPU（可用 V7_TORCH_THREADS 覆盖）
+        thread_count = int(os.environ.get("V7_TORCH_THREADS", "1"))
+        torch.set_num_threads(max(1, thread_count))
         
-        # 模型路径
-        self.model_path = Path(__file__).parent.parent.parent / "models" / "bc_model_ultimate_win_rate.pth"
+        # 模型路径（config/v7_paths.yaml + 环境变量）
+        from src.utils.v7_paths import get_model_file
+        self.model_path = Path(get_model_file())
         
         # 初始化模型
         self.model = None
@@ -44,6 +52,8 @@ class UltimateWinRateEngineV7:
         self.decision_count = 0
         self.model_decisions = 0
         self.fallback_decisions = 0
+
+        assert_v_integration_gate(self, label="UltimateWinRateEngineV7")
         
     def _load_model(self):
         """加载终极胜率导向模型"""
@@ -76,16 +86,17 @@ class UltimateWinRateEngineV7:
             self.model = None
             return False
     
-    def decide(self, game_state: Dict[str, Any]) -> int:
+    def decide(self, message: ActMessage) -> int:
         """
-        做出决策
+        做出决策（IDecisionProvider v1.0）
         
         Args:
-            game_state: 游戏状态
+            message: 平台 act 消息（含 actionList 等）
             
         Returns:
-            选择的动作索引
+            选择的 actionList 下标
         """
+        game_state = message
         self.decision_count += 1
         
         action_list = game_state.get("actionList", [])

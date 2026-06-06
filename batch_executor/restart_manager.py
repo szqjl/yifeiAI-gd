@@ -379,18 +379,22 @@ class RestartManager:
                             self.window_title = window_title
                             self.script_name = script_name
                         def poll(self):
-                            # 检查窗口是否还存在（通过tasklist查找python进程）
+                            # 检查python进程是否还存在（通过tasklist查找包含脚本名的python进程）
                             try:
                                 result = subprocess.run(
-                                    ['tasklist', '/FI', f'WINDOWTITLE eq {self.window_title}*', '/FO', 'CSV'],
+                                    ['tasklist', '/FI', 'IMAGENAME eq python.exe', '/FO', 'CSV', '/V'],
                                     capture_output=True,
                                     creationflags=subprocess.CREATE_NO_WINDOW,
                                     timeout=2
                                 )
-                                # 如果找不到窗口，进程可能已结束
-                                return 0 if self.window_title not in result.stdout.decode('gbk', errors='ignore') else None
+                                output = result.stdout.decode('gbk', errors='ignore')
+                                # 检查是否有python进程包含我们的脚本名
+                                if self.script_name.lower() in output.lower():
+                                    return None  # 进程还在运行
+                                else:
+                                    return 0  # 进程已结束
                             except:
-                                return None
+                                return None  # 检查失败，假设进程还在
                         def terminate(self):
                             # 通过窗口标题终止进程
                             try:
@@ -414,26 +418,36 @@ class RestartManager:
                 processes.append(process)
                 
                 # 等待后再启动下一个客户端 (确保顺序连接)
-                # 客户端内部延迟：yf1_m1=5s, client3=10s, yf2_m1=15s, client4=20s
-                # 需要等待足够时间，确保前一个客户端完成内部延迟并开始连接
+                # 客户端内部延迟（与脚本内 DELAY / _lalala_launcher 对齐）：
+                # yf1_v7=2s, run_lalala_client3=3s, yf2_v7=4s, run_lalala_client4=6s
                 if i < len(client_scripts) - 1:
-                    # 根据当前客户端类型计算需要等待的时间
-                    # 等待时间 = 当前客户端内部延迟 + 1秒缓冲
                     current_script = os.path.basename(script_path).lower()
-                    if 'yf1_m1' in current_script:
-                        # yf1_m1 需要5秒延迟，等待6秒确保它开始连接
+                    if 'yf1_v7' in current_script:
+                        wait_time = 4
+                        logger.info(f"等待 {wait_time} 秒（yf1_v7 内部延迟 2s + 缓冲）...")
+                    elif 'yf1_m1' in current_script:
                         wait_time = 6
                         logger.info(f"等待 {wait_time} 秒（yf1_m1需要5秒内部延迟，确保它开始连接后再启动下一个）...")
+                    elif 'run_lalala_client3' in current_script or (
+                        'client3' in current_script and 'lalala' in current_script
+                    ):
+                        wait_time = 5
+                        logger.info(f"等待 {wait_time} 秒（run_lalala_client3 内部延迟 3s + 缓冲）...")
                     elif 'client3' in current_script:
-                        # client3 需要10秒延迟，等待11秒确保它开始连接
                         wait_time = 11
                         logger.info(f"等待 {wait_time} 秒（client3需要10秒内部延迟，确保它开始连接后再启动下一个）...")
+                    elif 'yf2_v7' in current_script:
+                        wait_time = 6
+                        logger.info(f"等待 {wait_time} 秒（yf2_v7 内部延迟 4s + 缓冲）...")
                     elif 'yf2_m1' in current_script:
-                        # yf2_m1 需要15秒延迟，等待16秒确保它开始连接
                         wait_time = 16
                         logger.info(f"等待 {wait_time} 秒（yf2_m1需要15秒内部延迟，确保它开始连接后再启动下一个）...")
+                    elif 'run_lalala_client4' in current_script or (
+                        'client4' in current_script and 'lalala' in current_script
+                    ):
+                        wait_time = 8
+                        logger.info(f"等待 {wait_time} 秒（run_lalala_client4 内部延迟 6s + 缓冲）...")
                     else:
-                        # 默认等待时间（client4是最后一个，不需要等待）
                         wait_time = wait_between
                         logger.info(f"等待 {wait_time} 秒后启动下一个客户端（确保连接顺序）...")
                     
@@ -468,169 +482,59 @@ class RestartManager:
         self,
         expected_count: int = 4,
         timeout: int = 30,
-        check_interval: int = 2
+        check_interval: int = 2,
+        expected_client_ids: Optional[List[str]] = None,
     ) -> bool:
         """
-        等待所有客户端连接到服务器
-
-        使用多重检测方法确保客户端成功连接：
-        1. 检查客户端进程状态
-        2. 检测服务器端口连接
-        3. 监控服务器日志（如果可用）
-        4. 验证连接稳定性
+        等待所有客户端 WebSocket 就绪（读取 batch_executor/clients_ready.json）。
 
         Args:
-            expected_count: 期望连接的客户端数量，默认4个
-            timeout: 超时时间（秒），默认30秒
-            check_interval: 检查间隔（秒），默认2秒
+            expected_count: 期望连接的客户端数量
+            timeout: 超时时间（秒）
+            check_interval: 轮询间隔（秒）
+            expected_client_ids: 各席 user_info；缺省时仅按数量判断
 
         Returns:
-            如果所有客户端都连接成功返回True，否则返回False
+            四席全部登记就绪返回 True
         """
-        logger.info(f"等待 {expected_count} 个客户端连接到服务器...")
-        logger.info(f"超时时间: {timeout} 秒，检查间隔: {check_interval} 秒")
+        from batch_executor.client_ready import count_ready, get_ready_clients, wait_for_all_clients
 
-        import socket
-        import time
-        try:
-            import psutil  # 用于更精确的进程检测
-        except ImportError:
-            psutil = None
-            logger.warning("psutil不可用，将使用基本进程检查")
+        targets = list(expected_client_ids) if expected_client_ids else []
 
-        start_time = time.time()
-        elapsed = 0
-        consecutive_success_count = 0  # 连续成功检测次数
-        required_consecutive_success = 3  # 需要3次连续成功
+        logger.info(f"等待 {expected_count} 个客户端 WebSocket 就绪...")
+        logger.info(f"超时时间: {timeout} 秒，就绪表: batch_executor/clients_ready.json")
+        if targets:
+            logger.info(f"期望席位: {', '.join(targets)}")
 
-        # 用于跟踪每个客户端的连接状态
-        client_connection_states = [False] * len(self.client_processes)
-        stable_connection_start = None  # 稳定连接开始时间
+        if targets:
+            ok = wait_for_all_clients(
+                targets,
+                timeout=float(timeout),
+                poll_interval=float(check_interval),
+            )
+            if ok:
+                ready = get_ready_clients()
+                logger.info("✓ 四席已全部连上并就绪（末席连入后平台将开局）")
+                for cid in targets:
+                    ts = ready.get(cid, {}).get("timestamp", "?")
+                    logger.info(f"  - {cid}: {ts}")
+                return True
+            ready = get_ready_clients()
+            missing = [cid for cid in targets if cid not in ready]
+            logger.warning(f"⚠️ 等待客户端就绪超时 ({timeout}s)")
+            logger.warning(f"   已就绪: {list(ready.keys())}")
+            logger.warning(f"   未就绪: {missing}")
+            logger.warning("   建议: 查看各客户端控制台是否有「前序席位未就绪」或连接错误")
+            return False
 
-        while elapsed < timeout:
-            try:
-                current_active_clients = 0
-                current_connected_clients = 0
-
-                # 方法1: 检查客户端进程状态
-                if psutil:
-                    # 使用psutil获得更精确的进程信息
-                    for i, process in enumerate(self.client_processes):
-                        if process.poll() is None:  # 进程仍在运行
-                            current_active_clients += 1
-                            # 使用psutil检查进程是否真的在消耗CPU（表示在工作）
-                            try:
-                                psutil_process = psutil.Process(process.pid)
-                                cpu_percent = psutil_process.cpu_percent(interval=0.1)
-                                memory_info = psutil_process.memory_info()
-                                # 如果进程在消耗CPU或占用内存，说明可能在正常工作
-                                if cpu_percent > 0.1 or memory_info.rss > 10 * 1024 * 1024:  # 10MB
-                                    current_connected_clients += 1
-                                    client_connection_states[i] = True
-                                else:
-                                    client_connection_states[i] = False
-                            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                                # 进程可能已结束或无权限访问
-                                client_connection_states[i] = False
-                        else:
-                            logger.warning(f"客户端 {i+1} 进程已退出，返回码: {process.returncode}")
-                            client_connection_states[i] = False
-                else:
-                    # 回退到基本进程检查
-                    for i, process in enumerate(self.client_processes):
-                        if process.poll() is None:
-                            current_active_clients += 1
-                            current_connected_clients += 1
-                            client_connection_states[i] = True
-                        else:
-                            client_connection_states[i] = False
-
-                # 方法2: 检测服务器端口连接状态
-                server_connection_count = 0
-                try:
-                    # 尝试连接到服务器端口，检测连接数
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(1)
-                    result = sock.connect_ex(('127.0.0.1', 23456))
-                    if result == 0:
-                        server_connection_count = 1  # 简化处理，至少服务器在监听
-                    sock.close()
-                except Exception as e:
-                    logger.debug(f"服务器端口检测失败: {e}")
-
-                # 方法3: 检查连接稳定性
-                all_clients_connected = current_connected_clients >= expected_count
-                all_processes_active = current_active_clients >= expected_count
-
-                if all_clients_connected and all_processes_active:
-                    if stable_connection_start is None:
-                        stable_connection_start = time.time()
-                        consecutive_success_count = 1
-                    else:
-                        consecutive_success_count += 1
-
-                    if consecutive_success_count >= required_consecutive_success:
-                        stable_time = time.time() - stable_connection_start
-                        logger.info(f"✓ 客户端连接稳定 ({stable_time:.1f}秒内{consecutive_success_count}次成功检测)")
-                        logger.info(f"  活跃进程: {current_active_clients}/{expected_count}")
-                        logger.info(f"  连接客户端: {current_connected_clients}/{expected_count}")
-                        logger.info("等待 3 秒进行最终验证...")
-                        time.sleep(3)
-                        return True
-                else:
-                    # 连接不稳定，重置计数
-                    stable_connection_start = None
-                    consecutive_success_count = 0
-
-                    if not all_processes_active:
-                        logger.warning(f"进程状态不稳定: {current_active_clients}/{expected_count} 个进程活跃")
-                    if not all_clients_connected:
-                        logger.warning(f"连接状态不稳定: {current_connected_clients}/{expected_count} 个客户端连接")
-
-                elapsed = time.time() - start_time
-                remaining = timeout - elapsed
-
-                if remaining > 0:
-                    status_msg = f"活跃进程: {current_active_clients}/{expected_count}, "
-                    status_msg += f"连接客户端: {current_connected_clients}/{expected_count}"
-                    if consecutive_success_count > 0:
-                        status_msg += f", 连续成功: {consecutive_success_count}/{required_consecutive_success}"
-
-                    logger.info(f"已等待 {elapsed:.1f} 秒，剩余 {remaining:.1f} 秒... ({status_msg})")
-                    time.sleep(check_interval)
-
-            except Exception as e:
-                logger.warning(f"检测客户端连接状态时出错: {e}")
-                time.sleep(check_interval)
-                elapsed = time.time() - start_time
-                consecutive_success_count = 0
-                stable_connection_start = None
-
-        # 超时处理
-        elapsed = time.time() - start_time
-        logger.warning(f"⚠️ 等待客户端连接超时 ({elapsed:.1f} 秒)")
-        logger.warning(f"   活跃客户端进程数: {current_active_clients}/{expected_count}")
-        logger.warning(f"   连接客户端数: {current_connected_clients}/{expected_count}")
-
-        # 详细诊断信息
-        logger.warning("   详细状态:")
-        for i, (process, connected) in enumerate(zip(self.client_processes, client_connection_states)):
-            process_status = "运行中" if process.poll() is None else f"已退出({process.returncode})"
-            conn_status = "已连接" if connected else "未连接"
-            logger.warning(f"     客户端 {i+1}: 进程{process_status}, 状态{conn_status}")
-
-        logger.warning("   可能原因:")
-        logger.warning("   1. 客户端启动失败或连接超时")
-        logger.warning("   2. 服务器未正确启动或端口未监听")
-        logger.warning("   3. 网络连接问题或防火墙阻拦")
-        logger.warning("   4. 客户端脚本执行错误或配置问题")
-        logger.warning("   5. 系统资源不足导致进程异常")
-        logger.warning("   建议:")
-        logger.warning("   - 检查客户端控制台窗口的错误信息")
-        logger.warning("   - 确认服务器是否显示客户端连接消息")
-        logger.warning("   - 查看系统日志了解可能的错误")
-        logger.warning("   - 尝试重启训练过程")
-
+        start = time.time()
+        while time.time() - start < timeout:
+            n = count_ready()
+            if n >= expected_count:
+                logger.info(f"✓ 就绪席位数 {n}/{expected_count}")
+                return True
+            time.sleep(check_interval)
+        logger.warning(f"⚠️ 就绪席位不足: {count_ready()}/{expected_count}")
         return False
     def cleanup(self) -> None:
         """

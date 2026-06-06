@@ -18,6 +18,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from config_loader import get_config
 
+try:
+    from batch_executor.client_ready import mark_client_ready, wait_for_connect_turn
+except ImportError:
+    def mark_client_ready(_client_id: str) -> None:
+        pass
+
+    def wait_for_connect_turn(_client_id: str, *, timeout: float = 120.0, poll_interval: float = 0.5) -> bool:
+        return True
+
 
 class WebSocketManager:
     """
@@ -93,20 +102,35 @@ class WebSocketManager:
         
         while self.should_reconnect and (max_retries < 0 or retry_count < max_retries):
             try:
+                gate_ok = await asyncio.to_thread(
+                    wait_for_connect_turn,
+                    self.user_info,
+                    timeout=120.0,
+                )
+                if not gate_ok:
+                    self.logger.error(
+                        "前序席位未在时限内就绪，中止连接 user=%s",
+                        self.user_info,
+                    )
+                    return False
+
                 self.logger.info(f"Connecting to {self.uri}... (attempt {retry_count + 1})")
                 
                 # 连接服务器
                 self.websocket = await asyncio.wait_for(
                     websockets.connect(
                         self.uri,
-                        ping_timeout=None,  # 禁用ping超时，使用自定义心跳
-                        close_timeout=self.timeout
+                        ping_interval=None,
+                        ping_timeout=None,
+                        close_timeout=self.timeout,
                     ),
                     timeout=self.timeout
                 )
                 
                 self.is_connected = True
                 self.logger.info(f"✓ Connected to server: {self.uri}")
+                await asyncio.to_thread(mark_client_ready, self.user_info)
+                self.logger.info(f"✓ 已登记就绪: {self.user_info}")
                 
                 # 启动心跳任务
                 self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())

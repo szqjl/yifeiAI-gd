@@ -446,13 +446,20 @@ class BatchExecutor:
                     break
                 
                 self.logger.info("✓ 服务器端口就绪，开始启动客户端...")
+
+                from batch_executor.client_ready import clear_all_ready, client_id_from_script
+
+                clear_all_ready()
+                self.logger.info("已清空 clients_ready.json，准备按序连入四席")
                 
                 # 启动客户端（客户端内部有延迟：yf1_m1=5s, client3=10s, yf2_m1=15s, client4=20s）
                 # restart_clients 会根据每个客户端类型智能等待，确保连接顺序
                 self.logger.info("开始启动客户端（按顺序启动，智能等待确保连接顺序）...")
-                self.logger.info("客户端内部延迟：yf1_m1=5s(0号位), client3=10s(1号位), yf2_m1=15s(2号位), client4=20s(3号位)")
-                self.logger.info("启动策略：每个客户端启动后，等待其内部延迟完成后再启动下一个")
-                self.logger.info("预计总连接时间：约20秒（最后一个客户端client4需要20秒延迟）")
+                self.logger.info(
+                    "客户端内部延迟：yf1_v7=2s, client3=3s, yf2_v7=4s, client4=11s；"
+                    "末席门闩稳定等待 7s（GUA-044）"
+                )
+                self.logger.info("预计四席连入：约 25–35 秒（末席连上后平台才开局）")
                 client_processes = self.restart_manager.restart_clients(
                     self.client_scripts,
                     wait_between=8  # 默认等待时间（实际会根据客户端类型调整）
@@ -462,35 +469,40 @@ class BatchExecutor:
                     self.logger.error("没有客户端成功启动，停止执行")
                     break
                 
-                # 等待所有客户端连接到服务器（增加超时时间，因为客户端需要启动和连接）
                 expected_client_count = len(self.client_scripts)
-                self.logger.info(f"等待所有客户端连接（最多等待30秒，因为client4需要20秒延迟）...")
+                expected_client_ids = [
+                    cid
+                    for script in self.client_scripts
+                    if (cid := client_id_from_script(script))
+                ]
+                connect_wait_timeout = 90
+                self.logger.info(
+                    f"等待四席 WebSocket 就绪（最多 {connect_wait_timeout} 秒，末席就绪后平台开局）..."
+                )
                 clients_connected = self.restart_manager.wait_for_clients_connected(
                     expected_count=expected_client_count,
-                    timeout=30  # 超时时间：20秒延迟 + 5秒启动间隔 + 5秒缓冲
+                    timeout=connect_wait_timeout,
+                    expected_client_ids=expected_client_ids or None,
                 )
                 
                 if not clients_connected:
-                    self.logger.warning("⚠️ 客户端连接检测超时，但继续执行（可能连接已建立）")
-                    self.logger.warning("   如果游戏未开始，请检查:")
-                    self.logger.warning("   1. 客户端窗口是否有错误信息")
-                    self.logger.warning("   2. 服务器窗口是否显示客户端连接")
-                    self.logger.warning("   3. 网络连接是否正常")
-                else:
-                    self.logger.info("✓ 所有客户端已连接")
+                    self.logger.error("四席未全部就绪，本批次中止（避免未连齐即开局）")
+                    self.logger.error("请检查各客户端窗口：前序就绪门闩 / 连接错误")
+                    break
+                self.logger.info("✓ 四席已全部连上，平台可安全开局")
                 
                 # 验证连接顺序和组队信息
                 self.logger.info("=" * 60)
                 self.logger.info("连接顺序验证")
                 self.logger.info("=" * 60)
                 self.logger.info("预期连接顺序:")
-                self.logger.info("  1. yf1_m1 → 0号位 (Team A)")
-                self.logger.info("  2. client3 → 1号位 (Team B)")
-                self.logger.info("  3. yf2_m1 → 2号位 (Team A)")
-                self.logger.info("  4. client4 → 3号位 (Team B)")
+                self.logger.info("  1. yf1_v7 → 0号位 (Team A)")
+                self.logger.info("  2. run_lalala_client3 → 1号位 (Team B)")
+                self.logger.info("  3. yf2_v7 → 2号位 (Team A)")
+                self.logger.info("  4. run_lalala_client4 → 3号位 (Team B)")
                 self.logger.info("")
                 self.logger.info("组队规则:")
-                self.logger.info("  Team A: 0号(yf1_m1) + 2号(yf2_m1)")
+                self.logger.info("  Team A: 0号(yf1_v7) + 2号(yf2_v7)")
                 self.logger.info("  Team B: 1号(client3) + 3号(client4)")
                 self.logger.info("=" * 60)
                 
@@ -782,7 +794,11 @@ class BatchExecutor:
                         game_records_dir = self.project_root / "game_records"
                         if game_records_dir.exists():
                             # 查找包含 victoryNum 的最新游戏记录文件
-                            record_files = list(game_records_dir.glob("*yf*m1*.json"))
+                            record_files = (
+                                list(game_records_dir.glob("*yf*m1*.json"))
+                                + list(game_records_dir.glob("*yf*m3*.json"))
+                                + list(game_records_dir.glob("*yf*v7*.json"))
+                            )
                             if not record_files:
                                 record_files = list(game_records_dir.glob("*.json"))
                             
@@ -810,92 +826,75 @@ class BatchExecutor:
                                 except Exception as e:
                                     self.logger.debug(f"读取游戏记录文件失败 {record_file}: {e}")
                                     continue
-                        
-                        if victory_num and len(victory_num) >= 4:
-                            # victoryNum 格式: [0号位胜利, 1号位胜利, 2号位胜利, 3号位胜利]
-                            wins = {
-                                0: int(victory_num[0]) if victory_num[0] is not None else 0,
-                                1: int(victory_num[1]) if victory_num[1] is not None else 0,
-                                2: int(victory_num[2]) if victory_num[2] is not None else 0,
-                                3: int(victory_num[3]) if victory_num[3] is not None else 0
-                            }
-                            
-                            # 输出详细的胜负结果信息
-                            self.logger.info("=" * 60)
-                            self.logger.info(f"从{data_source or '游戏记录文件'}读取胜负结果")
-                            if latest_file:
-                                self.logger.info(f"  数据来源: {latest_file.name}")
-                            self.logger.info("=" * 60)
-                            self.logger.info(f"  0号位(yf1_m1)胜利: {wins[0]}次")
-                            self.logger.info(f"  1号位(client3)胜利: {wins[1]}次")
-                            self.logger.info(f"  2号位(yf2_m1)胜利: {wins[2]}次")
-                            self.logger.info(f"  3号位(client4)胜利: {wins[3]}次")
-                            self.logger.info("")
-                            
-                            # 0号和2号是team_a，1号和3号是team_b
-                            # 注意：victoryNum 是每个位置的累计胜利次数
-                            # 如果队友的胜利次数相同，说明他们作为一队共同获胜了这么多次
-                            # 如果不同，取较大值（因为每场游戏只有一方获胜）
-                            
-                            # Team A: 0号和2号是队友
-                            if wins[0] == wins[2]:
-                                # 队友胜利次数相同，说明他们共同获胜了 wins[0] 次
-                                current_team_a = wins[0]
-                            else:
-                                # 队友胜利次数不同，取较大值
-                                current_team_a = max(wins[0], wins[2])
-                            
-                            # Team B: 1号和3号是队友
-                            if wins[1] == wins[3]:
-                                # 队友胜利次数相同，说明他们共同获胜了 wins[1] 次
-                                current_team_b = wins[1]
-                            else:
-                                # 队友胜利次数不同，取较大值
-                                current_team_b = max(wins[1], wins[3])
-                            
-                            self.logger.info("组队胜负统计:")
-                            self.logger.info(f"  Team A (0号+2号): {current_team_a}胜 (0号位{wins[0]}次, 2号位{wins[2]}次)")
-                            self.logger.info(f"  Team B (1号+3号): {current_team_b}胜 (1号位{wins[1]}次, 3号位{wins[3]}次)")
-                            self.logger.info("=" * 60)
-                            
-                            # 计算本批次的增量
-                            # victoryNum 是累计的胜利次数，需要计算增量
-                            delta_a = current_team_a - initial_team_a
-                            delta_b = current_team_b - initial_team_b
-                            
-                            # 累加到tracker（每场游戏单独记录）
-                            for _ in range(delta_a):
-                                self.tracker.record_game("team_a")
-                            for _ in range(delta_b):
-                                self.tracker.record_game("team_b")
-                            
-                            # 更新初始值
-                            initial_team_a = current_team_a
-                            initial_team_b = current_team_b
-                            
-                            self.logger.info(f"本批次增量: Team A +{delta_a}, Team B +{delta_b}")
-                            self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
+
+                    if victory_num and len(victory_num) >= 4:
+                        # victoryNum 格式: [0号位胜利, 1号位胜利, 2号位胜利, 3号位胜利]
+                        wins = {
+                            0: int(victory_num[0]) if victory_num[0] is not None else 0,
+                            1: int(victory_num[1]) if victory_num[1] is not None else 0,
+                            2: int(victory_num[2]) if victory_num[2] is not None else 0,
+                            3: int(victory_num[3]) if victory_num[3] is not None else 0,
+                        }
+
+                        self.logger.info("=" * 60)
+                        self.logger.info(f"从{data_source or '游戏记录文件'}读取胜负结果")
+                        if latest_file:
+                            self.logger.info(f"  数据来源: {latest_file.name}")
+                        self.logger.info("=" * 60)
+                        self.logger.info(f"  0号位胜利: {wins[0]}次")
+                        self.logger.info(f"  1号位胜利: {wins[1]}次")
+                        self.logger.info(f"  2号位胜利: {wins[2]}次")
+                        self.logger.info(f"  3号位胜利: {wins[3]}次")
+                        self.logger.info("")
+
+                        if wins[0] == wins[2]:
+                            current_team_a = wins[0]
                         else:
-                            self.logger.warning("⚠ 未能从游戏记录文件中读取 victoryNum 数据")
-                            # 尝试从服务器输出中解析（作为备用方案）
-                            import re
-                            for line in reversed(server_output):
-                                if "达到设定场次" in line or ("其中" in line and "胜利" in line):
-                                    matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
-                                    if matches:
-                                        wins = {int(pos): int(count) for pos, count in matches}
-                                        current_team_a = wins.get(0, 0) + wins.get(2, 0)
-                                        current_team_b = wins.get(1, 0) + wins.get(3, 0)
-                                        delta_a = current_team_a - initial_team_a
-                                        delta_b = current_team_b - initial_team_b
-                                        for _ in range(delta_a):
-                                            self.tracker.record_game("team_a")
-                                        for _ in range(delta_b):
-                                            self.tracker.record_game("team_b")
-                                        initial_team_a = current_team_a
-                                        initial_team_b = current_team_b
-                                        self.logger.info(f"从服务器输出解析: Team A +{delta_a}, Team B +{delta_b}")
-                                        break
+                            current_team_a = max(wins[0], wins[2])
+
+                        if wins[1] == wins[3]:
+                            current_team_b = wins[1]
+                        else:
+                            current_team_b = max(wins[1], wins[3])
+
+                        self.logger.info("组队胜负统计:")
+                        self.logger.info(f"  Team A (0号+2号): {current_team_a}胜 (0号位{wins[0]}次, 2号位{wins[2]}次)")
+                        self.logger.info(f"  Team B (1号+3号): {current_team_b}胜 (1号位{wins[1]}次, 3号位{wins[3]}次)")
+                        self.logger.info("=" * 60)
+
+                        delta_a = current_team_a - initial_team_a
+                        delta_b = current_team_b - initial_team_b
+
+                        for _ in range(delta_a):
+                            self.tracker.record_game("team_a")
+                        for _ in range(delta_b):
+                            self.tracker.record_game("team_b")
+
+                        initial_team_a = current_team_a
+                        initial_team_b = current_team_b
+
+                        self.logger.info(f"本批次增量: Team A +{delta_a}, Team B +{delta_b}")
+                        self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
+                    else:
+                        self.logger.warning("⚠ 未能读取 victoryNum 数据")
+                        import re
+                        for line in reversed(server_output):
+                            if "达到设定场次" in line or ("其中" in line and "胜利" in line):
+                                matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
+                                if matches:
+                                    wins = {int(pos): int(count) for pos, count in matches}
+                                    current_team_a = wins.get(0, 0) + wins.get(2, 0)
+                                    current_team_b = wins.get(1, 0) + wins.get(3, 0)
+                                    delta_a = current_team_a - initial_team_a
+                                    delta_b = current_team_b - initial_team_b
+                                    for _ in range(delta_a):
+                                        self.tracker.record_game("team_a")
+                                    for _ in range(delta_b):
+                                        self.tracker.record_game("team_b")
+                                    initial_team_a = current_team_a
+                                    initial_team_b = current_team_b
+                                    self.logger.info(f"从服务器输出解析: Team A +{delta_a}, Team B +{delta_b}")
+                                    break
                 except Exception as e:
                     self.logger.warning(f"读取战绩失败: {e}")
                     import traceback
