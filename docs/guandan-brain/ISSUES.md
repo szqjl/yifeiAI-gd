@@ -10,6 +10,7 @@
 |------|------|----------|
 | **M1** | 首个实验 AI（`yf1_m1` / `yf2_m1` + `src/decision/`） | **frozen**（**GUA-022 closed**）— **非交付线**；**勿再开 M1 策略 GUA**；仅 **bugfix**（crash / 协议 / 记录）与 **pytest 回归** |
 | **M3** | **主交付** + **`IDecisionProvider` 底座**（`yf1_m3` / `yf2_m3`、`src/m/m3/`、`src/contracts/`） | **active** — 策略迭代、批跑 KPI、GUA-026+ 跟踪 |
+| **V7** | NN 实验线（`yf1_v7` / `yf2_v7` + `UltimateWinRateEngineV7`） | **active**（`v7-dev`）— **GUA-037+** 改造；**队胜率 KPI 观测**见 `ITERATIONS` V7-007；**禁止 import `src.m.m3.*`**（见 `V7-实施方案.md` §1.2） |
 | **V5+** | 组牌 / 牌力 / 知识层长期路线 | 规划 / 按需 — **P0 以外**的组牌与牌力评估 **不走 M3 硬编码扩张** |
 
 **队胜率 KPI**：自 **2026-05-31** 起**只看 M3 批跑**。**多样本观测**（净盘、同 exe）：S1 **7/10**、S2 **11/12**、S3 **8/10**、S4 **8/10** → **合计 34/42（81.0%）**（见 `ITERATIONS`「M3 队胜率多样本观测」）。M1 净盘 **0/12** 为 frozen 基线对照，**非**口径错误。
@@ -18,8 +19,8 @@
 
 | 优先级 / 能力 | 落点 | 说明 |
 |---------------|------|------|
-| **P0 guard**（可 pytest + 批跑验收的 if-guard） | `src/m/m3/m3_decision_engine.py`（及 `m3_utils.py`） | 与 [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) **M3 · P0** 一致；例 GUA-026/029/031/032 |
-| **组牌 / 牌力 / 混合决策** | **V5+**（`src/v/`、V 挂接 `IDecisionProvider`） | 不在 M3 引擎内堆整篇策略；M3 保持 lalala 式 guard + 契约底座 |
+| **P0 guard**（可 pytest + 批跑验收的 if-guard） | **M3**：`src/m/m3/m3_decision_engine.py`（及 `m3_utils.py`）；**V7**：`src/decision/ultimate_win_rate_engine_v7.py` 内 **V7-native** 过滤壳（**GUA-045**，不 import M3） | 与 [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) **M3 · P0** 一致；V7 原则对齐见 **GUA-045** §缺陷分类 |
+| **组牌 / 牌力 / 混合决策** | **V5+**（`src/v/`、V 挂接 `IDecisionProvider`） | 不在 M3 引擎内堆整篇策略；M3 保持 lalala 式 guard + 契约底座；V7 组牌类见 **GUA-045** Phase 2 / **V5+-04** |
 | **M1 共用层** | `src/decision/`（frozen） | 历史 PHASE2 与 V shim；**不接新开策略迭代** |
 
 ### 复盘发现 → 实现 → 验收（定音 · 2026-06-01）
@@ -90,6 +91,7 @@
 | GUA-042 | open | P1 | V-nn, v7 | v7 | ABL-GD 168 伪动作评估（含开源可行性） | 调研 ABL-GD（CCFAI 2025）168 伪动作方案的可获取性与可移植性，给出采纳/弃用/备选结论；仅调研 + 写结论文档，不实施 | `docs/analysis/abl-gd-eval-2026-06.md` | 完成定义见 `V7-实施方案.md` §2 Phase 0 GUA-042；关联研判 T2.2 |
 | GUA-043 | open | P1 | V-nn, v7 | v7 | 专利规避设计审计（CN113018837A 边界） | 审计掼蛋 AI 算法专利 CN113018837A 的权利要求边界，识别 V7 Phase 1-3 实施中被覆盖的子模块，给出规避方案；仅调研，不改代码 | `docs/governance/patent-audit-cn113018837a.md` | 完成定义见 `V7-实施方案.md` §2 Phase 0 GUA-043；关联研判 T7 |
 | GUA-044 | **closed** ✅ | P1 | observation, infra | v7, m1, m3, batch | **批跑四席未就绪即开局 + 首局空等卡顿** | **现象**（V7 批跑 `logs/v7_vs_lalala_20260606_102117.log`）：`wait_for_clients_connected` 在 Windows 新控制台启动下误报 **0/4** 仍继续；**第 4 席连上即开局**（v1006 规则），client4 ~10:22:10 连入、局 ~10:22:11 开始；yf2 `actIndex=9` 于 10:22:13 已回包后 **~51s** 无新 `act`（yf1 同步空窗），似等 lalala/平台。**根因**：批跑侧连接检测不可靠 + 末席连入前前三席未门闩。**非** V7 决策超时（无 `决策超时` 日志） | `batch_executor/client_ready.py`、`websocket_manager.py`、`lalala_adapter.py`、`restart_manager.py`、`executor.py` | **`closed_in` 2026-06-06**：四席就绪门闩 + 就绪表；`tests/test_client_ready.py` **3 passed**；见 `ITERATIONS` 2026-06-06 GUA-044 行、§GUA-044 完成定义 |
+| GUA-045 | open | **P0** | policy, v7 | v7 | **V7 决策根因：零特征模型 + 无 P0 Guard** | **统一根因**：`UltimateWinRateEngineV7` 对 `actionList` **argmax**；`_extract_features` **无 108 维牌面**（→ **GUA-037a**）；**零条**队友/最小炸/组牌 guard；回退「首个非 PASS」。**发现样例**（`20260606121245769675`，replay 仅作缺陷分类，**不作关单 pass**）：炸队友顺子、5 炸 9 压单 2、5 张 A+红 2 压 4Q、顺子漏带单 6、应压 PASS、拆钢板出对 7 等 → 见 **§GUA-045** 缺陷分类表 | `src/decision/ultimate_win_rate_engine_v7.py`；规划 `src/v/nn/guards/`（V7-native） | **改进路线**与 **GUA-037a/b、038、039、V5+-04** 对齐；**禁止**为单局手牌写特例；验收 **pytest 构造态** |
 
 ---
 
@@ -109,6 +111,7 @@
 | GUA-035 | **GUA-034** END-M02+；[`GUA-034-方案评审.md`](GUA-034-方案评审.md) 方向 E 前置；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2（两手枚举 → V5+）；[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) P-C01 / CALC-M05 |
 | GUA-036 | batch7 round38 复盘（[`ITERATIONS.md`](ITERATIONS.md)「batch7 replay」行）；[`08_straight_skills.md`](../knowledge/skills/04_common_skills/08_straight_skills.md) §控权；[`01_passing_skills.md`](../knowledge/skills/03_assist_attack/01_passing_skills.md)；**related** **GUA-031**、**GUA-032**、**GUA-034/035**（solo 边界）；[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §复盘与验收理念 |
 | GUA-044 | [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md) §局与副；[`服务器与客户端连接座位顺序排查.md`](../troubleshooting/服务器与客户端连接座位顺序排查.md)；**related** **GUA-033**（批跑 infra）、**GUA-008**（victoryNum 链路）；日志 `logs/yf2_v7_20260606_102201.log`（10:22:13→10:23:04 空窗） |
+| GUA-045 | [`V7-实施方案.md`](V7-实施方案.md) §0–§2、[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §复盘与验收理念；**related** **GUA-029 R5**（M3 队友不炸，V7 须 V7-native 复刻语义）、**GUA-031 P-F02**、**GUA-014**（拆牌泛化）、**GUA-037a/b**、**GUA-038**、**V5+-04**；发现样例 `game_records/20260606121245769675 [yf2_v7]-…-[1]-[2].json`（**非**关单标准） |
 
 ---
 
@@ -276,6 +279,70 @@
 - **整手组牌**：222333 + 9–K 顺 + 444 配炸 + 多步配合规划 → **V5+-01/02**、[`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md) §二十二
 - 重写 `combine_handcards` 多顺子槽 / 红配杂顺全局最优
 - 「再跑 batch7 round38 须赢局或逐步一致」作 pass 标准
+
+## GUA-045 完成定义（V7 决策根因 · P0 Guard 壳 + 改进路线）
+
+> 登记 **2026-06-06**：V7 净盘 3 局 replay 复盘（`game_id=20260606121245769675`）。**定音**：108 张分 4 家，**同发牌复现概率 ≈ 0**（见上表「复盘发现 → 实现 → 验收」）；**不得**为该局手牌写特例策略；replay 步数仅用于**缺陷分类**与 pytest **构造态**命名，**不作**关单 pass 标准。
+
+### 统一根因（三层）
+
+| 层 | 现状（`ultimate_win_rate_engine_v7.py`） | 后果 |
+|----|------------------------------------------|------|
+| **A · P0 Guard 壳** | **零条**；`decide()` 直接模型 argmax 或「首个非 PASS」回退 | 炸队友、过度拆炸、应压 PASS、最小代价缺失 |
+| **B · 特征 / 模型** | `_extract_features` 无牌面编码（**GUA-037a** open）；训练目标为 index 匹配率非掼蛋原则 | 同局内决策不稳定（如 SB 有时出、有时 PASS） |
+| **C · V5+ 组牌** | 无 `enumerate_groupings` / 结构评分（**V5+-04**） | 顺子漏带单张、钢板被拆、外对子未优先 |
+
+**升格约束**（`V7-实施方案.md` §1.2）：Guard 须 **V7-native** 实现；**禁止** `import src.m.m3.*`；可**只读** M3 `game_records` 作 **GUA-038** BC teacher。
+
+### 缺陷分类 → 原则 → 落点（不迎合单局）
+
+| 缺陷类 | 原则 ID（M3/V5 对齐） | Phase 0 **GUA-045** Guard | Phase 1+ GUA |
+|--------|----------------------|---------------------------|--------------|
+| 队友领出仍出炸（replay step 14 类） | **P-F02**、GUA-029 **R5** | **V7-R05**：`greaterPos==(myPos+2)%4` 且队友非 PASS → 剔除 `Bomb`/`StraightFlush` | — |
+| 压单级牌用炸 / 拆 5→4 炸（step 6 类） | **P-H04**、**P-G01** | **V7-R01**：压 `Single` 且 `curRank` 在场 → 优先 `Single B`/`Single` 最小点；禁为压单选 `Bomb` 若存在更小单牌选项 | **GUA-037a**（牌面特征） |
+| 同型炸弹多配牌（step 8：4A+红2 五炸） | **P-H04**、**P-G02** | **V7-R02**：同牌型能压时选 **`len(cards)` 最小** 合法炸；禁逢人配凑炸若纯炸可压 | **GUA-038** BC |
+| 被动应压却 PASS（step 40：有 555 不过 333） | **CALC-M03**、控权 | **V7-R03**：被动且 `greaterPos` 为对手；`actionList` 有同型非 PASS → **禁默认 PASS**（取最小够用） | **GUA-037b**（历史编码） |
+| 有王/级牌压单却 PASS（step 58 类） | **P-H06** | **V7-R04**：对手 `Single` 且己方可 `Single B` → 优先非 PASS | **GUA-038** |
+| 拆钢板/连对出小对（step 62 类） | **P-G01**、P-F02 | **V7-R06**（轻量）：存在**不拆结构**的更大 `Pair` 可压时，剔除拆 `ThreePair`/钢板的 `Pair` | **V5+-04** |
+| 顺子未带掉单张（step 12 类） | **P-G01**、CG-T06 | Guard **不覆盖**（需组牌枚举） | **V5+-04** + **GUA-037a** |
+
+### 改进路线（与现有 GUA 对齐）
+
+```
+Phase 0（~1 迭代）  GUA-045  P0 Guard 壳
+    │  V7-R01–R06（上表）；decide() 前 filter → 模型 → 后校验
+    │  tests/test_v7_gua045.py（构造 actionList/greaterPos，不绑 game_id）
+    ▼
+Phase 1（~1.5–2 迭代）  GUA-037a 静态特征 → GUA-037b 动态特征（可并行 GUA-040）
+    │  真牌面 124 维 + actionList 语义；替换零填充
+    ▼
+Phase 2（1 迭代）  GUA-038  M3 game_records BC 蒸馏（只读 teacher，不 import M3）
+    ▼
+Phase 3（~3 迭代）  GUA-039a/b  自对弈 + PPO；队胜率 vs lalala（V7-007 KPI）
+    │
+    └── 贯穿 Phase 2–3：V5+-04 整手组牌（顺子带单、钢板保护）— 不在 GUA-045 关单范围
+```
+
+| Phase | GUA | 优先级 | 验收 |
+|-------|-----|--------|------|
+| **0** | **GUA-045** | **P0** | `pytest tests/test_v7_gua045.py` **≥8 case**（R01–R06 覆盖）；`ultimate_win_rate_engine_v7` 无 M3 import；可选 V7 净盘 3 局 **观测**（不作关单） |
+| **1** | **GUA-037a** → **037b** | P0 / P1 | 特征维数契约 + 推理延迟基线（`V7-实施方案.md` §2） |
+| **2** | **GUA-038** | P1 | BC 加载后 `model_usage_rate` 稳定；构造态与 M3 标签一致率抽检 |
+| **3** | **GUA-039a/b** | P2 | 30 局 lalala 评估；**V7-007** 队胜率多样本 |
+| **并行** | **V5+-04** | P1+ | 组牌枚举关单独立于 GUA-045 |
+
+### 关单条件（GUA-045）
+
+| 项 | 要求 |
+|----|------|
+| **代码** | `decide()` 接入 **V7-native** `filter_action_list()`（或等价）；实现 **V7-R01、R02、R03、R04、R05** 为 **必达**；**R06** 为 **应达**（可 Phase 0 末条迭代） |
+| **测试** | `tests/test_v7_gua045.py` pass；**GUA-037a** 未关单前 guard 须可独立运行（模型可为 mock） |
+| **回归** | 不破坏 `IDecisionProvider` 契约；`tests/test_v7_paths.py` / `test_v7_notify_routing.py`（若有）不回归 |
+| **不作关单** | 再跑 `20260606121245769675` 逐步一致；V7 队胜率 >50%（归 **V7-007** / **GUA-039b**） |
+
+**后续 Agent**：实施 GUA-045 前读本节 + [`V7-实施方案.md`](V7-实施方案.md) §1.2 黑名单；M3 队胜率 KPI **仍只看 M3 批跑**；V7 KPI 见 `ITERATIONS` **V7-007**。
+
+---
 
 ## V5+ priority（GUA-034 / GUA-036 后续 · 不在 M3 本轮）
 
