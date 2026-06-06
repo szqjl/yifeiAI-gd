@@ -332,6 +332,69 @@ python scripts/tools/yf_replay.py
 | **改代码前** | 读 `ISSUES.md` → `ITERATIONS.md` → `TASKS.md` → `EVAL.md` |
 | **提交推送** | 前缀 `[M-m3]`/`[V-nn-v7]` 等；推 `origin m-dev` 或 `origin v7-dev`；禁推 main |
 
+## 🏃 批跑指南（2026-06-06 新增）
+
+> 每次批跑后必须：验证结果 → 更新 ITERATIONS.md → commit/push
+
+### 快速入口
+
+| 引擎 | 入口脚本 | 推荐局数 | 战绩文件 |
+|------|----------|----------|----------|
+| **V7 vs lalala** | `scripts/launchers/v7/run_v7_vs_lalala_games.py` | 3/9/12 | `v7_vs_lalala_scores.json` |
+| **M3 vs lalala** | `scripts/launchers/m/run_m3_vs_lalala_games.py` | 3/9/12 | `m3_vs_lalala_scores.json` |
+| **M1 vs lalala** | `scripts/launchers/m/run_m1_vs_lalala_games.py` | 3/9/12 | `game_scores.json` |
+
+### 执行命令
+
+```powershell
+# V7 批跑（当前分支 v7-dev）
+venv\Scripts\python.exe scripts\launchers\v7\run_v7_vs_lalala_games.py --games 3
+
+# M3 批跑（需切 m-dev）
+venv\Scripts\python.exe scripts\launchers\m\run_m3_vs_lalala_games.py --games 3
+```
+
+### 批跑后验证清单（必须逐项检查）
+
+1. **进程退出码**：确认正常退出（exit code 0）
+2. **战绩文件**：
+   ```powershell
+   cat v7_vs_lalala_scores.json   # V7
+   cat m3_vs_lalala_scores.json   # M3
+   ```
+   验证 `team_a_wins + team_b_wins == total_games`
+3. **victoryNum 共享文件**：
+   ```powershell
+   cat batch_executor\latest_victory_num.json
+   ```
+   验证 `[0]=[2]`、`[1]=[3]`、`[0]+[1] == total_games`
+4. **game_records**：
+   ```powershell
+   Get-ChildItem game_records\*.json | Measure-Object
+   ```
+   文件数应 ≈ `total_games × 2 × 平均每局副数`（yf1+yf2 各1份/副）
+5. **日志**：`logs\v7_vs_lalala_*.log`，搜索 `ERROR`/`WARNING`
+
+### 结果解读
+
+| 指标 | 含义 | 正常范围 |
+|------|------|----------|
+| `victoryNum` | 平台下发的局级胜负 | `[0,3,0,3]` = Team B 3胜 |
+| `team_a_wins` | 批跑器累计 Team A(0+2) 胜场 | 0~N |
+| `team_b_wins` | 批跑器累计 Team B(1+3) 胜场 | 0~N |
+| `total_games` | 已完成局数 | 应等于 `--games` |
+| game_records 数量 | 副数 | 每局通常 10~30 副 |
+
+### 迭代记录
+
+批跑完成后必须在 `docs/guandan-brain/ITERATIONS.md` 追加一行：
+
+```markdown
+| YYYY-MM-DD | 迭代名 / 分支 | GUA-xxx | 改动摘要 | 评测：队胜率 X/N，PASS 率，回归 | 下轮 priority |
+```
+
+---
+
 ### 完整启动文档
 
 如需更详细信息，阅读 [`docs/guandan-brain/AGENT_BOOTSTRAP.md`](docs/guandan-brain/AGENT_BOOTSTRAP.md)
