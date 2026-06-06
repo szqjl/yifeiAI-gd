@@ -8,9 +8,14 @@
 import ast
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Union, Any, List, Any, Optional
+
+RECORD_FILENAME_RE = re.compile(
+    r"^\d+ \[([^\]]+)\]-\[([^\]]+)\]-\[(\d+)\]-\[([^\]]*)\]\.json$"
+)
 
 try:
     from game_logic.guandan_constants import CARDS_PER_PLAYER
@@ -155,12 +160,70 @@ def notify_end_kind(data: dict) -> str:
     return "unknown"
 
 
+def decision_context_from_act(
+    data: dict,
+    player_id: int,
+    *,
+    version: str = "v7",
+    series: str = "V",
+) -> Dict[str, Any]:
+    """act 阶段 record_decision 的 context（对齐 M3 _decision_context_from_act）。"""
+    action_list = data.get("actionList") or []
+    size = len(action_list) if isinstance(action_list, list) else 0
+    return {
+        "myPos": data.get("myPos", player_id),
+        "curPos": data.get("curPos", -1),
+        "greaterPos": data.get("greaterPos", -1),
+        "actionList_size": size,
+        "selfRank": data.get("selfRank"),
+        "oppoRank": data.get("oppoRank"),
+        "curRank": data.get("curRank"),
+        "version": version,
+        "series": series,
+        "source": "act",
+        "stage": data.get("stage", ""),
+    }
+
+
 def extract_notify_game_result(
     data: dict,
     decision_count: int = 0,
     game_count: int = 0,
 ) -> Dict[str, Any]:
-    """从 notify 提取写入 game_records.result 的字段。"""
+    """从 notify 提取写入 game_records.result 的字段。
+
+    平台约束（见 docs/guandan-brain/掼蛋AI算法对抗平台使用说明.md §消息类型）：
+    - tribute/back 的 result 为 [[位,位,牌],...]，不是局结束
+    - episodeOver 含 order/curRank/restCards
+    """
+    stage = data.get("stage", "")
+    key = data.get("notifyType") or stage
+
+    if key == "episodeOver" or stage == "episodeOver":
+        return {
+            k: v
+            for k, v in {
+                "order": data.get("order"),
+                "curRank": data.get("curRank"),
+                "restCards": data.get("restCards", []),
+                "total_decisions": decision_count,
+                "game_count": game_count,
+            }.items()
+            if v is not None
+        }
+
+    if key == "gameOver" or stage == "gameOver":
+        return {
+            k: v
+            for k, v in {
+                "curTimes": data.get("curTimes"),
+                "settingTimes": data.get("settingTimes"),
+                "total_decisions": decision_count,
+                "game_count": game_count,
+            }.items()
+            if v is not None
+        }
+
     result = data.get("result", {}) or {}
     if not isinstance(result, dict):
         result = {}
@@ -519,6 +582,156 @@ class GameRecorder:
         }
         
         self.current_game["actions"].append(action_record)
+
+    def record_play_notify(self, data: dict, *, version: str = "v7") -> None:
+        """记录平台 act/play notify（任意玩家出牌）。
+
+        契约对齐 **M3**（`m-dev` 的 `yf1_m3._handle_act_notification`），写入 `actions` 供回放。
+        """
+        if not self.current_game:
+            return
+
+        cur_pos = data.get("curPos", -1)
+        cur_action = data.get("curAction", [])
+        greater_pos = data.get("greaterPos", -1)
+        greater_action = data.get("greaterAction", [])
+
+        if cur_pos == -1 or not cur_action:
+            return
+
+        if isinstance(cur_action, str):
+            try:
+                cur_action = ast.literal_eval(cur_action)
+            except (ValueError, SyntaxError):
+                pass
+        if isinstance(greater_action, str):
+            try:
+                greater_action = ast.literal_eval(greater_action)
+            except (ValueError, SyntaxError):
+                pass
+
+        context = {
+            "publicInfo": data.get("publicInfo", []),
+            "selfRank": data.get("selfRank"),
+            "oppoRank": data.get("oppoRank"),
+            "curRank": data.get("curRank"),
+            "restCards": data.get("restCards", []),
+            "source": "notify",
+            "stage": data.get("stage", "play"),
+            "version": version,
+        }
+        self.record_action(cur_pos, cur_action, greater_pos, greater_action, context)
+
+    @staticmethod
+    def _normalize_tribute_back_card(card: Any) -> Optional[str]:
+        """贡/还单张 → 'S2' 大写（与 M3 yf1_m3 一致）。"""
+        if card is None:
+            return None
+        normalized = normalize_cards_to_string_list([card])
+        if not normalized:
+            return None
+        raw = normalized[0]
+        if isinstance(raw, str) and len(raw) >= 2:
+            return raw[0].upper() + raw[1:].upper()
+        return raw
+
+    def _already_recorded_tribute_received(self, card_str: str, tribute_pos: int) -> bool:
+        for md in self.current_game.get("my_decisions", []) if self.current_game else []:
+            action = md.get("action") or []
+            ctx = md.get("context") or {}
+            if len(action) >= 3 and str(action[0]).lower() == "tribute":
+                existing = action[2]
+                if (
+                    isinstance(existing, list)
+                    and card_str in existing
+                    and ctx.get("source") == "notify"
+                    and ctx.get("receive_tribute_pos") == self.player_id
+                    and ctx.get("tribute_pos") == tribute_pos
+                ):
+                    return True
+        return False
+
+    def _already_recorded_back(self, card_str: str) -> bool:
+        for md in self.current_game.get("my_decisions", []) if self.current_game else []:
+            action = md.get("action") or []
+            if len(action) >= 3 and str(action[0]).lower() == "back":
+                existing = action[2]
+                if isinstance(existing, list) and card_str in existing:
+                    return True
+        return False
+
+    def record_tribute_notify(self, data: dict, *, version: str = "v7") -> None:
+        """进贡 notify：收贡方写入 my_decisions（对齐 M3 yf1_m3._handle_tribute_notification）。"""
+        if not self.current_game:
+            return
+        for item in data.get("result") or []:
+            if not isinstance(item, (list, tuple)) or len(item) < 3:
+                continue
+            tribute_pos, receive_pos, card = item[0], item[1], item[2]
+            try:
+                tribute_pos_i = int(tribute_pos)
+                receive_pos_i = int(receive_pos)
+            except (TypeError, ValueError):
+                continue
+            card_str = self._normalize_tribute_back_card(card)
+            if receive_pos_i != self.player_id or tribute_pos_i == self.player_id or not card_str:
+                continue
+            if self._already_recorded_tribute_received(card_str, tribute_pos_i):
+                continue
+            self.record_decision(
+                0,
+                ["tribute", "tribute", [card_str]],
+                context={
+                    "myPos": self.player_id,
+                    "curPos": -1,
+                    "greaterPos": -1,
+                    "actionList_size": 0,
+                    "selfRank": data.get("selfRank"),
+                    "oppoRank": data.get("oppoRank"),
+                    "curRank": data.get("curRank"),
+                    "version": version,
+                    "source": "notify",
+                    "stage": "tribute",
+                    "tribute_pos": tribute_pos_i,
+                    "receive_tribute_pos": receive_pos_i,
+                },
+            )
+
+    def record_back_notify(self, data: dict, *, version: str = "v7") -> None:
+        """还贡 notify：对手还给我的牌写入 my_decisions（对齐 M3 yf1_m3._handle_back_notification）。"""
+        if not self.current_game:
+            return
+        for item in data.get("result") or []:
+            if not isinstance(item, (list, tuple)) or len(item) < 3:
+                continue
+            back_pos, receive_pos, card = item[0], item[1], item[2]
+            try:
+                receive_pos_i = int(receive_pos)
+            except (TypeError, ValueError):
+                continue
+            card_str = self._normalize_tribute_back_card(card)
+            if receive_pos_i != self.player_id or not card_str:
+                continue
+            if self._already_recorded_back(card_str):
+                continue
+            self.record_decision(
+                0,
+                ["back", "back", [card_str]],
+                context={
+                    "myPos": self.player_id,
+                    "curPos": -1,
+                    "greaterPos": -1,
+                    "actionList_size": 0,
+                    "selfRank": data.get("selfRank"),
+                    "oppoRank": data.get("oppoRank"),
+                    "curRank": data.get("curRank"),
+                    "version": version,
+                    "source": "notify",
+                    "stage": "back",
+                    "back_pos": back_pos,
+                    "receive_back_pos": receive_pos_i,
+                },
+            )
     
     def _normalize_action(self, cur_action: List) -> List:
         """
@@ -887,7 +1100,101 @@ class GameRecorder:
         
         # 尝试合并同一局游戏的其他客户端记录
         game_data = GameRecorder._merge_same_game_records(game_data, filepath)
+        game_data = GameRecorder._hydrate_actions_for_replay(game_data, filepath)
         
+        return game_data
+
+    @staticmethod
+    def _decisions_to_actions(
+        my_decisions: List[Dict[str, Any]],
+        player_id: int,
+    ) -> List[Dict[str, Any]]:
+        """将 my_decisions 转为回放用的 actions（仅含本方出牌，缺对手步）。"""
+        actions: List[Dict[str, Any]] = []
+        for dec in my_decisions or []:
+            action = dec.get("action") or dec.get("selected_action")
+            if not action:
+                continue
+            ctx = dec.get("context") or {}
+            cur_pos = ctx.get("myPos", player_id)
+            if cur_pos is None:
+                cur_pos = player_id
+            actions.append({
+                "timestamp": dec.get("timestamp", ""),
+                "cur_pos": cur_pos,
+                "cur_action": action,
+                "greater_pos": ctx.get("greaterPos", -1),
+                "greater_action": [],
+                "context": {
+                    k: ctx[k]
+                    for k in ("curRank", "selfRank", "oppoRank", "stage", "source")
+                    if k in ctx
+                },
+            })
+        return actions
+
+    @staticmethod
+    def _merge_round_partner_decisions(
+        game_data: Dict[str, Any],
+        current_filepath: Path,
+    ) -> List[Dict[str, Any]]:
+        """合并同副（round+level）队友 JSON 的 my_decisions，补全 yf1+yf2 出牌。"""
+        m = RECORD_FILENAME_RE.match(current_filepath.name)
+        if not m:
+            return []
+        my_name, _opp, round_num, level = m.groups()
+        if not my_name.startswith("yf"):
+            return []
+        partner_prefix = "yf2" if my_name.startswith("yf1") else "yf1"
+        current_gid = str(game_data.get("game_id") or current_filepath.name.split()[0])
+        gid_prefix = current_gid[:14]
+        extra: List[Dict[str, Any]] = []
+        record_dir = current_filepath.parent
+        for record_file in record_dir.glob("*.json"):
+            if record_file == current_filepath:
+                continue
+            pm = RECORD_FILENAME_RE.match(record_file.name)
+            if not pm:
+                continue
+            pname, _popp, pround, plevel = pm.groups()
+            if pround != round_num or plevel != level:
+                continue
+            if not pname.startswith(partner_prefix):
+                continue
+            try:
+                with open(record_file, "r", encoding="utf-8") as f:
+                    other = json.load(f)
+                other_gid = str(other.get("game_id") or record_file.name.split()[0])
+                if other_gid[:14] != gid_prefix:
+                    continue
+                extra.extend(other.get("my_decisions") or [])
+            except Exception:
+                continue
+        return extra
+
+    @staticmethod
+    def _hydrate_actions_for_replay(
+        game_data: Dict[str, Any],
+        current_filepath: Path,
+    ) -> Dict[str, Any]:
+        """actions 为空时，从 my_decisions（含队友同副）合成回放步序。"""
+        actions = game_data.get("actions") or []
+        if actions:
+            return game_data
+
+        player_id = game_data.get("player_id", 0)
+        decisions = list(game_data.get("my_decisions") or [])
+        decisions.extend(
+            GameRecorder._merge_round_partner_decisions(game_data, current_filepath)
+        )
+        if not decisions:
+            return game_data
+
+        synthesized = GameRecorder._decisions_to_actions(decisions, player_id)
+        synthesized.sort(key=lambda a: a.get("timestamp", ""))
+        game_data["actions"] = synthesized
+        game_data["total_steps"] = len(synthesized)
+        game_data["_actions_synthesized"] = True
         return game_data
     
     @staticmethod

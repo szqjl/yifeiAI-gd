@@ -24,10 +24,12 @@ from communication.game_recorder import (
     unwrap_platform_payload,
     process_platform_game_end_notify,
     normalize_act_message_fields,
+    decision_context_from_act,
     is_ws_debug_enabled,
 )
 from communication.websocket_manager import WebSocketManager
 from config_loader import get_config
+from game_logic.guandan_constants import CARDS_PER_PLAYER
 
 # Configure logging
 log_dir = Path(__file__).parent.parent.parent / "logs"
@@ -134,13 +136,18 @@ class YF2_V7_Client:
                 self.handle_game_start(notification_data)
             elif key in ("gameEnd", "gameOver", "gameResult", "episodeOver"):
                 self.handle_game_end(notification_data)
-            elif (
-                "gameOver" in notification_data
-                or "gameResult" in notification_data
-                or "episodeOver" in notification_data
-                or notification_data.get("result")
-            ):
-                self.handle_game_end(notification_data)
+            elif key == "tribute":
+                self.game_recorder.record_tribute_notify(notification_data)
+            elif key == "back":
+                self.game_recorder.record_back_notify(notification_data)
+            elif key == "anti-tribute":
+                self.logger.info(
+                    "抗贡: antiNums=%s antiPos=%s",
+                    notification_data.get("antiNums"),
+                    notification_data.get("antiPos"),
+                )
+            elif key == "act" or (stage == "play" and not notify_type):
+                self._handle_act_notification(notification_data)
             elif "handCards" in notification_data and not self.game_recorder.current_game:
                 self.logger.info("检测到 handCards 且无 current_game，按游戏开始处理")
                 self.handle_game_start(notification_data)
@@ -151,6 +158,15 @@ class YF2_V7_Client:
         except Exception as e:
             self.logger.error(f"✗ Notification handling error: {e}", exc_info=True)
     
+    def _handle_act_notification(self, data: dict):
+        """出牌 notify → actions（契约对齐 M3 yf2_m3._handle_act_notification）。"""
+        hand_cards = data.get("handCards", [])
+        if hand_cards:
+            valid_cards = normalize_cards_to_string_list(hand_cards)
+            if len(valid_cards) <= CARDS_PER_PLAYER:
+                self.hand_cards = valid_cards
+        self.game_recorder.record_play_notify(data)
+
     def handle_game_start(self, data: dict):
         """Handle game start notification"""
         try:
@@ -260,19 +276,10 @@ class YF2_V7_Client:
             print(f"[yf2_v7] 选择动作: {act_index}")
             self.logger.info(f"选择动作: {act_index}")
 
-            # Record decision
             selected_action = action_list[act_index] if act_index < len(action_list) else []
-            self.game_recorder.record_decision(
-                act_index, selected_action, 
-                context={
-                    "myPos": action_data.get("myPos", self.player_id),
-                    "curPos": action_data.get("curPos", -1),
-                    "greaterPos": action_data.get("greaterPos", -1),
-                    "actionList_size": len(action_list),
-                    "version": "v7",
-                    "engine": "ultimate_win_rate"
-                }
-            )
+            ctx = decision_context_from_act(action_data, self.player_id, version="v7")
+            ctx["engine"] = "ultimate_win_rate"
+            self.game_recorder.record_decision(act_index, selected_action, context=ctx)
             
             # Validate action index
             if not self.validate_action(act_index, action_list):
@@ -292,16 +299,20 @@ class YF2_V7_Client:
         cur_rank = data.get("curRank", "?")
         print(f"[进贡] 我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
         
-        action_list = data.get("actionList", {})
-        if isinstance(action_list, dict) and "tribute" in action_list:
-            tribute_cards = action_list["tribute"]
-            print(f"[进贡] 轮到自己进贡，可以进贡的牌有: {tribute_cards}")
-            # 进贡阶段：选择第一张牌进贡（索引0）
+        action_list = data.get("actionList") or []
+        if not isinstance(action_list, list) or not action_list:
+            self.logger.warning("[进贡] actionList 为空或格式异常: %s", action_list)
             await self.send_action(0)
-        else:
-            # actionList格式异常，发送0
-            self.logger.warning(f"[进贡] actionList格式异常: {action_list}")
-            await self.send_action(0)
+            return
+        act_index = 0
+        selected = action_list[act_index]
+        print(f"[进贡] 轮到自己进贡，选择: {selected}")
+        self.game_recorder.record_decision(
+            act_index,
+            selected,
+            context=decision_context_from_act(data, self.player_id, version="v7"),
+        )
+        await self.send_action(act_index)
     
     async def _handle_back_action(self, data: dict):
         """Handle back action - 还贡阶段需要发送动作响应"""
@@ -310,16 +321,20 @@ class YF2_V7_Client:
         cur_rank = data.get("curRank", "?")
         print(f"[还贡] 我方等级：{self_rank}， 对方等级：{oppo_rank}， 当前等级{cur_rank}")
         
-        action_list = data.get("actionList", {})
-        if isinstance(action_list, dict) and "back" in action_list:
-            back_cards = action_list["back"]
-            print(f"[还贡] 轮到自己还贡，可以还贡的牌有: {back_cards}")
-            # 还贡阶段：选择第一张牌还贡（索引0）
+        action_list = data.get("actionList") or []
+        if not isinstance(action_list, list) or not action_list:
+            self.logger.warning("[还贡] actionList 为空或格式异常: %s", action_list)
             await self.send_action(0)
-        else:
-            # actionList格式异常，发送0
-            self.logger.warning(f"[还贡] actionList格式异常: {action_list}")
-            await self.send_action(0)
+            return
+        act_index = 0
+        selected = action_list[act_index]
+        print(f"[还贡] 轮到自己还贡，选择: {selected}")
+        self.game_recorder.record_decision(
+            act_index,
+            selected,
+            context=decision_context_from_act(data, self.player_id, version="v7"),
+        )
+        await self.send_action(act_index)
     
     def validate_action(self, action_index: int, action_list: list) -> bool:
         """Validate action index"""

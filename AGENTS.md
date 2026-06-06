@@ -209,6 +209,21 @@ python scripts/tools/yf_replay.py
 - 支持 **`yf1_m3` / `yf2_m3` / `yf1_v7` / `yf2_v7`** 等客户端落盘格式
 - 成对复盘：同一 `game_round` 可分别打开 yf1、yf2 两条 JSON
 
+### 录制契约（对齐 M3，勿参照 M1）
+
+牌谱回放读 **`actions`**（全员出牌 notify）+ **`my_decisions`**（本方 act + 贡还 notify）。**真源**：`m-dev` 的 `yf1_m3` / `yf2_m3`；**平台字段**见 [`docs/guandan-brain/掼蛋AI算法对抗平台使用说明.md`](docs/guandan-brain/掼蛋AI算法对抗平台使用说明.md) §消息类型 / §等级字段。
+
+| 消息 | 写入字段 | V7 实现 |
+|------|----------|---------|
+| `notify` · play/act | `actions[]` | `GameRecorder.record_play_notify` |
+| `notify` · tribute/back | `my_decisions[]` | `record_tribute_notify` / `record_back_notify` |
+| `act` · play/tribute/back | `my_decisions[]` | `record_decision` + `decision_context_from_act` |
+| `notify` · episodeOver | `result.order/curRank/restCards` | `extract_notify_game_result` |
+
+**notify 路由约束**：tribute/back 的 `result` 为 `[[进贡位,收贡位,牌],...]`，**不得**当作局结束；仅 `episodeOver` / `gameOver` / `gameResult` 触发 `end_game`。
+
+**M1 frozen**，新客户端录制逻辑只对齐 **M3**；旧 V7 牌谱若 `actions` 为空，回放会尝试从 `my_decisions` 合成（缺对手步）。
+
 ### 能力（相对旧命令行回放）
 
 - Tk GUI：四席手牌、逐步播放、级牌徽章（**curRank 以 play·act 为准**，见 GUA-027/回放 curRank 迭代）
