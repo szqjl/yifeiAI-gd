@@ -54,3 +54,19 @@ nul
 # Temporary JSON files
 execution_state.json
 game_scores.json
+batch_executor/current_batch.json
+batch_executor/latest_victory_num.json
+batch_executor/clients_ready.json
+v7_vs_lalala_scores.json
+v7_vs_lalala_state.json
+
+# Test / hypothesis cache
+.hypothesis/
+.pytest_cache/
+
+# Secrets and local runtime data
+config/cos.env
+data/
+
+# Offline platform bundle (large; use config/v7_paths.yaml)
+guandan_offline_v1006/
