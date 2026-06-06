@@ -308,3 +308,30 @@ python scripts/tools/yf_replay.py
 - `credential.helper store` 已启用
 
 ---
+
+## 🚀 新 Agent 快速启动（2026-06-06 新增）
+
+> **本章节已包含 AGENTS.md 全部内容的精华摘要 + 局/副口径 + 改代码前必读顺序 + 提交推送规则。**  
+> 新会话自动加载本文件后，**无需额外阅读其他文档**，除非任务涉及具体模块。
+
+### 一句话启动
+
+```text
+已加载 AGENTS.md（含 Bootstrap 全部内容）。当前分支 v7-dev，项目 YiFeiAI-GD 掼蛋AI客户端 v1006。
+```
+
+### 核心速查（已自动加载，无需再读）
+
+| 概念 | 内容 |
+|------|------|
+| **局 vs 副** | 局 ⊃ 多副；1 局可含数十副；`--target-games` 须 3 的倍数（3/9/12） |
+| **victoryNum** | `[0]` vs `[1]` = 各队赢几局；须 `[0]=[2]`、`[1]=[3]` |
+| **M3** | 主交付 + `IDecisionProvider` 底座（active） |
+| **M1** | frozen（GUA-022 closed），仅 bugfix/协议/记录/pytest |
+| **V7** | 实验线（v7-dev），引擎入口 `ultimate_win_rate_engine_v7.py::decide()` |
+| **改代码前** | 读 `ISSUES.md` → `ITERATIONS.md` → `TASKS.md` → `EVAL.md` |
+| **提交推送** | 前缀 `[M-m3]`/`[V-nn-v7]` 等；推 `origin m-dev` 或 `origin v7-dev`；禁推 main |
+
+### 完整启动文档
+
+如需更详细信息，阅读 [`docs/guandan-brain/AGENT_BOOTSTRAP.md`](docs/guandan-brain/AGENT_BOOTSTRAP.md)
