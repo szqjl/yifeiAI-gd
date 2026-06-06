@@ -25,7 +25,7 @@
 **当前状态**：
 - **M3** = 主交付 + `IDecisionProvider` 底座（active）
 - **M1 frozen**（GUA-022 closed）：仅 bugfix/协议/记录/pytest，**勿开 M1 策略 GUA**
-- **V7** = 实验线（v7-dev），GUA-037+ 改造
+- **V7** = 实验线（v7-dev），V7-001~V7-010 开发中
 
 ---
 
@@ -124,8 +124,11 @@ START_V7_GUI.bat         # Windows GUI 对战
 START_V7_AUTO.bat        # 自动启动服务器+客户端
 
 # V7 vs lalala 批跑
-RUN_V7_VS_LALALA.bat          # 默认 3 局
-RUN_V7_VS_LALALA.bat 12       # 12 局
+venv\Scripts\python.exe scripts\launchers\v7\run_v7_vs_lalala_games.py --games 3
+venv\Scripts\python.exe scripts\launchers\v7\run_v7_vs_lalala_games.py --games 12
+# 战绩文件：v7_vs_lalala_scores.json
+# M3 批跑：m3_vs_lalala_scores.json
+# M1 批跑：game_scores.json
 
 # 牌谱回放
 YF_REPLAY.bat
