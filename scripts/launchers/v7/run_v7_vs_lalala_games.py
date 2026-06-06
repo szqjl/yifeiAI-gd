@@ -14,7 +14,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-project_root = Path(__file__).resolve().parent
+project_root = Path(__file__).resolve().parents[3]  # repo root
 sys.path.insert(0, str(project_root))
 
 from batch_executor.executor import BatchExecutor
