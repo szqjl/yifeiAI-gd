@@ -13,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 V7_PATHS_FILE = REPO_ROOT / "config" / "v7_paths.yaml"
 
 LALALA_REFERENCE_REL = "reference/lalala"
+LALALA_OFFLINE_REL = "offline_platform/guandan_offline_v1006/lalala"
 LALALA_ASCII_REL = "guandan_offline_v1006/lalala"
 LALALA_LEGACY_REL = "guandan_offline_v1006/一等奖-东南大学-李菁-lalala-人机大赛"
 LALALA_CORE_FILES = ("state.py", "action.py", "utils.py")
@@ -23,6 +24,7 @@ DEFAULT_SERVER_CANDIDATES = (
 )
 
 DEFAULT_LALALA_CANDIDATES = (
+    LALALA_OFFLINE_REL,
     LALALA_ASCII_REL,
     LALALA_REFERENCE_REL,
     LALALA_LEGACY_REL,
@@ -137,13 +139,13 @@ def sync_lalala_to_reference(repo_root: Optional[Path] = None) -> Path:
     if env_src:
         source = Path(env_src)
     else:
-        for rel in (LALALA_ASCII_REL, LALALA_LEGACY_REL):
+        for rel in (LALALA_OFFLINE_REL, LALALA_ASCII_REL, LALALA_LEGACY_REL):
             candidate = root / rel
             if _lalala_dir_usable(candidate):
                 source = candidate
                 break
         else:
-            source = root / LALALA_ASCII_REL
+            source = root / LALALA_OFFLINE_REL
 
     if not _lalala_dir_usable(source):
         raise FileNotFoundError(
@@ -178,7 +180,9 @@ def get_lalala_dir(repo_root: Optional[Path] = None) -> str:
         if _lalala_dir_usable(p):
             return str(p.resolve())
 
-    source = root / LALALA_ASCII_REL
+    source = root / LALALA_OFFLINE_REL
+    if not _lalala_dir_usable(source):
+        source = root / LALALA_ASCII_REL
     if not _lalala_dir_usable(source):
         source = root / LALALA_LEGACY_REL
     if _lalala_dir_usable(source):
@@ -192,7 +196,7 @@ def get_lalala_dir(repo_root: Optional[Path] = None) -> str:
 
     if yaml_val:
         return _expand_repo(yaml_val, root)
-    return str((root / LALALA_ASCII_REL).resolve())
+    return str((root / LALALA_OFFLINE_REL).resolve())
 
 
 def get_model_dir(repo_root: Optional[Path] = None) -> str:
