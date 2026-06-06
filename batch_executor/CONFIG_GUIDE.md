@@ -634,7 +634,6 @@ python -m batch_executor --server-path server.exe --target-games 200
 
 - [README.md](README.md) - 系统使用文档
 - [QUICK_START.md](QUICK_START.md) - 快速开始指南
-- [设计文档](../.kiro/specs/batch-game-execution/design.md) - 系统设计文档
 
 ## 技术支持
 

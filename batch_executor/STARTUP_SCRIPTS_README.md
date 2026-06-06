@@ -186,5 +186,3 @@ python batch_executor.py --server-path server.exe --diagnose-only
 
 - [批量执行系统README](README.md) - 系统整体说明
 - [实现总结](IMPLEMENTATION_SUMMARY.md) - 实现细节
-- [需求文档](../.kiro/specs/batch-game-execution/requirements.md) - 需求规格
-- [设计文档](../.kiro/specs/batch-game-execution/design.md) - 设计规格

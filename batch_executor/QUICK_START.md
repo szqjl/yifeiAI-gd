@@ -223,6 +223,4 @@ python -m batch_executor --server-path server.exe --target-games 10 --log-level 
 
 如有问题，请查看：
 1. 日志文件: `logs/batch_executor_*.log`
-2. 设计文档: `.kiro/specs/batch-game-execution/design.md`
-3. 需求文档: `.kiro/specs/batch-game-execution/requirements.md`
-4. 实现总结: `batch_executor/IMPLEMENTATION_SUMMARY.md`
+2. 实现总结: `batch_executor/IMPLEMENTATION_SUMMARY.md`

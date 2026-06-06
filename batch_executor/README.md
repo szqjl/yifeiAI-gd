@@ -624,10 +624,8 @@ pytest tests/test_executor.py
 ### 文档资源
 
 1. **快速开始指南**: `batch_executor/QUICK_START.md`
-2. **设计文档**: `.kiro/specs/batch-game-execution/design.md`
-3. **需求文档**: `.kiro/specs/batch-game-execution/requirements.md`
-4. **实现总结**: `batch_executor/IMPLEMENTATION_SUMMARY.md`
-5. **启动脚本说明**: `batch_executor/STARTUP_SCRIPTS_README.md`
+2. **实现总结**: `batch_executor/IMPLEMENTATION_SUMMARY.md`
+3. **启动脚本说明**: `batch_executor/STARTUP_SCRIPTS_README.md`
 
 ### 日志分析
 
