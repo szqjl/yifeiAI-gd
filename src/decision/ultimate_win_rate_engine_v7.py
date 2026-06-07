@@ -23,6 +23,9 @@ try:
 except ImportError:
     DEFAULT_REST_CARDS = 27
 
+from src.v.nn.features.static_features import extract_static_features, STATIC_STATE_DIM
+from src.v.nn.guards import filter_action_list, validate_decision
+
 class UltimateWinRateEngineV7:
     """
     终极胜率导向决策引擎 V7
@@ -98,23 +101,40 @@ class UltimateWinRateEngineV7:
         """
         game_state = message
         self.decision_count += 1
-        
+
         action_list = game_state.get("actionList", [])
         if not action_list:
             return 0
-        
+
         try:
+            # ── GUA-045: 应用 P0 Guard 过滤 ──
+            filtered_actions, action_map = filter_action_list(game_state)
+            if not filtered_actions:
+                filtered_actions = action_list
+                action_map = list(range(len(action_list)))
+
             # 如果模型可用，使用模型决策
             if self.model is not None:
-                action_index = self._model_decision(game_state, action_list)
-                if action_index is not None:
+                # 在 filtered_actions 上做模型推理
+                filtered_index = self._model_decision(game_state, filtered_actions)
+                if filtered_index is not None:
+                    # GUA-045: 校验决策（覆盖不合理选择）
+                    safe_idx = validate_decision(
+                        filtered_index, filtered_actions, game_state,
+                        original_action_list=action_list,
+                    )
+                    # 映射回原始 actionList 下标
+                    if safe_idx < len(action_map):
+                        original_index = action_map[safe_idx]
+                    else:
+                        original_index = safe_idx
                     self.model_decisions += 1
-                    return action_index
-            
+                    return original_index
+
             # 回退到规则引擎
             self.fallback_decisions += 1
             return self._rule_based_decision(game_state, action_list)
-            
+
         except Exception as e:
             self.logger.error(f"✗ 决策失败: {e}")
             self.fallback_decisions += 1
@@ -165,93 +185,35 @@ class UltimateWinRateEngineV7:
     
     def _extract_features(self, game_state: Dict[str, Any], action_list: List) -> Optional[np.ndarray]:
         """
-        从游戏状态中提取特征
-        
+        从游戏状态中提取特征（GUA-037a 静态特征优先，后补 padding 至 512 维）。
+
+        GUA-037a 改造后：
+          - 前 124 维 = state_牌态（extract_static_features）
+          - 后续 388 维 = 零填充（待 GUA-037b 动作特征 + GUA-038 模型重训后替换）
+          - 总输出仍为 512 维（保持与现有 UltimateWinRateNet 架构兼容）
+
         Args:
             game_state: 游戏状态
             action_list: 可选动作列表
-            
+
         Returns:
-            特征向量，如果失败返回None
+            512 维 float32 数组，失败返回 None
         """
         try:
-            features = []
-            
-            # 基本游戏信息
-            my_pos = game_state.get("myPos", self.player_id)
-            cur_pos = game_state.get("curPos", -1)
-            greater_pos = game_state.get("greaterPos", -1)
-            
-            # 位置特征 (4维)
-            pos_features = [0] * 4
-            if 0 <= my_pos < 4:
-                pos_features[my_pos] = 1
-            features.extend(pos_features)
-            
-            # 当前出牌者特征 (4维)
-            cur_pos_features = [0] * 4
-            if 0 <= cur_pos < 4:
-                cur_pos_features[cur_pos] = 1
-            features.extend(cur_pos_features)
-            
-            # 最大动作者特征 (4维)
-            greater_pos_features = [0] * 4
-            if 0 <= greater_pos < 4:
-                greater_pos_features[greater_pos] = 1
-            features.extend(greater_pos_features)
-            
-            # 手牌信息
-            hand_cards = game_state.get("handCards", [])
-            features.append(len(hand_cards))  # 手牌数量
-            
-            # 公共信息
-            public_info = game_state.get("publicInfo", [])
-            for i in range(4):
-                if i < len(public_info) and isinstance(public_info[i], dict):
-                    rest_cards = public_info[i].get("rest", DEFAULT_REST_CARDS)
-                    features.append(rest_cards)
-                else:
-                    features.append(DEFAULT_REST_CARDS)
-            
-            # 等级信息
-            cur_rank = game_state.get("curRank", "2")
-            self_rank = game_state.get("selfRank", "2")
-            oppo_rank = game_state.get("oppoRank", "2")
-            
-            # 将等级转换为数值
-            rank_map = {"2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, 
-                       "9": 9, "T": 10, "J": 11, "Q": 12, "K": 13, "A": 14}
-            
-            features.append(rank_map.get(cur_rank, 2))
-            features.append(rank_map.get(self_rank, 2))
-            features.append(rank_map.get(oppo_rank, 2))
-            
-            # 动作列表特征
-            features.append(len(action_list))  # 可选动作数量
-            
-            # 当前动作和最大动作特征
-            cur_action = game_state.get("curAction", [])
-            greater_action = game_state.get("greaterAction", [])
-            
-            # 简化的动作编码
-            features.append(len(cur_action) if cur_action else 0)
-            features.append(len(greater_action) if greater_action else 0)
-            
-            # 填充到固定长度 (512维)
+            # GUA-037a: 124 维静态特征（牌态）
+            static_features = extract_static_features(game_state)
+            assert static_features.shape == (STATIC_STATE_DIM,), \
+                f"静态特征维度异常: {static_features.shape}"
+
+            # 填充至 512 维（待后续 GUA 逐步替换）
             target_size = 512
-            current_size = len(features)
-            
-            if current_size < target_size:
-                # 用0填充
-                features.extend([0] * (target_size - current_size))
-            elif current_size > target_size:
-                # 截断
-                features = features[:target_size]
-            
-            return np.array(features, dtype=np.float32)
-            
+            features = np.zeros(target_size, dtype=np.float32)
+            features[:STATIC_STATE_DIM] = static_features
+
+            return features
+
         except Exception as e:
-            self.logger.error(f"特征提取失败: {e}")
+            self.logger.error(f"特征提取失败: {e}", exc_info=True)
             return None
     
     def _rule_based_decision(self, game_state: Dict[str, Any], action_list: List) -> int:

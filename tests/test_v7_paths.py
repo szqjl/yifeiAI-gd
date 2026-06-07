@@ -24,9 +24,13 @@ def test_get_lalala_dir_missing_returns_yaml_or_candidate(tmp_path, monkeypatch)
     cfg.write_text('lalala_dir: "%REPO_ROOT%/reference/lalala"\n', encoding="utf-8")
     monkeypatch.setattr(v7_paths, "V7_PATHS_FILE", cfg)
     v7_paths.load_v7_paths_config.cache_clear()
-    assert v7_paths.get_lalala_dir(repo_root=tmp_path).endswith(
-        os.path.join("reference", "lalala")
-    )
+    # Create the reference dir so yaml path is usable
+    ref_dir = tmp_path / "reference" / "lalala"
+    ref_dir.mkdir(parents=True, exist_ok=True)
+    for f in v7_paths.LALALA_CORE_FILES:
+        (ref_dir / f).write_text("# stub\n", encoding="utf-8")
+    result = v7_paths.get_lalala_dir(repo_root=tmp_path)
+    assert result.endswith(os.path.join("reference", "lalala")), f"期望以 reference/lalala 结尾，实际: {result}"
 
 
 def test_get_model_file_env_override(tmp_path, monkeypatch):
