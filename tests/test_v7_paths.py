@@ -14,6 +14,11 @@ def test_get_server_exe_prefers_existing_candidate(tmp_path, monkeypatch):
     exe.write_bytes(b"stub")
     monkeypatch.setenv("SERVER_EXE", "")
     monkeypatch.setattr(v7_paths, "V7_PATHS_FILE", tmp_path / "missing.yaml")
+    v7_paths.load_v7_paths_config.cache_clear()
+    monkeypatch.setattr(v7_paths, "DEFAULT_SERVER_CANDIDATES", (
+        "offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe",
+        "guandan_offline_v1006/windows/guandan_offline_v1006.exe",
+    ))
     assert v7_paths.get_server_exe(repo_root=tmp_path) == str(exe)
 
 
@@ -70,6 +75,10 @@ def test_get_server_exe_fallback_when_offline_platform_missing(tmp_path, monkeyp
     monkeypatch.setenv("SERVER_EXE", "")
     monkeypatch.setattr(v7_paths, "V7_PATHS_FILE", cfg)
     v7_paths.load_v7_paths_config.cache_clear()
+    monkeypatch.setattr(v7_paths, "DEFAULT_SERVER_CANDIDATES", (
+        "offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe",
+        "guandan_offline_v1006/windows/guandan_offline_v1006.exe",
+    ))
     assert v7_paths.get_server_exe(repo_root=tmp_path) == str(legacy)
 
 
