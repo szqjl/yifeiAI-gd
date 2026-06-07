@@ -10,7 +10,9 @@ echo ========================================
 echo.
 
 echo 启动服务器...
-if exist "%REPO%\guandan_offline_v1006\windows\guandan_offline_v1006.exe" (
+if exist "D:\guandanscore\guandan-offline-serve\windows\guandan_offline_v1006.exe" (
+    start "服务器" "D:\guandanscore\guandan-offline-serve\windows\guandan_offline_v1006.exe" 12
+) else if exist "%REPO%\guandan_offline_v1006\windows\guandan_offline_v1006.exe" (
     start "服务器" "%REPO%\guandan_offline_v1006\windows\guandan_offline_v1006.exe" 12
 ) else if exist "%REPO%\offline_platform\guandan_offline_v1006\windows\guandan_offline_v1006.exe" (
     start "服务器" "%REPO%\offline_platform\guandan_offline_v1006\windows\guandan_offline_v1006.exe" 12

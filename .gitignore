@@ -69,4 +69,7 @@ config/cos.env
 data/
 
 # Offline platform bundle (large; use config/v7_paths.yaml)
-guandan_offline_v1006/
+# 精确匹配根目录下的 guandan_offline_v1006/（如果有）
+# 但不匹配 offline_platform/ 下的（Python 源码需追踪）
+/guandan_offline_v1006/
+!offline_platform/guandan_offline_v1006/

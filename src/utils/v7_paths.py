@@ -19,6 +19,7 @@ LALALA_LEGACY_REL = "guandan_offline_v1006/一等奖-东南大学-李菁-lalala-
 LALALA_CORE_FILES = ("state.py", "action.py", "utils.py")
 
 DEFAULT_SERVER_CANDIDATES = (
+    "D:/guandanscore/guandan-offline-serve/windows/guandan_offline_v1006.exe",
     "offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe",
     "guandan_offline_v1006/windows/guandan_offline_v1006.exe",
 )

@@ -6,9 +6,9 @@
 # 环境变量 LALALA_DIR 优先生效
 lalala_dir: "%REPO_ROOT%/guandan_offline_v1006/lalala"
 
-# 离线服务器 exe（治理口径：offline_platform/…；不存在时 v7_paths 回退 guandan_offline_v1006/…）
+# 离线服务器 exe（已移出仓库，详见 .gitignore 注释）
 # 环境变量 SERVER_EXE 优先生效
-server_exe: "%REPO_ROOT%/offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe"
+server_exe: "D:/guandanscore/guandan-offline-serve/windows/guandan_offline_v1006.exe"
 
 # 模型权重目录
 # 环境变量 MODEL_DIR 优先生效

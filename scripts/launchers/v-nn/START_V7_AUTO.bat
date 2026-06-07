@@ -24,6 +24,8 @@ if errorlevel 1 (
 
     if defined SERVER_EXE (
         start "Guandan Server" cmd /k ""%SERVER_EXE%" 12"
+    ) else if exist "D:\guandanscore\guandan-offline-serve\windows\guandan_offline_v1006.exe" (
+        start "Guandan Server" cmd /k "cd /d "D:\guandanscore\guandan-offline-serve\windows" && guandan_offline_v1006.exe 12"
     ) else if exist "%REPO_ROOT%\guandan_offline_v1006\windows\guandan_offline_v1006.exe" (
         start "Guandan Server" cmd /k "cd /d "%REPO_ROOT%\guandan_offline_v1006\windows" && guandan_offline_v1006.exe 12"
     ) else if exist "%REPO_ROOT%\offline_platform\guandan_offline_v1006\windows\guandan_offline_v1006.exe" (
