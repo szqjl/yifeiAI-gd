@@ -98,17 +98,21 @@ class RestartManager:
                 if hasattr(subprocess, 'CREATE_NO_WINDOW'):
                     creationflags = subprocess.CREATE_NO_WINDOW
 
+                stdout_dest = subprocess.PIPE
                 if visible_server and sys.platform == 'win32':
                     if hasattr(subprocess, 'CREATE_NEW_CONSOLE'):
                         creationflags = subprocess.CREATE_NEW_CONSOLE
                     else:
                         # Fallback for older Python versions
                         creationflags = 0  # Let it create default window
+                    # CREATE_NEW_CONSOLE 下子进程 stdout 进弹窗不进 PIPE，强读 PIPE 会拖到进程结束才批量 dump（GUA-048）
+                    stdout_dest = subprocess.DEVNULL
+                    logger.info("可见窗口模式：服务端输出仅在弹窗显示，批跑主日志不镜像 stdout")
 
                 process = subprocess.Popen(
                     command,
                     cwd=server_dir,  # 设置工作目录
-                    stdout=subprocess.PIPE,
+                    stdout=stdout_dest,
                     stderr=subprocess.STDOUT,
                     creationflags=creationflags,  # 设置创建标志
                     text=True,

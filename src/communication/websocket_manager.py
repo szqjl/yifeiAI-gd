@@ -265,7 +265,7 @@ class WebSocketManager:
         
         try:
             iter_count = 0
-            for message in self.websocket:
+            async for message in self.websocket:
                 iter_count += 1
                 t_iter = time.perf_counter()
                 try:

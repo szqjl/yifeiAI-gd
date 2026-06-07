@@ -24,13 +24,25 @@ log_dir = project_root / "logs"
 log_dir.mkdir(exist_ok=True)
 log_file = log_dir / f"v7_vs_lalala_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
+
+class _FlushingStreamHandler(logging.StreamHandler):
+    def emit(self, record: logging.LogRecord) -> None:
+        super().emit(record)
+        self.flush()
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
     handlers=[
-        logging.FileHandler(log_file, encoding="utf-8"),
-        logging.StreamHandler(),
+        logging.FileHandler(
+            log_file,
+            encoding="utf-8",
+            mode="w",
+            delay=False,
+        ),
+        _FlushingStreamHandler(),
     ],
 )
 
@@ -49,6 +61,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=DEFAULT_GAMES,
         help=f"目标局数，须为 3 的倍数（推荐 {', '.join(map(str, RECOMMENDED_GAMES))}）",
+    )
+    parser.add_argument(
+        "--visible-server",
+        action="store_true",
+        help="弹出服务端窗口（调试用）；默认隐藏窗口以保证主日志实时输出",
     )
     return parser.parse_args(argv)
 
@@ -77,6 +94,13 @@ def main(argv: list[str] | None = None) -> None:
             RECOMMENDED_GAMES,
         )
 
+    visible_server = args.visible_server
+    if visible_server:
+        logger.warning(
+            "已启用 --visible-server：主日志可能无法实时镜像服务端输出，"
+            "进度以「批跑进行中…」心跳与 victoryNum 为准"
+        )
+
     executor = BatchExecutor(
         target_games=games,
         server_path=get_server_exe(project_root),
@@ -85,7 +109,7 @@ def main(argv: list[str] | None = None) -> None:
         state_file=str(project_root / "v7_vs_lalala_state.json"),
         score_file=str(project_root / "v7_vs_lalala_scores.json"),
         enable_signal_handler=True,
-        visible_server=True,
+        visible_server=visible_server,
     )
 
     try:

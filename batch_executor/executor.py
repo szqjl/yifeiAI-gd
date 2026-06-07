@@ -143,6 +143,22 @@ class SignalHandler:
         return self.shutdown_requested
 
 
+def _session_games_from_victory_file(project_root: Path) -> int:
+    """从 latest_victory_num.json 读取本局累计局数（[0]+[1]，同队口径）。"""
+    shared_file = project_root / "batch_executor" / "latest_victory_num.json"
+    if not shared_file.exists():
+        return 0
+    try:
+        with open(shared_file, encoding="utf-8") as f:
+            data = json.load(f)
+        victory_num = data.get("victoryNum") or []
+        if len(victory_num) < 4:
+            return 0
+        return int(victory_num[0] or 0) + int(victory_num[1] or 0)
+    except Exception:
+        return 0
+
+
 class BatchExecutor:
     """批量游戏执行主控制器"""
     
@@ -517,180 +533,119 @@ class BatchExecutor:
                 self.logger.info("  Team B: 1号(client3) + 3号(client4)")
                 self.logger.info("=" * 60)
                 
-                # 额外等待并检测游戏是否开始
-                # 所有客户端连接后，等待服务器输出比赛信息
+                # 额外等待并检测游戏是否开始（单线程独占 stdout，避免 GUA-048 日志延迟）
                 self.logger.info("=" * 60)
                 self.logger.info("等待服务器输出比赛信息...")
                 self.logger.info("所有客户端已连接，等待服务器开始游戏...")
                 self.logger.info("=" * 60)
                 import time
-                game_start_timeout = 30  # 游戏开始超时时间（增加等待时间）
-                start_check_time = time.time()
-                game_started = False
-                
-                # 尝试读取服务器输出，检测游戏开始
-                # 注意：如果服务器窗口可见（visible_server=True），输出可能不在stdout中
-                if server_process.stdout and not self.visible_server:
-                    try:
-                        import threading
-                        import queue
-                        
-                        # 使用队列在后台线程中读取输出
-                        output_queue = queue.Queue()
-                        
-                        def read_output():
-                            """在后台线程中读取服务器输出"""
-                            try:
-                                for line in server_process.stdout:
-                                    if line:
-                                        output_queue.put(line.strip())
-                            except Exception:
-                                pass
-                        
-                        # 启动后台读取线程
-                        read_thread = threading.Thread(target=read_output, daemon=True)
-                        read_thread.start()
-                        
-                        # 轮询队列，检测游戏开始
-                        while time.time() - start_check_time < game_start_timeout:
-                            try:
-                                line = output_queue.get(timeout=1)
-                                if line:
-                                    self.logger.info(f"[服务器] {line}")
-                                    # 检测游戏开始的关键词
-                                    if any(keyword in line.lower() for keyword in [
-                                        "游戏开始", "gamestart", "game start", 
-                                        "开始游戏", "第.*局", "round.*start",
-                                        "ready", "all players connected"
-                                    ]):
-                                        self.logger.info("✓ 检测到游戏开始!")
-                                        game_started = True
-                                        break
-                            except queue.Empty:
-                                # 超时，继续等待
-                                pass
-                            
-                            time.sleep(0.5)
-                    except Exception as e:
-                        self.logger.debug(f"读取服务器输出检测游戏开始时出错: {e}")
+                from batch_executor.server_stdout_reader import ServerStdoutReader
+
+                stdout_reader: Optional[ServerStdoutReader] = None
+
+                if server_process.stdout:
+                    stdout_reader = ServerStdoutReader(server_process, self.logger)
+                    if stdout_reader.start():
+                        self.logger.info(
+                            "已启动服务器 stdout 实时读取（单读者%s）",
+                            "；可见窗口模式下 PIPE 可能无实时输出，进度看 victoryNum" if self.visible_server else "",
+                        )
+                elif self.visible_server:
+                    self.logger.info(
+                        "可见窗口模式：主日志不镜像服务端输出，通过 victoryNum / 完成提示监控进度"
+                    )
+
+                if stdout_reader is not None and stdout_reader.is_game_started():
+                    self.logger.info("✓ 已检测到游戏开始信号")
                 else:
-                    # 服务器窗口可见，无法从stdout读取，直接等待
-                    self.logger.info("服务器窗口可见，无法从stdout读取输出")
-                    self.logger.info("等待 10 秒让游戏有时间开始...")
-                    time.sleep(10)
-                    game_started = True  # 假设已开始
-                
-                if game_started:
-                    self.logger.info("✓ 游戏已开始或正在开始，继续监控...")
-                else:
-                    self.logger.warning("⚠️ 未检测到游戏开始消息，但继续执行")
-                    self.logger.warning("   可能原因:")
-                    self.logger.warning("   1. 服务器输出格式不同")
-                    self.logger.warning("   2. 游戏已开始但未输出检测关键词")
-                    self.logger.warning("   3. 服务器窗口可见，输出在窗口中显示")
-                    self.logger.warning("   建议: 检查服务器窗口确认游戏是否已开始")
-                
-                # 等待服务器完成
-                server_name = os.path.basename(self.server_path)
+                    self.logger.info("四席已就绪，进入实战监控（不阻塞等待开局关键词）")
+
                 self.logger.info(f"等待服务器完成 {batch_games} 场游戏...")
 
-                # 检查是否使用无限运行模式（不传递游戏次数参数）
                 infinite_mode = (batch_games == self.validator.single_run_limit)
                 if infinite_mode:
                     self.logger.info("使用无限运行模式：将通过游戏计数器监控进度")
                     self.logger.info(f"目标：完成 {batch_games} 场游戏后停止服务器")
                 else:
-                    self.logger.info("等待服务器输出完成提示: '达到设定游戏次数，若想再次训练请按照使用说明重新运行'")
+                    self.logger.info(
+                        "等待服务器输出完成提示: "
+                        "'达到设定游戏次数，若想再次训练请按照使用说明重新运行'"
+                    )
 
-                # 等待服务器进程结束并读取输出
-                server_output = []
+                server_output: list[str] = []
                 game_completed = False
-                completion_message = "达到设定游戏次数，若想再次训练请按照使用说明重新运行"
-
-                # 记录初始游戏数量（用于无限模式下的进度监控）
                 initial_games = self.tracker.total_games
-                
-                try:
-                    # 尝试读取输出（即使服务器窗口可见，也尝试读取stdout）
-                    # 注意：使用CREATE_NEW_CONSOLE时，stdout可能仍然可用
-                    if server_process.stdout:
-                        self.logger.info("开始读取服务器输出（实时监控完成提示）...")
+                initial_session_games = _session_games_from_victory_file(self.project_root)
+
+                def _terminate_server_after_completion() -> None:
+                    self.logger.info("主动终止服务器进程...")
+                    try:
+                        if server_process.poll() is None:
+                            server_process.terminate()
+                            self.logger.info("已发送终止信号，等待进程结束（最多5秒）...")
+                            try:
+                                server_process.wait(timeout=5)
+                                self.logger.info("✓ 服务器进程已正常终止")
+                            except subprocess.TimeoutExpired:
+                                self.logger.warning("服务器进程未响应终止信号，强制结束")
+                                server_process.kill()
+                                server_process.wait(timeout=2)
+                                self.logger.info("✓ 服务器进程已强制终止")
+                    except Exception as e:
+                        self.logger.error(f"终止服务器进程时出错: {e}")
                         try:
-                            for line in server_process.stdout:
-                                line_stripped = line.strip()
-                                server_output.append(line_stripped)
-                                # 实时打印服务器输出
-                                if line_stripped:
-                                    self.logger.info(f"[服务器] {line_stripped}")
-                                
-                                # 检测完成提示
-                                if completion_message in line_stripped or "达到设定游戏次数" in line_stripped:
-                                    self.logger.info("=" * 60)
-                                    self.logger.info("✓ 检测到服务器完成提示!")
-                                    self.logger.info(f"  提示内容: {line_stripped}")
-                                    self.logger.info("=" * 60)
-                                    game_completed = True
-                                    
-                                    # 检测到完成提示后，立即主动终止服务器进程
-                                    self.logger.info("主动终止服务器进程...")
-                                    try:
-                                        if server_process.poll() is None:
-                                            server_process.terminate()
-                                            self.logger.info("已发送终止信号，等待进程结束（最多5秒）...")
-                                            try:
-                                                server_process.wait(timeout=5)
-                                                self.logger.info("✓ 服务器进程已正常终止")
-                                            except subprocess.TimeoutExpired:
-                                                self.logger.warning("服务器进程未响应终止信号，强制结束")
-                                                server_process.kill()
-                                                server_process.wait(timeout=2)
-                                                self.logger.info("✓ 服务器进程已强制终止")
-                                    except Exception as e:
-                                        self.logger.error(f"终止服务器进程时出错: {e}")
-                                        try:
-                                            server_process.kill()
-                                            server_process.wait(timeout=2)
-                                        except:
-                                            pass
-                                    
-                                    # 退出读取循环，继续执行后续逻辑
-                                    break
+                            server_process.kill()
+                            server_process.wait(timeout=2)
+                        except Exception:
+                            pass
 
-                                # 在无限运行模式下，通过游戏计数器检测完成
-                                if infinite_mode and not game_completed:
-                                    current_games = self.tracker.total_games
-                                    games_completed_this_batch = current_games - initial_games
-                                    if games_completed_this_batch >= batch_games:
-                                        self.logger.info("=" * 60)
-                                        self.logger.info("✓ 检测到无限运行模式下游戏完成!")
-                                        self.logger.info(f"  本批次已完成: {games_completed_this_batch}/{batch_games} 场")
-                                        self.logger.info(f"  累计游戏总数: {current_games} 场")
-                                        self.logger.info("主动终止服务器进程...")
-                                        self.logger.info("=" * 60)
-                                        game_completed = True
+                try:
+                    self.logger.info("监控本批次进度（stdout 完成提示 / victoryNum / 进程结束）...")
+                    poll_interval = 0.5
+                    last_progress_log = time.time()
+                    progress_log_interval = 10.0
+                    while server_process.poll() is None and not game_completed:
+                        now = time.time()
+                        if now - last_progress_log >= progress_log_interval:
+                            session_games = _session_games_from_victory_file(self.project_root)
+                            done = max(0, session_games - initial_session_games)
+                            self.logger.info(
+                                "批跑进行中… 本批约 %d/%d 局（victoryNum 累计 %d）",
+                                done,
+                                batch_games,
+                                session_games,
+                            )
+                            last_progress_log = now
 
-                                        # 立即终止服务器进程
-                                        try:
-                                            if server_process.poll() is None:
-                                                server_process.terminate()
-                                                try:
-                                                    server_process.wait(timeout=5)
-                                                    self.logger.info("✓ 服务器进程已正常终止")
-                                                except subprocess.TimeoutExpired:
-                                                    self.logger.warning("服务器进程未响应终止信号，强制结束")
-                                                    server_process.kill()
-                                        except Exception as e:
-                                            self.logger.error(f"终止服务器进程时出错: {e}")
-                                            try:
-                                                server_process.kill()
-                                            except:
-                                                pass
-                        except Exception as read_error:
-                            # 如果无法读取stdout（例如CREATE_NEW_CONSOLE模式下），记录警告但继续
-                            self.logger.warning(f"无法从stdout读取服务器输出: {read_error}")
-                            self.logger.warning("将等待服务器进程结束（请检查服务器窗口确认完成提示）")
-                    else:
-                        self.logger.warning("服务器stdout不可用，无法读取输出")
+                        if stdout_reader is not None and stdout_reader.is_game_completed():
+                            self.logger.info("=" * 60)
+                            self.logger.info("✓ 检测到服务器完成提示!")
+                            self.logger.info("=" * 60)
+                            game_completed = True
+                            _terminate_server_after_completion()
+                            break
+
+                        if infinite_mode:
+                            session_games = _session_games_from_victory_file(self.project_root)
+                            games_completed_this_batch = session_games - initial_session_games
+                            if games_completed_this_batch >= batch_games:
+                                self.logger.info("=" * 60)
+                                self.logger.info("✓ 检测到本批次局数达标（latest_victory_num）!")
+                                self.logger.info(
+                                    f"  本批次已完成: {games_completed_this_batch}/{batch_games} 局"
+                                )
+                                self.logger.info(f"  victoryNum 累计局数: {session_games}")
+                                self.logger.info("=" * 60)
+                                game_completed = True
+                                _terminate_server_after_completion()
+                                break
+
+                        time.sleep(poll_interval)
+
+                    if stdout_reader is not None:
+                        server_output = stdout_reader.get_lines()
+                    elif not server_process.stdout:
+                        self.logger.warning("服务器 stdout 不可用，依赖进程自然结束")
                     
                     # 如果已经检测到完成提示并已终止服务器，跳过等待
                     if game_completed and server_process.poll() is not None:
