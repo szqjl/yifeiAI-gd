@@ -15,7 +15,7 @@
 
 **字段说明**：
 - **改动摘要**：必填，与 `ITERATIONS.md` 联动
-- **批跑命令**：`python run_v7_vs_lalala_3games.py` 或 `RUN_V7_VS_LALALA.bat 12`
+- **批跑命令**：`python scripts/launchers/v7/run_v7_vs_lalala_games.py --games 3` 或 `RUN_V7_VS_LALALA.bat 12`
 - **局数**：3 的倍数（3/9/12）
 - **V7 队胜率**：`[0]+[1]` vs 总局数；**≥30%** 才算 GUA-039b 验收通过
 - **副数**：`game_records/` mtime 窗新增 JSON 数 / 2
