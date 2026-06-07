@@ -16,9 +16,9 @@ echo.
 
 where py >nul 2>&1
 if %ERRORLEVEL%==0 (
-    py "%REPO_ROOT%\run_v7_vs_lalala_games.py" --games %GAMES%
+    py "%REPO_ROOT%\scripts\launchers\v7\run_v7_vs_lalala_games.py" --games %GAMES%
 ) else (
-    python "%REPO_ROOT%\run_v7_vs_lalala_games.py" --games %GAMES%
+    python "%REPO_ROOT%\scripts\launchers\v7\run_v7_vs_lalala_games.py" --games %GAMES%
 )
 
 set "EC=%ERRORLEVEL%"

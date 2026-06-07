@@ -83,28 +83,19 @@ V7 采用深度学习胜率导向决策引擎，替代 M 系列硬编码规则�
 
 ## V7 任务台账 (GUA)
 
-| GUA | 状态 | 说明 |
-|-----|------|------|
-| V7-001 引擎模型加载 | closed ✅ | 13/13 PASS，模型 651KB |
-| V7-002 WebSocket 连接 | closed ✅ | 审计 6 大类，修复 P0x3+P1x4，30 项测试通过 |
-| V7-003 启动脚本路径 | closed ✅ | 消除所有 D 盘硬编码 |
-| V7-004 模型文件检查 | open 🔴 | 与 V7-001 联动，需 torch 环境验证 |
-| V7-005 特征工程扩充 | closed ✅ | 27→127 维 (5.3%→24.8%) |
-| V7-006 端到端链路 | open 🔴 | **待推进** — 引擎+客户端+平台全链路跑通 |
-| V7-007 胜率基线测试 | open 🔴 | Phase 2，3 的倍数局数 |
-| V7-008 模型权重管理 | open 🔴 | Phase 1 |
-| V7-009 自对弈基础设施 | open 🔴 | Phase 3 |
-| V7-010 路径债清理 | open 🔴 | Phase 3 |
+> ⚠️ 以下只留真源链接，不做静态快照。状态以源文档为准。
 
-### 下一步 Priority
-
-1. **V7-006** 端到端决策链路测试 — 引擎+客户端+平台全链路跑通一轮对局
-2. **V7-004** 模型文件验证 — 需 Windows torch 环境
+| 数据 | 真源 |
+|------|------|
+| GUA 状态（open/closed） | [`docs/guandan-brain/ISSUES.md`](docs/guandan-brain/ISSUES.md) §V7 |
+| 当前迭代与下轮 priority | [`docs/guandan-brain/ITERATIONS.md`](docs/guandan-brain/ITERATIONS.md) 最新行 |
+| V7 实施方案 & 验收总表 | [`docs/guandan-brain/V7-实施方案.md`](docs/guandan-brain/V7-实施方案.md) |
+| 队胜率历史（战 KPI） | [`docs/guandan-brain/v7-win-rate-history.md`](docs/guandan-brain/v7-win-rate-history.md) |
 
 ### 关键数据
 
-- 特征利用率 24.8%，目标 >=50%
-- 服务器路径通过 `GUANDAN_SERVER` 环境变量配置
+- 特征利用率 24.8%（127/512 维），目标 >=50%
+- 服务器路径：`config/v7_paths.yaml` 或环境变量 `SERVER_EXE`
 - WebSocket 端口 23456
 - 模型：`bc_model_ultimate_win_rate.pth`，分数 84.3%
 
