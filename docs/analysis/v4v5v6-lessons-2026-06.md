@@ -339,7 +339,7 @@ V5 早期**代码看起来都在**，但因 lalala 路径错，**实际跑的是
 | `docs/versions/MATRIX.md` | 现存 | 104 | V4/V5_stage5 deprecated 状态 |
 | `docs/governance/M-V-Series-治理方案.md` | 现存 | 513 | V 系列定位 + 升格约束 |
 | `docs/analysis/v4v5v6-lessons-2026-06.md` | 现存 | 357 | **本文件**——V4-V5-V6 教训汇总（2026-06-07 增） |
-| `docs/analysis/v7-win-rate-history.md` | 现存 | — | V7 队胜率硬 KPI 日志（2026-06-07 新建） |
+| `docs/guandan-brain/v7-win-rate-history.md` | 现存 | — | V7 队胜率硬 KPI 日志（2026-06-07 新建，2026-06-07 移入 guandan-brain/） |
 
 **复原命令**（任何 Agent 后续可验证）：
 ```bash
