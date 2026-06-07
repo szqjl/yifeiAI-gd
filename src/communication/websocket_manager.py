@@ -5,6 +5,7 @@ WebSocket 连接管理器
 """
 
 import asyncio
+import time
 import websockets
 import json
 import logging
@@ -263,7 +264,10 @@ class WebSocketManager:
             return
         
         try:
-            async for message in self.websocket:
+            iter_count = 0
+            for message in self.websocket:
+                iter_count += 1
+                t_iter = time.perf_counter()
                 try:
                     data = json.loads(message)
                     # 首次收到游戏消息时登记 game_ready（确认客户端能处理消息）
@@ -272,6 +276,9 @@ class WebSocketManager:
                         await asyncio.to_thread(mark_game_ready, self.user_info)
                         self.logger.info(f"✓ 首条消息到达，game_ready: {self.user_info}")
                     await self.message_handler(data)
+                    t_after = time.perf_counter()
+                    if t_after - t_iter > 0.5:
+                        self.logger.warning("[WS] recv→handler 耗时 %.2fs msg_iter=%d", t_after - t_iter, iter_count)
                 except json.JSONDecodeError as e:
                     self.logger.error(f"✗ Invalid JSON: {e}")
                 except Exception as e:

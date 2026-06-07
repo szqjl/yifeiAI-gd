@@ -113,6 +113,7 @@ class YF1_V7_Client:
     
     async def process_message(self, data: dict):
         """Process a message from the server"""
+        t_msg = time.perf_counter()
         message_type = data.get("type", "")
         
         if self.ws_debug and message_type in ("notify", "act"):
@@ -120,7 +121,14 @@ class YF1_V7_Client:
             print(f"完整消息: {json.dumps(data, indent=2, ensure_ascii=False)[:1500]}...")
         
         if message_type == "act":
+            t_act_start = time.perf_counter()
             await self.handle_action_request(data)
+            t_act_end = time.perf_counter()
+            if t_act_end - t_act_start > 0.5:
+                self.logger.warning("[perf] act handler 耗时 %.3fs", t_act_end - t_act_start)
+            # 记录整体消息处理耗时
+            if t_act_end - t_msg > 1.0:
+                self.logger.warning("[perf] 消息处理总耗时 %.3fs type=%s", t_act_end - t_msg, message_type)
         elif message_type == "notify":
             self.handle_notification(data)
     
