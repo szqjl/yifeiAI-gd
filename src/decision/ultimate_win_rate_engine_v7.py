@@ -136,7 +136,7 @@ class UltimateWinRateEngineV7:
             return self._rule_based_decision(game_state, action_list)
 
         except Exception as e:
-            self.logger.error(f"✗ 决策失败: {e}")
+            self.logger.error(f"✗ 决策失败: {e}", exc_info=True)
             self.fallback_decisions += 1
             return self._rule_based_decision(game_state, action_list)
     
@@ -230,17 +230,16 @@ class UltimateWinRateEngineV7:
         try:
             # 简单的规则：优先选择非PASS动作
             for i, action in enumerate(action_list):
-                if action and len(action) > 0:
-                    if isinstance(action, list) and action[0] != "PASS":
-                        return i
-                    elif isinstance(action, str) and action.upper() != "PASS":
-                        return i
+                if isinstance(action, list) and len(action) > 0 and action[0] != "PASS":
+                    return i
+                elif isinstance(action, str) and action.upper() != "PASS":
+                    return i
             
             # 如果都是PASS，返回第一个
             return 0
             
         except Exception as e:
-            self.logger.error(f"规则决策失败: {e}")
+            self.logger.error(f"规则决策失败: {e}", exc_info=True)
             return 0
     
     def get_statistics(self) -> Dict[str, Any]:

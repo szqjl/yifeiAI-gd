@@ -471,6 +471,18 @@ def filter_action_list(
     if not action_list:
         return [], []
 
+    try:
+        return _filter_action_list_impl(game_state, action_list)
+    except Exception as e:
+        logger.error(f"filter_action_list 异常，回退原始 actionList: {e}", exc_info=True)
+        return action_list, list(range(len(action_list)))
+
+
+def _filter_action_list_impl(
+    game_state: Dict[str, Any],
+    action_list: List[List[str]],
+) -> Tuple[List[List[str]], List[int]]:
+    """filter_action_list 实际逻辑（被外层 try/except 包裹）。"""
     my_pos = game_state.get("myPos", game_state.get("player_id", 0))
     greater_pos = game_state.get("greaterPos", -1)
     greater_action = game_state.get("greaterAction", [])
@@ -557,6 +569,20 @@ def validate_decision(
     if not filtered_actions:
         return 0
 
+    try:
+        return _validate_decision_impl(model_idx, filtered_actions, game_state, original_action_list)
+    except Exception as e:
+        logger.error(f"validate_decision 异常，返回 0: {e}", exc_info=True)
+        return 0
+
+
+def _validate_decision_impl(
+    model_idx: int,
+    filtered_actions: List[List[str]],
+    game_state: Dict[str, Any],
+    original_action_list: List[List[str]] = None,
+) -> int:
+    """validate_decision 实际逻辑（被外层 try/except 包裹）。"""
     if model_idx < 0 or model_idx >= len(filtered_actions):
         model_idx = 0
 

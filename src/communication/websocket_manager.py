@@ -19,9 +19,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config_loader import get_config
 
 try:
-    from batch_executor.client_ready import mark_client_ready, wait_for_connect_turn
+    from batch_executor.client_ready import (
+        mark_client_ready,
+        mark_game_ready,
+        wait_for_connect_turn,
+    )
 except ImportError:
     def mark_client_ready(_client_id: str) -> None:
+        pass
+
+    def mark_game_ready(_client_id: str) -> None:
         pass
 
     def wait_for_connect_turn(_client_id: str, *, timeout: float = 120.0, poll_interval: float = 0.5) -> bool:
@@ -69,6 +76,9 @@ class WebSocketManager:
         
         # 消息处理回调
         self.message_handler: Optional[Callable] = None
+        
+        # game_ready 标记（首条游戏消息到达后置位）
+        self._game_ready_marked = False
         
         # 获取连接URL
         self.uri = self._get_connection_uri()
@@ -256,6 +266,11 @@ class WebSocketManager:
             async for message in self.websocket:
                 try:
                     data = json.loads(message)
+                    # 首次收到游戏消息时登记 game_ready（确认客户端能处理消息）
+                    if not self._game_ready_marked:
+                        self._game_ready_marked = True
+                        await asyncio.to_thread(mark_game_ready, self.user_info)
+                        self.logger.info(f"✓ 首条消息到达，game_ready: {self.user_info}")
                     await self.message_handler(data)
                 except json.JSONDecodeError as e:
                     self.logger.error(f"✗ Invalid JSON: {e}")

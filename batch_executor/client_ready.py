@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 READY_FILE = Path(__file__).resolve().parent / "clients_ready.json"
+GAME_READY_FILE = Path(__file__).resolve().parent / "game_ready.json"
 
 # 连接顺序（0=首席直连，末席连上后平台自动开局）
 CONNECT_ORDER_INDEX: Dict[str, int] = {
@@ -38,6 +39,7 @@ def _now_iso() -> str:
 def clear_all_ready() -> None:
     """新批次开始前清空就绪表。"""
     READY_FILE.write_text("{}", encoding="utf-8")
+    GAME_READY_FILE.write_text("{}", encoding="utf-8")
 
 
 def mark_client_ready(client_id: str) -> None:
@@ -45,6 +47,13 @@ def mark_client_ready(client_id: str) -> None:
     data = _load()
     data[client_id] = {"connected": True, "timestamp": _now_iso()}
     _save(data)
+
+
+def mark_game_ready(client_id: str) -> None:
+    """客户端收到首条游戏消息后登记（游戏已开局，客户端可正常决策）。"""
+    data = _game_load()
+    data[client_id] = {"ready": True, "timestamp": _now_iso()}
+    _game_save(data)
 
 
 def unmark_client_ready(client_id: str) -> None:
@@ -168,6 +177,23 @@ def wait_for_all_clients(
     return False
 
 
+def wait_for_all_clients_game_ready(
+    expected_ids: Iterable[str],
+    *,
+    timeout: float = 90.0,
+    poll_interval: float = 1.0,
+) -> bool:
+    """批跑侧等待 expected_ids 全部 game_ready（首条游戏消息已被处理）。"""
+    expected = set(expected_ids)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        ready = _game_load()
+        if expected.issubset(ready.keys()):
+            return True
+        time.sleep(poll_interval)
+    return False
+
+
 def _load() -> Dict[str, dict]:
     if not READY_FILE.exists():
         return {}
@@ -184,6 +210,27 @@ def _load() -> Dict[str, dict]:
 def _save(data: Dict[str, dict]) -> None:
     READY_FILE.parent.mkdir(parents=True, exist_ok=True)
     READY_FILE.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _game_load() -> Dict[str, dict]:
+    if not GAME_READY_FILE.exists():
+        return {}
+    try:
+        raw = GAME_READY_FILE.read_text(encoding="utf-8").strip()
+        if not raw:
+            return {}
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _game_save(data: Dict[str, dict]) -> None:
+    GAME_READY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    GAME_READY_FILE.write_text(
         json.dumps(data, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )

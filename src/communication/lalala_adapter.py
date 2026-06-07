@@ -21,9 +21,12 @@ if str(_REPO_ROOT) not in sys.path:
 from src.utils.v7_paths import get_lalala_dir
 
 try:
-    from batch_executor.client_ready import mark_client_ready, wait_for_connect_turn
+    from batch_executor.client_ready import mark_client_ready, mark_game_ready, wait_for_connect_turn
 except ImportError:
     def mark_client_ready(_client_id: str) -> None:
+        pass
+
+    def mark_game_ready(_client_id: str) -> None:
         pass
 
     def wait_for_connect_turn(_client_id: str, *, timeout: float = 120.0, poll_interval: float = 0.5) -> bool:
@@ -51,6 +54,7 @@ class LalalaWebsocketsClient:
     def __init__(self, user_info):
         self.user_info = user_info
         self.websocket = None
+        self._game_ready_marked = False
         
         # 使用lalala的State和Action
         self.state = State(user_info)
@@ -230,6 +234,11 @@ class LalalaWebsocketsClient:
             async for message in self.websocket:
                 try:
                     data = json.loads(message)
+                    # 首次收到消息时登记 game_ready
+                    if not self._game_ready_marked:
+                        self._game_ready_marked = True
+                        mark_game_ready(self.user_info)
+                        print(f"[{self.user_info}] ✓ 首条消息到达，game_ready")
                     data = self._preprocess_message(data)
                     msg_type = data.get("type", "")
 

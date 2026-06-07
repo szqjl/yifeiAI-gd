@@ -443,7 +443,11 @@ class BatchExecutor:
                 
                 self.logger.info("✓ 服务器端口就绪，开始启动客户端...")
 
-                from batch_executor.client_ready import clear_all_ready, client_id_from_script
+                from batch_executor.client_ready import (
+                    clear_all_ready,
+                    client_id_from_script,
+                    wait_for_all_clients_game_ready,
+                )
 
                 clear_all_ready()
                 self.logger.info("已清空 clients_ready.json，准备按序连入四席")
@@ -486,6 +490,17 @@ class BatchExecutor:
                     self.logger.error("请检查各客户端窗口：前序就绪门闩 / 连接错误")
                     break
                 self.logger.info("✓ 四席已全部连上，平台可安全开局")
+                
+                # 等待所有客户端处理首条游戏消息（game_ready）
+                self.logger.info("等待所有客户端处理首条游戏消息...")
+                game_ready = wait_for_all_clients_game_ready(
+                    expected_client_ids,
+                    timeout=60,
+                )
+                if not game_ready:
+                    self.logger.warning("部分客户端 game_ready 超时，继续执行（可能开局延迟）")
+                else:
+                    self.logger.info("✓ 所有客户端已收到首条游戏消息")
                 
                 # 验证连接顺序和组队信息
                 self.logger.info("=" * 60)
