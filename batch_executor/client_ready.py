@@ -10,6 +10,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
+# 跨平台文件锁（fcntl Linux / msvcrt Windows）
+_HAS_FCNTL = hasattr(os, "fcntl")
+_HAS_MSVCRT = False
+try:
+    import msvcrt  # type: ignore[import-not-found]
+    _HAS_MSVCRT = True
+except ImportError:
+    pass
+
 READY_FILE = Path(__file__).resolve().parent / "clients_ready.json"
 GAME_READY_FILE = Path(__file__).resolve().parent / "game_ready.json"
 
@@ -36,10 +45,91 @@ def _now_iso() -> str:
     return datetime.now().isoformat()
 
 
+def _lock_acquire(fh) -> bool:
+    if _HAS_FCNTL:
+        import fcntl
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except (BlockingIOError, OSError):
+            return False
+    elif _HAS_MSVCRT:
+        try:
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+            return True
+        except OSError:
+            return False
+    return True
+
+
+def _lock_release(fh) -> None:
+    if _HAS_FCNTL:
+        import fcntl
+        try:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+        except OSError:
+            pass
+    elif _HAS_MSVCRT:
+        try:
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+
+
 def clear_all_ready() -> None:
-    """新批次开始前清空就绪表。"""
-    READY_FILE.write_text("{}", encoding="utf-8")
-    GAME_READY_FILE.write_text("{}", encoding="utf-8")
+    """新批次开始前清空就绪表（原子写）。"""
+    _atomic_write(READY_FILE, "{}")
+    _atomic_write(GAME_READY_FILE, "{}")
+
+
+def _atomic_write(file_path: Path, content: str) -> None:
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_name = f"{file_path.name}.{os.getpid()}.{time.time_ns()}.tmp"
+    tmp = file_path.parent / tmp_name
+    tmp.write_text(content, encoding="utf-8")
+    for _ in range(20):
+        try:
+            os.replace(tmp, file_path)
+            return
+        except PermissionError:
+            time.sleep(0.01)
+    os.replace(tmp, file_path)
+
+
+def _locked_read_modify_write(file_path: Path, update_fn) -> None:
+    """带文件锁的 read-modify-write（原子写 + 跨进程互斥）。"""
+    lock_path = file_path.with_suffix(".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + 5.0
+    while True:
+        with open(lock_path, "a+", encoding="utf-8") as lf:
+            if _lock_acquire(lf):
+                try:
+                    if file_path.exists():
+                        try:
+                            raw = file_path.read_text(encoding="utf-8").strip()
+                            data = json.loads(raw) if raw else {}
+                        except (json.JSONDecodeError, OSError):
+                            data = {}
+                    else:
+                        data = {}
+                    update_fn(data)
+                    content = json.dumps(data, ensure_ascii=False, indent=2)
+                    tmp_name = f"{file_path.name}.{os.getpid()}.{time.time_ns()}.tmp"
+                    tmp = file_path.parent / tmp_name
+                    tmp.write_text(content, encoding="utf-8")
+                    for _ in range(20):
+                        try:
+                            os.replace(tmp, file_path)
+                            break
+                        except PermissionError:
+                            time.sleep(0.01)
+                    return
+                finally:
+                    _lock_release(lf)
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"file lock acquire timeout after 5s: {file_path}")
+        time.sleep(0.005)
 
 
 def mark_client_ready(client_id: str) -> None:
@@ -208,11 +298,7 @@ def _load() -> Dict[str, dict]:
 
 
 def _save(data: Dict[str, dict]) -> None:
-    READY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    READY_FILE.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _locked_read_modify_write(READY_FILE, lambda d: d.update(data))
 
 
 def _game_load() -> Dict[str, dict]:
@@ -229,8 +315,4 @@ def _game_load() -> Dict[str, dict]:
 
 
 def _game_save(data: Dict[str, dict]) -> None:
-    GAME_READY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    GAME_READY_FILE.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _locked_read_modify_write(GAME_READY_FILE, lambda d: d.update(data))

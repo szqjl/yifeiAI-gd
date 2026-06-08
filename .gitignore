@@ -37,13 +37,9 @@ __pycache__/
 .env.*.local
 
 # Test files
-# 2026-06-07 Hermes + CEO 决策: 删 test_*.py 规则，让 race condition 复现 test 进库
-# pytest 默认发现 test_*.py 文件; 此前 rules 因历史原因忽略，导致 test_batch_stdout_reader.py
-# (Trae 2026-06-07) / test_game_ready_race.py (Hermes 2026-06-07) 无法直接 commit
-# 新规约: 测试文件用 test_*.py 命名（pytest 默认约定），不再被 .gitignore 拦截
-# * 配套措施: 业务代码严禁用 test_*.py 前缀（已被 pytest 占用）
-# * 配套措施: tests/ 目录外的 test_*.py 文件需 case-by-case review
-# test_*.py
+# 2026-06-08 决定: test_*.py 不纳入 commit —— 测试代码单独存放、不入库（pytest 默认约定 test_*.py）
+# tests/ 目录下 test_*.py 仅本地跑，CI/人工跑；不入库避免生产目录误采集
+test_*.py
 *.md.bak
 
 # Testscore directory (contains large binary files)
