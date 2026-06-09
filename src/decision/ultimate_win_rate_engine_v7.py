@@ -24,6 +24,7 @@ except ImportError:
     DEFAULT_REST_CARDS = 27
 
 from src.v.nn.features.static_features import extract_static_features, STATIC_STATE_DIM
+from src.v.nn.features.dynamic_features import extract_dynamic_features, DYNAMIC_HIDDEN_DIM
 from src.v.nn.guards import filter_action_list, validate_decision
 
 class UltimateWinRateEngineV7:
@@ -187,12 +188,14 @@ class UltimateWinRateEngineV7:
     
     def _extract_features(self, game_state: Dict[str, Any], action_list: List) -> Optional[np.ndarray]:
         """
-        从游戏状态中提取特征（GUA-037a 静态特征优先，后补 padding 至 512 维）。
+        从游戏状态中提取特征（GUA-037a 静态 + GUA-037b 动态 LSTM）。
 
-        GUA-037a 改造后：
+        GUA-037b 改造后：
           - 前 124 维 = state_牌态（extract_static_features）
-          - 后续 388 维 = 零填充（待 GUA-037b 动作特征 + GUA-038 模型重训后替换）
+          - 124-187 维 = LSTM 动态编码（extract_dynamic_features, 64 维）
+          - 188-511 维 = 零填充（待 GUA-038 模型重训后替换）
           - 总输出仍为 512 维（保持与现有 UltimateWinRateNet 架构兼容）
+          - 有效特征: 188 维（利用率 188/512 = 36.7%）
 
         Args:
             game_state: 游戏状态
@@ -207,10 +210,19 @@ class UltimateWinRateEngineV7:
             assert static_features.shape == (STATIC_STATE_DIM,), \
                 f"静态特征维度异常: {static_features.shape}"
 
-            # 填充至 512 维（待后续 GUA 逐步替换）
+            # 填充至 512 维
             target_size = 512
             features = np.zeros(target_size, dtype=np.float32)
             features[:STATIC_STATE_DIM] = static_features
+
+            # GUA-037b: 64 维动态特征（LSTM 历史编码）
+            try:
+                dynamic_features = extract_dynamic_features(game_state, static_features)
+                assert dynamic_features.shape == (DYNAMIC_HIDDEN_DIM,), \
+                    f"动态特征维度异常: {dynamic_features.shape}"
+                features[STATIC_STATE_DIM:STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM] = dynamic_features
+            except Exception as dyn_e:
+                self.logger.debug(f"[GUA-037b] 动态特征提取失败(回退零填充): {dyn_e}")
 
             return features
 
