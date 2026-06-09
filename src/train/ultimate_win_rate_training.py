@@ -324,13 +324,13 @@ def train_ultimate_win_rate_model():
         match_rate = exact_matches / total_samples
         win_accuracy = win_rate_accuracy / samples_with_result
         
-        # 终极胜率导向评分
+        # 终极胜率导向评分（GUA-037a：胜率代理指标权重 ≥ 0.4，防回 V5 训练指标当 KPI 老路）
         ultimate_score = (
-            match_rate * 0.5 +                    # 动作匹配率 50%
-            win_accuracy * 0.25 +                 # 胜率预测准确率 25%
+            match_rate * 0.3 +                    # 动作匹配率 30%（降权）
+            win_accuracy * 0.4 +                  # 胜率预测准确率 40%（升权，主指标）
             (1.0 - avg_win_rate_loss / 2.0) * 0.15 +  # 胜率损失 15%
-            (1.0 - avg_value_loss / 2.0) * 0.05 +     # 价值损失 5%
-            (1.0 - avg_reward_loss / 2.0) * 0.05      # 收益损失 5%
+            (1.0 - avg_value_loss / 2.0) * 0.075 +     # 价值损失 7.5%
+            (1.0 - avg_reward_loss / 2.0) * 0.075      # 收益损失 7.5%
         )
         
         # 学习率调度

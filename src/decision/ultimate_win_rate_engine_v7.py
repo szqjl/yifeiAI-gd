@@ -55,6 +55,7 @@ class UltimateWinRateEngineV7:
         self.decision_count = 0
         self.model_decisions = 0
         self.fallback_decisions = 0
+        self.model_load_failures = 0  # GUA-037a: 模型加载失败计数器
 
         assert_v_integration_gate(self, label="UltimateWinRateEngineV7")
         
@@ -62,8 +63,8 @@ class UltimateWinRateEngineV7:
         """加载终极胜率导向模型"""
         try:
             if not self.model_path.exists():
-                self.logger.warning(f"[警告] 终极胜率导向模型未找到！模型路径: {self.model_path}")
-                self.logger.warning("将使用规则引擎作为回退")
+                self.model_load_failures += 1
+                self.logger.error(f"[GUA-037a] 终极胜率导向模型未找到！模型路径: {self.model_path} — 将使用规则引擎回退（model_load_failures={self.model_load_failures}）")
                 return False
             
             # 加载模型
@@ -85,7 +86,8 @@ class UltimateWinRateEngineV7:
             return True
             
         except Exception as e:
-            self.logger.error(f"✗ 模型加载失败: {e}")
+            self.model_load_failures += 1
+            self.logger.error(f"[GUA-037a] 模型加载失败: {e} — model_load_failures={self.model_load_failures}")
             self.model = None
             return False
     
