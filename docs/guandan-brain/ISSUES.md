@@ -81,7 +81,7 @@
 
 **统计检验 note（2026-06-02 补充，2026-06-02 夜 确认结论）**：GUA-034/035 26/33=78.8% vs GUA-036 36/69=52.2%（S9后），**差值 26.6pp，p=0.009（两比例 z 检验），统计显著**；95% CI [8pp, 45pp]。**关键差异**：`[0,3,0,3]` 在 GUA-036 出现 **2 次**（S8批5、S9批2），GUA-035 出现 **0 次**——GUA-036 下限更差，lalala 队有批能把 M3 队剃光头。批次均值 t 检验 p=0.048（边缘显著）。**结论**：GUA-036 **显著差于** GUA-035，非发牌随机波动可解释，待 CALC-M04/M05 修复。 |
 
-| GUA-037a | closed | P0 | V-nn, v7 | v7 | V7 静态特征工程（state_牌态 124 维） | `_extract_features` 静态部分全零填充；需重写手牌 108 维 + 级牌/红心配 9 维 + 主动被动/阶段/炸弹/贡局/队友 6 维 + hand count 1 维 = 124 维；actionList 牌型 15 维后移 | `src/v/nn/ultimate_win_rate_engine_v7.py`、`src/v/nn/features/static_features.py` | `closed_in` 2026-06-07：124 维静态特征提取模块实现（`static_features.py`），V7 引擎 `_extract_features` 前 124 维替换零填充；13 项 pytest 验证通过；关联 V7-实施方案.md §2 Phase 1 |
+| GUA-037a | closed | P0 | V-nn, v7 | v7 | V7 静态特征工程（state_牌态 124 维） | `_extract_features` 静态部分全零填充；需重写手牌 108 维 + 级牌/红心配 9 维 + 主动被动/阶段/炸弹/贡局/队友 6 维 + hand count 1 维 = 124 维；actionList 牌型 15 维后移 | `src/v/nn/ultimate_win_rate_engine_v7.py`、`src/v/nn/features/static_features.py`、`src/v/nn/features/belief_state.py` | `closed_in` 2026-06-07：124 维静态特征提取模块实现（`static_features.py`），V7 引擎 `_extract_features` 前 124 维替换零填充；13 项 pytest 验证通过；关联 V7-实施方案.md §2 Phase 1。**Part 3（2026-06-14）**：叠加局面信念分类器（套路一原型）→ 4 维 soft 向量 [进攻型, 防守型, 观望型, 保对家型] 写至特征索引 188-191；特征利用率 188→192/512（37.5%）；见 `docs/guandan-brain/掼蛋AI自我进化-随机应变套路.md` |
 | GUA-037b | open | P1 | V-nn, v7 | v7 | V7 动态特征工程（LSTM 历史编码） | 在 037a 静态特征基础上叠加 LSTM 历史编码（出牌历史 + numof* 序列），目标总维度 188 维 | `src/v/nn/features/dynamic_features.py`、`src/v/nn/ultimate_win_rate_engine_v7.py` | 完成定义见 `V7-实施方案.md` §2 Phase 1 GUA-037b；可与 GUA-038 并行 |
 | GUA-038 | **closed** ✅ | P1 | V-nn, v7 | v7 | V7 M3 知识蒸馏（BC 热启动） | V7-internal 录牌（不依赖 M3 录牌链路）→ 提取 (state, action) 标签对 → BC 训练 → 加载推理；teacher 数据源为 M3 离线 game_records | `src/v/nn/recorder/v7_recorder.py`、`src/v/nn/training/bc_dataset.py`、`src/v/nn/training/bc_trainer.py`、`scripts/v7/run_bc_training.py` | **`closed_in` 2026-06-07**：V7-internal 录牌器（`v7_recorder.py`）+ BC 数据集（`bc_dataset.py`）+ BC 训练器（`bc_trainer.py`）+ CLI 入口（`run_bc_training.py`）；考试通过：`tests/test_v7_bc.py` **34/34 passed**；回归 72 passed；验收标准：数据加载、特征重建、train/val 切分、masked CE、录牌落盘全部覆盖 |
 | GUA-039a | open | P2 | V-nn, v7 | v7 | V7 自对弈 DMC + ZMQ 桥 + Actor 原型 | 搭建 V7 自对弈基础设施：DMC value net 训练 + ZMQ Actor-Learner 通信 + 单 Actor 与 v1006 平台交互原型 | `src/v/nn/training/actor.py`、`learner.py`、`replay_buffer.py`、`zmq_bridge.py`、`reward.py` | 完成定义见 `V7-实施方案.md` §2 Phase 3 GUA-039a；**关单前提**：评审后方可启动 GUA-039b |
@@ -368,3 +368,9 @@ Phase 3（~3 迭代）  GUA-039a/b  自对弈 + PPO；队胜率 vs lalala（V7-0
 | ID | 状态 | 严重级别 | 标签 | 版本 | 简述 | 现象 / 复现要点 | 涉及模块 | 备注 |
 |----|------|----------|------|------|------|-----------------|----------|------|
 | GUA-xxx | open / closed | P0–P3 | rules, observation, policy | m1/v4/v5/v6/训练/docs | | | | `closed_in` / `duplicate of` |
+
+## 紧急通知
+
+**GUA-050** 已登记，**P0 严重**，需立即停止训练并诊断问题。模型从 Round 1-3 的 55-64% 胜率暴跌至 Round 4-10 的 0% 胜率，完全崩溃。所有 V7 BC 训练工作必须暂停，问题必须立即解决。
+
+**GUA-050 详细信息**：Stage6 V7 BC 训练失败，模型完全崩溃，胜率从 60% 暴跌至 0%。需要立即停止训练，诊断问题根源，修复训练流程，并验证模型稳定性和适应性。
