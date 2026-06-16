@@ -2,10 +2,9 @@
 """
 游戏记录器 - 保存每局游戏并支持回放
 格式参考：2021122022131000098 [szqjl]-[新城老王].fp
-牌张与基本概念见：docs/rules/牌张与基本概念.md，常量见 game_logic.guandan_constants。
+牌张与基本概念见：docs/archive/rules/牌张与基本概念.md，常量见 game_logic.guandan_constants。
 """
 
-import ast
 import json
 import os
 import re
@@ -13,14 +12,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Union, Any, List, Any, Optional
 
-RECORD_FILENAME_RE = re.compile(
-    r"^\d+ \[([^\]]+)\]-\[([^\]]+)\]-\[(\d+)\]-\[([^\]]*)\]\.json$"
-)
-
 try:
     from game_logic.guandan_constants import CARDS_PER_PLAYER
 except ImportError:
-    CARDS_PER_PLAYER = 27  # 掼蛋每人27张，规则见 docs/rules/牌张与基本概念.md
+    CARDS_PER_PLAYER = 27  # 掼蛋每人27张，规则见 docs/archive/rules/牌张与基本概念.md
+
+# 文件名：YYYYMMDDHHMMSSffffff [player]-[opponent]-[round]-[level].json
+RECORD_FILENAME_RE = re.compile(
+    r"^(\d+) \[([^\]]+)\]-\[([^\]]+)\]-\[(\d+)\]-\[([^\]]*)\]\.json$"
+)
 
 
 def normalize_cards_to_string_list(cards: List) -> List[str]:
@@ -92,227 +92,29 @@ def ensure_my_pos_int(data: dict, fallback_player_id: int) -> int:
         return int(fallback_player_id)
 
 
-_PLATFORM_PAYLOAD_KEYS = frozenset({
-    "actionList",
-    "stage",
-    "handCards",
-    "myPos",
-    "curPos",
-    "curAction",
-    "greaterPos",
-    "greaterAction",
-    "publicInfo",
-    "selfRank",
-    "oppoRank",
-    "curRank",
-    "notifyType",
-    "result",
-    "victoryNum",
-})
-
-
-def unwrap_platform_payload(message: dict) -> dict:
-    """
-    v1006 平台 WebSocket 消息多为顶层字段（见 guandan_offline lalala/state.py）；
-    少数封装为 {"type": "...", "data": {...}}。
-    """
-    if not isinstance(message, dict):
-        return {}
-    nested = message.get("data")
-    if isinstance(nested, dict) and any(k in nested for k in _PLATFORM_PAYLOAD_KEYS):
-        return nested
-    return message
-
-
-def is_ws_debug_enabled() -> bool:
-    """是否打印 WebSocket 完整消息（YF_DEBUG_WS=1 开启）。"""
-    return os.environ.get("YF_DEBUG_WS", "").strip().lower() in ("1", "true", "yes", "on")
-
-
-def normalize_act_message_fields(data: dict) -> dict:
-    """规范化 act 消息：字符串形式的 curAction/greaterAction 转列表。"""
-    for field in ("curAction", "greaterAction"):
-        value = data.get(field)
-        if isinstance(value, str):
-            try:
-                data[field] = ast.literal_eval(value)
-            except (ValueError, SyntaxError):
-                pass
-    if "handCards" in data and data["handCards"]:
-        data["handCards"] = normalize_cards_to_string_list(data["handCards"])
-    if data.get("actionList"):
-        data["actionList"] = normalize_action_list(data["actionList"])
-    return data
-
-
-def get_latest_victory_num_path() -> Path:
-    """batch_executor 读取的 victoryNum 共享文件路径。"""
-    return Path(__file__).parent.parent.parent / "batch_executor" / "latest_victory_num.json"
-
-
-def notify_end_kind(data: dict) -> str:
-    """区分副结束 (episode) 与局级结果 (session/gameResult)。"""
-    key = data.get("notifyType") or data.get("stage", "")
-    if key in ("gameResult", "gameEnd") or "victoryNum" in data:
-        return "session"
-    if key in ("episodeOver", "gameOver"):
-        return "episode"
-    return "unknown"
-
-
-def decision_context_from_act(
-    data: dict,
+def sync_pass_counters(
+    pass_num: int,
+    my_pass_num: int,
+    cur_action: list,
+    cur_pos: int,
     player_id: int,
-    *,
-    version: str = "v7",
-    series: str = "V",
-) -> Dict[str, Any]:
-    """act 阶段 record_decision 的 context（对齐 M3 _decision_context_from_act）。"""
-    action_list = data.get("actionList") or []
-    size = len(action_list) if isinstance(action_list, list) else 0
-    return {
-        "myPos": data.get("myPos", player_id),
-        "curPos": data.get("curPos", -1),
-        "greaterPos": data.get("greaterPos", -1),
-        "actionList_size": size,
-        "selfRank": data.get("selfRank"),
-        "oppoRank": data.get("oppoRank"),
-        "curRank": data.get("curRank"),
-        "version": version,
-        "series": series,
-        "source": "act",
-        "stage": data.get("stage", ""),
-    }
-
-
-def extract_notify_game_result(
-    data: dict,
-    decision_count: int = 0,
-    game_count: int = 0,
-) -> Dict[str, Any]:
-    """从 notify 提取写入 game_records.result 的字段。
-
-    平台约束（见 docs/guandan-brain/掼蛋AI算法对抗平台使用说明.md §消息类型）：
-    - tribute/back 的 result 为 [[位,位,牌],...]，不是局结束
-    - episodeOver 含 order/curRank/restCards
+) -> tuple:
     """
-    stage = data.get("stage", "")
-    key = data.get("notifyType") or stage
-
-    if key == "episodeOver" or stage == "episodeOver":
-        return {
-            k: v
-            for k, v in {
-                "order": data.get("order"),
-                "curRank": data.get("curRank"),
-                "restCards": data.get("restCards", []),
-                "total_decisions": decision_count,
-                "game_count": game_count,
-            }.items()
-            if v is not None
-        }
-
-    if key == "gameOver" or stage == "gameOver":
-        return {
-            k: v
-            for k, v in {
-                "curTimes": data.get("curTimes"),
-                "settingTimes": data.get("settingTimes"),
-                "total_decisions": decision_count,
-                "game_count": game_count,
-            }.items()
-            if v is not None
-        }
-
-    result = data.get("result", {}) or {}
-    if not isinstance(result, dict):
-        result = {}
-
-    if data.get("stage") == "gameResult" or "victoryNum" in data:
-        victory_num = data.get("victoryNum") or result.get("victoryNum", [])
-        if victory_num:
-            return {
-                "victoryNum": victory_num,
-                "draws": data.get("draws", result.get("draws", [])),
-                "total_decisions": decision_count,
-                "game_count": game_count,
-            }
-        if not result:
-            return {
-                "draws": data.get("draws", []),
-                "total_decisions": decision_count,
-                "game_count": game_count,
-            }
-    return dict(result)
-
-
-def save_victory_num_shared(
-    victory_num: list,
-    player: str,
-    logger=None,
-    *,
-    vn_source: str = "gameResult",
-) -> bool:
-    """写入 latest_victory_num.json，供 batch_executor 批末对账。"""
-    if not victory_num or len(victory_num) < 4:
-        return False
-    try:
-        shared_file = get_latest_victory_num_path()
-        shared_file.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "victoryNum": victory_num,
-            "server_vn_raw": victory_num,
-            "vn_source": vn_source,
-            "timestamp": datetime.now().isoformat(),
-            "player": player,
-        }
-        with open(shared_file, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        if logger:
-            logger.info("✓ victoryNum 已保存到共享文件: %s → %s", shared_file, victory_num)
-        return True
-    except Exception as e:
-        if logger:
-            logger.warning("保存 victoryNum 到共享文件失败: %s", e)
-        return False
-
-
-def process_platform_game_end_notify(
-    data: dict,
-    game_recorder: "GameRecorder",
-    logger,
-    player_tag: str,
-    decision_count: int = 0,
-    game_count: int = 0,
-) -> None:
+    按 lalala 客户端逻辑更新连续 PASS 计数（GUA-022 context 补全）。
+    返回 (pass_num, my_pass_num)。
     """
-    统一处理 episodeOver / gameResult 结束通知（M1/M3/V7 共用逻辑）。
-    - episodeOver：落盘当前副记录（可无 victoryNum）
-    - gameResult：写 latest_victory_num.json 并回填近期 game_records
-    """
-    key = data.get("notifyType") or data.get("stage", "")
-    kind = notify_end_kind(data)
-    result = extract_notify_game_result(data, decision_count, game_count)
-    victory_num = result.get("victoryNum")
-
-    if game_recorder.current_game:
-        filepath = game_recorder.end_game(result)
-        if filepath and logger:
-            logger.info("✓ 游戏记录已保存: %s", filepath)
-    elif kind == "episode":
-        if logger:
-            logger.info(
-                "游戏结束通知(%s)收到但 current_game 为空，副记录可能已保存；跳过 end_game",
-                key,
-            )
-    elif logger:
-        logger.info("局级结束通知(%s)，current_game 为空", key)
-
-    if kind == "session" and victory_num:
-        save_victory_num_shared(victory_num, player_tag, logger)
-        filled = game_recorder.backfill_victory_num(victory_num)
-        if logger and filled:
-            logger.info("✓ victoryNum 已回填 %s 条 game_records", filled)
+    if not cur_action:
+        return pass_num, my_pass_num
+    if cur_action[0] == "PASS":
+        pass_num += 1
+    else:
+        pass_num = 0
+    if cur_pos == player_id:
+        if cur_action[0] == "PASS":
+            my_pass_num += 1
+        else:
+            my_pass_num = 0
+    return pass_num, my_pass_num
 
 
 def _format_cards(action_cards: Any) -> str:
@@ -440,6 +242,62 @@ class GameRecorder:
         if not self.record_dir.exists():
             self.record_dir.mkdir(parents=True, exist_ok=True)
         
+    def backfill_victory_num(
+        self,
+        victory_num: list,
+        pending_files: list,
+        *,
+        expected_batch_games: Optional[int] = None,
+    ) -> int:
+        """
+        回填 pending 记录文件的 victoryNum。
+        读取每个文件，添加 victoryNum 到 result，写回。
+        Args:
+            victory_num: [pos0_wins, pos1_wins, pos2_wins, pos3_wins]
+            pending_files: 待回填的文件路径列表
+            expected_batch_games: 本批 batch_games；若给出则校验 [0]+[1] 一致才回填
+        Returns:
+            成功回填的文件数
+        """
+        import logging
+        import json
+        import tempfile
+        import os
+        from communication.game_result_utils import validate_batch_victory_num
+
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        if not pending_files:
+            return 0
+
+        ok, reason = validate_batch_victory_num(victory_num, expected_batch_games)
+        if not ok:
+            logger.warning(
+                "跳过 victoryNum 回填: %s (vn=%s, batch_games=%s)",
+                reason,
+                victory_num,
+                expected_batch_games,
+            )
+            pending_files.clear()
+            return 0
+        flushed = 0
+        for path in list(pending_files):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                data["result"] = data.get("result", {}) or {}
+                data["result"]["victoryNum"] = victory_num
+                fd, tmp = tempfile.mkstemp(dir=str(self.record_dir), suffix=".tmp")
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp, path)
+                flushed += 1
+            except Exception as e:
+                logger.warning("回填 pending 记录失败: {}, error={}".format(path, e))
+        pending_files.clear()
+        if flushed:
+            logger.info("已批量回填 pending 记录 victoryNum: {} 个".format(flushed))
+        return flushed
+
     def record_game_start(self, message: dict):
         """
         记录游戏开始（V7协议兼容方法）
@@ -496,15 +354,22 @@ class GameRecorder:
         logger = logging.getLogger(f"GameRecorder.{self.player_name}")
         
         # ⚠️ 重要：如果已经有游戏记录在进行，先保存它（防止多局游戏时丢失记录）
+        # 修复：如果当前游戏还没有result，延迟保存，等待gameResult通知
         if self.current_game:
-            logger.warning(f"⚠ 新游戏开始，但当前游戏记录未结束，先保存当前游戏记录")
-            # 使用临时结果保存当前游戏
-            temp_result = {
-                "reason": "new_game_started_before_end",
-                "saved_at": datetime.now().isoformat(),
-                "game_counter": self.game_counter
-            }
-            self.end_game(temp_result)
+            # 检查是否已经有result（说明已经收到gameResult通知）
+            if self.current_game.get("result") and isinstance(self.current_game.get("result"), dict):
+                if "victoryNum" in self.current_game.get("result", {}):
+                    # 已经有完整的result，可以保存
+                    logger.info(f"✓ 新游戏开始，当前游戏已有完整result，先保存当前游戏记录")
+                    self.end_game(self.current_game.get("result"))
+                else:
+                    # result存在但没有victoryNum，可能是临时result，等待gameResult
+                    logger.warning(f"⚠ 新游戏开始，但当前游戏记录result不完整，延迟保存等待gameResult")
+                    # 不保存，等待gameResult通知
+            else:
+                # 没有result，等待gameResult通知
+                logger.warning(f"⚠ 新游戏开始，但当前游戏记录未结束（无result），延迟保存等待gameResult")
+                # 不保存，等待gameResult通知
         
         self.game_start_time = datetime.now()
         
@@ -582,156 +447,6 @@ class GameRecorder:
         }
         
         self.current_game["actions"].append(action_record)
-
-    def record_play_notify(self, data: dict, *, version: str = "v7") -> None:
-        """记录平台 act/play notify（任意玩家出牌）。
-
-        契约对齐 **M3**（`m-dev` 的 `yf1_m3._handle_act_notification`），写入 `actions` 供回放。
-        """
-        if not self.current_game:
-            return
-
-        cur_pos = data.get("curPos", -1)
-        cur_action = data.get("curAction", [])
-        greater_pos = data.get("greaterPos", -1)
-        greater_action = data.get("greaterAction", [])
-
-        if cur_pos == -1 or not cur_action:
-            return
-
-        if isinstance(cur_action, str):
-            try:
-                cur_action = ast.literal_eval(cur_action)
-            except (ValueError, SyntaxError):
-                pass
-        if isinstance(greater_action, str):
-            try:
-                greater_action = ast.literal_eval(greater_action)
-            except (ValueError, SyntaxError):
-                pass
-
-        context = {
-            "publicInfo": data.get("publicInfo", []),
-            "selfRank": data.get("selfRank"),
-            "oppoRank": data.get("oppoRank"),
-            "curRank": data.get("curRank"),
-            "restCards": data.get("restCards", []),
-            "source": "notify",
-            "stage": data.get("stage", "play"),
-            "version": version,
-        }
-        self.record_action(cur_pos, cur_action, greater_pos, greater_action, context)
-
-    @staticmethod
-    def _normalize_tribute_back_card(card: Any) -> Optional[str]:
-        """贡/还单张 → 'S2' 大写（与 M3 yf1_m3 一致）。"""
-        if card is None:
-            return None
-        normalized = normalize_cards_to_string_list([card])
-        if not normalized:
-            return None
-        raw = normalized[0]
-        if isinstance(raw, str) and len(raw) >= 2:
-            return raw[0].upper() + raw[1:].upper()
-        return raw
-
-    def _already_recorded_tribute_received(self, card_str: str, tribute_pos: int) -> bool:
-        for md in self.current_game.get("my_decisions", []) if self.current_game else []:
-            action = md.get("action") or []
-            ctx = md.get("context") or {}
-            if len(action) >= 3 and str(action[0]).lower() == "tribute":
-                existing = action[2]
-                if (
-                    isinstance(existing, list)
-                    and card_str in existing
-                    and ctx.get("source") == "notify"
-                    and ctx.get("receive_tribute_pos") == self.player_id
-                    and ctx.get("tribute_pos") == tribute_pos
-                ):
-                    return True
-        return False
-
-    def _already_recorded_back(self, card_str: str) -> bool:
-        for md in self.current_game.get("my_decisions", []) if self.current_game else []:
-            action = md.get("action") or []
-            if len(action) >= 3 and str(action[0]).lower() == "back":
-                existing = action[2]
-                if isinstance(existing, list) and card_str in existing:
-                    return True
-        return False
-
-    def record_tribute_notify(self, data: dict, *, version: str = "v7") -> None:
-        """进贡 notify：收贡方写入 my_decisions（对齐 M3 yf1_m3._handle_tribute_notification）。"""
-        if not self.current_game:
-            return
-        for item in data.get("result") or []:
-            if not isinstance(item, (list, tuple)) or len(item) < 3:
-                continue
-            tribute_pos, receive_pos, card = item[0], item[1], item[2]
-            try:
-                tribute_pos_i = int(tribute_pos)
-                receive_pos_i = int(receive_pos)
-            except (TypeError, ValueError):
-                continue
-            card_str = self._normalize_tribute_back_card(card)
-            if receive_pos_i != self.player_id or tribute_pos_i == self.player_id or not card_str:
-                continue
-            if self._already_recorded_tribute_received(card_str, tribute_pos_i):
-                continue
-            self.record_decision(
-                0,
-                ["tribute", "tribute", [card_str]],
-                context={
-                    "myPos": self.player_id,
-                    "curPos": -1,
-                    "greaterPos": -1,
-                    "actionList_size": 0,
-                    "selfRank": data.get("selfRank"),
-                    "oppoRank": data.get("oppoRank"),
-                    "curRank": data.get("curRank"),
-                    "version": version,
-                    "source": "notify",
-                    "stage": "tribute",
-                    "tribute_pos": tribute_pos_i,
-                    "receive_tribute_pos": receive_pos_i,
-                },
-            )
-
-    def record_back_notify(self, data: dict, *, version: str = "v7") -> None:
-        """还贡 notify：对手还给我的牌写入 my_decisions（对齐 M3 yf1_m3._handle_back_notification）。"""
-        if not self.current_game:
-            return
-        for item in data.get("result") or []:
-            if not isinstance(item, (list, tuple)) or len(item) < 3:
-                continue
-            back_pos, receive_pos, card = item[0], item[1], item[2]
-            try:
-                receive_pos_i = int(receive_pos)
-            except (TypeError, ValueError):
-                continue
-            card_str = self._normalize_tribute_back_card(card)
-            if receive_pos_i != self.player_id or not card_str:
-                continue
-            if self._already_recorded_back(card_str):
-                continue
-            self.record_decision(
-                0,
-                ["back", "back", [card_str]],
-                context={
-                    "myPos": self.player_id,
-                    "curPos": -1,
-                    "greaterPos": -1,
-                    "actionList_size": 0,
-                    "selfRank": data.get("selfRank"),
-                    "oppoRank": data.get("oppoRank"),
-                    "curRank": data.get("curRank"),
-                    "version": version,
-                    "source": "notify",
-                    "stage": "back",
-                    "back_pos": back_pos,
-                    "receive_back_pos": receive_pos_i,
-                },
-            )
     
     def _normalize_action(self, cur_action: List) -> List:
         """
@@ -987,9 +702,19 @@ class GameRecorder:
             logger.info(f"✓ 游戏记录已保存: {filepath}")
             print(f"游戏记录已保存: {filepath}")
             
-            # 重置
-            self.current_game = None
-            self.game_start_time = None
+            # 重置（只有在result包含victoryNum时才重置，否则保留current_game等待gameResult）
+            # 修复：如果result不包含victoryNum，不重置current_game，等待gameResult通知
+            if result and isinstance(result, dict) and "victoryNum" in result:
+                # 有完整的victoryNum，可以重置
+                self.current_game = None
+                self.game_start_time = None
+            elif result and isinstance(result, dict) and result.get("reason") == "new_game_started_before_end":
+                # 临时保存的情况，不重置，等待gameResult
+                logger.info("保留current_game，等待gameResult通知以更新result")
+            else:
+                # 其他情况，正常重置
+                self.current_game = None
+                self.game_start_time = None
             
             return filepath
             
@@ -997,35 +722,7 @@ class GameRecorder:
             logger.error(f"✗ 保存游戏记录失败: {e}", exc_info=True)
             print(f"✗ 保存游戏记录失败: {e}")
             return None
-    
-    def backfill_victory_num(self, victory_num: List, max_files: int = 50) -> int:
-        """将 victoryNum 补写入近期缺少该字段的本玩家 game_records。"""
-        if not victory_num or len(victory_num) < 4:
-            return 0
-        pattern = f"*{self.player_name}*.json"
-        files = sorted(
-            self.record_dir.glob(pattern),
-            key=lambda f: f.stat().st_mtime,
-            reverse=True,
-        )
-        filled = 0
-        for filepath in files[:max_files]:
-            try:
-                with open(filepath, "r", encoding="utf-8") as f:
-                    record = json.load(f)
-                existing = record.get("result")
-                if not isinstance(existing, dict):
-                    existing = {}
-                if existing.get("victoryNum"):
-                    continue
-                existing["victoryNum"] = victory_num
-                record["result"] = existing
-                with open(filepath, "w", encoding="utf-8") as f:
-                    json.dump(record, f, ensure_ascii=False, indent=2)
-                filled += 1
-            except Exception:
-                continue
-        return filled
+            return None
     
     def _generate_filename(self, result: Dict) -> str:
         """
@@ -1038,6 +735,11 @@ class GameRecorder:
         
         # 从结果中推断对手信息
         victory_num = result.get("victoryNum", [0, 0, 0, 0])
+        # 某些 gameOver/中间通知里 victoryNum 可能为空或长度不足，避免索引越界
+        if not isinstance(victory_num, list):
+            victory_num = [0, 0, 0, 0]
+        if len(victory_num) < 4:
+            victory_num = (victory_num + [0, 0, 0, 0])[:4]
         
         # 判断对手位置（队友是(player_id+2)%4）
         teammate_pos = (int(self.player_id) + 2) % 4
@@ -1100,101 +802,7 @@ class GameRecorder:
         
         # 尝试合并同一局游戏的其他客户端记录
         game_data = GameRecorder._merge_same_game_records(game_data, filepath)
-        game_data = GameRecorder._hydrate_actions_for_replay(game_data, filepath)
         
-        return game_data
-
-    @staticmethod
-    def _decisions_to_actions(
-        my_decisions: List[Dict[str, Any]],
-        player_id: int,
-    ) -> List[Dict[str, Any]]:
-        """将 my_decisions 转为回放用的 actions（仅含本方出牌，缺对手步）。"""
-        actions: List[Dict[str, Any]] = []
-        for dec in my_decisions or []:
-            action = dec.get("action") or dec.get("selected_action")
-            if not action:
-                continue
-            ctx = dec.get("context") or {}
-            cur_pos = ctx.get("myPos", player_id)
-            if cur_pos is None:
-                cur_pos = player_id
-            actions.append({
-                "timestamp": dec.get("timestamp", ""),
-                "cur_pos": cur_pos,
-                "cur_action": action,
-                "greater_pos": ctx.get("greaterPos", -1),
-                "greater_action": [],
-                "context": {
-                    k: ctx[k]
-                    for k in ("curRank", "selfRank", "oppoRank", "stage", "source")
-                    if k in ctx
-                },
-            })
-        return actions
-
-    @staticmethod
-    def _merge_round_partner_decisions(
-        game_data: Dict[str, Any],
-        current_filepath: Path,
-    ) -> List[Dict[str, Any]]:
-        """合并同副（round+level）队友 JSON 的 my_decisions，补全 yf1+yf2 出牌。"""
-        m = RECORD_FILENAME_RE.match(current_filepath.name)
-        if not m:
-            return []
-        my_name, _opp, round_num, level = m.groups()
-        if not my_name.startswith("yf"):
-            return []
-        partner_prefix = "yf2" if my_name.startswith("yf1") else "yf1"
-        current_gid = str(game_data.get("game_id") or current_filepath.name.split()[0])
-        gid_prefix = current_gid[:14]
-        extra: List[Dict[str, Any]] = []
-        record_dir = current_filepath.parent
-        for record_file in record_dir.glob("*.json"):
-            if record_file == current_filepath:
-                continue
-            pm = RECORD_FILENAME_RE.match(record_file.name)
-            if not pm:
-                continue
-            pname, _popp, pround, plevel = pm.groups()
-            if pround != round_num or plevel != level:
-                continue
-            if not pname.startswith(partner_prefix):
-                continue
-            try:
-                with open(record_file, "r", encoding="utf-8") as f:
-                    other = json.load(f)
-                other_gid = str(other.get("game_id") or record_file.name.split()[0])
-                if other_gid[:14] != gid_prefix:
-                    continue
-                extra.extend(other.get("my_decisions") or [])
-            except Exception:
-                continue
-        return extra
-
-    @staticmethod
-    def _hydrate_actions_for_replay(
-        game_data: Dict[str, Any],
-        current_filepath: Path,
-    ) -> Dict[str, Any]:
-        """actions 为空时，从 my_decisions（含队友同副）合成回放步序。"""
-        actions = game_data.get("actions") or []
-        if actions:
-            return game_data
-
-        player_id = game_data.get("player_id", 0)
-        decisions = list(game_data.get("my_decisions") or [])
-        decisions.extend(
-            GameRecorder._merge_round_partner_decisions(game_data, current_filepath)
-        )
-        if not decisions:
-            return game_data
-
-        synthesized = GameRecorder._decisions_to_actions(decisions, player_id)
-        synthesized.sort(key=lambda a: a.get("timestamp", ""))
-        game_data["actions"] = synthesized
-        game_data["total_steps"] = len(synthesized)
-        game_data["_actions_synthesized"] = True
         return game_data
     
     @staticmethod
@@ -1416,91 +1024,95 @@ class GameRecorder:
         game_data["all_players_hands"] = played_cards_by_player
     
     @staticmethod
+    def parse_record_filename(filepath: Union[str, Path]) -> Optional[Dict[str, Any]]:
+        """Parse standard game record filename into match keys for same-round merge."""
+        name = Path(filepath).name
+        m = RECORD_FILENAME_RE.match(name)
+        if not m:
+            return None
+        return {
+            "timestamp": int(m.group(1)),
+            "player_name": m.group(2),
+            "opponent": m.group(3),
+            "round": m.group(4),
+            "level": m.group(5),
+        }
+
+    @staticmethod
+    def _normalize_all_hands_keys(all_hands: Dict) -> Dict[str, List]:
+        """Normalize all_players_hands keys to str and card lists to string format."""
+        normalized: Dict[str, List] = {}
+        if not all_hands:
+            return normalized
+        for pos, cards in all_hands.items():
+            pos_str = str(pos)
+            if isinstance(cards, list) and cards:
+                normalized[pos_str] = normalize_cards_to_string_list(cards)
+            elif pos_str not in normalized:
+                normalized[pos_str] = []
+        return normalized
+
+    @staticmethod
     def _merge_same_game_records(game_data: Dict[str, Any], current_filepath: Path) -> Dict[str, Any]:
         """
-        合并同一局游戏的其他客户端记录，获取所有玩家的手牌
-        
-        Args:
-            game_data: 当前游戏记录
-            current_filepath: 当前文件路径
-            
-        Returns:
-            合并后的游戏数据
+        合并同一局游戏的其他客户端记录，获取所有玩家的手牌。
+
+        匹配规则（GUA-025）：文件名中的 opponent + round + level 必须一致；
+        不再使用 start_time 5 秒窗口（batch 多局会在 5 秒内产生误合并）。
+        同 round 多份记录时，取 game_id 时间戳最接近的队友/对手文件。
         """
-        # 获取当前记录的start_time
-        start_time_str = game_data.get('start_time')
-        if not start_time_str:
+        parsed = GameRecorder.parse_record_filename(current_filepath)
+        if not parsed:
             return game_data
-        
-        try:
-            from datetime import datetime
-            current_start_time = datetime.fromisoformat(start_time_str)
-        except:
-            return game_data
-        
-        # 在同一个目录下查找其他记录文件
+
+        all_hands = GameRecorder._normalize_all_hands_keys(game_data.get("all_players_hands", {}))
+        my_pos = game_data.get("player_id")
+        if my_pos is not None:
+            my_pos_str = str(my_pos)
+            if my_pos_str not in all_hands or not all_hands[my_pos_str]:
+                initial = normalize_cards_to_string_list(game_data.get("initial_hand", []))
+                if initial:
+                    all_hands[my_pos_str] = initial
+
         record_dir = current_filepath.parent
-        all_hands = game_data.get('all_players_hands', {}).copy()
-        if not all_hands:
-            # 如果没有all_players_hands，从initial_hand创建
-            my_pos = game_data.get('player_id')
-            if my_pos is not None:
-                # 规范化my_pos为整数
-                if isinstance(my_pos, str):
-                    try:
-                        my_pos = int(my_pos)
-                    except:
-                        pass
-                all_hands[my_pos] = game_data.get('initial_hand', [])
-        
-        # 查找时间接近的其他记录文件（时间差在5秒内）
-        for record_file in record_dir.glob('*.json'):
+        candidates = []
+        for record_file in record_dir.glob("*.json"):
             if record_file == current_filepath:
                 continue
-            
-            try:
-                with open(record_file, 'r', encoding='utf-8') as f:
-                    other_data = json.load(f)
-                
-                other_start_time_str = other_data.get('start_time')
-                if not other_start_time_str:
-                    continue
-                
-                other_start_time = datetime.fromisoformat(other_start_time_str)
-                time_diff = abs((current_start_time - other_start_time).total_seconds())
-                
-                # 如果时间差在5秒内，认为是同一局游戏
-                if time_diff < 5:
-                    other_hands = other_data.get('all_players_hands', {})
-                    if not other_hands:
-                        # 从initial_hand创建
-                        other_pos = other_data.get('player_id')
-                        if other_pos is not None:
-                            # 规范化other_pos为整数
-                            if isinstance(other_pos, str):
-                                try:
-                                    other_pos = int(other_pos)
-                                except:
-                                    continue
-                            other_hands = {other_pos: other_data.get('initial_hand', [])}
-                    
-                    # 合并手牌信息
-                    for pos, hand_cards in other_hands.items():
-                        # 规范化pos为整数
-                        if isinstance(pos, str):
-                            try:
-                                pos = int(pos)
-                            except:
-                                continue
-                        # 如果该位置的手牌还没有记录，或者当前记录为空，则使用其他记录
-                        if pos not in all_hands or not all_hands.get(pos):
-                            all_hands[pos] = hand_cards
-            except Exception as e:
-                # 忽略读取失败的文件
+            other_parsed = GameRecorder.parse_record_filename(record_file)
+            if not other_parsed:
                 continue
-        
-        # 更新game_data
-        game_data['all_players_hands'] = all_hands
+            if (
+                other_parsed["opponent"] != parsed["opponent"]
+                or other_parsed["round"] != parsed["round"]
+                or other_parsed["level"] != parsed["level"]
+            ):
+                continue
+            ts_diff = abs(other_parsed["timestamp"] - parsed["timestamp"])
+            candidates.append((ts_diff, record_file))
+
+        candidates.sort(key=lambda item: item[0])
+
+        for _, record_file in candidates:
+            try:
+                with open(record_file, "r", encoding="utf-8") as f:
+                    other_data = json.load(f)
+            except Exception:
+                continue
+
+            other_hands = GameRecorder._normalize_all_hands_keys(other_data.get("all_players_hands", {}))
+            if not other_hands:
+                other_pos = other_data.get("player_id")
+                if other_pos is not None:
+                    initial = normalize_cards_to_string_list(other_data.get("initial_hand", []))
+                    if initial:
+                        other_hands[str(other_pos)] = initial
+
+            for pos_str, hand_cards in other_hands.items():
+                if hand_cards and (pos_str not in all_hands or not all_hands.get(pos_str)):
+                    all_hands[pos_str] = hand_cards
+
+        game_data["all_players_hands"] = all_hands
         return game_data
     
     @staticmethod
@@ -1614,7 +1226,7 @@ class GameRecorder:
         
         # my_pos 和 teammate_pos 已在上面定义，这里不需要重复定义
         
-        # 初始化玩家剩余牌数和牌型统计（每人 CARDS_PER_PLAYER，规则见 docs/rules/牌张与基本概念.md）
+        # 初始化玩家剩余牌数和牌型统计（每人 CARDS_PER_PLAYER，规则见 docs/archive/rules/牌张与基本概念.md）
         player_cards = {0: CARDS_PER_PLAYER, 1: CARDS_PER_PLAYER, 2: CARDS_PER_PLAYER, 3: CARDS_PER_PLAYER}
         # 使用所有玩家的手牌信息初始化剩余牌数
         for pos, hand_cards in all_hands.items():
@@ -1866,7 +1478,11 @@ class GameRecorder:
     def save_records(self):
         """保存游戏记录（兼容V7客户端）"""
         if self.current_game:
-            self.end_game({})  # 结束当前游戏并保存
+            # 修复：如果result为空，尝试保留current_game，等待gameResult通知
+            # 只有在明确需要保存时才调用end_game
+            if self.current_game.get("result") is not None:
+                self.end_game(self.current_game.get("result", {}))  # 结束当前游戏并保存
+            # 否则不保存，等待gameResult通知
         
         import logging
         logger = logging.getLogger(f"GameRecorder.{self.player_name}")

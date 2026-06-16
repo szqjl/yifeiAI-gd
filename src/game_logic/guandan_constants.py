@@ -3,8 +3,8 @@
 掼蛋规则常量（一）牌张与基本概念 + 胜负与目标
 
 规则依据：
-- 牌张：docs/rules/牌张与基本概念.md
-- 胜负与目标：docs/rules/胜负与目标.md（决策/策略/RL 须据此做目标对齐）
+- 牌张：docs/archive/rules/牌张与基本概念.md
+- 胜负与目标：docs/archive/rules/胜负与目标.md（决策/策略/RL 须据此做目标对齐）
 代码中涉及牌数、人数、默认手牌/剩余牌数、局目标时，应优先使用本模块常量。
 """
 
@@ -72,6 +72,7 @@ RANK_NAMES = {
 WINNING_RANKS = (RANK_FIRST, RANK_SECOND)
 
 # ---------- 概念说明（与规则文档对应，仅作注释） ----------
-# 一副牌：从抓牌开始到一方打完并决定胜负结束 → 代码中一局 game（start_game ~ end_game）
+# 一副牌（episode）：108 张发完 →（第二副起进贡/还贡或抗贡）→ 多圈出牌 → 四人完牌顺序确定 → 升级
+# 代码对应：game_recorder start_game ~ end_game / episodeOver（变量名 game 指一副，勿与「一局」混淆）
 # 一手牌：牌手一次打出的一组牌 → 代码中 actionList 的一个元素
-# 一圈牌：四人依次出牌直到无人出牌 → 代码中由 curAction、greater_pos 及 act 流程体现
+# 一圈牌：四人依次出牌直到连续三人过牌 → 代码中由 curAction、greater_pos 及 act 流程体现
