@@ -23,7 +23,7 @@ try:
 except ImportError:
     DEFAULT_REST_CARDS = 27
 
-from src.v.nn.features.static_features import extract_static_features, STATIC_STATE_DIM
+from src.v.nn.features.static_features import extract_static_features, STATIC_STATE_DIM, extract_state_belief, BELIEF_DIM
 from src.v.nn.features.dynamic_features import extract_dynamic_features, DYNAMIC_HIDDEN_DIM
 from src.v.nn.features.belief_state import extract_situation_vector, SITUATION_DIM
 from src.v.nn.guards import filter_action_list, validate_decision
@@ -189,18 +189,15 @@ class UltimateWinRateEngineV7:
     
     def _extract_features(self, game_state: Dict[str, Any], action_list: List) -> Optional[np.ndarray]:
         """
-        从游戏状态中提取特征（GUA-037a 静态 + GUA-037b 动态 LSTM + 局面信念）。
+        从游戏状态中提取特征（GUA-037a 静态 + GUA-037b 动态 LSTM）。
 
-        特征布局（512 维）：
-          -   0–123: state_牌态（extract_static_features, 124 维）
-          - 124–187: LSTM 动态编码（extract_dynamic_features, 64 维）
-          - 188–191: 局面信念分类器（extract_situation_vector, 4 维）
-          - 192–511: 零填充（待 GUA-038 模型重训后替换）
-          - 有效特征: 192 维（利用率 192/512 = 37.5%）
-
-        局面信念（套路一原型）：
-          - 4 维 soft 向量：[进攻型, 防守型, 观望型, 保对家型]
-          - 启发式规则分类，后续可替换为学习型分类器
+        GUA-037b 改造后（GUA-050 追加信念）：
+          - 前 124 维 = state_牌态（extract_static_features）
+          - 124-187 维 = LSTM 动态编码（extract_dynamic_features, 64 维）
+          - 188-195 维 = 局面信念向量（extract_state_belief, 8 维；GUA-050）
+          - 196-511 维 = 零填充（待 GUA-038 模型重训后替换）
+          - 总输出仍为 512 维（保持与现有 UltimateWinRateNet 架构兼容）
+          - 有效特征: 196 维（利用率 196/512 = 38.3%；GUA-050 增 8 维信念）
 
         Args:
             game_state: 游戏状态
@@ -229,15 +226,15 @@ class UltimateWinRateEngineV7:
             except Exception as dyn_e:
                 self.logger.debug(f"[GUA-037b] 动态特征提取失败(回退零填充): {dyn_e}")
 
-            # 套路一: 局面信念分类器（4 维）
+            # GUA-050: 8 维局面信念向量（放置在 dynamic 之后，188-195）
             try:
-                situation_vec = extract_situation_vector(game_state)
-                assert situation_vec.shape == (SITUATION_DIM,), \
-                    f"局面向量维度异常: {situation_vec.shape}"
-                belief_offset = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM
-                features[belief_offset:belief_offset + SITUATION_DIM] = situation_vec
+                belief = extract_state_belief(game_state)
+                assert len(belief) == BELIEF_DIM, \
+                    f"信念向量维度异常: {len(belief)}"
+                belief_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM  # 124 + 64 = 188
+                features[belief_start:belief_start + BELIEF_DIM] = belief
             except Exception as bel_e:
-                self.logger.debug(f"[套路一] 局面信念提取失败(回退零填充): {bel_e}")
+                self.logger.debug(f"[GUA-050] 信念提取失败(回退零填充): {bel_e}")
 
             return features
 

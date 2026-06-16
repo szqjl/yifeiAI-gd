@@ -15,7 +15,9 @@ server_exe: "D:/guandanscore/guandan-offline-serve/windows/guandan_offline_v1006
 model_dir: "%REPO_ROOT%/models"
 
 # 默认模型文件名（也可用环境变量 V7_MODEL_PATH 指向完整路径）
-model_file: "bc_model_ultimate_win_rate.pth"
+# GUA-038: 用 188 维特征重训的 BC 模型（val_acc=88.44%），替代旧 124 维模型
+# 回退: bc_model_ultimate_win_rate.pth (GUA-037a 124维, 84.3%)
+model_file: "v-nn/bc_model_v2.pth"
 
 # 默认服务器参数（传给 exe 的 argv；须配合 batch_executor 使用 3 的倍数）
 server_args: "12"

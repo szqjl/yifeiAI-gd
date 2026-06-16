@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-GUA-037a 静态特征工程测试
+GUA-037a 静态特征工程测试 + GUA-050 局面信念向量测试
 
-覆盖 8+ 测试用例：
+覆盖 10+ 测试用例：
   1. test_dimension_124        — 输出维度恒定 124
   2. test_empty_hand           — 空手牌（全 0）
   3. test_27_card_hand         — 满手 27 张（108 维正确编码）
@@ -13,6 +13,13 @@ GUA-037a 静态特征工程测试
   8. test_rank_suit_dist       — 级牌花色分布
   9. test_joker_detection      — Joker 检测
   10. test_normalized_range    — 所有归一化值在 [0, 1] 内
+  GUA-050:
+  11. test_belief_dimension_8           — 信念向量维度恒定 8
+  12. test_belief_value_range           — 信念所有值在 [0, 1] 内
+  13. test_belief_trump_ready           — 有级牌/王时 trump_ready=1
+  14. test_belief_bomb_count            — bomb_count 与 curBombNum 一致
+  15. test_belief_boundary             — 边界条件（空手牌/全满）
+  16. test_engine_belief_188_195       — engine 输出 188-195 与 belief 一致
 """
 
 import numpy as np
@@ -21,6 +28,8 @@ import pytest
 from src.v.nn.features.static_features import (
     extract_static_features,
     STATIC_STATE_DIM,
+    extract_state_belief,
+    BELIEF_DIM,
     encode_hand_cards_108,
     CARD_TYPES,
     SUITS,
@@ -333,3 +342,105 @@ class TestEngineFeatureExtraction:
         feat = engine._extract_features(gs, [["S2"]])
         static = extract_static_features(gs)
         assert np.allclose(feat[:124], static), "前 124 维应与静态特征一致"
+
+    def test_engine_belief_188_195(self):
+        """engine 输出 188-195 应与 extract_state_belief 一致。"""
+        from src.decision.ultimate_win_rate_engine_v7 import UltimateWinRateEngineV7
+        engine = UltimateWinRateEngineV7(player_id=0)
+        gs = _make_game_state(
+            handCards=["S2", "BJ", "H5", "H5", "D8", "D8", "D8", "D8"],
+            curRank="5", selfRank="5", oppoRank="3", curBombNum=2,
+            publicInfo={"0": {"rest": 10}, "1": {"rest": 15}, "2": {"rest": 8}, "3": {"rest": 12}},
+        )
+        feat = engine._extract_features(gs, [["S2"]])
+        belief = np.array(extract_state_belief(gs), dtype=np.float32)
+        assert feat.shape == (512,), "engine 输出必须 512 维"
+        assert np.allclose(feat[188:196], belief), "engine 188-195 应与 belief 一致"
+
+
+# ── GUA-050: 局面信念向量测试 ──
+
+class TestBeliefDimension:
+    def test_belief_dimension_8(self):
+        """信念向量维度必须为 8。"""
+        gs = _make_game_state()
+        belief = extract_state_belief(gs)
+        assert len(belief) == BELIEF_DIM, f"期望 {BELIEF_DIM} 维，实际 {len(belief)}"
+
+    def test_belief_always_fixed(self):
+        """不同输入均应输出 8 维。"""
+        cases = [
+            _make_game_state(),
+            _make_game_state(handCards=["S2"] * 27),
+            _make_game_state(handCards=["BJ", "RJ"]),
+            _make_game_state(handCards=[], curRank="A", selfRank="A", oppoRank="2"),
+            _make_game_state(curBombNum=8),
+        ]
+        for gs in cases:
+            belief = extract_state_belief(gs)
+            assert len(belief) == BELIEF_DIM, f"期望 {BELIEF_DIM} 维，实际 {len(belief)}"
+
+
+class TestBeliefValues:
+    def test_belief_value_range(self):
+        """信念所有维度值必须在 [0, 1] 内。"""
+        gs = _make_game_state(
+            handCards=["S2", "BJ", "H5", "H5", "D8", "D8", "D8", "D8"],
+            curRank="5", selfRank="5", oppoRank="3",
+            publicInfo={"0": {"rest": 10}, "2": {"rest": 8}},
+        )
+        belief = extract_state_belief(gs)
+        for i, v in enumerate(belief):
+            assert 0.0 <= v <= 1.0, f"belief[{i}]={v} 不在 [0,1] 内"
+
+    def test_belief_trump_ready(self):
+        """有级牌或王时 trump_ready=1，否则=0。"""
+        # 有 BJ → trump_ready=1
+        gs1 = _make_game_state(handCards=["BJ", "S3"])
+        assert extract_state_belief(gs1)[4] == 1.0, "有 BJ 应 trump_ready=1"
+
+        # 有 H+curRank → trump_ready=1
+        gs2 = _make_game_state(handCards=["H5"], curRank="5")
+        assert extract_state_belief(gs2)[4] == 1.0, "有 H5+curRank=5 应 trump_ready=1"
+
+        # 无级牌/王 → trump_ready=0
+        gs3 = _make_game_state(handCards=["S3", "D5"])
+        assert extract_state_belief(gs3)[4] == 0.0, "无级牌/王应 trump_ready=0"
+
+    def test_belief_bomb_count(self):
+        """bomb_count 应与 curBombNum 归一化一致。"""
+        gs1 = _make_game_state(curBombNum=3)
+        assert abs(extract_state_belief(gs1)[5] - 0.3) < 1e-6, "3/10=0.3"
+
+        gs2 = _make_game_state(curBombNum=0)
+        assert extract_state_belief(gs2)[5] == 0.0, "0 炸弹应 0"
+
+        gs3 = _make_game_state(curBombNum=12)
+        assert extract_state_belief(gs3)[5] == 1.0, "炸弹超上限应 clamp 到 1"
+
+    def test_belief_level_progress(self):
+        """级牌进度应随 selfRank-oppoRank 变化。"""
+        # 领先
+        gs1 = _make_game_state(selfRank="A", oppoRank="2")
+        assert extract_state_belief(gs1)[3] >= 0.7, "A vs 2 应有较高进度"
+
+        # 落后
+        gs2 = _make_game_state(selfRank="2", oppoRank="A")
+        assert extract_state_belief(gs2)[3] <= 0.3, "2 vs A 应有较低进度"
+
+        # 持平
+        gs3 = _make_game_state(selfRank="5", oppoRank="5")
+        assert 0.4 <= extract_state_belief(gs3)[3] <= 0.6, "同 rank 应在 0.5 附近"
+
+    def test_belief_boundary_empty_hand(self):
+        """空手牌边界不崩溃。"""
+        gs = _make_game_state(handCards=[])
+        belief = extract_state_belief(gs)
+        assert len(belief) == BELIEF_DIM
+        assert all(0.0 <= v <= 1.0 for v in belief)
+
+    def test_belief_boundary_no_public_info(self):
+        """无 publicInfo 不崩溃。"""
+        gs = _make_game_state(handCards=["S2"])
+        belief = extract_state_belief(gs)
+        assert len(belief) == BELIEF_DIM

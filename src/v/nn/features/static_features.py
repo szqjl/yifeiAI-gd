@@ -20,6 +20,9 @@ V7 静态特征工程 — state_牌态 124 维
   123:     handCards 计数 1 维（归一化至 0~27 张）
 
 注：actionList 牌型 one-hot 15 维不计入本模块，后移到 GUA-037b 拼接层。
+
+GUA-050（v7-re-eval-2026-06.md §2.2）：局面信念向量 8 维，在引擎 512 中放置于 dynamic 之后（188–195）。
+STATIC_STATE_DIM 保持 124（不扩）；belief 由 extract_state_belief() 独立返回，引擎拼接。
 """
 
 import numpy as np
@@ -27,6 +30,7 @@ from typing import Dict, List, Any
 
 # ── 常量 ──────────────────────────────────────────────
 STATIC_STATE_DIM = 124
+BELIEF_DIM = 8          # GUA-050: 局面信念向量
 
 # 54 种牌型定义（52 花色牌 + 2 王）
 SUITS = ["S", "H", "D", "C"]
@@ -116,6 +120,94 @@ def _detect_game_phase(game_state: Dict[str, Any]) -> str:
     if not hand_cards and cur_pos < 0:
         return "end"
     return "play"
+
+
+# ── GUA-050: 局面信念向量 8 维 ───────────────────────
+
+def extract_state_belief(game_state: Dict[str, Any]) -> List[float]:
+    """
+    从游戏状态提取 8 维局面信念向量（GUA-050）。
+
+    Belief 维度（v7-re-eval-2026-06.md §2.2）：
+      0: my_strength         — 自己牌力 0~1（基于手牌炸弹/王/级牌估算）
+      1: partner_strength    — 对家牌力 0~1（基于对家剩牌推断）
+      2: opponent_pressure   — 对手压迫程度 0~1（对手剩牌少/我方劣势）
+      3: level_progress      — 级牌进度（selfRank - oppoRank，归一化至 -5~5→0~1）
+      4: trump_ready         — 是否有级牌/王/炸弹（0/1）
+      5: bomb_count          — 我方剩余炸弹数（归一化至 0~1）
+      6: opponent_bomb_risk  — 推断对手有炸弹的概率（0~1）
+      7: last_card_meaning   — 上家出牌信号（0=无关/1=压力/0.5=常规）
+
+    Args:
+        game_state: 游戏状态字典
+
+    Returns:
+        8 维 float list
+    """
+    hand_cards: List[str] = game_state.get("handCards", [])
+    cur_rank = game_state.get("curRank", "2")
+    self_rank = game_state.get("selfRank", "2")
+    oppo_rank = game_state.get("oppoRank", "2")
+    cur_bomb_num = game_state.get("curBombNum", 0)
+    public_info = game_state.get("publicInfo", {})
+    my_pos = game_state.get("myPos", 0)
+
+    # 0: my_strength — 炸弹/王/级牌密度
+    num_bombs = sum(1 for card in hand_cards if hand_cards.count(card) >= 4)
+    has_joker_flag = any(c in JOKERS for c in hand_cards)
+    has_trump = has_heart_cur_rank(hand_cards, cur_rank)
+    my_strength = min((num_bombs * 0.2 + has_joker_flag * 0.3 + has_trump * 0.1), 1.0)
+
+    # 1: partner_strength — 对家剩牌越少越强
+    partner_pos = (my_pos + 2) % 4
+    partner_rest = public_info.get(str(partner_pos), {}).get("rest", 27)
+    partner_strength = 1.0 - min(partner_rest / 27.0, 1.0)
+
+    # 2: opponent_pressure — 对手剩牌少/我方落后
+    oppo1_rest = public_info.get(str((my_pos + 1) % 4), {}).get("rest", 27)
+    oppo2_rest = public_info.get(str((my_pos + 3) % 4), {}).get("rest", 27)
+    min_oppo_rest = min(oppo1_rest, oppo2_rest)
+    self_rank_val = RANK_VALUE_MAP.get(self_rank, 0)
+    oppo_rank_val = RANK_VALUE_MAP.get(oppo_rank, 0)
+    rank_gap = self_rank_val - oppo_rank_val
+    opponent_pressure = min((1.0 - min_oppo_rest / 27.0) * 0.6 + max(-rank_gap / 13.0, 0) * 0.4, 1.0)
+
+    # 3: level_progress — 级牌进度（-5~5 → 0~1）
+    norm_gap = (self_rank_val - oppo_rank_val + 5) / 10.0
+    level_progress = max(0.0, min(norm_gap, 1.0))
+
+    # 4: trump_ready — 有级牌或王
+    trump_ready = 1.0 if (has_trump > 0 or has_joker_flag) else 0.0
+
+    # 5: bomb_count — 我方炸弹数归一化
+    bomb_count = min(cur_bomb_num / 10.0, 1.0)
+
+    # 6: opponent_bomb_risk — 对手未出炸弹+进度推测
+    bombs_played = public_info.get("bombsPlayed", 0)
+    total_bombs = 8  # 假设全桌最多 8 炸
+    remaining_bombs = max(total_bombs - bombs_played - cur_bomb_num, 0)
+    game_progress = 1.0 - min(partner_rest / 27.0, 1.0)
+    opponent_bomb_risk = min(remaining_bombs / total_bombs * game_progress * 1.5, 1.0)
+
+    # 7: last_card_meaning — 上家出牌信号
+    last_action = game_state.get("curAction", [])
+    if not last_action or last_action == ["PASS"]:
+        last_card_meaning = 0.0
+    else:
+        action_type = last_action[0] if isinstance(last_action, list) else "UNKNOWN"
+        strong_types = {"Bomb", "Rocket", "Straight", "ThreePair", "TwoTrips"}
+        last_card_meaning = 0.5 if action_type in strong_types else 0.25
+
+    return [
+        my_strength,
+        partner_strength,
+        opponent_pressure,
+        level_progress,
+        trump_ready,
+        bomb_count,
+        opponent_bomb_risk,
+        last_card_meaning,
+    ]
 
 
 # ── 主入口 ────────────────────────────────────────────
