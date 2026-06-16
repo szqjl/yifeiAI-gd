@@ -50,14 +50,14 @@ class UltimateWinRateEngineV7:
         self.model = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # 加载模型
-        self._load_model()
-        
-        # 决策统计
+        # 决策统计（必须在 _load_model 前初始化，因其引用这些属性）
         self.decision_count = 0
         self.model_decisions = 0
         self.fallback_decisions = 0
         self.model_load_failures = 0  # GUA-037a: 模型加载失败计数器
+        
+        # 加载模型
+        self._load_model()
 
         assert_v_integration_gate(self, label="UltimateWinRateEngineV7")
         

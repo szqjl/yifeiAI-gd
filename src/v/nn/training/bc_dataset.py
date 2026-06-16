@@ -25,13 +25,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from src.v.nn.features.static_features import extract_static_features, STATIC_STATE_DIM
+from src.v.nn.features.static_features import extract_static_features, STATIC_STATE_DIM, extract_state_belief, BELIEF_DIM
 from src.v.nn.features.dynamic_features import extract_dynamic_features, DYNAMIC_HIDDEN_DIM
 
 logger = logging.getLogger("bc_dataset")
 
 TARGET_FEATURE_DIM = 512
-EFFECTIVE_FEATURE_DIM = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM  # 124 + 64 = 188
+EFFECTIVE_FEATURE_DIM = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM  # 124 + 64 + 8 = 196
 RECORD_DIR = Path("game_records")
 
 # ── 工具函数 ──────────────────────────────────────────
@@ -63,10 +63,11 @@ def _filter_by_victory_num(game_data: Dict[str, Any]) -> bool:
 def _reconstruct_features_from_full_state(
     full_state: Dict[str, Any],
 ) -> Optional[np.ndarray]:
-    """从 full_state 重建 512 维特征向量（GUA-037a 静态 + GUA-037b 动态 LSTM）。
+    """从 full_state 重建 512 维特征向量（GUA-037a 静态 + GUA-037b 动态 LSTM + GUA-050 信念）。
 
     full_state 应包含 handCards, actionList, curRank, myPos, curPos, greaterPos, stage 等。
-    前 124 维 = extract_static_features，124-187 维 = extract_dynamic_features。
+    前 124 维 = extract_static_features，124-187 维 = extract_dynamic_features，
+    188-195 维 = extract_state_belief (GUA-050)。
     """
     try:
         static_features = extract_static_features(full_state)
@@ -80,6 +81,14 @@ def _reconstruct_features_from_full_state(
         except Exception:
             pass  # 动态特征失败不影响静态特征
 
+        # GUA-050: 叠加局面信念向量（188-195 维）
+        try:
+            belief = extract_state_belief(full_state)
+            belief_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM
+            features[belief_start:belief_start + BELIEF_DIM] = belief
+        except Exception:
+            pass  # 信念提取失败不影响核心特征
+
         return features
     except Exception as e:
         logger.debug("full_state 特征重建失败: %s", e)
@@ -90,7 +99,7 @@ def _reconstruct_features_from_my_decision(
     my_decision: Dict[str, Any],
     game_info: Optional[Dict[str, Any]] = None,
 ) -> Optional[np.ndarray]:
-    """从 my_decisions 条目 + game_info 尽力重建特征（GUA-037a 静态 + GUA-037b 动态）。
+    """从 my_decisions 条目 + game_info 尽力重建特征（GUA-037a 静态 + GUA-037b 动态 + GUA-050 信念）。
 
     这是 M3 旧格式的 fallback，缺少 handCards 和完整 actionList。
     构造一个最小可用状态用于 extract_static_features（大部分维为 0）。
@@ -127,6 +136,14 @@ def _reconstruct_features_from_my_decision(
         try:
             dynamic_features = extract_dynamic_features(fake_state, static_features)
             features[STATIC_STATE_DIM:STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM] = dynamic_features
+        except Exception:
+            pass
+
+        # GUA-050: 叠加局面信念向量（188-195 维）
+        try:
+            belief = extract_state_belief(fake_state)
+            belief_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM
+            features[belief_start:belief_start + BELIEF_DIM] = belief
         except Exception:
             pass
 
