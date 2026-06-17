@@ -131,6 +131,144 @@ weight 由 RL 或模仿学习得到
 
 ---
 
+## 套路七：模块化分阶段训练（V7 新方向）
+
+### 核心思路
+
+**像人类一样学习**：先单训各个模块，训练达标一个，再训练新的模块，最后整合。
+
+> 端到端训练（V2-V7 失败路线）：手牌特征 → 模型 → 动作（跳过了组牌、记牌、策略）
+> 模块化训练（新路线）：组牌 → 记牌 → 策略 → 动作（每个模块独立验证）
+
+### 为什么端到端训练失败？
+
+| 问题 | V2-V7 端到端训练 | 模块化训练 |
+|------|-----------------|-----------|
+| **任务复杂度** | 同时学习组牌+记牌+策略+动作 | 每个模块只学一个子任务 |
+| **可诊断性** | val_acc=35% 不知道哪里错 | 哪个模块差就调哪个 |
+| **表示学习** | 缺少中间表示（局面信念） | 组牌/记牌/策略就是中间表示 |
+| **数据效率** | 需要大量数据才能收敛 | 每个模块用针对性数据 |
+| **人类对照** | 不像人类学习方式 | 完全符合人类学习路径 |
+
+### 训练路线图
+
+```
+Week 1: 组牌模块（监督学习）
+├─ 输入：手牌 one-hot (108 维)
+├─ 输出：炸弹数、手数、牌力分数、角色定位
+├─ 训练数据：M3 规则引擎生成（366 局胜局）
+├─ 目标：
+│   ├─ bomb_count 准确率 > 95%
+│   ├─ hand_count 准确率 > 90%
+│   ├─ power_score MAE < 1.0
+│   └─ role 准确率 > 85%
+└─ 验证：独立测试集，不达标不进入下一步
+
+Week 2: 记牌模块（序列学习）
+├─ 输入：出牌历史序列
+├─ 输出：各家剩余牌分布概率 (4 × 54 维)
+├─ 训练数据：完整对局记录（game_records）
+├─ 目标：推断准确率 > 80%
+└─ 验证：对比真实剩余牌（restCards）
+
+Week 3: 策略模块（分类学习）
+├─ 输入：组牌结果 + 记牌结果
+├─ 输出：进攻/防守/观望/保对家 (4 分类)
+├─ 训练数据：M3 胜局策略标注
+├─ 目标：分类准确率 > 85%
+└─ 验证：M3 策略一致性检查
+
+Week 4: 动作模块（条件学习）
+├─ 输入：手牌 + 组牌 + 记牌 + 策略
+├─ 输出：动作概率分布 (2048 维)
+├─ 训练数据：M3 胜局动作
+├─ 目标：动作匹配率 > 70%
+└─ 验证：批跑 12 局 vs lalala，胜率 > 30%
+
+Week 5: 整合与微调（可选）
+├─ 冻结组牌/记牌/策略模块
+├─ 端到端微调动作模块
+├─ 批跑 36 局 vs lalala
+└─ 目标：V7 胜率 > 40%
+```
+
+### 技术实现
+
+```python
+# Step 1: 组牌模块
+class CardGroupingNetwork(nn.Module):
+    """手牌 → 组牌结果"""
+    def forward(self, hand_cards):
+        # 输入：手牌 one-hot (108 维)
+        # 输出：bomb_count, hand_count, power_score, role
+        x = self.encoder(hand_cards)
+        return self.bomb_head(x), self.hand_head(x), \
+               self.power_head(x), self.role_head(x)
+
+# Step 2: 记牌模块
+class CardCountingNetwork(nn.Module):
+    """出牌历史 → 各家剩余牌分布"""
+    def forward(self, history_sequence):
+        # 输入：出牌历史序列
+        # 输出：4 × 54 维概率分布
+        x = self.lstm(history_sequence)
+        return self.decoder(x)
+
+# Step 3: 策略模块
+class StrategyNetwork(nn.Module):
+    """组牌+记牌 → 策略分类"""
+    def forward(self, grouping, counting):
+        # 输入：组牌结果 + 记牌结果
+        # 输出：进攻/防守/观望/保对家
+        x = torch.cat([grouping, counting], dim=1)
+        return self.classifier(x)
+
+# Step 4: 动作模块
+class ActionNetwork(nn.Module):
+    """手牌+组牌+记牌+策略 → 动作概率"""
+    def forward(self, hand_cards, grouping, counting, strategy):
+        # 输入：所有模块输出
+        # 输出：动作概率分布 (2048 维)
+        x = torch.cat([hand_cards, grouping, counting, strategy], dim=1)
+        return self.decoder(x)
+
+# 整合
+class V7ModularEngine(nn.Module):
+    def __init__(self):
+        self.card_grouping = CardGroupingNetwork()
+        self.card_counting = CardCountingNetwork()
+        self.strategy = StrategyNetwork()
+        self.action = ActionNetwork()
+    
+    def forward(self, message):
+        # 串联所有模块
+        grouping = self.card_grouping(message.handCards)
+        counting = self.card_counting(message.history)
+        strategy = self.strategy(grouping, counting)
+        return self.action(message.handCards, grouping, counting, strategy)
+```
+
+### 关键优势
+
+1. ✅ **每个模块可独立验证**（不达标就不进入下一步）
+2. ✅ **问题可定位**（组牌差就调组牌，动作差就调动作）
+3. ✅ **数据可复用**（组牌模块数据可用于其他任务）
+4. ✅ **可解释性强**（能看到每个模块的输出）
+5. ✅ **符合人类学习方式**（先学基本功，再学综合）
+6. ✅ **与套路一完美契合**（组牌/记牌=局面信念建模）
+
+### 与现有套路的关系
+
+| 套路 | 对应模块 | 关系 |
+|------|---------|------|
+| 套路一：局面信念建模 | 组牌+记牌+策略 | 组牌/记牌输出就是局面信念 |
+| 套路二：多模块评估 | 组牌+记牌+策略+动作 | 每个模块就是一个 specialized 评估 |
+| 套路三：Memory | 记牌模块 | LSTM/Transformer 建模历史 |
+| 套路六：模仿学习 | 动作模块 | 用 M3 胜局做 BC 训练 |
+| **套路七：模块化训练** | **全部** | **训练方法论，贯穿所有套路** |
+
+---
+
 ## 套路六：从模仿学习起步
 
 直接 RL 的问题：探索空间太大，没有有效引导。
