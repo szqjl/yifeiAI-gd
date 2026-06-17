@@ -33,6 +33,7 @@
 | **合计 06-05~06-06** | — | — | — | **9** | **1/9（11.1%）** | ~153 | — |
 | 2026-06-17 | GUA-038 | BC v2 重训（录牌→特征→训练→模型部署，val_acc=82.57%） | `python scripts\launchers\v7\run_v7_vs_lalala_games.py --games 3` | 3 | 0/3（0%） | 51 | V7 队达 A 级 **14 次**（共 51 副），lalala 3-0 横扫 |
 | 2026-06-17 | GUA-038 | BC v2（M3 胜局重训 action_dim 512→2048，val_acc=35.85%）+ 净盘 12 局 | `python scripts\launchers\v7\run_v7_vs_lalala_games.py --games 12` | 12 | **0/12（0%）** | **204** | 副级：V7 赢 24/204（11.8%），V7 达 A **32 副**；lalala 全 4 批连续 vn=[0,3,0,3]。对比前次 3 局（8/58=13.8%）：副胜率基本持平（11.8%），V7 竞争力无显著改善。累计 **1/21（4.8%）**。日志：`logs\v7_vs_lalala_20260617_130258.log` |
+| 2026-06-17 | GUA-038 | BC v2（M3胜局366局重训，val_acc=35.19%，bc_model_v2.pth）+ 12局批跑 | `python scripts\launchers\v7\run_v7_vs_lalala_games.py --games 12` | 12 | **0/12（0%）** | **244** | 副级：V7 赢 0/236（0%），lalala 赢 236/236（100%）；4批全部 vn=[0,3,0,3]。使用M3规则引擎胜局训练，模型仅训练1个epoch即early stopping。V7实战表现极差，**需增加训练轮次或调整训练策略**。累计 **1/33（3.0%）**。日志：`logs\v7_vs_lalala_20260617_145158.log` |
 | | | | | | | | |
 
 ---

@@ -24,7 +24,7 @@ from collections import defaultdict
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-GAME_RECORDS = REPO / "game_records"
+GAME_RECORDS = REPO / "game_records_v7"  # V7批跑数据目录
 
 # 级牌点值
 RANK_VAL = {"2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8,

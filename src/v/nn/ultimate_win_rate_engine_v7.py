@@ -51,8 +51,8 @@ class UltimateWinRateEngineV7:
         self.player_id = player_id
         self.logger = logging.getLogger(f"UltimateWinRateEngineV7.{player_id}")
 
-        # 模型路径
-        self.model_path = Path(__file__).parent.parent.parent / "models" / "bc_model_ultimate_win_rate.pth"
+        # 模型路径（使用M3胜局训练的新模型）
+        self.model_path = Path(__file__).parent.parent.parent / "models" / "v-nn" / "bc_model_v2.pth"
 
         # 初始化模型
         self.model = None

@@ -27,8 +27,8 @@ def main():
     logger.info("=" * 60)
 
     samples = load_samples(
-        record_dir="game_records_v7",
-        require_victory_filter=False,  # V7败局数据 + 新特征（static+dynamic+belief+MT=220维）
+        record_dir="game_records",  # M3胜局数据（100%胜率，366局）
+        require_victory_filter=False,  # M3胜局数据 + 新特征（static+dynamic+belief+MT=220维）
     )
     logger.info("Loaded %d samples", len(samples))
     if len(samples) < 100:
