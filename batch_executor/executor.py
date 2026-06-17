@@ -857,6 +857,9 @@ class BatchExecutor:
                 
                 # 等待所有客户端处理首条游戏消息（game_ready）
                 self.logger.info("等待所有客户端处理首条游戏消息...")
+                expected_client_ids = [
+                    client_id_from_script(s) for s in self.client_scripts
+                ]
                 game_ready = wait_for_all_clients_game_ready(
                     expected_client_ids,
                     timeout=60,
