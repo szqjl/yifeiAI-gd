@@ -1,6 +1,6 @@
 # 掼蛋 AI 迭代大脑（项目真源）
 
-> **新开 Agent？** 复制 **[`AGENT_FIRST_MESSAGE.md`](AGENT_FIRST_MESSAGE.md)** 里那句话，粘贴给新 Agent 作为第一句。  
+> **新开 Agent？** 复制 **[`AGENT_BOOTSTRAP.md`](AGENT_BOOTSTRAP.md)** §1 里那句话，粘贴给新 Agent 作为第一句。  
 > **提交 / 推送？** 复制 **[`AGENT_PUSH_CHECKLIST.md`](AGENT_PUSH_CHECKLIST.md)** 里默认第一句。
 
 本目录与代码同仓，用于**可追溯**的缺陷、版本修复、评测与迭代焦点。通用知识库见 `docs/knowledge/`；**解读离线平台 `victoryNum` / 批跑台账**见 [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md)；此处只记**本仓库版本—问题—验收**相关事实。
@@ -32,11 +32,11 @@
 
 ## Agent 批跑数据入门（5 分钟）
 
-新 Agent / 换机接续时，**解读批跑胜率、PASS、`game_records` 落盘**须先统一「局 vs 副」口径，再写 `ITERATIONS` / `EVAL`。Cursor 已自动加载 [`.cursor/rules/guandan-context.mdc`](../../.cursor/rules/guandan-context.mdc)（含批跑对照表与 `victoryNum` 自检）；以下为刻意阅读的推荐顺序。
+新 Agent / 换机接续时，**解读批跑胜率、PASS、`game_records` 落盘**须先统一「局 vs 副」口径，再写 `ITERATIONS` / `EVAL`。Agent 已自动加载 `AGENTS.md`（含批跑对照表与 `victoryNum` 自检）；以下为刻意阅读的推荐顺序。
 
 ### 阅读顺序
 
-1. **[`guandan-context.mdc`](../../.cursor/rules/guandan-context.mdc)** — 「解读批跑…」整段（约 1 分钟）：什么字段数**局**、什么数**副**、`victoryNum` 怎么读。
+1. **`AGENTS.md` § 数据解读口径** — 什么字段数**局**、什么数**副**、`victoryNum` 怎么读。
 2. **[`guandan-knowledge.mdc`](../../.cursor/rules/guandan-knowledge.mdc) §1** — 局 / 副 / 小局 / 整局 / `victoryNum` 完整定义（约 3 分钟）。
 3. **改客户端或批跑脚本时** — [`guandan-platform-v1006.mdc`](../../.cursor/rules/guandan-platform-v1006.mdc) §局与副：`episodeOver` vs `gameOver`、协议字段。
 4. **写 ITERATIONS / 分析报告时** — [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md) §1～§3（详版真源，含 `--target-games 1` → 59 副实测）。
@@ -58,7 +58,7 @@ batch_games 真源=current_batch.json；本包 exe 会话固定 3 局；target-g
 
 | 任务 | 必读 |
 |------|------|
-| 分析批跑胜率、填 ITERATIONS | `guandan-context` + `platform-data-interpretation` §3.3 |
+| 分析批跑胜率、填 ITERATIONS | `AGENTS.md` § 数据解读口径 + `platform-data-interpretation` §3.3 |
 | 改 `yf*_m*.py`、落盘逻辑 | `guandan-platform-v1006` + `platform-data-interpretation` §3.4 |
 | 改 **M3** 决策 / 策略 | `ISSUES` open（tag=`m3`）、`ITERATIONS` 最新一行、[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) 相关节、[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md)；`guandan-knowledge` §1 + 相关规则节；**M1 frozen 不改策略** |
 | 换机接续 | [分析接续-handoff](../governance/分析接续-handoff.md) + `ITERATIONS` 最新一行 |
