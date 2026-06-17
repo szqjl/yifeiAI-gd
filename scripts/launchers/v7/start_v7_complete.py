@@ -46,12 +46,30 @@ def check_port_listening(port, timeout=30):
     print(f"✗ 端口 {port} 在 {timeout} 秒内未监听")
     return False
 
+def _resolve_path(key, default, env_var=""):
+    """从 v7_paths.yaml 解析路径，优先级：环境变量 > config > 默认值"""
+    import yaml
+    # 1) 环境变量
+    if env_var:
+        val = os.environ.get(env_var, "")
+        if val:
+            return val
+    # 2) config/v7_paths.yaml
+    cfg_path = Path(__file__).resolve().parents[2] / "config" / "v7_paths.yaml"
+    if cfg_path.exists():
+        with open(cfg_path, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+        val = cfg.get(key, "")
+        if val:
+            return val.replace("%REPO_ROOT%", str(Path(__file__).resolve().parents[2]))
+    # 3) 默认值
+    return default
 
 def start_server():
     """启动服务器"""
-    server_path = get_server_exe(REPO_ROOT)
-    server_argv = get_server_argv(REPO_ROOT)
-
+    _default_exe = str(Path(__file__).resolve().parents[2] / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
+    server_path = _resolve_path("server_exe", _default_exe, "SERVER_EXE")
+    
     if not os.path.exists(server_path):
         print(f"✗ 服务器文件不存在: {server_path}")
         return None
@@ -111,10 +129,19 @@ def main():
     print("=" * 60)
     print("V7终极胜率导向系统完整启动")
     print("=" * 60)
-
-    client_scripts = get_v7_client_scripts(REPO_ROOT)
-    required_files = [get_server_exe(REPO_ROOT), get_model_file(REPO_ROOT), *client_scripts]
-
+    
+    # 检查必要文件
+    _default_lalala = str(Path(__file__).resolve().parents[2] / "reference" / "lalala")
+    _lalala_dir = _resolve_path("lalala_dir", _default_lalala, "LALALA_DIR")
+    _default_exe = str(Path(__file__).resolve().parents[2] / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
+    required_files = [
+        _resolve_path("server_exe", _default_exe, "SERVER_EXE"),
+        "src/communication/yf1_v7.py",
+        os.path.join(_lalala_dir, "client3.py"),
+        "src/communication/yf2_v7.py",
+        os.path.join(_lalala_dir, "client4.py")
+    ]
+    
     print("检查必要文件...")
     all_exists = True
     for file_path in required_files:
@@ -155,11 +182,30 @@ def main():
     delays = [0, 3, 3, 3]
 
     try:
-        for script, title, delay in zip(client_scripts, titles, delays):
-            proc = start_client(script, delay=delay, window_title=title)
-            if proc:
-                clients.append(proc)
-
+        # 2. 按顺序启动客户端
+        clients = []
+        
+        # yf1_v7 (3秒内部延迟)
+        client1 = start_client("src/communication/yf1_v7.py", delay=0, window_title="yf1_v7")
+        if client1:
+            clients.append(client1)
+        
+        # client3 (10秒内部延迟) - 等待yf1_v7连接后启动
+        _lalala_dir = _resolve_path("lalala_dir", _default_lalala, "LALALA_DIR")
+        client2 = start_client(os.path.join(_lalala_dir, "client3.py"), delay=4, window_title="client3")
+        if client2:
+            clients.append(client2)
+        
+        # yf2_v7 (9秒内部延迟) - 等待client3连接后启动
+        client3 = start_client("src/communication/yf2_v7.py", delay=11, window_title="yf2_v7")
+        if client3:
+            clients.append(client3)
+        
+        # client4 (20秒内部延迟) - 等待yf2_v7连接后启动
+        client4 = start_client(os.path.join(_lalala_dir, "client4.py"), delay=10, window_title="client4")
+        if client4:
+            clients.append(client4)
+        
         print("\n" + "=" * 60)
         print("启动完成")
         print("=" * 60)
