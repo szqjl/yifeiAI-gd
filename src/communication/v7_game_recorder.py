@@ -5,6 +5,7 @@
 牌张与基本概念见：docs/archive/rules/牌张与基本概念.md，常量见 game_logic.guandan_constants。
 """
 
+import ast
 import json
 import os
 import re
@@ -90,6 +91,229 @@ def ensure_my_pos_int(data: dict, fallback_player_id: int) -> int:
         return int(raw)
     except (TypeError, ValueError):
         return int(fallback_player_id)
+
+
+_PLATFORM_PAYLOAD_KEYS = frozenset({
+    "actionList",
+    "stage",
+    "handCards",
+    "myPos",
+    "curPos",
+    "curAction",
+    "greaterPos",
+    "greaterAction",
+    "publicInfo",
+    "selfRank",
+    "oppoRank",
+    "curRank",
+    "notifyType",
+    "result",
+    "victoryNum",
+})
+
+
+def unwrap_platform_payload(message: dict) -> dict:
+    """
+    v1006 平台 WebSocket 消息多为顶层字段（见 guandan_offline lalala/state.py）；
+    少数封装为 {"type": "...", "data": {...}}。
+    """
+    if not isinstance(message, dict):
+        return {}
+    nested = message.get("data")
+    if isinstance(nested, dict) and any(k in nested for k in _PLATFORM_PAYLOAD_KEYS):
+        return nested
+    return message
+
+
+def is_ws_debug_enabled() -> bool:
+    """是否打印 WebSocket 完整消息（YF_DEBUG_WS=1 开启）。"""
+    return os.environ.get("YF_DEBUG_WS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def normalize_act_message_fields(data: dict) -> dict:
+    """规范化 act 消息：字符串形式的 curAction/greaterAction 转列表。"""
+    for field in ("curAction", "greaterAction"):
+        value = data.get(field)
+        if isinstance(value, str):
+            try:
+                data[field] = ast.literal_eval(value)
+            except (ValueError, SyntaxError):
+                pass
+    if "handCards" in data and data["handCards"]:
+        data["handCards"] = normalize_cards_to_string_list(data["handCards"])
+    if data.get("actionList"):
+        data["actionList"] = normalize_action_list(data["actionList"])
+    return data
+
+
+def get_latest_victory_num_path() -> Path:
+    """batch_executor 读取的 victoryNum 共享文件路径。"""
+    return Path(__file__).parent.parent.parent / "batch_executor" / "latest_victory_num.json"
+
+
+def notify_end_kind(data: dict) -> str:
+    """区分副结束 (episode) 与局级结果 (session/gameResult)。"""
+    key = data.get("notifyType") or data.get("stage", "")
+    if key in ("gameResult", "gameEnd") or "victoryNum" in data:
+        return "session"
+    if key in ("episodeOver", "gameOver"):
+        return "episode"
+    return "unknown"
+
+
+def decision_context_from_act(
+    data: dict,
+    player_id: int,
+    *,
+    version: str = "v7",
+    series: str = "V",
+) -> Dict[str, Any]:
+    """act 阶段 record_decision 的 context（对齐 M3 _decision_context_from_act）。"""
+    action_list = data.get("actionList") or []
+    size = len(action_list) if isinstance(action_list, list) else 0
+    return {
+        "myPos": data.get("myPos", player_id),
+        "curPos": data.get("curPos", -1),
+        "greaterPos": data.get("greaterPos", -1),
+        "actionList_size": size,
+        "selfRank": data.get("selfRank"),
+        "oppoRank": data.get("oppoRank"),
+        "curRank": data.get("curRank"),
+        "version": version,
+        "series": series,
+        "source": "act",
+        "stage": data.get("stage", ""),
+    }
+
+
+def extract_notify_game_result(
+    data: dict,
+    decision_count: int = 0,
+    game_count: int = 0,
+) -> Dict[str, Any]:
+    """从 notify 提取写入 game_records.result 的字段。
+
+    平台约束（见 docs/guandan-brain/掼蛋AI算法对抗平台使用说明.md §消息类型）：
+    - tribute/back 的 result 为 [[位,位,牌],...]，不是局结束
+    - episodeOver 含 order/curRank/restCards
+    """
+    stage = data.get("stage", "")
+    key = data.get("notifyType") or stage
+
+    if key == "episodeOver" or stage == "episodeOver":
+        return {
+            k: v
+            for k, v in {
+                "order": data.get("order"),
+                "curRank": data.get("curRank"),
+                "restCards": data.get("restCards", []),
+                "total_decisions": decision_count,
+                "game_count": game_count,
+            }.items()
+            if v is not None
+        }
+
+    if key == "gameOver" or stage == "gameOver":
+        return {
+            k: v
+            for k, v in {
+                "curTimes": data.get("curTimes"),
+                "settingTimes": data.get("settingTimes"),
+                "total_decisions": decision_count,
+                "game_count": game_count,
+            }.items()
+            if v is not None
+        }
+
+    result = data.get("result", {}) or {}
+    if not isinstance(result, dict):
+        result = {}
+
+    if data.get("stage") == "gameResult" or "victoryNum" in data:
+        victory_num = data.get("victoryNum") or result.get("victoryNum", [])
+        if victory_num:
+            return {
+                "victoryNum": victory_num,
+                "draws": data.get("draws", result.get("draws", [])),
+                "total_decisions": decision_count,
+                "game_count": game_count,
+            }
+        if not result:
+            return {
+                "draws": data.get("draws", []),
+                "total_decisions": decision_count,
+                "game_count": game_count,
+            }
+    return dict(result)
+
+
+def save_victory_num_shared(
+    victory_num: list,
+    player: str,
+    logger=None,
+    *,
+    vn_source: str = "gameResult",
+) -> bool:
+    """写入 latest_victory_num.json，供 batch_executor 批末对账。"""
+    if not victory_num or len(victory_num) < 4:
+        return False
+    try:
+        shared_file = get_latest_victory_num_path()
+        shared_file.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "victoryNum": victory_num,
+            "server_vn_raw": victory_num,
+            "vn_source": vn_source,
+            "timestamp": datetime.now().isoformat(),
+            "player": player,
+        }
+        with open(shared_file, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        if logger:
+            logger.info("✓ victoryNum 已保存到共享文件: %s → %s", shared_file, victory_num)
+        return True
+    except Exception as e:
+        if logger:
+            logger.warning("保存 victoryNum 到共享文件失败: %s", e)
+        return False
+
+
+def process_platform_game_end_notify(
+    data: dict,
+    game_recorder: "GameRecorder",
+    logger,
+    player_tag: str,
+    decision_count: int = 0,
+    game_count: int = 0,
+) -> None:
+    """
+    统一处理 episodeOver / gameResult 结束通知（M1/M3/V7 共用逻辑）。
+    - episodeOver：落盘当前副记录（可无 victoryNum）
+    - gameResult：写 latest_victory_num.json 并回填近期 game_records
+    """
+    key = data.get("notifyType") or data.get("stage", "")
+    kind = notify_end_kind(data)
+    result = extract_notify_game_result(data, decision_count, game_count)
+    victory_num = result.get("victoryNum")
+
+    if game_recorder.current_game:
+        filepath = game_recorder.end_game(result)
+        if filepath and logger:
+            logger.info("✓ 游戏记录已保存: %s", filepath)
+    elif kind == "episode":
+        if logger:
+            logger.info(
+                "游戏结束通知(%s)收到但 current_game 为空，副记录可能已保存；跳过 end_game",
+                key,
+            )
+    elif logger:
+        logger.info("局级结束通知(%s)，current_game 为空", key)
+
+    if kind == "session" and victory_num:
+        save_victory_num_shared(victory_num, player_tag, logger)
+        filled = game_recorder.backfill_victory_num(victory_num)
+        if logger and filled:
+            logger.info("✓ victoryNum 已回填 %s 条 game_records", filled)
 
 
 def sync_pass_counters(
@@ -245,17 +469,21 @@ class GameRecorder:
     def backfill_victory_num(
         self,
         victory_num: list,
-        pending_files: list,
+        pending_files: Optional[list] = None,
         *,
         expected_batch_games: Optional[int] = None,
+        max_files: int = 50,
     ) -> int:
         """
-        回填记录文件的 victoryNum（M3 模式：按 pending_files 列表回填）。
+        回填记录文件的 victoryNum（兼容 m-dev pending_files 与 v7 近期文件扫描两种模式）。
+        - 传 pending_files：按 m-dev 逻辑校验 + 回填指定文件列表
+        - 不传 pending_files：扫描近期本玩家 game_records 并回填（v7 模式）
 
         Args:
             victory_num: [pos0_wins, pos1_wins, pos2_wins, pos3_wins]
-            pending_files: 待回填的文件路径列表
+            pending_files: 待回填的文件路径列表（可选，为 None 则自动扫描）
             expected_batch_games: 本批 batch_games
+            max_files: v7 模式下最多扫描的文件数
         Returns:
             成功回填的文件数
         """
@@ -265,37 +493,109 @@ class GameRecorder:
 
         logger = logging.getLogger(f"GameRecorder.{self.player_name}")
 
-        if not pending_files:
-            return 0
-        ok, reason = validate_batch_victory_num(victory_num, expected_batch_games)
-        if not ok:
-            logger.warning(
-                "跳过 victoryNum 回填: %s (vn=%s, batch_games=%s)",
-                reason,
-                victory_num,
-                expected_batch_games,
-            )
+        # ── m-dev 模式：传了 pending_files ──
+        if pending_files is not None:
+            if not pending_files:
+                return 0
+            ok, reason = validate_batch_victory_num(victory_num, expected_batch_games)
+            if not ok:
+                logger.warning(
+                    "跳过 victoryNum 回填: %s (vn=%s, batch_games=%s)",
+                    reason,
+                    victory_num,
+                    expected_batch_games,
+                )
+                pending_files.clear()
+                return 0
+            flushed = 0
+            for path in list(pending_files):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    data["result"] = data.get("result", {}) or {}
+                    data["result"]["victoryNum"] = victory_num
+                    fd, tmp = tempfile.mkstemp(dir=str(self.record_dir), suffix=".tmp")
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    os.replace(tmp, path)
+                    flushed += 1
+                except Exception as e:
+                    logger.warning("回填 pending 记录失败: {}, error={}".format(path, e))
             pending_files.clear()
-            return 0
-        flushed = 0
-        for path in list(pending_files):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                data["result"] = data.get("result", {}) or {}
-                data["result"]["victoryNum"] = victory_num
-                fd, tmp = tempfile.mkstemp(dir=str(self.record_dir), suffix=".tmp")
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                os.replace(tmp, path)
-                flushed += 1
-            except Exception as e:
-                logger.warning("回填 pending 记录失败: {}, error={}".format(path, e))
-        pending_files.clear()
-        if flushed:
-            logger.info("已批量回填 pending 记录 victoryNum: {} 个".format(flushed))
-        return flushed
+            if flushed:
+                logger.info("已批量回填 pending 记录 victoryNum: {} 个".format(flushed))
+            return flushed
 
+        # ── v7 模式：扫描近期本玩家 game_records ──
+        if not victory_num or len(victory_num) < 4:
+            return 0
+        pattern = f"*{self.player_name}*.json"
+        files = sorted(
+            self.record_dir.glob(pattern),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        )
+        filled = 0
+        for filepath in files[:max_files]:
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    record = json.load(f)
+                existing = record.get("result")
+                if not isinstance(existing, dict):
+                    existing = {}
+                if existing.get("victoryNum"):
+                    continue
+                existing["victoryNum"] = victory_num
+                record["result"] = existing
+                with open(filepath, "w", encoding="utf-8") as f:
+                    json.dump(record, f, ensure_ascii=False, indent=2)
+                filled += 1
+            except Exception:
+                continue
+        return filled
+
+    def record_game_start(self, message: dict):
+        """
+        记录游戏开始（V7协议兼容方法）
+        
+        Args:
+            message: 游戏开始消息，包含playerPosition、handCards等信息
+        """
+        import logging
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        
+        try:
+            # 从V7协议的gameStart消息中提取信息
+            player_pos = message.get("playerPosition", self.player_id)
+            hand_cards = message.get("handCards", [])
+            
+            # 提取游戏信息
+            game_info = {
+                "curRank": message.get("curRank", "2"),
+                "selfRank": message.get("selfRank", "2"),
+                "oppoRank": message.get("oppoRank", "2"),
+            }
+            
+            # 提取所有玩家手牌（如果消息中包含）
+            all_players_hands = {}
+            if "allPlayersHands" in message:
+                all_players_hands = message["allPlayersHands"]
+            elif "all_players_hands" in message:
+                all_players_hands = message["all_players_hands"]
+            
+            # 调用start_game方法
+            self.start_game(
+                hand_cards=hand_cards,
+                my_pos=player_pos,
+                game_info=game_info,
+                all_players_hands=all_players_hands
+            )
+            
+            logger.info(f"✓ 游戏记录已初始化: 位置={player_pos}, 手牌数={len(hand_cards)}")
+            
+        except Exception as e:
+            logger.error(f"✗ 记录游戏开始失败: {e}", exc_info=True)
+    
     def start_game(self, hand_cards: List, my_pos: int, game_info: Dict = None, all_players_hands: Dict[int, List] = None):
         """
         开始记录一局游戏
@@ -403,6 +703,156 @@ class GameRecorder:
         }
         
         self.current_game["actions"].append(action_record)
+
+    def record_play_notify(self, data: dict, *, version: str = "v7") -> None:
+        """记录平台 act/play notify（任意玩家出牌）。
+
+        契约对齐 **M3**（`m-dev` 的 `yf1_m3._handle_act_notification`），写入 `actions` 供回放。
+        """
+        if not self.current_game:
+            return
+
+        cur_pos = data.get("curPos", -1)
+        cur_action = data.get("curAction", [])
+        greater_pos = data.get("greaterPos", -1)
+        greater_action = data.get("greaterAction", [])
+
+        if cur_pos == -1 or not cur_action:
+            return
+
+        if isinstance(cur_action, str):
+            try:
+                cur_action = ast.literal_eval(cur_action)
+            except (ValueError, SyntaxError):
+                pass
+        if isinstance(greater_action, str):
+            try:
+                greater_action = ast.literal_eval(greater_action)
+            except (ValueError, SyntaxError):
+                pass
+
+        context = {
+            "publicInfo": data.get("publicInfo", []),
+            "selfRank": data.get("selfRank"),
+            "oppoRank": data.get("oppoRank"),
+            "curRank": data.get("curRank"),
+            "restCards": data.get("restCards", []),
+            "source": "notify",
+            "stage": data.get("stage", "play"),
+            "version": version,
+        }
+        self.record_action(cur_pos, cur_action, greater_pos, greater_action, context)
+
+    @staticmethod
+    def _normalize_tribute_back_card(card: Any) -> Optional[str]:
+        """贡/还单张 → 'S2' 大写（与 M3 yf1_m3 一致）。"""
+        if card is None:
+            return None
+        normalized = normalize_cards_to_string_list([card])
+        if not normalized:
+            return None
+        raw = normalized[0]
+        if isinstance(raw, str) and len(raw) >= 2:
+            return raw[0].upper() + raw[1:].upper()
+        return raw
+
+    def _already_recorded_tribute_received(self, card_str: str, tribute_pos: int) -> bool:
+        for md in self.current_game.get("my_decisions", []) if self.current_game else []:
+            action = md.get("action") or []
+            ctx = md.get("context") or {}
+            if len(action) >= 3 and str(action[0]).lower() == "tribute":
+                existing = action[2]
+                if (
+                    isinstance(existing, list)
+                    and card_str in existing
+                    and ctx.get("source") == "notify"
+                    and ctx.get("receive_tribute_pos") == self.player_id
+                    and ctx.get("tribute_pos") == tribute_pos
+                ):
+                    return True
+        return False
+
+    def _already_recorded_back(self, card_str: str) -> bool:
+        for md in self.current_game.get("my_decisions", []) if self.current_game else []:
+            action = md.get("action") or []
+            if len(action) >= 3 and str(action[0]).lower() == "back":
+                existing = action[2]
+                if isinstance(existing, list) and card_str in existing:
+                    return True
+        return False
+
+    def record_tribute_notify(self, data: dict, *, version: str = "v7") -> None:
+        """进贡 notify：收贡方写入 my_decisions（对齐 M3 yf1_m3._handle_tribute_notification）。"""
+        if not self.current_game:
+            return
+        for item in data.get("result") or []:
+            if not isinstance(item, (list, tuple)) or len(item) < 3:
+                continue
+            tribute_pos, receive_pos, card = item[0], item[1], item[2]
+            try:
+                tribute_pos_i = int(tribute_pos)
+                receive_pos_i = int(receive_pos)
+            except (TypeError, ValueError):
+                continue
+            card_str = self._normalize_tribute_back_card(card)
+            if receive_pos_i != self.player_id or tribute_pos_i == self.player_id or not card_str:
+                continue
+            if self._already_recorded_tribute_received(card_str, tribute_pos_i):
+                continue
+            self.record_decision(
+                0,
+                ["tribute", "tribute", [card_str]],
+                context={
+                    "myPos": self.player_id,
+                    "curPos": -1,
+                    "greaterPos": -1,
+                    "actionList_size": 0,
+                    "selfRank": data.get("selfRank"),
+                    "oppoRank": data.get("oppoRank"),
+                    "curRank": data.get("curRank"),
+                    "version": version,
+                    "source": "notify",
+                    "stage": "tribute",
+                    "tribute_pos": tribute_pos_i,
+                    "receive_tribute_pos": receive_pos_i,
+                },
+            )
+
+    def record_back_notify(self, data: dict, *, version: str = "v7") -> None:
+        """还贡 notify：对手还给我的牌写入 my_decisions（对齐 M3 yf1_m3._handle_back_notification）。"""
+        if not self.current_game:
+            return
+        for item in data.get("result") or []:
+            if not isinstance(item, (list, tuple)) or len(item) < 3:
+                continue
+            back_pos, receive_pos, card = item[0], item[1], item[2]
+            try:
+                receive_pos_i = int(receive_pos)
+            except (TypeError, ValueError):
+                continue
+            card_str = self._normalize_tribute_back_card(card)
+            if receive_pos_i != self.player_id or not card_str:
+                continue
+            if self._already_recorded_back(card_str):
+                continue
+            self.record_decision(
+                0,
+                ["back", "back", [card_str]],
+                context={
+                    "myPos": self.player_id,
+                    "curPos": -1,
+                    "greaterPos": -1,
+                    "actionList_size": 0,
+                    "selfRank": data.get("selfRank"),
+                    "oppoRank": data.get("oppoRank"),
+                    "curRank": data.get("curRank"),
+                    "version": version,
+                    "source": "notify",
+                    "stage": "back",
+                    "back_pos": back_pos,
+                    "receive_back_pos": receive_pos_i,
+                },
+            )
     
     def _normalize_action(self, cur_action: List) -> List:
         """
@@ -530,6 +980,68 @@ class GameRecorder:
         except Exception as e:
             logger.debug(f"卡牌验证时出错（非关键）：{e}")
     
+    def record_my_action(self, message: dict, selected_action: Any, decision_time: float = None):
+        """
+        记录我方的动作（V7协议兼容方法）
+        
+        Args:
+            message: 游戏状态消息，包含当前状态信息
+            selected_action: 选择的动作（可能是字符串如"PASS"或列表）
+            decision_time: 决策耗时（秒）
+        """
+        if not self.current_game:
+            import logging
+            logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+            logger.warning("⚠ record_my_action() called but current_game is None")
+            return
+        
+        try:
+            # 提取当前状态信息
+            cur_pos = message.get("curPlayer", self.player_id)
+            hand_cards = message.get("handCards", [])
+            valid_actions = message.get("actions", [])
+            
+            # 构建决策记录
+            decision_record = {
+                "timestamp": datetime.now().isoformat(),
+                "cur_pos": cur_pos,
+                "hand_cards_count": len(hand_cards),
+                "selected_action": selected_action,
+                "decision_time": decision_time,
+                "valid_actions_count": len(valid_actions) if valid_actions else 0,
+                "context": {
+                    "curRank": message.get("curRank", "2"),
+                    "selfRank": message.get("selfRank", "2"),
+                    "oppoRank": message.get("oppoRank", "2"),
+                }
+            }
+            
+            self.current_game["my_decisions"].append(decision_record)
+            
+            # 同时记录为动作（如果动作不是PASS）
+            if selected_action and selected_action != "PASS":
+                # 尝试将动作转换为列表格式
+                if isinstance(selected_action, str):
+                    # 如果是字符串，可能需要解析（这里简化处理）
+                    cur_action = [selected_action]
+                elif isinstance(selected_action, list):
+                    cur_action = selected_action
+                else:
+                    cur_action = [str(selected_action)]
+                
+                # 记录动作
+                self.record_action(
+                    cur_pos=cur_pos,
+                    cur_action=cur_action,
+                    greater_pos=-1,
+                    greater_action=None,
+                    context=decision_record["context"]
+                )
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+            logger.error(f"✗ 记录我方动作失败: {e}", exc_info=True)
     
     def record_decision(self, action_index: int, action: List, 
                        score: float = None, layer: str = None,
@@ -1337,3 +1849,47 @@ class GameRecorder:
                         print(f"  {layer}: {success}/{total} ({rate:.1f}%)")
         
         print("=" * 80)
+
+    def record_game_end(self, message: dict):
+        """
+        记录游戏结束（V7协议兼容方法）
+        
+        Args:
+            message: 游戏结束消息，包含result等信息
+        """
+        import logging
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        
+        # 提取结果信息
+        result = {}
+        if isinstance(message, dict):
+            # V7协议格式
+            game_result = message.get("result", {})
+            if game_result:
+                result = {
+                    "winner": game_result.get("winner", -1),
+                    "scores": game_result.get("scores", []),
+                    "victoryNum": game_result.get("victoryNum", [])
+                }
+            else:
+                # 可能是V5协议格式
+                result = {
+                    "victoryNum": message.get("victoryNum", []),
+                    "draws": message.get("draws", 0)
+                }
+        
+        # 调用end_game保存记录
+        return self.end_game(result)
+    
+    def save_records(self):
+        """保存游戏记录（兼容V7客户端）"""
+        if self.current_game:
+            # 修复：如果result为空，尝试保留current_game，等待gameResult通知
+            # 只有在明确需要保存时才调用end_game
+            if self.current_game.get("result") is not None:
+                self.end_game(self.current_game.get("result", {}))  # 结束当前游戏并保存
+            # 否则不保存，等待gameResult通知
+        
+        import logging
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        logger.info(f"游戏记录已保存到 {self.record_dir}")
