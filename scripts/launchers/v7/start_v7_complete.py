@@ -12,7 +12,7 @@ import os
 import socket
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.utils.v7_paths import (
@@ -48,26 +48,30 @@ def check_port_listening(port, timeout=30):
 
 def _resolve_path(key, default, env_var=""):
     """从 v7_paths.yaml 解析路径，优先级：环境变量 > config > 默认值"""
-    import yaml
     # 1) 环境变量
     if env_var:
         val = os.environ.get(env_var, "")
         if val:
             return val
-    # 2) config/v7_paths.yaml
-    cfg_path = Path(__file__).resolve().parents[2] / "config" / "v7_paths.yaml"
-    if cfg_path.exists():
-        with open(cfg_path, encoding="utf-8") as f:
-            cfg = yaml.safe_load(f) or {}
-        val = cfg.get(key, "")
-        if val:
-            return val.replace("%REPO_ROOT%", str(Path(__file__).resolve().parents[2]))
+    # 2) config/v7_paths.yaml（yaml 可能未安装，静默跳过）
+    try:
+        import yaml
+        cfg_path = REPO_ROOT / "config" / "v7_paths.yaml"
+        if cfg_path.exists():
+            with open(cfg_path, encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+            val = cfg.get(key, "")
+            if val:
+                return val.replace("%REPO_ROOT%", str(REPO_ROOT))
+    except ImportError:
+        pass
     # 3) 默认值
     return default
 
 def start_server():
     """启动服务器"""
-    _default_exe = str(Path(__file__).resolve().parents[2] / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
+    server_argv = get_server_argv(REPO_ROOT)
+    _default_exe = str(REPO_ROOT / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
     server_path = _resolve_path("server_exe", _default_exe, "SERVER_EXE")
     
     if not os.path.exists(server_path):
@@ -131,9 +135,9 @@ def main():
     print("=" * 60)
     
     # 检查必要文件
-    _default_lalala = str(Path(__file__).resolve().parents[2] / "reference" / "lalala")
+    _default_lalala = str(REPO_ROOT / "reference" / "lalala")
     _lalala_dir = _resolve_path("lalala_dir", _default_lalala, "LALALA_DIR")
-    _default_exe = str(Path(__file__).resolve().parents[2] / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
+    _default_exe = str(REPO_ROOT / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
     required_files = [
         _resolve_path("server_exe", _default_exe, "SERVER_EXE"),
         "src/communication/yf1_v7.py",
@@ -183,8 +187,6 @@ def main():
 
     try:
         # 2. 按顺序启动客户端
-        clients = []
-        
         # yf1_v7 (3秒内部延迟)
         client1 = start_client("src/communication/yf1_v7.py", delay=0, window_title="yf1_v7")
         if client1:

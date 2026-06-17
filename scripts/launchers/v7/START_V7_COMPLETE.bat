@@ -1,4 +1,5 @@
 @echo off
+call "%~dp0..\_env.bat"
 echo ========================================
 echo V7终极胜率导向系统完整启动
 echo ========================================
@@ -17,6 +18,6 @@ echo - 端口23456未被占用
 echo.
 pause
 
-python start_v7_complete.py
+python scripts/launchers/v7/start_v7_complete.py
 
 pause
