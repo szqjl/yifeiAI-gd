@@ -451,8 +451,8 @@ class GameRecorder:
         self.player_id = player_id
         self.player_name = player_name or f"player_{player_id}"
         
-        # 创建记录目录
-        self.record_dir = Path(__file__).parent.parent.parent / "game_records"
+        # 创建记录目录（V7专用，与M3的game_records分开）
+        self.record_dir = Path(__file__).parent.parent.parent / "game_records_v7"
         self.record_dir.mkdir(exist_ok=True)
         
         # 当前游戏记录

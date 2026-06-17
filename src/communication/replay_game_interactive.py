@@ -612,7 +612,7 @@ def main():
     # 交互式回放
     filepath = Path(sys.argv[1])
     if not filepath.is_absolute():
-        record_dir = Path(__file__).parent.parent.parent / "game_records"
+        record_dir = Path(__file__).parent.parent.parent / "game_records_v7"
         filepath = record_dir / sys.argv[1]
     
     replay_interactive(filepath)

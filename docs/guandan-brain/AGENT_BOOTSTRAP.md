@@ -145,6 +145,7 @@ victoryNum[0] vs [1] = 各队赢几局；须 [0]=[2]、[1]=[3]；批跑 N 局时
 
 > **⚠️ Python 环境**：本机**无 venv**，直接用 `python` 命令（系统 Python 3.14.4）。
 > **⚠️ 分支**：M3 / V7 批跑**均可在 v7-dev 直接跑**（M3 客户端/引擎 import 测试通过）。
+> **⚠️ 数据目录分离**：M3 批跑 → `game_records/`，V7 批跑 → `game_records_v7/`（训练只读 V7 数据）。
 
 ```bash
 # 切分支
@@ -179,7 +180,16 @@ python tests/test_v7_engine_load.py
 
 ## 8. 批跑数据恢复（game_records 丢失/被清时）
 
-> **前提**：`game_records/*.json` 全部丢失，但日志文件还在。**不要重新跑局**，日志足够恢复全部 victoryNum。
+> **前提**：`game_records/*.json` 或 `game_records_v7/*.json` 全部丢失，但日志文件还在。**不要重新跑局**，日志足够恢复全部 victoryNum。
+
+### 数据目录分离策略
+
+| 引擎 | game_records 目录 | 用途 |
+|------|------------------|------|
+| M3 | `game_records/` | M3 批跑数据（BC训练数据源） |
+| V7 | `game_records_v7/` | V7 批跑数据 + V7 BC训练 |
+
+> **注意**：两个目录**完全隔离**，避免数据混杂。M3 批跑存入 `game_records/`，V7 批跑存入 `game_records_v7/`。训练脚本 `train_bc_v7.py` 默认读取 `game_records_v7/`。
 
 ### 为什么能恢复——双重数据通道
 
@@ -214,7 +224,7 @@ python tests/test_v7_engine_load.py
 | 1 | `latest_victory_num.json` | `yf1_v7.py`（Player 0） | 最后一批 | **覆盖** |
 | 2 | `logs/v7_vs_lalala_*.log` | `executor.py`（stdout 镜像） | 全部批次 | **追加** |
 | 3 | `v7_vs_lalala_scores.json` | `executor.py`（score tracker） | 全部批次 | **覆盖** |
-| 4 | `game_records/*.json` | `yf1_v7.py`（game_recorder） | 每副 | **追加** |
+| 4 | `game_records_v7/*.json`（V7）或 `game_records/*.json`（M3） | `v7_game_recorder.py` / `game_recorder.py` | 每副 | **追加** |
 
 **结论**：只要 2 或 3 还在，victoryNum 永不会丢。即使 1+4 全丢，从 2 搜关键行即可完整恢复。
 

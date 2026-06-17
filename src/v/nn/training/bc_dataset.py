@@ -27,11 +27,13 @@ import numpy as np
 
 from src.v.nn.features.static_features import extract_static_features, STATIC_STATE_DIM, extract_state_belief, BELIEF_DIM
 from src.v.nn.features.dynamic_features import extract_dynamic_features, DYNAMIC_HIDDEN_DIM
+from src.v.nn.features.memory_tracker import MemoryTracker, MEMORY_TRACKER_DIM
 
 logger = logging.getLogger("bc_dataset")
 
 TARGET_FEATURE_DIM = 512
-EFFECTIVE_FEATURE_DIM = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM  # 124 + 64 + 8 = 196
+TARGET_ACTION_DIM = 2048  # 与 UltimateWinRateNet.action_head 输出维度对齐
+EFFECTIVE_FEATURE_DIM = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM + MEMORY_TRACKER_DIM  # 124 + 64 + 8 + 24 = 220
 RECORD_DIR = Path("game_records")
 
 # ── 工具函数 ──────────────────────────────────────────
@@ -60,14 +62,61 @@ def _filter_by_victory_num(game_data: Dict[str, Any]) -> bool:
     return team_a_wins >= 2
 
 
+def _build_memory_tracker_state(game_state: Dict[str, Any]) -> List[float]:
+    """
+    从 game_state 构建 memory_tracker 并返回 24 维 state_vector（GUA-052）。
+
+    replay 逻辑：
+      1. 初始化 tracker（手牌 + curRank）
+      2. 从 history/recentPlays 回放每步出牌
+      3. 从 actions 列表（若可用）补充历史
+    """
+    try:
+        my_pos = game_state.get("myPos", 0)
+        hand_cards = game_state.get("handCards", [])
+        cur_rank = str(game_state.get("curRank", "2"))
+
+        tracker = MemoryTracker(my_pos=my_pos, enable_inference=False, max_infer_depth=0)
+        if hand_cards:
+            tracker.init_from_hand(hand_cards)
+        tracker.set_level_rank(cur_rank)
+
+        # 回放 history
+        history = game_state.get("history", [])
+        for h in history:
+            seat = h.get("pos", h.get("seat", -1))
+            if seat < 0:
+                continue
+            action = h.get("action") or h.get("curAction") or []
+            if action:
+                tracker.record_play(seat, action)
+
+        # 回放 recentPlays
+        recent = game_state.get("recentPlays", [])
+        for rp in recent:
+            seat = rp.get("pos", -1)
+            if seat < 0:
+                continue
+            cards = rp.get("cards", [])
+            if cards:
+                action_type = rp.get("type", "Unknown")
+                tracker.record_play(seat, [action_type, "", cards])
+
+        return tracker.get_state_vector()
+    except Exception:
+        return [0.0] * MEMORY_TRACKER_DIM
+
+
 def _reconstruct_features_from_full_state(
     full_state: Dict[str, Any],
 ) -> Optional[np.ndarray]:
-    """从 full_state 重建 512 维特征向量（GUA-037a 静态 + GUA-037b 动态 LSTM + GUA-050 信念）。
+    """从 full_state 重建 512 维特征向量（GUA-037a 静态 + GUA-037b 动态 + GUA-050 信念 + GUA-052 记忆追踪）。
 
-    full_state 应包含 handCards, actionList, curRank, myPos, curPos, greaterPos, stage 等。
-    前 124 维 = extract_static_features，124-187 维 = extract_dynamic_features，
-    188-195 维 = extract_state_belief (GUA-050)。
+    维度分段（512 维）：
+      0-123:     extract_static_features (124)
+      124-187:   extract_dynamic_features (64)
+      188-195:   extract_state_belief (8) — GUA-050
+      196-219:   _build_memory_tracker_state (24) — GUA-052
     """
     try:
         static_features = extract_static_features(full_state)
@@ -88,6 +137,14 @@ def _reconstruct_features_from_full_state(
             features[belief_start:belief_start + BELIEF_DIM] = belief
         except Exception:
             pass  # 信念提取失败不影响核心特征
+
+        # GUA-052: 叠加记忆追踪状态向量（196-219 维）
+        try:
+            mt_state = _build_memory_tracker_state(full_state)
+            mt_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM
+            features[mt_start:mt_start + MEMORY_TRACKER_DIM] = mt_state
+        except Exception:
+            pass
 
         return features
     except Exception as e:
@@ -144,6 +201,14 @@ def _reconstruct_features_from_my_decision(
             belief = extract_state_belief(fake_state)
             belief_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM
             features[belief_start:belief_start + BELIEF_DIM] = belief
+        except Exception:
+            pass
+
+        # GUA-052: 叠加记忆追踪状态向量（M3 旧格式无出牌历史 → fallback 零向量）
+        try:
+            mt_state = _build_memory_tracker_state(fake_state)
+            mt_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM
+            features[mt_start:mt_start + MEMORY_TRACKER_DIM] = mt_state
         except Exception:
             pass
 
@@ -249,6 +314,8 @@ def load_samples(
                     skipped_feature += 1
                     continue
                 action_index = step.get("action_index", 0)
+                if action_index >= TARGET_ACTION_DIM:
+                    continue  # 超出模型输出维度，跳过（M3 硬编码枚举上限 1085 < 2048）
                 action_list_size = full_state.get("actionList_size", 0)
                 if action_list_size <= 1:
                     continue  # 单动作决策无学习意义
@@ -270,8 +337,8 @@ def load_samples(
                 if ctx.get("stage") not in (None, "", "play"):
                     continue
                 action_index = dec.get("action_index")
-                if action_index is None:
-                    continue
+                if action_index is None or action_index >= TARGET_ACTION_DIM:
+                    continue  # 超出模型输出维度，跳过（M3 硬编码枚举上限 1085 < 2048）
                 action_list_size = ctx.get("actionList_size", 0)
                 if action_list_size <= 1:
                     continue

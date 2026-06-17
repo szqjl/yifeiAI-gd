@@ -39,8 +39,10 @@ class UltimateWinRateNet(nn.Module):
         )
         
         # 动作预测头（Stage 7.7方法）
+        # M3 胜局中 action_index 最大 1085，action_list_size 最大 3079
+        # V7 推理时 clamp 到 len(action_list)，故 2048 足够且省参数（vs 3079 省 33K）
         self.action_head = nn.Sequential(
-            nn.Linear(32, 512)
+            nn.Linear(32, 2048)
         )
         
         # 位置胜率预测头（新增）

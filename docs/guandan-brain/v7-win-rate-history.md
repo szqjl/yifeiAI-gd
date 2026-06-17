@@ -18,7 +18,7 @@
 - **批跑命令**：`python scripts/launchers/v7/run_v7_vs_lalala_games.py --games 3` 或 `RUN_V7_VS_LALALA.bat 12`
 - **局数**：3 的倍数（3/9/12）
 - **V7 队胜率**：`[0]+[1]` vs 总局数；**≥30%** 才算 GUA-039b 验收通过
-- **副数**：`game_records/` mtime 窗新增 JSON 数 / 2
+- **副数**：`game_records_v7/` mtime 窗新增 JSON 数 / 2
 - **备注**：胜场负局是否胶着 / 异常短局原因 / 与上次对比
 
 ---
@@ -32,8 +32,8 @@
 | 2026-06-06 | V7-007 | 3 局批跑复盘定音（lalala 满编碾压） | `run_v7_vs_lalala_3games.py` | 3 | 0/3（0%） | 15 | **副数异常短**；4 席 10:44:27 齐连，lalala 连升 2→A 横扫 |
 | **合计 06-05~06-06** | — | — | — | **9** | **1/9（11.1%）** | ~153 | — |
 | 2026-06-17 | GUA-038 | BC v2 重训（录牌→特征→训练→模型部署，val_acc=82.57%） | `python scripts\launchers\v7\run_v7_vs_lalala_games.py --games 3` | 3 | 0/3（0%） | 51 | V7 队达 A 级 **14 次**（共 51 副），lalala 3-0 横扫 |
+| 2026-06-17 | GUA-038 | BC v2（M3 胜局重训 action_dim 512→2048，val_acc=35.85%）+ 净盘 12 局 | `python scripts\launchers\v7\run_v7_vs_lalala_games.py --games 12` | 12 | **0/12（0%）** | **204** | 副级：V7 赢 24/204（11.8%），V7 达 A **32 副**；lalala 全 4 批连续 vn=[0,3,0,3]。对比前次 3 局（8/58=13.8%）：副胜率基本持平（11.8%），V7 竞争力无显著改善。累计 **1/21（4.8%）**。日志：`logs\v7_vs_lalala_20260617_130258.log` |
 | | | | | | | | |
-| _（空 — 待 GUA-037b/038/051/052 实施后回填）_ | | | | | | | |
 
 ---
 
@@ -55,7 +55,7 @@
 - `ITERATIONS.md` = 改动摘要 + 文件列表
 - `ISSUES.md` = 缺陷登记 + 完成定义（含"对战验证"条目）
 - `replay_word.md` = 单局复盘文字稿
-- `game_records/` = 单副 JSON 牌谱（Layer 2 产物，不进 Git）
+- `game_records_v7/` = 单副 JSON 牌谱（Layer 2 产物，不进 Git）
 
 ---
 
@@ -63,7 +63,7 @@
 
 **症状**："V7 又赢了 0/3 局"
 1. 先查本文件最近 5 行——是否有过 1/3 的拐点？回归到 0/3 说明某条改动破坏
-2. 对比 `game_records/` 副数 — 副数过短（如 < 10）说明没真打完
+2. 对比 `game_records_v7/` 副数 — 副数过短（如 < 10）说明没真打完
 3. 对比 `logs/yf*_v7_*.log` — 是否四席就绪门闩生效（GUA-044）
 4. 不要用"训练指标好"作为辩解
 

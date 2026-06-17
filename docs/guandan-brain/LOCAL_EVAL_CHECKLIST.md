@@ -29,7 +29,7 @@ python -m batch_executor --server-path "<SERVER_EXE>" --target-games 12 \
             src/communication/yf2_m3.py src/communication/run_lalala_client4.py
 ```
 
-净盘：跑前清空 `game_records/*.json`。批末 **`victoryNum[0]+[1]` = 该批 `batch_games`**（整批为 3 的倍数时各批均为 3，无尾批 fallback）。
+净盘：跑前清空对应目录（V7→`game_records_v7/*.json`，M3→`game_records/*.json`）。批末 **`victoryNum[0]+[1]` = 该批 `batch_games`**（整批为 3 的倍数时各批均为 3，无尾批 fallback）。
 
 ## 2b. M1 批量对战（frozen · 仅回归）
 
@@ -50,7 +50,7 @@ python -m batch_executor --server-path "<SERVER_EXE>" --diagnose-only
 
 ## 4. 改完代码后的动作
 
-1. 重复 §2，生成**新** `game_records`。  
+1. 重复 §2，生成**新** `game_records`（M3）或 `game_records_v7`（V7）。  
 2. 用与 **`EVAL.md` / `M1_yf1_vs_yf2_comparison.md`** 一致的口径统计 **近似问题 PASS**（`actionList_size>1` 仍选 PASS）。  
 3. 更新 **`ITERATIONS.md`**：日期、改动摘要、评测结果摘要、是否关闭 **GUA-021**。  
 4. 若指标达标，在 **`ISSUES.md`** 将 **GUA-021** 标为 `closed` 并写 `closed_in`。
