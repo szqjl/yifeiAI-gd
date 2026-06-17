@@ -128,10 +128,23 @@ victoryNum[0] vs [1] = 各队赢几局；须 [0]=[2]、[1]=[3]；批跑 N 局时
 | **仓库治理** | `docs/governance/M-V-Series-治理方案.md` |
 | **牌谱回放** | `scripts/tools/yf_replay.py` / `YF_REPLAY.bat` |
 | **本地评测清单** | `docs/guandan-brain/LOCAL_EVAL_CHECKLIST.md` |
+| **V7 副级等级分析** | `scripts/tools/analyze_v7_round_levels.py` |
+
+> **V7 副级分析工具**（每次 V7 批跑后必跑）：
+> ```bash
+> python scripts/tools/analyze_v7_round_levels.py                    # 全量 V7 批跑副级表
+> python scripts/tools/analyze_v7_round_levels.py --game-id <ID>     # 单局分析
+> ```
+> 输出：每副「起始级 / V7末级 / lalala推断级 / 赢家 / 剩余牌数 / 出牌顺序」
+> 用途：解释 0-3 局战绩背后的真实副级博弈——V7 赢了几副、谁先跑光、谁先双上过 A。
+> 替代：手动 grep `curRank` / `order`（已废弃，不再手动统计）。
 
 ---
 
 ## 7. 常用命令
+
+> **⚠️ Python 环境**：本机**无 venv**，直接用 `python` 命令（系统 Python 3.14.4）。
+> **⚠️ 分支**：M3 / V7 批跑**均可在 v7-dev 直接跑**（M3 客户端/引擎 import 测试通过）。
 
 ```bash
 # 切分支
@@ -141,14 +154,18 @@ git checkout -f v7-dev
 git push origin v7-dev
 
 # V7 启动
-start_v7_gui.py          # Linux
 START_V7_GUI.bat         # Windows GUI 对战
 START_V7_AUTO.bat        # 自动启动服务器+客户端
 
-# V7 vs lalala 批跑
-venv\Scripts\python.exe scripts\launchers\v7\run_v7_vs_lalala_games.py --games 3
-venv\Scripts\python.exe scripts\launchers\v7\run_v7_vs_lalala_games.py --games 12
+# V7 vs lalala 批跑（当前分支 v7-dev）
+python scripts\launchers\v7\run_v7_vs_lalala_games.py --games 3
+python scripts\launchers\v7\run_v7_vs_lalala_games.py --games 12
 # 战绩文件：v7_vs_lalala_scores.json
+
+# M3 vs lalala 批跑（当前分支 v7-dev，直接跑）
+python scripts\launchers\m\run_m3_vs_lalala_games.py --games 3
+python scripts\launchers\m\run_m3_vs_lalala_games.py --games 12
+# 战绩文件：m3_vs_lalala_scores.json
 
 # 牌谱回放
 YF_REPLAY.bat
