@@ -39,14 +39,15 @@ def main():
     train_samples, val_samples = train_val_split(samples, val_ratio=0.2)
 
     # Step 3: Train
+    # B-α 调参（2026-06-17）：lr 1e-3 -> 5e-4 + patience 5 -> 10，配合 label_smoothing=0.1 防 top1 collapse
     record = train(
         train_samples=train_samples,
         val_samples=val_samples,
-        lr=1e-3,
+        lr=5e-4,
         weight_decay=1e-4,
         batch_size=64,
         max_epochs=50,
-        patience=5,
+        patience=10,
         output_dir="models/v-nn",
         model_name="bc_model_v2",
     )

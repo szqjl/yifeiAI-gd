@@ -32,8 +32,12 @@ from src.v.nn.features.memory_tracker import MemoryTracker, MEMORY_TRACKER_DIM
 logger = logging.getLogger("bc_dataset")
 
 TARGET_FEATURE_DIM = 512
-TARGET_ACTION_DIM = 2048  # 与 UltimateWinRateNet.action_head 输出维度对齐
-EFFECTIVE_FEATURE_DIM = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM + MEMORY_TRACKER_DIM  # 124 + 64 + 8 + 24 = 220
+# GUA-059 修复（2026-06-17）：action_head 改回 512（M3 胜局 action_index < 512 子集保留，≥ 512 跳过）
+# v2 的 2048 引入稀疏退化（val_acc 6 epoch 纹丝不动 0.3519），v1 = 512 表达力足够覆盖主样本
+TARGET_ACTION_DIM = 512
+# GUA-054 升级（2026-06-17）：EFFECTIVE_FEATURE_DIM 220 → 229（24 → 33，含 grouping_score 9 维）
+# 229 = 124(static) + 64(dynamic) + 8(belief) + 24(MT_GUA052) + 9(grouping_GUA054)
+EFFECTIVE_FEATURE_DIM = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM + MEMORY_TRACKER_DIM  # 124 + 64 + 8 + 33 = 229
 RECORD_DIR = Path("game_records")
 
 # ── 工具函数 ──────────────────────────────────────────
@@ -64,12 +68,13 @@ def _filter_by_victory_num(game_data: Dict[str, Any]) -> bool:
 
 def _build_memory_tracker_state(game_state: Dict[str, Any]) -> List[float]:
     """
-    从 game_state 构建 memory_tracker 并返回 24 维 state_vector（GUA-052）。
+    从 game_state 构建 memory_tracker 并返回 33 维 state_vector（GUA-052 24 + GUA-054 9）。
 
     replay 逻辑：
       1. 初始化 tracker（手牌 + curRank）
       2. 从 history/recentPlays 回放每步出牌
       3. 从 actions 列表（若可用）补充历史
+      4. GUA-054 追加：get_state_vector(game_state) 拼接 9 维 grouping_score
     """
     try:
         my_pos = game_state.get("myPos", 0)
@@ -102,7 +107,8 @@ def _build_memory_tracker_state(game_state: Dict[str, Any]) -> List[float]:
                 action_type = rp.get("type", "Unknown")
                 tracker.record_play(seat, [action_type, "", cards])
 
-        return tracker.get_state_vector()
+        # GUA-054 升级（2026-06-17）：传 game_state 让 grouping_score 拼接 9 维
+        return tracker.get_state_vector(game_state=game_state)
     except Exception:
         return [0.0] * MEMORY_TRACKER_DIM
 
@@ -110,13 +116,13 @@ def _build_memory_tracker_state(game_state: Dict[str, Any]) -> List[float]:
 def _reconstruct_features_from_full_state(
     full_state: Dict[str, Any],
 ) -> Optional[np.ndarray]:
-    """从 full_state 重建 512 维特征向量（GUA-037a 静态 + GUA-037b 动态 + GUA-050 信念 + GUA-052 记忆追踪）。
+    """从 full_state 重建 512 维特征向量（GUA-037a 静态 + GUA-037b 动态 + GUA-050 信念 + GUA-052 记忆追踪 + GUA-054 grouping_score）。
 
     维度分段（512 维）：
       0-123:     extract_static_features (124)
       124-187:   extract_dynamic_features (64)
       188-195:   extract_state_belief (8) — GUA-050
-      196-219:   _build_memory_tracker_state (24) — GUA-052
+      196-228:   _build_memory_tracker_state (33) — GUA-052 24 + GUA-054 9
     """
     try:
         static_features = extract_static_features(full_state)
@@ -138,7 +144,7 @@ def _reconstruct_features_from_full_state(
         except Exception:
             pass  # 信念提取失败不影响核心特征
 
-        # GUA-052: 叠加记忆追踪状态向量（196-219 维）
+        # GUA-052 + GUA-054: 叠加记忆追踪状态向量 + grouping_score（196-228 维 = 33 维）
         try:
             mt_state = _build_memory_tracker_state(full_state)
             mt_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM
@@ -204,7 +210,7 @@ def _reconstruct_features_from_my_decision(
         except Exception:
             pass
 
-        # GUA-052: 叠加记忆追踪状态向量（M3 旧格式无出牌历史 → fallback 零向量）
+        # GUA-052 + GUA-054: 叠加记忆追踪状态向量 + grouping_score（M3 旧格式无出牌历史 → fallback 零向量）
         try:
             mt_state = _build_memory_tracker_state(fake_state)
             mt_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM

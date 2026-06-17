@@ -39,10 +39,15 @@ class UltimateWinRateNet(nn.Module):
         )
         
         # 动作预测头（Stage 7.7方法）
-        # M3 胜局中 action_index 最大 1085，action_list_size 最大 3079
-        # V7 推理时 clamp 到 len(action_list)，故 2048 足够且省参数（vs 3079 省 33K）
+        # GUA-059 修复（2026-06-17）：action_head 改回 32→512（v1 基线）
+        # v2 的 2048 引入稀疏（5555 样本 / 2048 维 ≈ 2.7 样本/类），
+        # val_acc 6 epoch 纹丝不动 0.3519（val_accs 数组完全一致），
+        # 退化根因：softmax 在 2048 维上完全没学到有意义的概率分布。
+        # v1 训练时用 1208 样本 + 512 维 action_head → val_acc=82.57%。
+        # 512 维足够覆盖 M3 胜局主样本（bc_dataset 已过滤 action_index >= 512）。
+        # M3 硬编码枚举上限 1085 需在 bc_dataset.py 同步加 action_index < 512 过滤。
         self.action_head = nn.Sequential(
-            nn.Linear(32, 2048)
+            nn.Linear(32, 512)
         )
         
         # 位置胜率预测头（新增）

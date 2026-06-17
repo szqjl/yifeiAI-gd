@@ -81,11 +81,15 @@ def masked_cross_entropy(
     logits: torch.Tensor,          # (batch, 512)
     targets: torch.Tensor,         # (batch,)  int64
     action_list_sizes: torch.Tensor,  # (batch,)  int64
+    label_smoothing: float = 0.1,  # B-α 调参（2026-06-17）：防 collapse 到 top1
 ) -> torch.Tensor:
     """仅对有效 actionList 范围计算交叉熵。
 
     对于每个样本，创建一个 mask 使得 logits 中前 action_list_size 个位置有效，
     其余位置被屏蔽（-inf）。然后在有效位置计算 CE loss。
+
+    Args:
+        label_smoothing: B-α 调参加入，0.1 防 top1 collapse（35.75% 占比 → val_acc 锁死 36.46%）
     """
     batch_size = logits.size(0)
     max_size = logits.size(1)
@@ -98,7 +102,7 @@ def masked_cross_entropy(
     # 屏蔽无效位置
     masked_logits = logits * mask + (1 - mask) * (-1e9)
 
-    return nn.functional.cross_entropy(masked_logits, targets)
+    return nn.functional.cross_entropy(masked_logits, targets, label_smoothing=label_smoothing)
 
 
 # ── 训练循环 ──────────────────────────────────────────

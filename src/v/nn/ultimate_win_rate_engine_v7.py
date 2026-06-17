@@ -33,6 +33,16 @@ except ImportError as e:
     FEATURE_IMPORT_OK = False
     print(f"[Warning] 特征工程导入失败: {e}, 使用简化特征")
 
+# GUA-045 Guard 接入（2026-06-17 修复）
+# v7_guards.py 实施完成但生产代码未接入 → GUA-045 实施不完整
+# 接入点：decide() 入口 filter_action_list，模型决策后 validate_decision 二次校验
+try:
+    from src.v.nn.guards.v7_guards import filter_action_list, validate_decision
+    GUARD_IMPORT_OK = True
+except ImportError as e:
+    GUARD_IMPORT_OK = False
+    print(f"[Warning] Guard 导入失败: {e}, 使用规则回退（无 Guard）")
+
 TARGET_FEATURE_DIM = 512  # 与 bc_dataset.py 一致
 
 class UltimateWinRateEngineV7:
@@ -65,6 +75,10 @@ class UltimateWinRateEngineV7:
         self.decision_count = 0
         self.model_decisions = 0
         self.fallback_decisions = 0
+        # GUA-045 Guard 统计（2026-06-17 接入）
+        self.guard_filtered_count = 0
+        self.guard_validated_count = 0
+        self.guard_override_count = 0
 
         # GUA-052: MemoryTracker 实例（跨决策状态）
         self._tracker = None
@@ -104,31 +118,61 @@ class UltimateWinRateEngineV7:
     def decide(self, game_state: Dict[str, Any]) -> int:
         """
         做出决策
-        
+
         Args:
             game_state: 游戏状态
-            
+
         Returns:
-            选择的动作索引
+            选择的动作索引（原始 actionList 下标）
         """
         self.decision_count += 1
-        
+
         action_list = game_state.get("actionList", [])
         if not action_list:
             return 0
-        
+
+        # GUA-045 Guard 接入（2026-06-17）：先 filter_action_list
+        # 在 filtered_actions 上让模型决策，最后映射回原始 actionList 下标
+        filtered_actions = action_list
+        action_map = list(range(len(action_list)))
+        if GUARD_IMPORT_OK:
+            try:
+                filtered_actions, action_map = filter_action_list(game_state)
+                if len(filtered_actions) < len(action_list):
+                    self.guard_filtered_count += 1
+            except Exception as e:
+                self.logger.warning(f"filter_action_list 失败: {e}, 用原始 actionList")
+                filtered_actions = action_list
+                action_map = list(range(len(action_list)))
+
         try:
-            # 如果模型可用，使用模型决策
+            # 如果模型可用，使用模型决策（在 filtered_actions 上）
             if self.model is not None:
-                action_index = self._model_decision(game_state, action_list)
+                action_index = self._model_decision(game_state, filtered_actions)
                 if action_index is not None:
                     self.model_decisions += 1
-                    return action_index
-            
+                    # GUA-045 Guard 校验（2026-06-17）：模型决策后二次校验
+                    if GUARD_IMPORT_OK:
+                        try:
+                            safe_idx = validate_decision(
+                                action_index, filtered_actions, game_state, action_list
+                            )
+                            self.guard_validated_count += 1
+                            if safe_idx != action_index:
+                                self.guard_override_count += 1
+                                self.logger.info(
+                                    f"Guard 覆盖: idx {action_index} → {safe_idx}"
+                                )
+                            action_index = safe_idx
+                        except Exception as e:
+                            self.logger.warning(f"validate_decision 失败: {e}")
+                    # 把 filtered_actions 下的下标映射回原始 actionList 下标
+                    return action_map[action_index]
+
             # 回退到规则引擎
             self.fallback_decisions += 1
             return self._rule_based_decision(game_state, action_list)
-            
+
         except Exception as e:
             self.logger.error(f"✗ 决策失败: {e}")
             self.fallback_decisions += 1
@@ -170,12 +214,15 @@ class UltimateWinRateEngineV7:
                 action_type = rp.get("type", "Unknown")
                 self._tracker.record_play(seat, [action_type, "", cards])
 
-    def _get_tracker_state(self) -> List[float]:
-        """获取 MemoryTracker 状态向量。"""
+    def _get_tracker_state(self, game_state: Optional[Dict[str, Any]] = None) -> List[float]:
+        """获取 MemoryTracker 状态向量。
+
+        GUA-054 升级（2026-06-17）：传 game_state 时追加 9 维 grouping_score。
+        """
         if not FEATURE_IMPORT_OK or self._tracker is None:
             return [0.0] * MEMORY_TRACKER_DIM
         try:
-            return self._tracker.get_state_vector()
+            return self._tracker.get_state_vector(game_state=game_state)
         except Exception:
             return [0.0] * MEMORY_TRACKER_DIM
 
@@ -255,7 +302,7 @@ class UltimateWinRateEngineV7:
                 pass
 
             try:
-                mt_state = self._get_tracker_state()
+                mt_state = self._get_tracker_state(game_state)
                 mt_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM
                 features[mt_start:mt_start + MEMORY_TRACKER_DIM] = mt_state
             except Exception:
@@ -336,5 +383,12 @@ class UltimateWinRateEngineV7:
             "model_decisions": self.model_decisions,
             "fallback_decisions": self.fallback_decisions,
             "model_usage_rate": self.model_decisions / max(1, self.decision_count),
-            "model_available": self.model is not None
+            "model_available": self.model is not None,
+            # GUA-045 Guard 统计（2026-06-17 接入）
+            "guard_filtered_count": self.guard_filtered_count,
+            "guard_validated_count": self.guard_validated_count,
+            "guard_override_count": self.guard_override_count,
+            "guard_filter_rate": self.guard_filtered_count / max(1, self.decision_count),
+            "guard_override_rate": self.guard_override_count / max(1, self.guard_validated_count),
+            "guard_import_ok": GUARD_IMPORT_OK,
         }

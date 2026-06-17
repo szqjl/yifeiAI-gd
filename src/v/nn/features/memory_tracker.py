@@ -39,7 +39,22 @@ HAND_SIZE = 27
 RANK_LETTERS = {"2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"}
 
 # ── GUA-052 维度常量 ────────────────────────────────
-MEMORY_TRACKER_DIM = 24  # state_vector 维度：4(seat剩张)+18(rank已出)+4(bomb)+1(level_card)
+# GUA-054 升级（2026-06-17）：24 维 + 9 维 grouping_score = 33 维
+# 24 维 = 4(seat 剩张) + 15(rank 已出比例) + 4(seat 炸弹数) + 1(级牌剩余)
+#  9 维 = extract_grouping_score（v7-internal，0~1 归一化独立软信号）
+MEMORY_TRACKER_DIM = 33
+GROUPING_SCORE_DIM = 9
+
+# ── GUA-054 grouping_scanner 接入（2026-06-17）──────
+try:
+    from src.v.nn.features.grouping_scanner import (
+        extract_grouping_score,
+        get_grouping_score_dim,
+    )
+    _grouping_import_ok = True
+except ImportError as e:
+    _grouping_import_ok = False
+    print(f"[Warning] grouping_scanner 导入失败: {e}, grouping_score 退化为零向量")
 
 
 def _parse_card_rank(card: str) -> str:
@@ -222,10 +237,15 @@ class MemoryTracker:
         bomb_likely = remaining <= 10 and played < 2
         return min(1.0, (HAND_SIZE - remaining) / HAND_SIZE * 2.0) if bomb_likely else 0.0
 
-    def get_state_vector(self) -> List[float]:
+    def get_state_vector(self, game_state: Optional[Dict[str, Any]] = None) -> List[float]:
         """获取记忆追踪状态向量（用于特征拼接）。
 
-        24 维 = 4(seat 剩张) + 15(各 rank 已出比例) + 4(各 seat 炸弹数) + 1(级牌剩余)
+        33 维（GUA-054 升级）= 4(seat 剩张) + 15(各 rank 已出比例) + 4(各 seat 炸弹数) + 1(级牌剩余)
+                         + 9(grouping_score, GUA-054 软信号)
+
+        Args:
+            game_state: 游戏状态（GUA-054 追加 grouping_score 需要 handCards/curRank）。
+                       传 None 时退化为 24 维（向后兼容）。
         """
         vec: List[float] = []
 
@@ -233,7 +253,7 @@ class MemoryTracker:
         for i in range(4):
             vec.append(self.hand_counts.get(i, HAND_SIZE) / HAND_SIZE)
 
-        # 27 牌型已出比例
+        # 15 rank 已出比例（13 个 RANK + 2 王）
         rank_counts: Dict[str, int] = defaultdict(int)
         for ct, copies in self.card_state.items():
             rank = _parse_card_rank(ct)
@@ -259,7 +279,22 @@ class MemoryTracker:
                         lc += 1
         vec.append(min(1.0, lc / 4.0))
 
-        assert len(vec) == 24, f"state_vector 维度异常: {len(vec)}"
+        # ── GUA-054 追加 9 维 grouping_score（2026-06-17）────
+        if _grouping_import_ok and game_state is not None:
+            try:
+                grouping = extract_grouping_score(game_state)
+                if len(grouping) == GROUPING_SCORE_DIM:
+                    vec.extend(grouping)
+                else:
+                    vec.extend([0.0] * GROUPING_SCORE_DIM)
+            except Exception as e:
+                logger.warning(f"extract_grouping_score 失败: {e}, 退化零向量")
+                vec.extend([0.0] * GROUPING_SCORE_DIM)
+        else:
+            # 向后兼容：game_state 为 None 时填零向量
+            vec.extend([0.0] * GROUPING_SCORE_DIM)
+
+        assert len(vec) == MEMORY_TRACKER_DIM, f"state_vector 维度异常: {len(vec)} (期望 {MEMORY_TRACKER_DIM})"
         return vec
 
     # ── 内部方法 ──────────────────────────────────────
