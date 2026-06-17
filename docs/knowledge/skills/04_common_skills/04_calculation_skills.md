@@ -16,6 +16,8 @@ last_updated: 2025-11-26 14:51:29
 
 记得住牌张或牌型，并籍此计算牌，绝大多数新手是个头疼的问题。掼蛋，因其多变的特点，本质上是个大概率事件的动态演绎过程。算牌也就是通过已知牌的信息进行逻辑推理来判断别人手上还剩什么牌。
 
+> **引擎映射（★ 重点）**：[`PRINCIPLES_MAPPING.md`](../../../guandan-brain/PRINCIPLES_MAPPING.md) §十四 — **怎么算**；记什么见 [`05_memory_skills.md`](05_memory_skills.md) §十五 / **GUA-032**。
+
 **平台变量名**：
 - `handcards`：手牌
 - `remain_cards`：剩余牌

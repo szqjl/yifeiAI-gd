@@ -13,10 +13,6 @@ from pathlib import Path
 # 将 src 目录添加到系统路径
 if str(Path(__file__).parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).parent.parent))
-try:
-    from game_logic.guandan_constants import CARDS_PER_PLAYER
-except ImportError:
-    CARDS_PER_PLAYER = 27
 
 from game_logic.enhanced_state import EnhancedGameStateManager
 from game_logic.hand_combiner import HandCombiner
@@ -204,9 +200,9 @@ class MultiFactorEvaluator:
         cards = action[2] if len(action) > 2 else []
         card_count = len(cards) if isinstance(cards, list) else 1
         
-        # 计算出牌数量占当前手牌的比例（使用规则常量）
+        # 计算出牌数量占当前手牌的比例（假设当前手牌27张为初始值）
         # 出牌数量越多，剩余越少，分数越高
-        return min(card_count / float(CARDS_PER_PLAYER), 1.0)
+        return min(card_count / 27.0, 1.0)
     
     def _evaluate_cooperation(self, action: List, target_action: Optional[List]) -> float:
         """评估配合度"""
@@ -472,3 +468,411 @@ class MultiFactorEvaluator:
         else:
             return 0.4  # 其他类型，中性评估
 
+
+
+# ==================== 动态优先级系统 ====================
+# 根据 YF掼蛋硬编码优化规范实现
+# 需求: 3.1-3.5, 属性: 11-15
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+
+@dataclass
+class PriorityContext:
+    """优先级调整上下文"""
+    my_remain: int = 27
+    teammate_remain: int = 27
+    next_player_remain: int = 27
+    opponent_remain: List[int] = None
+    pass_count: int = 0
+    game_stage: str = "early"
+    is_endgame: bool = False
+    endgame_type: str = "normal"
+    teammate_is_leading: bool = False
+    
+    def __post_init__(self):
+        if self.opponent_remain is None:
+            self.opponent_remain = [27, 27]
+
+
+class ContextAdjuster(ABC):
+    """
+    上下文调整器抽象基类
+    
+    实现需求3的优先级调整框架
+    """
+    
+    def __init__(self, weight: float = 1.0):
+        """
+        初始化调整器
+        
+        Args:
+            weight: 调整器权重
+        """
+        self.weight = weight
+        self.name = self.__class__.__name__
+    
+    @abstractmethod
+    def adjust(self, base_scores: List[float], action_list: List[List], 
+               context: PriorityContext) -> List[float]:
+        """
+        调整优先级分数
+        
+        Args:
+            base_scores: 基础分数列表
+            action_list: 动作列表
+            context: 优先级上下文
+            
+        Returns:
+            调整后的分数列表
+        """
+        pass
+    
+    def get_adjustment_info(self) -> Dict:
+        """获取调整信息"""
+        return {"name": self.name, "weight": self.weight}
+
+
+class NextPlayerAdjuster(ContextAdjuster):
+    """
+    下家牌数调整器
+    
+    实现需求3.1和属性11：根据下家牌数调整单张优先级
+    """
+    
+    def __init__(self, weight: float = 1.0):
+        super().__init__(weight)
+    
+    def adjust(self, base_scores: List[float], action_list: List[List], 
+               context: PriorityContext) -> List[float]:
+        """
+        调整优先级
+        
+        **属性 11: 下家单张优先级调整**
+        *对于任何* 下家剩余牌数为1张的情况，系统应该降低单张出牌优先级
+        **验证: 需求 3.1**
+        """
+        adjusted = base_scores.copy()
+        
+        # 下家只剩1张牌时，降低单张优先级
+        if context.next_player_remain == 1:
+            for i, action in enumerate(action_list):
+                if action[0] == "Single":
+                    # 大幅降低单张优先级，避免送牌
+                    adjusted[i] *= 0.3 * self.weight
+        
+        # 下家牌少时（<=3张），也要谨慎出单张
+        elif context.next_player_remain <= 3:
+            for i, action in enumerate(action_list):
+                if action[0] == "Single":
+                    adjusted[i] *= 0.6 * self.weight
+        
+        return adjusted
+
+
+class PassCountAdjuster(ContextAdjuster):
+    """
+    PASS次数调整器
+    
+    实现需求3.2和属性12：根据连续PASS次数调整出牌优先级
+    """
+    
+    def __init__(self, weight: float = 1.0, threshold: int = 5):
+        super().__init__(weight)
+        self.threshold = threshold
+    
+    def adjust(self, base_scores: List[float], action_list: List[List], 
+               context: PriorityContext) -> List[float]:
+        """
+        调整优先级
+        
+        **属性 12: PASS次数优先级调整**
+        *对于任何* 连续PASS次数超过5次的情况，系统应该提高出牌动作优先级
+        **验证: 需求 3.2**
+        """
+        adjusted = base_scores.copy()
+        
+        if context.pass_count >= self.threshold:
+            # 连续PASS太多，提高出牌优先级
+            boost_factor = 1.0 + (context.pass_count - self.threshold + 1) * 0.1 * self.weight
+            boost_factor = min(boost_factor, 1.5)  # 最多提升50%
+            
+            for i, action in enumerate(action_list):
+                if action[0] != "PASS":
+                    adjusted[i] *= boost_factor
+        
+        return adjusted
+
+
+class EndgameAdjuster(ContextAdjuster):
+    """
+    残局调整器
+    
+    实现需求3.3和属性13：根据残局类型调整各牌型优先级
+    """
+    
+    def __init__(self, weight: float = 1.2):
+        super().__init__(weight)
+    
+    def adjust(self, base_scores: List[float], action_list: List[List], 
+               context: PriorityContext) -> List[float]:
+        """
+        调整优先级
+        
+        **属性 13: 残局优先级调整**
+        *对于任何* 处于残局阶段的情况，系统应该根据残局类型调整各牌型优先级
+        **验证: 需求 3.3**
+        """
+        adjusted = base_scores.copy()
+        
+        if not context.is_endgame:
+            return adjusted
+        
+        # 根据残局类型调整
+        if context.endgame_type == "rush":
+            # 冲刺型：提高大牌型优先级
+            for i, action in enumerate(action_list):
+                if action[0] in ["Bomb", "StraightFlush"]:
+                    adjusted[i] *= 1.3 * self.weight
+                elif action[0] in ["Straight", "ThreeWithTwo"]:
+                    adjusted[i] *= 1.2 * self.weight
+        
+        elif context.endgame_type == "defend":
+            # 防守型：提高PASS和小牌优先级
+            for i, action in enumerate(action_list):
+                if action[0] == "PASS":
+                    adjusted[i] = 0.8 * self.weight  # 给PASS一个较高的分数
+                elif action[0] == "Single":
+                    # 检查是否是小牌
+                    rank = action[1] if len(action) > 1 else ""
+                    if rank in ["3", "4", "5", "6", "7"]:
+                        adjusted[i] *= 1.2 * self.weight
+        
+        elif context.endgame_type == "cooperate":
+            # 配合型：提高配合动作优先级
+            for i, action in enumerate(action_list):
+                if action[0] == "PASS":
+                    adjusted[i] = 0.6 * self.weight
+        
+        elif context.endgame_type == "control":
+            # 控制型：平衡调整
+            for i, action in enumerate(action_list):
+                if action[0] in ["Pair", "Trips"]:
+                    adjusted[i] *= 1.1 * self.weight
+        
+        return adjusted
+
+
+class TeammateAdjuster(ContextAdjuster):
+    """
+    队友状态调整器
+    
+    实现需求3.4和属性14：根据队友状态调整PASS优先级
+    """
+    
+    def __init__(self, weight: float = 1.3):
+        super().__init__(weight)
+    
+    def adjust(self, base_scores: List[float], action_list: List[List], 
+               context: PriorityContext) -> List[float]:
+        """
+        调整优先级
+        
+        **属性 14: 队友领先优先级调整**
+        *对于任何* 队友处于领先状态且牌数少的情况，系统应该大幅提高PASS优先级
+        **验证: 需求 3.4**
+        """
+        adjusted = base_scores.copy()
+        
+        # 队友领先且牌少
+        if context.teammate_is_leading and context.teammate_remain <= 5:
+            for i, action in enumerate(action_list):
+                if action[0] == "PASS":
+                    # 大幅提高PASS优先级
+                    adjusted[i] = 1.0 * self.weight
+                else:
+                    # 降低其他动作优先级
+                    adjusted[i] *= 0.5
+        
+        # 队友牌很少（<=3张），即使不领先也要配合
+        elif context.teammate_remain <= 3:
+            for i, action in enumerate(action_list):
+                if action[0] == "PASS":
+                    adjusted[i] = 0.7 * self.weight
+        
+        return adjusted
+
+
+class DynamicPrioritySystem:
+    """
+    动态优先级系统
+    
+    实现需求3.5和属性15：实时优先级调整
+    """
+    
+    def __init__(self):
+        """初始化动态优先级系统"""
+        import logging
+        self.logger = logging.getLogger("DynamicPriority")
+        
+        # 初始化所有调整器
+        self.adjusters: List[ContextAdjuster] = [
+            NextPlayerAdjuster(weight=1.0),
+            PassCountAdjuster(weight=1.0, threshold=5),
+            EndgameAdjuster(weight=1.2),
+            TeammateAdjuster(weight=1.3),
+        ]
+    
+    def adjust_priorities(self, base_scores: List[float], action_list: List[List],
+                         message: dict) -> List[float]:
+        """
+        调整优先级
+        
+        **属性 15: 实时优先级调整**
+        *对于任何* 游戏上下文发生变化的情况，系统应该实时调整优先级权重
+        **验证: 需求 3.5**
+        
+        Args:
+            base_scores: 基础分数列表
+            action_list: 动作列表
+            message: 游戏状态消息
+            
+        Returns:
+            调整后的分数列表
+        """
+        # 构建上下文
+        context = self._build_context(message)
+        
+        # 依次应用所有调整器
+        adjusted_scores = base_scores.copy()
+        adjustment_log = []
+        
+        for adjuster in self.adjusters:
+            before = adjusted_scores.copy()
+            adjusted_scores = adjuster.adjust(adjusted_scores, action_list, context)
+            
+            # 记录调整信息
+            changes = sum(1 for i in range(len(before)) if abs(before[i] - adjusted_scores[i]) > 0.01)
+            if changes > 0:
+                adjustment_log.append({
+                    'adjuster': adjuster.name,
+                    'changes': changes
+                })
+        
+        self.logger.debug(f"优先级调整: {adjustment_log}")
+        
+        return adjusted_scores
+    
+    def _build_context(self, message: dict) -> PriorityContext:
+        """构建优先级上下文"""
+        my_pos = message.get("myPos", 0)
+        my_remain = len(message.get("handCards", []))
+        
+        # 获取各玩家剩余牌数
+        public_info = message.get("publicInfo", [])
+        teammate_pos = (my_pos + 2) % 4
+        next_player_pos = (my_pos + 1) % 4
+        
+        teammate_remain = 27
+        next_player_remain = 27
+        opponent_remain = [27, 27]
+        
+        if len(public_info) > teammate_pos and isinstance(public_info[teammate_pos], dict):
+            teammate_remain = public_info[teammate_pos].get('rest', 27)
+        
+        if len(public_info) > next_player_pos and isinstance(public_info[next_player_pos], dict):
+            next_player_remain = public_info[next_player_pos].get('rest', 27)
+        
+        opponent_positions = [(my_pos + 1) % 4, (my_pos + 3) % 4]
+        for i, pos in enumerate(opponent_positions):
+            if len(public_info) > pos and isinstance(public_info[pos], dict):
+                opponent_remain[i] = public_info[pos].get('rest', 27)
+        
+        # 计算PASS次数
+        action_history = message.get("actionHistory", [])
+        pass_count = 0
+        for action in reversed(action_history):
+            if action and action[0] == "PASS":
+                pass_count += 1
+            else:
+                break
+        
+        # 判断游戏阶段
+        total_remain = my_remain + teammate_remain + sum(opponent_remain)
+        if total_remain > 80:
+            game_stage = "early"
+        elif total_remain > 50:
+            game_stage = "mid"
+        elif total_remain > 20:
+            game_stage = "late"
+        else:
+            game_stage = "endgame"
+        
+        # 判断残局
+        is_endgame = my_remain <= 10 or teammate_remain <= 5
+        endgame_type = "normal"
+        if is_endgame:
+            if my_remain <= 5 and max(opponent_remain) >= 10:
+                endgame_type = "rush"
+            elif teammate_remain <= 5 and my_remain <= 8:
+                endgame_type = "defend"
+            elif teammate_remain <= 8 and my_remain <= 10:
+                endgame_type = "cooperate"
+            elif my_remain <= 10 and sum(opponent_remain) <= 20:
+                endgame_type = "control"
+        
+        # 判断队友是否领先
+        teammate_is_leading = teammate_remain < min(opponent_remain)
+        
+        return PriorityContext(
+            my_remain=my_remain,
+            teammate_remain=teammate_remain,
+            next_player_remain=next_player_remain,
+            opponent_remain=opponent_remain,
+            pass_count=pass_count,
+            game_stage=game_stage,
+            is_endgame=is_endgame,
+            endgame_type=endgame_type,
+            teammate_is_leading=teammate_is_leading
+        )
+    
+    def get_adjusters_info(self) -> List[Dict]:
+        """获取所有调整器信息"""
+        return [adj.get_adjustment_info() for adj in self.adjusters]
+
+
+# 创建全局实例
+_dynamic_priority = DynamicPrioritySystem()
+
+
+def evaluate_all_actions_enhanced(evaluator: MultiFactorEvaluator,
+                                  action_list: List[List],
+                                  message: dict,
+                                  target_action: Optional[List] = None) -> List[Tuple[int, float]]:
+    """
+    增强版动作评估接口
+    
+    整合动态优先级系统和原有评估器
+    
+    Args:
+        evaluator: 多因素评估器
+        action_list: 动作列表
+        message: 游戏状态消息
+        target_action: 目标动作
+        
+    Returns:
+        评估结果列表 [(索引, 分数), ...]
+    """
+    # 获取基础评估分数
+    base_evaluations = evaluator.evaluate_all_actions(action_list, target_action)
+    base_scores = [score for _, score in sorted(base_evaluations, key=lambda x: x[0])]
+    
+    # 应用动态优先级调整
+    adjusted_scores = _dynamic_priority.adjust_priorities(base_scores, action_list, message)
+    
+    # 构建结果
+    result = [(i, adjusted_scores[i]) for i in range(len(adjusted_scores))]
+    result.sort(key=lambda x: x[1], reverse=True)
+    
+    return result

@@ -55,7 +55,7 @@ python -c "import yaml; print('PyYAML version:', yaml.__version__)"
 
 ## 相关文档
 
-- `INSTALL_DEPENDENCIES.md` - 详细安装指南
+- [INSTALL_DEPENDENCIES.md](../development/INSTALL_DEPENDENCIES.md) - 详细安装指南
 - `YAML_DEPENDENCY_ANALYSIS.md` - 依赖影响分析
 - `TEST_GUIDE.md` - 测试指南
 

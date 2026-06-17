@@ -185,7 +185,6 @@ class BatchExecutorGUIM3:
     def load_default_config(self):
         """加载默认配置（M3版本）"""
         possible_paths = [
-            "D:/guandanscore/guandan-offline-serve/windows/guandan_offline_v1006.exe",
             "../GDAI/离线平台/windows/guandan_offline_v1006.exe",
             "D:/GDAI/server/windows/guandan_offline_v1006.exe",
             "D:/GDAI/离线平台/windows/guandan_offline_v1006.exe",

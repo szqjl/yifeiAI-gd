@@ -27,3 +27,7 @@ mlflow>=2.8.0  # MLflow 实验管理（推荐，免费，开源）
 wandb>=0.16.0  # Weights & Biases 训练监控（可选，需要登录）
 optuna>=3.5.0  # 超参数优化
 pytorch-lightning>=2.1.0  # 训练框架简化
+
+# 腾讯云 COS 官方 Python SDK（见 docs/governance/COS-接入指南.md）
+# https://cloud.tencent.com/document/product/436/12269
+cos-python-sdk-v5>=1.9.0

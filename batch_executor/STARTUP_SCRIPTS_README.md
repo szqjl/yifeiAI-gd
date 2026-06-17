@@ -1,30 +1,37 @@
 # 启动脚本说明
 
-本文档说明批量游戏执行系统的启动脚本使用方法。
+本文档说明批量游戏执行系统的启动方式。**日常入口**以 `scripts/launchers/` 为准（根目录 `START_*.bat` 为薄 stub）。
+
+## 推荐入口（Phase 5）
+
+| 场景 | 路径 |
+|------|------|
+| M1 批跑 GUI | 根目录 `START_M1_GUI.bat` → `scripts/launchers/m/START_M1_GUI.bat` |
+| M2/M3 GUI | `START_M2_GUI.bat` / `START_M3_GUI.bat` |
+| CLI 批跑 | `python scripts/batch_executor.py` |
+| 启动器索引 | [scripts/launchers/README.md](../scripts/launchers/README.md) |
 
 ## 文件列表
 
-### 1. batch_executor.py
-**位置**: `YiFeiAI-GD/batch_executor.py`
-
-**说明**: Python主启动脚本，作为批量执行系统的主入口点。
+### 1. scripts/batch_executor.py
+**位置**: `YiFeiAI-GD/scripts/batch_executor.py`（原根目录 `batch_executor.py` 已迁入）
 
 **使用方法**:
 ```bash
 # 基本用法
-python batch_executor.py --server-path <服务器路径>
+python scripts/batch_executor.py --server-path <服务器路径>
 
 # 指定目标场数
-python batch_executor.py --server-path server.exe --target-games 200
+python scripts/batch_executor.py --server-path server.exe --target-games 200
 
 # 仅运行诊断
-python batch_executor.py --server-path server.exe --diagnose-only
+python scripts/batch_executor.py --server-path server.exe --diagnose-only
 
 # 指定客户端脚本
-python batch_executor.py --server-path server.exe --clients client1.py client2.py client3.py client4.py
+python scripts/batch_executor.py --server-path server.exe --clients client1.py client2.py client3.py client4.py
 
 # 完整示例
-python batch_executor.py \
+python scripts/batch_executor.py \
     --server-path guandan_offline_v1006.exe \
     --target-games 100 \
     --clients Test1.py Test2.py client3.py client4.py \
@@ -157,12 +164,12 @@ set TARGET_GAMES=100
 
 ### 自定义日志级别
 ```bash
-python batch_executor.py --server-path server.exe --log-level DEBUG
+python scripts/batch_executor.py --server-path server.exe --log-level DEBUG
 ```
 
 ### 指定自定义文件路径
 ```bash
-python batch_executor.py \
+python scripts/batch_executor.py \
     --server-path server.exe \
     --state-file my_state.json \
     --score-file my_scores.json \
@@ -171,7 +178,7 @@ python batch_executor.py \
 
 ### 仅诊断模式
 ```bash
-python batch_executor.py --server-path server.exe --diagnose-only
+python scripts/batch_executor.py --server-path server.exe --diagnose-only
 ```
 
 ## 注意事项

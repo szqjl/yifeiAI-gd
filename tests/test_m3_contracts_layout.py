@@ -1,0 +1,132 @@
+# -*- coding: utf-8
+"""M3 目录迁移与 IDecisionProvider 契约测试。"""
+
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from contracts import (
+    DECISION_PROVIDER_CONTRACT_VERSION,
+    V_INTEGRATION_GATE_ENABLED,
+    DecisionProviderAdapter,
+    is_decision_provider,
+)
+from m.m1 import RuleBasedDecisionEngineM1, StageRouter, OpeningPassiveHandler
+from m.m2 import RuleBasedDecisionEngineM2
+from m.m3 import M3DecisionEngine, M3DecisionProvider
+from m.platform import GameRecorder, WebSocketManager
+from v.learn import HybridDecisionEngineV4, HybridDecisionEngineV5
+from v.nn import UltimateWinRateEngineV7
+
+
+@pytest.mark.unit
+def test_contract_version_frozen():
+    assert DECISION_PROVIDER_CONTRACT_VERSION == "1.0"
+    assert V_INTEGRATION_GATE_ENABLED is True
+
+
+@pytest.mark.unit
+def test_m2_m3_modules_physically_under_m_package():
+    import m.m2.rule_based_decision_engine_m2 as m2e
+    import m.m3.m3_decision_engine as m3e
+
+    assert "m2" in m2e.__file__.replace("\\", "/")
+    assert "m3" in m3e.__file__.replace("\\", "/")
+
+
+@pytest.mark.unit
+def test_m2_m3_decision_shims():
+    from decision.rule_based_decision_engine_m2 import RuleBasedDecisionEngineM2 as ShimM2
+    from decision.m3_decision_engine import M3DecisionEngine as ShimM3
+    from m.m2 import RuleBasedDecisionEngineM2
+    from m.m3 import M3DecisionEngine
+
+    assert ShimM2 is RuleBasedDecisionEngineM2
+    assert ShimM3 is M3DecisionEngine
+
+
+@pytest.mark.unit
+def test_m1_modules_physically_under_m_package():
+    import m.m1.stage_router as sr
+    import m.m1.phase_handlers as ph
+
+    assert "m" in sr.__file__.replace("\\", "/")
+    assert "m1" in sr.__file__.replace("\\", "/")
+    assert "m" in ph.__file__.replace("\\", "/")
+
+
+@pytest.mark.unit
+def test_m1_m2_m3_satisfy_decision_provider():
+    assert is_decision_provider(RuleBasedDecisionEngineM1(player_id=0))
+    assert is_decision_provider(RuleBasedDecisionEngineM2(player_id=2))
+    assert is_decision_provider(M3DecisionProvider(player_id=1))
+    assert not is_decision_provider(M3DecisionEngine(player_id=1))
+
+
+@pytest.mark.unit
+def test_v_learn_v_nn_import_and_decide_callable():
+    v4 = HybridDecisionEngineV4(player_id=0, config={})
+    v5 = HybridDecisionEngineV5(player_id=0, config={})
+    v7 = UltimateWinRateEngineV7(player_id=0)
+    for engine in (v4, v5, v7):
+        assert is_decision_provider(engine)
+
+
+@pytest.mark.unit
+def test_decision_shims_still_work():
+    from decision.stage_router import StageRouter as ShimRouter
+    from decision.hybrid_decision_engine_v5 import HybridDecisionEngineV5 as ShimV5
+
+    assert ShimRouter is StageRouter
+    assert ShimV5 is HybridDecisionEngineV5
+
+
+@pytest.mark.unit
+def test_platform_reexports():
+    assert GameRecorder is not None
+    assert WebSocketManager is not None
+
+
+@pytest.mark.unit
+def test_decision_provider_adapter():
+    inner = RuleBasedDecisionEngineM1(player_id=3)
+    wrapped = DecisionProviderAdapter(inner, player_id=3)
+    assert is_decision_provider(wrapped)
+    assert wrapped.player_id == 3
+
+
+@pytest.mark.unit
+def test_m1_handler_import_from_package():
+    assert OpeningPassiveHandler is not None
+
+
+@pytest.mark.unit
+def test_m3_passive_uses_action_rank_not_cards_list():
+    """回归：移植时 curAction[1]/action[1] 误写为 [-1] 会 TypeError，客户端兜底成 PASS。"""
+    engine = M3DecisionEngine(player_id=0)
+    data = {
+        "stage": "play",
+        "greaterPos": 1,
+        "curPos": 1,
+        "curRank": "2",
+        "curAction": ["Single", "8", ["D8"]],
+        "greaterAction": ["Single", "8", ["D8"]],
+        "handCards": [
+            "C2", "S3", "D3", "S4", "H4", "D4", "D4", "D5", "H6", "C6",
+            "S7", "S7", "S8", "S8", "H8", "C8", "D9", "HT", "DT", "SJ",
+            "HJ", "SQ", "HQ", "CK", "CA", "DA", "SB",
+        ],
+        "actionList": [
+            ["PASS", "PASS", "PASS"],
+            ["Single", "9", ["D9"]],
+            ["Single", "T", ["HT"]],
+            ["Single", "J", ["HJ"]],
+            ["Single", "Q", ["HQ"]],
+        ],
+    }
+    idx = engine._rule_parse(data)
+    assert idx > 0
+    assert data["actionList"][idx][0] == "Single"

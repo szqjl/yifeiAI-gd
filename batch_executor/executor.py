@@ -8,13 +8,149 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
 import tempfile
+import time
+import threading
+import queue
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional, Set
 import logging
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+
+# game_records 文件名示例：「<game_id> [yf1_m3]-[opponent]-[round]-[level].json」
+# 台账 completed_games = 平台批次数累计（每批 += batch_games）；落盘副数见 match_key 诊断。
+# match key 与 GUA-025 / game_recorder.parse_record_filename 一致：(opponent, round, level)。
+_GAME_RECORD_PAIR_PATTERN = re.compile(r"^(\d+) \[(yf[12]_(m[123]|v[4-7]))\]")
+_GAME_RECORD_MATCH_KEY_RE = re.compile(
+    r"^(\d+) \[([^\]]+)\]-\[([^\]]+)\]-\[(\d+)\]-\[([^\]]*)\]\.json$"
+)
+
+
+@dataclass
+class GameRecordsStats:
+    """本 Run 相对 baseline 的落盘诊断计数（不驱动 completed_games）。"""
+    paired_game_id: int = 0
+    paired_match_key: int = 0
+    legacy_round_only_pairs: int = 0
+
+
+def _scan_game_records_stats(
+    records_dir: Path,
+    baseline_files: Set[str],
+    player_prefix: str = "yf1_",
+    teammate_prefix: str = "yf2_",
+) -> GameRecordsStats:
+    """扫描新增 JSON：成对 game_id、GUA-025 match key、旧 round-only 口径（仅诊断）。"""
+    if not records_dir.is_dir():
+        return GameRecordsStats()
+    by_id_p1: Set[str] = set()
+    by_id_p2: Set[str] = set()
+    by_round_p1: Set[str] = set()
+    by_round_p2: Set[str] = set()
+    match_sides: dict = {}
+    try:
+        for p in records_dir.glob("*.json"):
+            if p.name in baseline_files:
+                continue
+            m = _GAME_RECORD_PAIR_PATTERN.match(p.name)
+            if m:
+                gid, tag = m.group(1), m.group(2)
+                if tag.startswith(player_prefix):
+                    by_id_p1.add(gid)
+                elif tag.startswith(teammate_prefix):
+                    by_id_p2.add(gid)
+            mk = _GAME_RECORD_MATCH_KEY_RE.match(p.name)
+            if mk:
+                player_name = mk.group(2)
+                key = (mk.group(3), mk.group(4), mk.group(5))
+                if player_name.startswith(player_prefix):
+                    match_sides.setdefault(key, set()).add("p1")
+                    by_round_p1.add(mk.group(4))
+                elif player_name.startswith(teammate_prefix):
+                    match_sides.setdefault(key, set()).add("p2")
+                    by_round_p2.add(mk.group(4))
+    except OSError as e:
+        logging.getLogger("batch_executor").warning(
+            "扫描 game_records 失败: %s: %s", records_dir, e
+        )
+        return GameRecordsStats()
+    paired_match_key = sum(
+        1 for sides in match_sides.values() if "p1" in sides and "p2" in sides
+    )
+    return GameRecordsStats(
+        paired_game_id=len(by_id_p1 & by_id_p2),
+        paired_match_key=paired_match_key,
+        legacy_round_only_pairs=len(by_round_p1 & by_round_p2),
+    )
+
+
+def _count_new_paired_games(
+    records_dir: Path,
+    baseline_files: Set[str],
+    player_prefix: str = "yf1_",
+    teammate_prefix: str = "yf2_",
+) -> int:
+    """旧 max(game_id, round) 口径，仅保留供测试对比；不得写入 completed_games。"""
+    stats = _scan_game_records_stats(
+        records_dir, baseline_files, player_prefix, teammate_prefix
+    )
+    return max(stats.paired_game_id, stats.legacy_round_only_pairs)
+
+
+def _increment_completed_after_batch(
+    state: "ExecutionState",
+    batch_games: int,
+    *,
+    server_terminated_by_kill: bool,
+) -> int:
+    """方案 A：正常结束的批次按 batch_games 累加台账；强杀批次不加。"""
+    if server_terminated_by_kill or batch_games <= 0:
+        return 0
+    added = min(batch_games, state.target_games - state.completed_games)
+    state.completed_games += added
+    state.last_update = datetime.now()
+    return added
+
+
+def _count_new_paired_m1_games(
+    records_dir: Path,
+    baseline_files: Set[str],
+) -> int:
+    """本 Run 新增成对 M1 局数（yf1_m1 / yf2_m1）。"""
+    return _count_new_paired_games(records_dir, baseline_files, "yf1_m1", "yf2_m1")
+
+
+def _paired_m1_game_ids(game_records_dir: Path) -> Set[str]:
+    """返回「成对」的 M1 game_id 集合。"""
+    if not game_records_dir.is_dir():
+        return set()
+    yf1: Set[str] = set()
+    yf2: Set[str] = set()
+    try:
+        for p in game_records_dir.glob("*.json"):
+            m = _GAME_RECORD_PAIR_PATTERN.match(p.name)
+            if not m:
+                continue
+            gid, tag = m.group(1), m.group(2)
+            if tag.startswith("yf1_m1"):
+                yf1.add(gid)
+            elif tag.startswith("yf2_m1"):
+                yf2.add(gid)
+    except OSError as e:
+        logging.getLogger("batch_executor").warning(
+            "扫描 game_records 失败: %s: %s", game_records_dir, e
+        )
+        return set()
+    return yf1 & yf2
 
 
 @dataclass
@@ -81,18 +217,25 @@ class ExecutionState:
 class SignalHandler:
     """信号处理器，用于捕获终止信号并优雅退出"""
     
-    def __init__(self, state_file: str, logger: Optional[logging.Logger] = None):
+    def __init__(
+        self,
+        state_file: str,
+        logger: Optional[logging.Logger] = None,
+        on_before_save: Optional[Callable[[], None]] = None,
+    ):
         """
         初始化信号处理器
         
         Args:
             state_file: 状态保存文件路径
             logger: 日志记录器（可选）
+            on_before_save: 保存状态前回调（例如刷新 game_records 诊断日志）
         """
         self.state_file = state_file
         self.logger = logger or logging.getLogger(__name__)
         self.execution_state: Optional[ExecutionState] = None
         self.shutdown_requested = False
+        self.on_before_save = on_before_save
         
         # 注册信号处理函数
         signal.signal(signal.SIGINT, self._handle_signal)
@@ -120,6 +263,12 @@ class SignalHandler:
         
         # 标记关闭请求
         self.shutdown_requested = True
+        
+        if self.on_before_save:
+            try:
+                self.on_before_save()
+            except Exception as e:
+                self.logger.warning(f"信号退出前回调失败: {e}")
         
         # 保存当前状态
         if self.execution_state:
@@ -215,12 +364,19 @@ class BatchExecutor:
         self.tracker = ScoreTracker(score_file)
         self.restart_manager = RestartManager(self.process_monitor, self.project_root)
         self.validator = InputValidator()
+        # 本 Run 开始时 game_records 文件名快照（用于统计新增成对局）
+        self._game_records_files_baseline: Optional[Set[str]] = None
+        self._run_lock_path: Optional[Path] = None
         
         # 初始化信号处理器（仅在主线程中）
         self.signal_handler = None
         if enable_signal_handler:
             try:
-                self.signal_handler = SignalHandler(state_file, self.logger)
+                self.signal_handler = SignalHandler(
+                    state_file,
+                    self.logger,
+                    on_before_save=self._sync_state_before_persist,
+                )
             except ValueError as e:
                 self.logger.warning(f"无法初始化信号处理器: {e}，将在非主线程模式下运行")
         
@@ -337,8 +493,166 @@ class BatchExecutor:
         
         self.logger.info("=" * 60 + "\n")
     
+    def _get_game_records_stats(self) -> GameRecordsStats:
+        if self._game_records_files_baseline is None:
+            return GameRecordsStats()
+        return _scan_game_records_stats(
+            self.project_root / "game_records",
+            self._game_records_files_baseline,
+        )
+
+    def _log_game_records_diagnostics(
+        self,
+        state: ExecutionState,
+        *,
+        batch_games: Optional[int] = None,
+        batch_start_stats: Optional[GameRecordsStats] = None,
+    ) -> None:
+        """方案 C：落盘诊断（match key / game_id），不写入 completed_games。"""
+        stats = self._get_game_records_stats()
+        state.last_update = datetime.now()
+        batch_new_match_keys = None
+        if batch_start_stats is not None:
+            batch_new_match_keys = stats.paired_match_key - batch_start_stats.paired_match_key
+        self.logger.info(
+            "game_records 诊断：成对 game_id=%d，成对 match_key(opponent+round+level)=%d，"
+            "legacy_round_only=%d；台账 completed_games=%d/%d",
+            stats.paired_game_id,
+            stats.paired_match_key,
+            stats.legacy_round_only_pairs,
+            state.completed_games,
+            state.target_games,
+        )
+        if batch_games is not None and batch_new_match_keys is not None:
+            self.logger.info(
+                "本批落盘：batch_games=%d，新增 match_key=%d",
+                batch_games,
+                batch_new_match_keys,
+            )
+            if batch_games > 0 and batch_new_match_keys > batch_games * 3:
+                self.logger.warning(
+                    "本批 match_key 增量(%d) 远大于 batch_games(%d)；"
+                    "落盘副数不等于平台批次数，分析 PASS/胜率时请区分口径。",
+                    batch_new_match_keys,
+                    batch_games,
+                )
+
+    def _write_current_batch_context(self, state: ExecutionState, batch_games: int) -> None:
+        """供 M3 客户端读取本批 batch_games（GUA-033）。"""
+        payload = {
+            "batch": state.current_batch,
+            "batch_games": batch_games,
+            "timestamp": datetime.now().isoformat(),
+        }
+        path = self.project_root / "batch_executor" / "current_batch.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.environ["BATCH_GAMES"] = str(batch_games)
+
+    def _validate_batch_victory_num(self, batch_games: int) -> None:
+        """批末交叉验证：latest_victory_num.json 与 batch_games / RAW gameResult 口径。"""
+        shared = self.project_root / "batch_executor" / "latest_victory_num.json"
+        if not shared.exists():
+            self.logger.warning(
+                "批末未找到 latest_victory_num.json，无法交叉验证 victoryNum（batch_games=%d）",
+                batch_games,
+            )
+            return
+        try:
+            payload = json.loads(shared.read_text(encoding="utf-8"))
+            vn = payload.get("victoryNum", [])
+            if not isinstance(vn, list) or len(vn) < 4:
+                self.logger.warning("latest_victory_num.json 格式无效: %s", payload)
+                return
+            team_total = int(vn[0]) + int(vn[1])
+            raw = payload.get("server_vn_raw")
+            if raw and isinstance(raw, list) and len(raw) >= 4:
+                raw_sum = int(raw[0]) + int(raw[1])
+                if raw_sum != team_total:
+                    self.logger.info(
+                        "批末对账：采用 vn=%s (vn_source=%s)，服务器 RAW=%s",
+                        vn,
+                        payload.get("vn_source", "?"),
+                        raw,
+                    )
+            if team_total != batch_games:
+                self.logger.warning(
+                    "批末 victoryNum 与 batch_games 不一致: vn=%s [0]+[1]=%d, batch_games=%d；"
+                    "本批队胜不计入 tracker",
+                    vn,
+                    team_total,
+                    batch_games,
+                )
+                return
+            if int(vn[0]) != int(vn[2]) or int(vn[1]) != int(vn[3]):
+                self.logger.warning("批末 victoryNum 同队不一致: %s", vn)
+                return
+            self.logger.info(
+                "批末 victoryNum 校验通过: vn=%s, batch_games=%d, Team0=%d Team1=%d",
+                vn,
+                batch_games,
+                int(vn[0]),
+                int(vn[1]),
+            )
+        except (json.JSONDecodeError, TypeError, ValueError, OSError) as e:
+            self.logger.warning("读取 latest_victory_num.json 失败: %s", e)
+
+    def _sync_state_before_persist(self) -> None:
+        """供信号处理 / stop 前调用：刷新诊断日志，不改动 completed_games。"""
+        if self._current_state is not None:
+            self._log_game_records_diagnostics(self._current_state)
+    
+    def _acquire_run_lock(self) -> None:
+        """防止多个 batch_executor 同时抢占端口 23456 并互相杀进程。"""
+        lock_dir = self.project_root / "tmp"
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        lock_path = lock_dir / ".batch_executor.lock"
+        stale_root_lock = self.project_root / ".batch_executor.lock"
+        if stale_root_lock.exists():
+            stale_root_lock.unlink(missing_ok=True)
+        if lock_path.exists():
+            try:
+                old_pid = int(lock_path.read_text(encoding="utf-8").strip())
+                if psutil is not None and psutil.pid_exists(old_pid):
+                    raise RuntimeError(
+                        f"已有 batch_executor 在运行 (PID {old_pid})。"
+                        "请先 Ctrl+C 停止该进程，或删除 stale lock 后再试。"
+                    )
+            except ValueError:
+                pass
+            lock_path.unlink(missing_ok=True)
+        lock_path.write_text(str(os.getpid()), encoding="utf-8")
+        self._run_lock_path = lock_path
+    
+    def _release_run_lock(self) -> None:
+        if self._run_lock_path is None:
+            return
+        try:
+            if self._run_lock_path.exists():
+                if self._run_lock_path.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                    self._run_lock_path.unlink()
+        except OSError:
+            pass
+        self._run_lock_path = None
+    
+    def _count_live_client_processes(self) -> int:
+        """统计当前仍在运行的客户端 Python 进程数（按脚本名匹配，去重 PID）。"""
+        from .restart_manager import _count_live_client_scripts
+        return _count_live_client_scripts(self.client_scripts)
+    
     def run(self) -> None:
         """执行批量游戏"""
+        self._acquire_run_lock()
+        try:
+            self._run_impl()
+        finally:
+            self.logger.info("清理进程...")
+            self.restart_manager.cleanup()
+            self._release_run_lock()
+            self._running = False
+    
+    def _run_impl(self) -> None:
+        """run() 主体逻辑（由 run() 包装 lock/cleanup）。"""
         # 立即创建执行状态，以便GUI可以显示
         state = ExecutionState(
             target_games=self.target_games,
@@ -362,12 +676,22 @@ class BatchExecutor:
         self.logger.info(f"服务器路径: {self.server_path}")
         self.logger.info(f"客户端数量: {len(self.client_scripts)}")
         
+        # 立即落盘，避免磁盘上仍为旧 target_games / completed_games（GUI 与无头共用）
+        try:
+            state.save(self.state_file)
+        except Exception as e:
+            self.logger.warning(f"保存初始执行状态失败: {e}")
+        
         # 运行诊断
         diagnostic_report = self.run_diagnostic()
         
         if self.diagnose_only:
             self.logger.info("仅诊断模式，退出")
-            self._running = False
+            state.last_update = datetime.now()
+            try:
+                state.save(self.state_file)
+            except Exception as e:
+                self.logger.warning(f"保存执行状态失败: {e}")
             return
         
         # 检查诊断是否成功
@@ -395,22 +719,49 @@ class BatchExecutor:
         self.tracker.total_games = 0
         self.logger.info("已清空之前的战绩，开始新的对战")
         
+        # 记录初始战绩，用于计算增量
+        initial_team_a = 0
+        initial_team_b = 0
+        
+        records_dir = self.project_root / "game_records"
+        self._game_records_files_baseline = {
+            p.name for p in records_dir.glob("*.json")
+        } if records_dir.is_dir() else set()
+        self.logger.info(
+            "game_records 基线文件数: %d（目录: %s）",
+            len(self._game_records_files_baseline),
+            records_dir,
+        )
+        
+        max_no_progress_restarts = int(
+            os.environ.get("BATCH_EXECUTOR_MAX_NO_PROGRESS_RESTARTS", "3")
+        )
+        max_total_restarts = int(
+            os.environ.get(
+                "BATCH_EXECUTOR_MAX_TOTAL_RESTARTS",
+                str(max(state.target_games * 5, 15)),
+            )
+        )
+        client_monitor_grace_seconds = int(
+            os.environ.get("BATCH_EXECUTOR_CLIENT_MONITOR_GRACE", "60")
+        )
+        consecutive_no_progress_restarts = 0
+        last_completed_games = 0
+        
         # 主执行循环
         try:
-            self.logger.info("=" * 80)
-            self.logger.info("🚀 开始批量执行循环")
-            self.logger.info(f"🎯 目标：{state.target_games} 场游戏")
-            self.logger.info(f"📏 单批次限制：{self.validator.single_run_limit} 场")
-            self.logger.info(f"🔢 预计批次数：{self.validator.calculate_restart_count(state.target_games) + 1}")
-            self.logger.info("=" * 80)
-
             while state.completed_games < state.target_games and self._running:
-                self.logger.info("=" * 80)
-                self.logger.info(f"🔄 循环检查：{state.completed_games} < {state.target_games} and {self._running}")
-                self.logger.info("=" * 80)
-
+                if state.restart_count >= max_total_restarts:
+                    self.logger.error(
+                        "已达最大重启次数 %d（completed=%d/%d），停止执行。"
+                        "请确认无其他 test_t9/batch_executor 在并行运行。",
+                        max_total_restarts,
+                        state.completed_games,
+                        state.target_games,
+                    )
+                    break
                 if self.signal_handler and self.signal_handler.is_shutdown_requested():
-                    self.logger.info("🛑 检测到关闭请求，停止执行")
+                    self.logger.info("检测到关闭请求，停止执行")
                     break
                 
                 # 显示进度
@@ -420,18 +771,11 @@ class BatchExecutor:
                 remaining = state.target_games - state.completed_games
                 batch_games = min(remaining, self.validator.single_run_limit)
                 
-                self.logger.info("=" * 60)
                 self.logger.info(f"开始批次 {state.current_batch}，执行 {batch_games} 场游戏")
-                self.logger.info("=" * 60)
+                self._write_current_batch_context(state, batch_games)
                 
-                # 清理之前的进程（确保没有残留）
-                # 注意：第一轮时，这里会清理；后续轮次在上一轮结束时已清理
-                self.logger.info("清理之前的进程（确保没有残留）...")
+                # 清理之前的进程
                 self.restart_manager.cleanup()
-                # 等待一小段时间，确保清理完成
-                import time
-                time.sleep(1)
-                self.logger.info("✓ 清理完成")
                 
                 # 启动服务器
                 server_process = self.restart_manager.restart_server(
@@ -451,11 +795,32 @@ class BatchExecutor:
                 import time
                 time.sleep(2)
                 
-                # 验证服务器进程仍在运行
+                # 验证服务器进程仍在运行（或端口已开放）
+                # NOTE: 掼蛋 exe 会启动 tornado 服务端后作为孤儿进程退出父进程，
+                #       因此直接检查 process.poll() 会误杀仍在运行的背景服务器。
+                #       改为检查端口 23456 是否开放 —— 如果开放说明服务端在运行。
                 if server_process.poll() is not None:
-                    self.logger.error(f"服务器进程已退出，返回码: {server_process.returncode}")
-                    self.logger.error("请检查服务器窗口或日志，查看启动失败原因")
-                    break
+                    self.logger.warning(
+                        f"服务器主进程已退出（返回码 {server_process.returncode}），"
+                        f"检查端口 23456 是否仍开放..."
+                    )
+                    import socket
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(2)
+                    port_open = sock.connect_ex(('127.0.0.1', 23456)) == 0
+                    sock.close()
+                    if port_open:
+                        self.logger.info(
+                            "✓ 端口 23456 已开放，孤儿服务端进程正常运行，"
+                            "继续执行"
+                        )
+                    else:
+                        self.logger.error(
+                            f"服务器进程已退出（返回码: {server_process.returncode}），"
+                            "且端口 23456 未开放"
+                        )
+                        self.logger.error("请检查服务器窗口或日志，查看启动失败原因")
+                        break
                 
                 self.logger.info("✓ 服务器端口就绪，开始启动客户端...")
 
@@ -468,37 +833,20 @@ class BatchExecutor:
                 clear_all_ready()
                 self.logger.info("已清空 clients_ready.json，准备按序连入四席")
                 
-                # 启动客户端（客户端内部有延迟：yf1_m1=5s, client3=10s, yf2_m1=15s, client4=20s）
-                # restart_clients 会根据每个客户端类型智能等待，确保连接顺序
-                self.logger.info("开始启动客户端（按顺序启动，智能等待确保连接顺序）...")
-                self.logger.info(
-                    "客户端内部延迟：yf1_v7=2s, client3=3s, yf2_v7=4s, client4=11s；"
-                    "末席门闩稳定等待 7s（GUA-044）"
-                )
-                self.logger.info("预计四席连入：约 25–35 秒（末席连上后平台才开局）")
+                # 启动客户端
                 client_processes = self.restart_manager.restart_clients(
-                    self.client_scripts,
-                    wait_between=8  # 默认等待时间（实际会根据客户端类型调整）
+                    self.client_scripts
                 )
                 
                 if not client_processes:
                     self.logger.error("没有客户端成功启动，停止执行")
                     break
                 
+                # 等待所有客户端连接到服务器
                 expected_client_count = len(self.client_scripts)
-                expected_client_ids = [
-                    cid
-                    for script in self.client_scripts
-                    if (cid := client_id_from_script(script))
-                ]
-                connect_wait_timeout = 90
-                self.logger.info(
-                    f"等待四席 WebSocket 就绪（最多 {connect_wait_timeout} 秒，末席就绪后平台开局）..."
-                )
                 clients_connected = self.restart_manager.wait_for_clients_connected(
                     expected_count=expected_client_count,
-                    timeout=connect_wait_timeout,
-                    expected_client_ids=expected_client_ids or None,
+                    timeout=30
                 )
                 
                 if not clients_connected:
@@ -518,343 +866,257 @@ class BatchExecutor:
                 else:
                     self.logger.info("✓ 所有客户端已收到首条游戏消息")
                 
-                # 验证连接顺序和组队信息
-                self.logger.info("=" * 60)
-                self.logger.info("连接顺序验证")
-                self.logger.info("=" * 60)
-                self.logger.info("预期连接顺序:")
-                self.logger.info("  1. yf1_v7 → 0号位 (Team A)")
-                self.logger.info("  2. run_lalala_client3 → 1号位 (Team B)")
-                self.logger.info("  3. yf2_v7 → 2号位 (Team A)")
-                self.logger.info("  4. run_lalala_client4 → 3号位 (Team B)")
-                self.logger.info("")
-                self.logger.info("组队规则:")
-                self.logger.info("  Team A: 0号(yf1_v7) + 2号(yf2_v7)")
-                self.logger.info("  Team B: 1号(client3) + 3号(client4)")
-                self.logger.info("=" * 60)
-                
-                # 额外等待并检测游戏是否开始（单线程独占 stdout，避免 GUA-048 日志延迟）
-                self.logger.info("=" * 60)
-                self.logger.info("等待服务器输出比赛信息...")
-                self.logger.info("所有客户端已连接，等待服务器开始游戏...")
-                self.logger.info("=" * 60)
+                # 额外等待让对局启动，避免在此阶段提前消费 stdout（会影响后续完成判定）
+                self.logger.info("等待游戏开始（保留stdout给后续完成监控）...")
                 import time
-                from batch_executor.server_stdout_reader import ServerStdoutReader
-
-                stdout_reader: Optional[ServerStdoutReader] = None
-
-                if server_process.stdout:
-                    stdout_reader = ServerStdoutReader(server_process, self.logger)
-                    if stdout_reader.start():
-                        self.logger.info(
-                            "已启动服务器 stdout 实时读取（单读者%s）",
-                            "；可见窗口模式下 PIPE 可能无实时输出，进度看 victoryNum" if self.visible_server else "",
-                        )
-                elif self.visible_server:
-                    self.logger.info(
-                        "可见窗口模式：主日志不镜像服务端输出，通过 victoryNum / 完成提示监控进度"
-                    )
-
-                if stdout_reader is not None and stdout_reader.is_game_started():
-                    self.logger.info("✓ 已检测到游戏开始信号")
-                else:
-                    self.logger.info("四席已就绪，进入实战监控（不阻塞等待开局关键词）")
-
+                game_start_wait_seconds = 10
+                time.sleep(game_start_wait_seconds)
+                self.logger.info(f"已等待 {game_start_wait_seconds} 秒，进入完成监控阶段...")
+                
+                # 等待服务器完成
+                server_name = os.path.basename(self.server_path)
                 self.logger.info(f"等待服务器完成 {batch_games} 场游戏...")
-
-                infinite_mode = (batch_games == self.validator.single_run_limit)
-                if infinite_mode:
-                    self.logger.info("使用无限运行模式：将通过游戏计数器监控进度")
-                    self.logger.info(f"目标：完成 {batch_games} 场游戏后停止服务器")
-                else:
-                    self.logger.info(
-                        "等待服务器输出完成提示: "
-                        "'达到设定游戏次数，若想再次训练请按照使用说明重新运行'"
+                
+                # 掼蛋单局（含多副升级）常超过 5 分钟；过短会误杀仍在出牌的服务器。
+                # 每场按 12 分钟估算，整批至少 3 分钟；可按环境变量调大（见 README）。
+                _min_batch_seconds = int(os.environ.get("BATCH_EXECUTOR_MIN_BATCH_SECONDS", "180"))
+                _seconds_per_game_estimate = int(
+                    os.environ.get("BATCH_EXECUTOR_SECONDS_PER_GAME_ESTIMATE", str(12 * 60))
+                )
+                estimated_timeout = max(_min_batch_seconds, batch_games * _seconds_per_game_estimate)
+                self.logger.info(
+                    f"等待服务器完成（超时时间: {estimated_timeout // 60} 分钟，"
+                    f"按每局约 {_seconds_per_game_estimate // 60} 分钟 × {batch_games} 局估算）..."
+                )
+                
+                # 等待服务器进程结束并读取输出
+                server_output = []
+                start_time = time.time()
+                client_monitor_ready_at = start_time + client_monitor_grace_seconds
+                server_terminated_by_kill = False  # 超时强杀则不计入 completed_games（见下方）
+                low_client_strikes = 0
+                batch_start_stats = self._get_game_records_stats()
+                
+                try:
+                    # 使用混合方式：同时读取stdout和监控进程状态
+                    import threading
+                    import queue
+                    
+                    output_queue = queue.Queue()
+                    read_complete = threading.Event()
+                    server_reported_done = False
+                    done_detected_at: Optional[float] = None
+                    # 兼容编码乱码与不同服务器输出：中文、英文、通知键等都可触发完成
+                    done_markers = (
+                        "达到设定",
+                        "游戏结束",
+                        "gameover",
+                        "gameresult",
+                        "setting",
+                        "curtimes",
                     )
-
-                server_output: list[str] = []
-                game_completed = False
-                initial_games = self.tracker.total_games
-                initial_session_games = _session_games_from_victory_file(self.project_root)
-
-                def _terminate_server_after_completion() -> None:
-                    self.logger.info("主动终止服务器进程...")
-                    try:
-                        if server_process.poll() is None:
-                            server_process.terminate()
-                            self.logger.info("已发送终止信号，等待进程结束（最多5秒）...")
-                            try:
-                                server_process.wait(timeout=5)
-                                self.logger.info("✓ 服务器进程已正常终止")
-                            except subprocess.TimeoutExpired:
-                                self.logger.warning("服务器进程未响应终止信号，强制结束")
-                                server_process.kill()
-                                server_process.wait(timeout=2)
-                                self.logger.info("✓ 服务器进程已强制终止")
-                    except Exception as e:
-                        self.logger.error(f"终止服务器进程时出错: {e}")
-                        try:
-                            server_process.kill()
-                            server_process.wait(timeout=2)
-                        except Exception:
-                            pass
-
-                try:
-                    self.logger.info("监控本批次进度（stdout 完成提示 / victoryNum / 进程结束）...")
-                    poll_interval = 0.5
-                    last_progress_log = time.time()
-                    progress_log_interval = 10.0
-                    while server_process.poll() is None and not game_completed:
-                        now = time.time()
-                        if now - last_progress_log >= progress_log_interval:
-                            session_games = _session_games_from_victory_file(self.project_root)
-                            done = max(0, session_games - initial_session_games)
-                            self.logger.info(
-                                "批跑进行中… 本批约 %d/%d 局（victoryNum 累计 %d）",
-                                done,
-                                batch_games,
-                                session_games,
-                            )
-                            last_progress_log = now
-
-                        if stdout_reader is not None and stdout_reader.is_game_completed():
-                            self.logger.info("=" * 60)
-                            self.logger.info("✓ 检测到服务器完成提示!")
-                            self.logger.info("=" * 60)
-                            game_completed = True
-                            _terminate_server_after_completion()
-                            break
-
-                        if infinite_mode:
-                            session_games = _session_games_from_victory_file(self.project_root)
-                            games_completed_this_batch = session_games - initial_session_games
-                            if games_completed_this_batch >= batch_games:
-                                self.logger.info("=" * 60)
-                                self.logger.info("✓ 检测到本批次局数达标（latest_victory_num）!")
-                                self.logger.info(
-                                    f"  本批次已完成: {games_completed_this_batch}/{batch_games} 局"
-                                )
-                                self.logger.info(f"  victoryNum 累计局数: {session_games}")
-                                self.logger.info("=" * 60)
-                                game_completed = True
-                                _terminate_server_after_completion()
-                                break
-
-                        time.sleep(poll_interval)
-
-                    if stdout_reader is not None:
-                        server_output = stdout_reader.get_lines()
-                    elif not server_process.stdout:
-                        self.logger.warning("服务器 stdout 不可用，依赖进程自然结束")
                     
-                    # 如果已经检测到完成提示并已终止服务器，跳过等待
-                    if game_completed and server_process.poll() is not None:
-                        self.logger.info("✓ 服务器进程已终止，跳过等待")
-                    else:
-                        # 等待进程结束（增加超时时间，确保有足够时间完成所有游戏）
-                        # 每场游戏大约需要1-2分钟，3场游戏需要3-6分钟，加上缓冲时间，设置10分钟超时
-                        timeout_seconds = max(600, batch_games * 120)  # 至少10分钟，或每场游戏2分钟
-                        
-                        if self.visible_server:
-                            # 服务器窗口可见
-                            if game_completed:
-                                self.logger.info(f"已检测到完成提示，等待服务器进程结束（超时时间: {timeout_seconds}秒）...")
-                            else:
-                                self.logger.info(f"等待服务器进程结束（超时时间: {timeout_seconds}秒）...")
-                                self.logger.info("请检查服务器窗口，确认显示完成提示: '达到设定游戏次数，若想再次训练请按照使用说明重新运行'")
-                                self.logger.info("提示：如果服务器窗口显示完成提示，进程将自动结束")
-                        else:
-                            self.logger.info(f"等待服务器进程结束（超时时间: {timeout_seconds}秒）...")
-                        
-                        # 等待服务器进程结束
+                    def read_stdout():
+                        """在单独线程中读取stdout"""
                         try:
-                            server_process.wait(timeout=timeout_seconds)
-                            self.logger.info("✓ 服务器进程已正常结束")
-                            # 如果之前没有检测到完成提示，但进程已结束，认为已完成
-                            if not game_completed:
-                                self.logger.info("服务器进程已结束，认为本批次已完成")
-                                game_completed = True
-                        except subprocess.TimeoutExpired:
-                            # 如果超时，但已经检测到完成提示，继续执行
-                            if game_completed:
-                                self.logger.warning(f"服务器进程未在 {timeout_seconds} 秒内结束，但已检测到完成提示，继续执行")
-                                # 强制终止服务器进程
-                                try:
-                                    if server_process.poll() is None:
-                                        server_process.terminate()
-                                        server_process.wait(timeout=5)
-                                except:
-                                    server_process.kill()
-                            else:
-                                raise
-                except subprocess.TimeoutExpired:
-                    self.logger.warning(f"⚠️ 服务器未在 {timeout_seconds} 秒内终止")
-                    # 检查是否已经检测到完成提示
-                    if game_completed:
-                        self.logger.info("但已检测到完成提示，继续执行")
-                    else:
-                        self.logger.warning("未检测到完成提示，强制结束服务器")
-                        server_process.kill()
-                except Exception as e:
-                    self.logger.error(f"读取服务器输出时出错: {e}")
-                    # 如果已经检测到完成提示，继续执行
-                    if not game_completed:
-                        raise
-                
-                # 确保服务器进程已完全结束
-                self.logger.info("=" * 60)
-                self.logger.info("等待服务器进程完全结束...")
-                self.logger.info("=" * 60)
-                if server_process.poll() is None:
-                    self.logger.warning("服务器进程仍在运行，等待3秒...")
-                    import time
-                    time.sleep(3)
-                    if server_process.poll() is None:
-                        self.logger.warning("强制终止服务器进程...")
-                        server_process.kill()
-                        server_process.wait(timeout=5)
-                
-                self.logger.info("✓ 服务器进程已完全结束")
-                
-                # 更新状态
-                old_completed = state.completed_games
-                state.completed_games += batch_games
-                state.last_update = datetime.now()
-                self.logger.info("=" * 60)
-                self.logger.info(f"📊 状态更新：")
-                self.logger.info(f"  本批次游戏数: {batch_games}")
-                self.logger.info(f"  之前完成: {old_completed} 场")
-                self.logger.info(f"  现在完成: {state.completed_games} 场")
-                self.logger.info(f"  目标游戏: {state.target_games} 场")
-                self.logger.info(f"  剩余: {state.target_games - state.completed_games} 场")
-                self.logger.info("=" * 60)
-                
-                # 从共享文件或游戏记录文件中读取本批次战绩
-                # victoryNum 格式: [0, 3, 0, 3]
-                # 表示: [0号位胜利次数, 1号位胜利次数, 2号位胜利次数, 3号位胜利次数]
-                # 注意：服务器每批重置计数，所以 victoryNum 是本批的局级结果，不是累计值
-                try:
-                    import time
-                    # 等待游戏记录文件保存完成（客户端可能在游戏结束后才保存）
-                    time.sleep(2)
-                    
-                    victory_num = None
-                    latest_file = None
-                    data_source = None
-                    
-                    # 方法1: 优先从共享文件读取（客户端保存的 latest_victory_num.json）
-                    shared_file = self.project_root / "batch_executor" / "latest_victory_num.json"
-                    if shared_file.exists():
-                        try:
-                            with open(shared_file, 'r', encoding='utf-8') as f:
-                                shared_data = json.load(f)
-                            if "victoryNum" in shared_data and shared_data["victoryNum"]:
-                                victory_num = shared_data["victoryNum"]
-                                latest_file = shared_file
-                                data_source = "共享文件"
-                                self.logger.info(f"✓ 从共享文件读取 victoryNum: {shared_file}")
+                            if server_process.stdout:
+                                for line in server_process.stdout:
+                                    line = line.strip()
+                                    if line:
+                                        output_queue.put(line)
+                                        self.logger.info(f"[服务器] {line}")
                         except Exception as e:
-                            self.logger.debug(f"读取共享文件失败: {e}")
+                            self.logger.debug(f"读取stdout异常: {e}")
+                        finally:
+                            read_complete.set()
                     
-                    # 方法2: 如果共享文件没有，从游戏记录文件中读取
-                    if not victory_num:
-                        game_records_dir = self.project_root / "game_records"
-                        if game_records_dir.exists():
-                            # 查找包含 victoryNum 的最新游戏记录文件
-                            record_files = (
-                                list(game_records_dir.glob("*yf*m1*.json"))
-                                + list(game_records_dir.glob("*yf*m3*.json"))
-                                + list(game_records_dir.glob("*yf*v7*.json"))
-                            )
-                            if not record_files:
-                                record_files = list(game_records_dir.glob("*.json"))
-                            
-                            # 按修改时间排序，最新的在前
-                            record_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-                            
-                            for record_file in record_files[:10]:  # 只检查最新的10个文件
-                                try:
-                                    with open(record_file, 'r', encoding='utf-8') as f:
-                                        record_data = json.load(f)
-                                    
-                                    # 检查是否有 result.victoryNum
-                                    result = record_data.get("result", {})
-                                    if isinstance(result, dict) and "victoryNum" in result:
-                                        victory_num = result.get("victoryNum", [])
-                                        latest_file = record_file
-                                        data_source = "游戏记录文件"
-                                        break
-                                    # 兼容直接包含 victoryNum 的情况
-                                    elif "victoryNum" in record_data:
-                                        victory_num = record_data.get("victoryNum", [])
-                                        latest_file = record_file
-                                        data_source = "游戏记录文件"
-                                        break
-                                except Exception as e:
-                                    self.logger.debug(f"读取游戏记录文件失败 {record_file}: {e}")
-                                    continue
-
-                    if victory_num and len(victory_num) >= 4:
-                        # victoryNum 格式: [0号位胜利, 1号位胜利, 2号位胜利, 3号位胜利]
-                        # 这是本批的局级结果，需要直接累加到 tracker
-                        wins = {
-                            0: int(victory_num[0]) if victory_num[0] is not None else 0,
-                            1: int(victory_num[1]) if victory_num[1] is not None else 0,
-                            2: int(victory_num[2]) if victory_num[2] is not None else 0,
-                            3: int(victory_num[3]) if victory_num[3] is not None else 0,
-                        }
-
-                        self.logger.info("=" * 60)
-                        self.logger.info(f"从{data_source or '游戏记录文件'}读取胜负结果")
-                        if latest_file:
-                            self.logger.info(f"  数据来源: {latest_file.name}")
-                        self.logger.info("=" * 60)
-                        self.logger.info(f"  0号位胜利: {wins[0]}次")
-                        self.logger.info(f"  1号位胜利: {wins[1]}次")
-                        self.logger.info(f"  2号位胜利: {wins[2]}次")
-                        self.logger.info(f"  3号位胜利: {wins[3]}次")
-                        self.logger.info("")
-
-                        # 计算本批各队胜场（同队席位胜利数应一致，取最大值）
-                        if wins[0] == wins[2]:
-                            batch_team_a = wins[0]
-                        else:
-                            batch_team_a = max(wins[0], wins[2])
-
-                        if wins[1] == wins[3]:
-                            batch_team_b = wins[1]
-                        else:
-                            batch_team_b = max(wins[1], wins[3])
-
-                        self.logger.info("本批组队胜负统计:")
-                        self.logger.info(f"  Team A (0号+2号): {batch_team_a}胜 (0号位{wins[0]}次, 2号位{wins[2]}次)")
-                        self.logger.info(f"  Team B (1号+3号): {batch_team_b}胜 (1号位{wins[1]}次, 3号位{wins[3]}次)")
-                        self.logger.info("=" * 60)
-
-                        # 直接累加本批胜场（不是增量计算）
-                        for _ in range(batch_team_a):
-                            self.tracker.record_game("team_a")
-                        for _ in range(batch_team_b):
-                            self.tracker.record_game("team_b")
-
-                        self.logger.info(f"本批次新增: Team A +{batch_team_a}, Team B +{batch_team_b}")
-                        self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
-                    else:
-                        self.logger.warning("⚠ 未能读取 victoryNum 数据")
-                        import re
-                        for line in reversed(server_output):
-                            if "达到设定场次" in line or ("其中" in line and "胜利" in line):
-                                matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
-                                if matches:
-                                    wins = {int(pos): int(count) for pos, count in matches}
-                                    batch_team_a = wins.get(0, 0) + wins.get(2, 0)
-                                    batch_team_b = wins.get(1, 0) + wins.get(3, 0)
-                                    for _ in range(batch_team_a):
-                                        self.tracker.record_game("team_a")
-                                    for _ in range(batch_team_b):
-                                        self.tracker.record_game("team_b")
-                                    self.logger.info(f"从服务器输出解析: Team A +{batch_team_a}, Team B +{batch_team_b}")
+                    # 启动stdout读取线程
+                    stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+                    stdout_thread.start()
+                    
+                    # 主线程：等待进程结束，同时收集输出
+                    check_interval = 5  # 每5秒检查一次进程状态
+                    expected_clients = len(self.client_scripts)
+                    while True:
+                        # 客户端启动后需等待一段时间再监控，避免误判导致每批立即重启
+                        if time.time() >= client_monitor_ready_at:
+                            live_clients = self._count_live_client_processes()
+                            if live_clients < expected_clients:
+                                low_client_strikes += 1
+                                if low_client_strikes >= 2:
+                                    self.logger.error(
+                                        "连续检测到客户端进程不足（%d/%d），"
+                                        "可能已手动关闭客户端窗口，终止本批次",
+                                        live_clients,
+                                        expected_clients,
+                                    )
+                                    server_terminated_by_kill = True
+                                    if server_process.poll() is None:
+                                        try:
+                                            server_process.terminate()
+                                            server_process.wait(timeout=5)
+                                        except Exception:
+                                            try:
+                                                server_process.kill()
+                                            except Exception:
+                                                pass
                                     break
+                                self.logger.warning(
+                                    "客户端进程不足（%d/%d），等待下次确认（%d/2）",
+                                    live_clients,
+                                    expected_clients,
+                                    low_client_strikes,
+                                )
+                            else:
+                                low_client_strikes = 0
+                        
+                        # 检查进程是否已结束
+                        return_code = server_process.poll()
+                        if return_code is not None:
+                            self.logger.info(f"服务器进程已结束，返回码: {return_code}")
+                            break
+                        
+                        # 收集输出队列中的内容，并检查是否已到达设定场次
+                        try:
+                            while True:
+                                line = output_queue.get_nowait()
+                                server_output.append(line)
+                                line_norm = line.lower()
+                                if any(marker in line_norm for marker in done_markers):
+                                    server_reported_done = True
+                                    if done_detected_at is None:
+                                        done_detected_at = time.time()
+                                        self.logger.info("检测到服务器完成标记，等待进程自行退出...")
+                        except queue.Empty:
+                            pass
+                        
+                        # 服务端已明确完成但进程不退出：给几秒缓冲后主动结束，避免 m1.bat 一直无回传
+                        if server_reported_done and done_detected_at is not None:
+                            if time.time() - done_detected_at >= 8:
+                                self.logger.info("服务器已报告完成且超出缓冲时间，主动结束服务端进程以回传结果")
+                                try:
+                                    server_process.terminate()
+                                    server_process.wait(timeout=5)
+                                except Exception:
+                                    # 这里只是让父流程尽快推进，不视作超时强杀失败
+                                    try:
+                                        server_process.kill()
+                                        server_process.wait(timeout=3)
+                                    except Exception:
+                                        pass
+                                break
+                        
+                        # 检查超时
+                        elapsed = time.time() - start_time
+                        if elapsed >= estimated_timeout:
+                            self.logger.warning(f"等待超时（{elapsed//60:.1f} 分钟），检查进程状态...")
+                            # 再次检查进程状态
+                            if server_process.poll() is None:
+                                self.logger.warning("服务器进程仍在运行，可能卡住")
+                                # 检查是否有游戏记录生成（作为完成标志；与项目根一致，避免 cwd 不一致漏检）
+                                game_records_dir = self.project_root / "game_records"
+                                if game_records_dir.exists():
+                                    recent_records = list(game_records_dir.glob("*.json"))
+                                    if recent_records:
+                                        # 检查最新记录的时间
+                                        latest_record = max(recent_records, key=lambda p: p.stat().st_mtime)
+                                        record_age = time.time() - latest_record.stat().st_mtime
+                                        # 单局很长时，记录仍在写入；放宽到 10 分钟内有新文件则延长 10 分钟
+                                        if record_age < 600:
+                                            self.logger.info(f"检测到最近游戏记录（{record_age:.0f}秒前），继续等待...")
+                                            estimated_timeout += 600
+                                            continue
+                                
+                                self.logger.error("服务器长时间未响应，强制终止")
+                                server_terminated_by_kill = True
+                                server_process.kill()
+                                try:
+                                    server_process.wait(timeout=5)
+                                except subprocess.TimeoutExpired:
+                                    self.logger.error("无法终止服务器进程")
+                                break
+                            else:
+                                # 进程已结束，但之前没检测到
+                                break
+                        
+                        # 等待一段时间再检查
+                        time.sleep(check_interval)
+                    
+                    # 等待stdout读取线程完成，并收集剩余输出
+                    read_complete.wait(timeout=2)
+                    try:
+                        while True:
+                            line = output_queue.get_nowait()
+                            server_output.append(line)
+                    except queue.Empty:
+                        pass
+                    
+                    self.logger.info(f"服务器完成，共收集 {len(server_output)} 行输出")
+                    
+                except Exception as e:
+                    self.logger.error(f"等待服务器完成时出错: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
+                # 方案 A：按平台批次累加台账；强杀批次不加
+                if server_terminated_by_kill:
+                    self.logger.warning(
+                        "本批次因超时强杀或客户端异常结束，不增加 completed_games。"
+                    )
+                else:
+                    added = _increment_completed_after_batch(
+                        state,
+                        batch_games,
+                        server_terminated_by_kill=False,
+                    )
+                    self.logger.info(
+                        "本批台账：batch_games=%d，本批计入=%d，completed_games=%d/%d",
+                        batch_games,
+                        added,
+                        state.completed_games,
+                        state.target_games,
+                    )
+                time.sleep(1.5)
+                self._log_game_records_diagnostics(
+                    state,
+                    batch_games=batch_games,
+                    batch_start_stats=batch_start_stats,
+                )
+                if not server_terminated_by_kill:
+                    self._validate_batch_victory_num(batch_games)
+                
+                # 从服务器输出读取本批次战绩
+                # 服务器输出格式: "达到设定场次, 其中0号位胜利X次，1号位胜利Y次，2号位胜利Z次，3号位胜利W次"
+                try:
+                    import re
+                    # 从服务器输出中查找战绩
+                    for line in reversed(server_output):
+                        if "达到设定场次" in line or "其中" in line:
+                            # 提取各位置胜利次数
+                            matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
+                            if matches:
+                                wins = {int(pos): int(count) for pos, count in matches}
+                                # 0号和2号是team_a，1号和3号是team_b
+                                current_team_a = wins.get(0, 0) + wins.get(2, 0)
+                                current_team_b = wins.get(1, 0) + wins.get(3, 0)
+                                
+                                # 计算本批次的增量
+                                delta_a = current_team_a - initial_team_a
+                                delta_b = current_team_b - initial_team_b
+                                
+                                # 累加到tracker
+                                for _ in range(delta_a):
+                                    self.tracker.record_game("team_a")
+                                for _ in range(delta_b):
+                                    self.tracker.record_game("team_b")
+                                
+                                # 更新初始值
+                                initial_team_a = current_team_a
+                                initial_team_b = current_team_b
+                                
+                                self.logger.info(f"本批次增量: Team A +{delta_a}, Team B +{delta_b}")
+                                self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
+                                break
                 except Exception as e:
                     self.logger.warning(f"读取战绩失败: {e}")
                     import traceback
@@ -867,68 +1129,38 @@ class BatchExecutor:
                 except Exception as e:
                     self.logger.error(f"保存数据失败: {e}", exc_info=True)
                 
-                # 一次实战（3场比赛）结束后，等待15秒再清理进程
-                self.logger.info("=" * 60)
-                self.logger.info(f"⏳ 一次实战（{batch_games}场比赛）已结束，等待15秒后再清理进程...")
-                self.logger.info("=" * 60)
-                import time
-                time.sleep(15)
-                self.logger.info("✓ 等待完成，开始清理进程")
-                
                 # 检查是否需要重启
-                self.logger.info("=" * 80)
-                self.logger.info(f"🔍 检查循环条件：")
-                self.logger.info(f"  completed_games: {state.completed_games}")
-                self.logger.info(f"  target_games: {state.target_games}")
-                self.logger.info(f"  _running: {self._running}")
-                self.logger.info(f"  条件: {state.completed_games} < {state.target_games} and {self._running}")
-                self.logger.info("=" * 80)
-
                 if state.completed_games < state.target_games:
-                    self.logger.info("=" * 60)
-                    self.logger.info(f"✅ 本批次完成！已完成 {state.completed_games}/{state.target_games} 场")
-                    self.logger.info("🔄 准备启动下一批次...")
-                    self.logger.info("=" * 60)
-
+                    if state.completed_games <= last_completed_games:
+                        consecutive_no_progress_restarts += 1
+                        self.logger.warning(
+                            "本批次未产生新进度（completed_games=%d），"
+                            "连续无进度重启 %d/%d",
+                            state.completed_games,
+                            consecutive_no_progress_restarts,
+                            max_no_progress_restarts,
+                        )
+                        if consecutive_no_progress_restarts >= max_no_progress_restarts:
+                            self.logger.error(
+                                "连续 %d 次重启仍无进度，停止执行。"
+                                "请检查：是否重复启动了 test_t9/batch_executor、"
+                                "客户端是否异常退出、端口 23456 是否被占用。",
+                                max_no_progress_restarts,
+                            )
+                            break
+                    else:
+                        consecutive_no_progress_restarts = 0
+                    last_completed_games = state.completed_games
                     state.restart_count += 1
                     state.current_batch += 1
-
-                    # 重要：在启动下一轮之前，先清理所有进程
-                    # 这确保没有残留的客户端或服务器进程
-                    self.logger.info("🧹 清理所有进程，准备下一轮...")
-                    self.restart_manager.cleanup()
-                    # 额外等待2秒，确保所有进程完全清理
-                    time.sleep(2)
-                    self.logger.info("✅ 清理完成，准备启动下一轮")
-
-                    # 明确记录循环将继续
-                    self.logger.info("=" * 80)
-                    self.logger.info(f"🔄 循环将继续执行下一批次")
-                    self.logger.info(f"  已完成: {state.completed_games}/{state.target_games} 场")
-                    self.logger.info(f"  下一批次: batch {state.current_batch}")
-                    self.logger.info(f"  已重启: {state.restart_count} 次")
-                    self.logger.info("=" * 80)
-                    # 循环会继续，因为 while 条件仍然满足
+                    state.last_update = datetime.now()
+                    try:
+                        state.save(self.state_file)
+                    except Exception as e:
+                        self.logger.error(f"保存数据失败: {e}", exc_info=True)
+                    self.logger.info(f"准备重启，已完成 {state.completed_games}/{state.target_games} 场")
                 else:
-                    self.logger.info("=" * 60)
-                    self.logger.info("🎉 所有游戏已完成!")
-                    self.logger.info(f"📊 最终统计：{state.completed_games}/{state.target_games} 场游戏完成")
-                    self.logger.info("=" * 60)
-                    
-                    # 最后一次实战结束后，等待15秒再清理进程
-                    self.logger.info("=" * 60)
-                    self.logger.info(f"⏳ 最后一次实战（{batch_games}场比赛）已结束，等待15秒后再清理进程...")
-                    self.logger.info("=" * 60)
-                    import time
-                    time.sleep(15)
-                    self.logger.info("✓ 等待完成，开始清理进程")
-                    
-                    # 清理所有进程
-                    self.logger.info("🧹 清理所有进程...")
-                    self.restart_manager.cleanup()
-                    self.logger.info("✅ 清理完成")
-                    
-                    # 所有游戏完成，退出循环
+                    self.logger.info("所有游戏已完成!")
             
             # 显示最终结果
             self.logger.info("\n" + "=" * 60)
@@ -942,11 +1174,6 @@ class BatchExecutor:
         except Exception as e:
             self.logger.error(f"执行过程中发生错误: {e}", exc_info=True)
             raise
-        finally:
-            # 清理所有进程
-            self.logger.info("清理进程...")
-            self.restart_manager.cleanup()
-            self._running = False
     
     def start(self) -> None:
         """启动执行（用于GUI）"""
@@ -960,6 +1187,7 @@ class BatchExecutor:
         # 保存当前状态
         if self._current_state:
             try:
+                self._sync_state_before_persist()
                 self._current_state.save(self.state_file)
                 self.logger.info(f"执行状态已保存到 {self.state_file}")
             except Exception as e:

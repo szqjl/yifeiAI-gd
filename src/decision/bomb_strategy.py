@@ -24,7 +24,9 @@ def bomb_strategy(
     opponent_is_main_attacker: bool = False,  # 对手是否主攻
     is_last_player: bool = False,  # 是否是最后一家
     has_clear_next_action: bool = True,  # 炸完后是否有明确出牌
-    card_type_clear: bool = True  # 牌型是否明朗
+    card_type_clear: bool = True,  # 牌型是否明朗
+    pass_num: int = 0,  # P0改进④：PASS计数
+    is_opponent_greater: bool = False,  # P0改进④：对手是否控场
 ) -> Dict[str, List[Dict[str, str]]]:
     """
     出炸弹要领决策函数。目标：为己方赢（头游+二游）服务，该炸则炸、该省则省。
@@ -207,6 +209,27 @@ def bomb_strategy(
     if opponent_rest_cards > 10:
         if opponent_action_type in ['single', 'pair', 'trips']:
             suggestions.append({'action': '不炸（小牌型）', 'reason': f'非残局，{opponent_action_type}不值得炸。'})
+
+    # ========== P0改进④：主动用炸弹控场 ==========
+    # 根本原因分析显示：M1缺乏主动抢控权的能力，导致失去主动权
+    # 增强：在关键时刻主动出炸弹，掌握局面
+
+    # 1. 对方即将获得控权时，主动炸掉
+    if is_opponent_greater and opponent_rest_cards <= 8:
+        # 对手控场且剩牌少，主动炸打破局面
+        suggestions.append({'action': '炸（主动抢控）', 'reason': '对手控权且即将冲刺，主动炸打破局面。'})
+
+    # 2. 队友需要保护时，主动炸
+    if teammate_needs_help and opponent_rest_cards <= 10:
+        suggestions.append({'action': '炸（保护队友）', 'reason': '队友处境危险，主动炸给队友创造机会。'})
+
+    # 3. 己方手牌优势时，主动用炸终结
+    if power >= 8 and opponent_rest_cards <= 12:
+        suggestions.append({'action': '炸（优势终结）', 'reason': '己方牌力优势，积极用炸快速结束。'})
+
+    # 4. 关键时刻不能PASS，需要主动炸打破僵局
+    if pass_num >= 3 and opponent_rest_cards <= 6:
+        suggestions.append({'action': '炸（打破僵局）', 'reason': 'PASS数多且对手剩牌少，主动炸打破僵局。'})
 
     # **增强**：中期阶段谨慎控制炸弹使用
     if opponent_rest_cards > 12:  # 中期阶段

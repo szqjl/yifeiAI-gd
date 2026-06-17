@@ -16,6 +16,8 @@ last_updated: 2025-11-26 14:51:29
 
 掼蛋游戏的核心原则体系：一个中心，两个基本点，三个有利，四项基本原则，五条高压线。这是掼蛋游戏的基础指导思想，是所有技巧和策略的根本遵循。
 
+> **引擎映射（只读规划）**：[`docs/guandan-brain/PRINCIPLES_MAPPING.md`](../../../guandan-brain/PRINCIPLES_MAPPING.md) — **P0→M3**，**P1+→V5+**（[`GUA-030`](../../../guandan-brain/ISSUES.md)）。
+
 ## 适用阶段
 
 - **开局阶段**：✅ 完全适用

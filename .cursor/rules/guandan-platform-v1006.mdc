@@ -1,0 +1,142 @@
+---
+description: v1006 离线平台 WebSocket/JSON 协议速查；改通信客户端、批跑、离线平台时必读
+globs:
+  - src/communication/**
+  - offline_platform/**
+  - batch_executor/**
+  - scripts/launchers/**
+---
+
+# v1006 离线平台协议速查
+
+> **完整真源**：[offline_platform/掼蛋平台使用说明书v1006.pdf](../../offline_platform/掼蛋平台使用说明书v1006.pdf) · 示例解析：[offline_platform/guandan_offline_v1006/clients/state.py](../../offline_platform/guandan_offline_v1006/clients/state.py) · 字段详解：[README.md § 离线平台 v1006](../../README.md#离线平台-v1006-怎么理解)
+
+## 连接与座位
+
+- **WebSocket**：`ws://127.0.0.1:23456/game/{user_info}`（本地离线，无重连、错动作仅 stderr 报错）
+- **启动**：`guandan_offline_v1006.exe N` 或 `./guandan_offline_v1006 N`；见 `Ready for connect` 后再连 4 客户端
+- **座位**：**连入顺序** → 0、1、2、3 号；**0+2 一队，1+3 一队**（不可选座）
+- **队友**：`teammate_pos = (myPos + 2) % 4`
+- **参数 N**：说明书「**游戏次数**」= **平台局数**（`settingTimes` / `completed_games`）。见下文 §局与副。
+
+## 局与副（协议视角）
+
+**局 ⊃ 多副**。平台 `exe N` / 批跑 `--target-games N` 的 **N = 局数**，不是副数（实测 `N=1` → 59 副，2026-05-31）。规则细则 → [guandan-knowledge.mdc](./guandan-knowledge.mdc) §1.0。
+
+### 副 — 最小单位
+
+| 项 | 内容 |
+|----|------|
+| 流程 | 发牌 →（进贡还贡）→ 出牌 → 四人完牌 → 升级 |
+| 协议 | **`episodeOver`**（state.py：「小局结束」） |
+| 落盘 | 每座 1 条 JSON；数副用 `total_rounds` / match_key |
+
+### 局 — 更大单位
+
+| 项 | 内容 |
+|----|------|
+| 含义 | 从 2 打到 A，某队 **A 级本副双上** 过关（PDF `gameOver` 段「一次游戏」） |
+| 协议 | 打满 N 局 → **`gameOver`**（`curTimes` = `settingTimes` = N） |
+| 批跑 | **`completed_games`** 累计局数；**≠** `episodeOver` 次数 |
+| 客户端 | `game_scores_m2.json` → `games[]`（跨副追踪规则一局） |
+
+### 关联定音
+
+```text
+1 局  =  多副升级 → 直至 A 级双上结束
+1 副  =  1 次 episodeOver
+N     =  连续 N 局（非 N 副）
+```
+
+| 概念 | 平台 `stage` | 数什么 |
+|------|--------------|--------|
+| 副 | `episodeOver` | 副数、`game_records` |
+| 局 | `gameOver` | `completed_games`、`settingTimes` |
+
+**`victoryNum`**（`gameResult`，**平台下发、按规则正确**）：每 **一整局**（一方 A 级双上过关）结束，赢方 **+1 局**；批跑 N 局后 **`[0]` vs `[1]`** = 各队本批 **赢几局**（同队 0=2、1=3 数值相同；**禁止四席相加**）。**不是副数**。
+
+例（M3 在 0+2、lalala 在 1+3）：`[0,3,0,3]` → lalala 赢 **3 局**、M3 赢 **0 局**；`[3,0,3,0]` → M3 赢 **3 局**、lalala 赢 **0 局**。
+
+**`game_records`**：每条 JSON = **一副**（小局），与 `victoryNum` 无关。全文 → [platform-data-interpretation.md](../../docs/knowledge/platform-data-interpretation.md)
+
+## 消息类型
+
+| `type` | 含义 |
+|--------|------|
+| `notify` | 广播通知，无需回复 |
+| `act` | 请求动作，须回复 `{"actIndex": N}`（N = `actionList` 下标） |
+
+## 阶段 `stage`（与 state.py 一致）
+
+| stage | type | 说明 |
+|-------|------|------|
+| `beginning` | notify | 发牌；含 `handCards`、`myPos`（官方示例**无**三等级字段） |
+| `tribute` | notify / act | 进贡；notify 的 `result` = `[[进贡位, 收贡位, 牌], ...]` |
+| `anti-tribute` | notify | 抗贡；`antiNums`、`antiPos` |
+| `back` | notify / act | 还贡；`result` 格式同 tribute |
+| `play` | notify / act | 出牌；act 含 `actionList`、`publicInfo`、`selfRank`/`oppoRank`/`curRank` |
+| `episodeOver` | notify | **一副结束**（小局）；`order`、`curRank`、`restCards` |
+| `gameOver` | notify | 跑满 N **局**（平台「游戏次数」）；`curTimes`、`settingTimes` |
+| `gameResult` | notify | 本批结束；**`victoryNum`** = 各队本批 **赢局数**（整局结束计胜）；`draws` |
+
+**解析约束**：仅在对应 `(stage, type)` 下读取该消息字段；其他属性可能是上一轮残留（见 state.py 注释）。
+
+## 卡牌与牌型（摘要）
+
+- 编码：2 字符，如 `S2` `HA` `SB`(小王) `HR`(大王)；10 = `T`
+- 牌型三元组：`[牌型, 点数, [卡牌...]]`；`PASS` = `['PASS','PASS','PASS']`
+- 进贡/还贡动作：`["tribute","tribute",[...]]` / `["back","back",[...]]`
+
+## 等级字段（易混，决策以 `act`·`play` 为准）
+
+| 字段 | 含义 |
+|------|------|
+| `selfRank` | 我方队伍等级（跨副累积） |
+| `oppoRank` | 对方队伍等级（跨副累积） |
+| `curRank` | **当前等级**（本副级牌点数；`play` 阶段即本副打几） |
+
+- 等级字符：`2,3,4,5,6,7,8,9,T,J,Q,K,A`
+- `notify`·`play` **不带**三字段；`game_info` 快照可能滞后于进贡后本副 `act`·`play`
+- 分析级牌 / AI 决策：**优先**同副 `act`·`stage=play` 的 `curRank`
+
+### `curRank` 真值优先级（读 `game_records` / 回放 / 决策）
+
+**禁止**只读文件名 `[level]` 或 `game_info.curRank` 就定「本副打几」。
+
+| 优先级 | 来源 | 说明 |
+|--------|------|------|
+| **1** | 同副 `my_decisions` / `act` · `stage=play` 的 `curRank` | AI 决策与级牌规则**唯一可靠真值** |
+| **2** | 同副 `act` · `back` / `tribute` 的 `curRank` | 贡还阶段已有级牌；还贡后常与 play 一致 |
+| **3** | `episodeOver` 的 `curRank` | 本副结束快照 |
+| **4** | `game_info.curRank` | 落盘快照，**常滞后**（仍停在进贡前） |
+| **5（仅索引）** | 文件名 `…-[round]-[level].json` 的 `[level]` | **归档标签**，= 本副**开局/进贡前**落盘级；**≠** 还贡后出牌级 |
+
+**一副内可变化**（2026-06-01 实测 round 40）：进贡 `act` 时 `curRank=9`（`selfRank=J`，`oppoRank=9`）；还贡后 `act`·`play` 起 **`curRank=K`**（约 70/73 步）。文件名仍为 `[9]`，`game_info.curRank` 仍为 `9` — **三者不一致属正常**，分析/回放排序/级牌保护须用 **还贡后 `act`·`play` 的 K**。
+
+**`actions[].context`**：来自 `notify`·`play` 录制，**无**三等级字段；客户端写入的 context 可能混有邻副/滞后值，**低于** `my_decisions` 与原始 `act` 消息。
+
+**下发时机（摘要）**：`beginning` notify 无三字段 →（第二副起）`act`·tribute/back → 每条 **`act`·play** 均带三字段 → `episodeOver` 仅 `curRank`。详见 PDF / `state.py`。
+
+## 常用字段速查
+
+| 字段 | 含义 |
+|------|------|
+| `episodeOver.order` | `[头游, 二游, 三游, 末游]` 座位号 0–3 |
+| `episodeOver.restCards` | `[[座位, 剩余手牌], ...]`（双上提前结束时） |
+| `publicInfo[i].rest` | 各玩家剩余张数 |
+| `curPos` / `greaterPos` | 当前出牌位 / 当前圈最大牌位；接风时常为 -1 |
+| `actionList` | 合法动作列表；选下标回 `actIndex` |
+
+## 副 / 局与仓库实现（索引）
+
+与上文 §局与副 一致；改客户端 / 批跑时对照：
+
+- **一副生命周期**：`beginning` →（第二副起 `tribute`/`back`）→ `play` → **`episodeOver`** → [guandan-knowledge.mdc](./guandan-knowledge.mdc) §1.2
+- **规则一局检测**：`_detect_game_end` → `game_scores_m2.json` §三
+- **批跑台账**：`batch_executor` 的 `completed_games` = 局数；日志「match_key」= 副数诊断
+- 等级字段、`curRank` 易混 → 上文 §等级字段；更细 → [guandan-basic-knowledge.md](../../docs/knowledge/guandan-basic-knowledge.md) §二、§三
+
+## 改代码前
+
+- 字段/JSON 歧义 → 查 **PDF**，勿凭 OCR 版 `docs/gdrules/掼蛋平台使用说明书1006.md`
+- 改 AI **行为/规则** → 另读 [guandan-knowledge.mdc](./guandan-knowledge.mdc) 与 `docs/guandan-brain/`

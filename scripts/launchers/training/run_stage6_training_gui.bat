@@ -1,4 +1,5 @@
 @echo off
+call "%~dp0..\_env.bat"
 REM ========================================
 REM 阶段6游戏导向训练GUI工具启动脚本（增强版）
 REM 整合1312数据转换器，包含完整的数据加载、转换、训练、监控、评估功能
@@ -107,7 +108,7 @@ echo ========================================
 echo.
 
 REM 运行Python GUI脚本
-python run_stage6_training_gui.py
+python scripts/training/run_stage6_training_gui.py
 
 REM 如果Python命令失败，显示错误信息
 if errorlevel 1 (

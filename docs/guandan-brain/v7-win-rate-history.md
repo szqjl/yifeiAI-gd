@@ -31,12 +31,8 @@
 | 2026-06-06 | V7-007 | 批跑 3 局（scores 汇总 bugfix） | `run_v7_vs_lalala_3games.py` | 3 | 1/3（33.3%） | 46 | 较 06-05 回升 |
 | 2026-06-06 | V7-007 | 3 局批跑复盘定音（lalala 满编碾压） | `run_v7_vs_lalala_3games.py` | 3 | 0/3（0%） | 15 | **副数异常短**；4 席 10:44:27 齐连，lalala 连升 2→A 横扫 |
 | **合计 06-05~06-06** | — | — | — | **9** | **1/9（11.1%）** | ~153 | — |
-| 2026-06-07 | GUA-037a/045/038 | GUA-037a 静态特征(124维)+训练早停切胜率代理；GUA-045 P0 Guard壳(R01~R06)；GUA-038 BC热启动全链路 | `run_v7_vs_lalala_games.py --games 9` | 9 | 0/9（0.0%） | 110 | 模型使用率~89%，特征利用率24.2%瓶颈 |
-| 2026-06-10 | GUA-037a Part 2 | 训练权重调整：match_rate→win_accuracy做主指标 + 模型加载ERROR日志 | `run_v7_vs_lalala_games.py --games 3` | 3 | 0/3（0%） | 226 | `latest_victory_num=[0,3,0,3]`自检通过 ✅；scores.json `team_a_wins:0, team_b_wins:3` |
-| 2026-06-10 | GUA-037b 批跑验收 | LSTM 64维动态特征集成后净盘3局 | `run_v7_vs_lalala_games.py --games 3` | 3 | 0/3（0%） | 256 | `latest_victory_num=[0,3,0,3]`自检通过 ✅；scores.json `team_a_wins:0, team_b_wins:3`；耗时 1:53 |
-| 2026-06-10 | GUA-038 BC 重训 | 188维特征 BC 重训（val_acc=88.44%）+ 部署 `bc_model_v2.pth` | — | — | —（训练指标） | 2122 | 训练数据为 M3 旧格式 fallback（手牌缺失，动态特征退化），val_acc 虚高不代表实战；**待批跑验收** |
-| 2026-06-10 | GUA-038 批跑验收 | 净盘 3 局 V7 vs lalala 验证 GUA-038 重训模型 | `run_v7_vs_lalala_games.py --games 3` | 3 | 0/3（0%） | 30 | `[0,3,0,3]` 自检通过 ✅；scores.json `0:3`；耗时 1:53；训练数据全败局致模型学败方决策 |
-| **合计 06-05~06-10** | — | — | — | **21** | **1/21（4.8%）** | — | GUA-038 188维重训 val_acc 88.44% 未转化胜率 → 需 M3 胜利局数据重训 |
+| | | | | | | | |
+| _（空 — 待 GUA-037a/045 实施后回填）_ | | | | | | | |
 
 ---
 

@@ -16,6 +16,8 @@ last_updated: 2025-01-27 17:30:00
 
 顺子是掼蛋一种常见而又具有战略意义的牌型。顺子相当于兵器库中的诸葛连弩，打出去的速度很快且难于防守。同时，顺子弊端在于牺牲其他潜在的牌型，拆掉手上的对子 (`Pair`)、三带 (`ThreeWithTwo`) 甚至5头炸 (`Bomb`) 等，从而在牌力分布上可能呈现出弱势。
 
+> **引擎映射**：[`PRINCIPLES_MAPPING.md`](../../../guandan-brain/PRINCIPLES_MAPPING.md) §十八 — M3 有 `_Straight`/`_active`/`is_inStraight`；**P-H05**（慎始发）+ **CALC-M03**（5/10 法则）→ 既有 P0/GUA-032；送顺/不接队友顺 → **GUA-031**；**无新增 P0/P1 GUA**。
+
 **平台变量名**：
 - `Straight`：顺子
 - `Pair`：对子

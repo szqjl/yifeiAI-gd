@@ -5,8 +5,8 @@
 # 大文档文件（>50MB）- 从 git 中排除
 # Note: Keep markdown versions instead
 # 注意：保留 markdown 版本代替
-docs/skill/*.docx
-docs/skill/*.pdf
+docs/archive/skill/*.docx
+docs/archive/skill/*.pdf
 
 # Model files - too large for git repository
 # 模型文件 - 文件太大，不适合直接提交到git仓库
@@ -25,6 +25,9 @@ models/*_training_history.json
 # Temporary files
 tmp/
 *.tmp
+tmp/.batch_executor.lock
+_batch_log.txt
+yfscore/
 
 # Python cache
 __pycache__/
@@ -35,43 +38,48 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+config/cos.env
 
-# Test files
-# 2026-06-08 决定: test_*.py 不纳入 commit —— 测试代码单独存放、不入库（pytest 默认约定 test_*.py）
-# tests/ 目录下 test_*.py 仅本地跑，CI/人工跑；不入库避免生产目录误采集
-test_*.py
+# COS 拉取的 artifact（manifest 在 Git）
+data/artifacts/
+
+# 新跑评测 JSON（本地）
+data/eval/
+
+# 个人 VS Code 多根工作区（用 docs/dev/*.example 复制）
+yifeGDBOT.code-workspace
+
+# Legacy root test/scratch scripts (use tests/ instead)
+/test_*.py
+/_test_*.py
+/debug_test.py
 *.md.bak
 
 # Testscore directory (contains large binary files)
 Testscore/
 
 # Game records and logs
-game_records/
+game_records/*
+!game_records/README.md
 logs/
+training_logs/
+trajectories/
 *.log
 
 # Windows special files
 nul
 
-# Temporary JSON files
+# Temporary JSON files (Layer 2 runtime state — 治理 §6)
 execution_state.json
 game_scores.json
+game_scores_m2.json
 batch_executor/current_batch.json
-batch_executor/latest_victory_num.json
-batch_executor/clients_ready.json
-v7_vs_lalala_scores.json
-v7_vs_lalala_state.json
 
-# Test / hypothesis cache
+# Hypothesis property-test cache
 .hypothesis/
-.pytest_cache/
 
-# Secrets and local runtime data
-config/cos.env
-data/
-
-# Offline platform bundle (large; use config/v7_paths.yaml)
-# 精确匹配根目录下的 guandan_offline_v1006/（如果有）
-# 但不匹配 offline_platform/ 下的（Python 源码需追踪）
-/guandan_offline_v1006/
-!offline_platform/guandan_offline_v1006/
+# IDE / local scratch
+**/.idea/
+.cursor/hooks/         # Cursor IDE 钩子状态（continual-learning 等），按 M-V 治理 §5.5 不入仓
+.cursor/hooks/**
+tmp_*.py

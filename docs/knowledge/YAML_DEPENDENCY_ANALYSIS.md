@@ -149,7 +149,7 @@ pip install -r requirements.txt
 
 ## 相关文件
 
-- `INSTALL_DEPENDENCIES.md` - 依赖安装指南
+- [INSTALL_DEPENDENCIES.md](../development/INSTALL_DEPENDENCIES.md) - 依赖安装指南
 - `docs/knowledge/YAML_DEPENDENCY_FIX.md` - YAML依赖修复说明
 - `requirements.txt` - 项目依赖列表（需要检查是否包含pyyaml）
 

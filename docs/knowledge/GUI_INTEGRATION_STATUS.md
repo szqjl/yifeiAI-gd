@@ -69,7 +69,7 @@ HybridDecisionEngineV4初始化
 运行 `START_V4_GUI.bat` 或：
 
 ```bash
-python batch_executor_gui.py
+python scripts/gui/batch_executor_gui.py
 ```
 
 ### 知识库自动加载

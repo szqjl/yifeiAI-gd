@@ -1,0 +1,37 @@
+@echo off
+call "%~dp0..\_env.bat"
+REM 启动M1批量测试GUI
+REM 使用M1硬编码规则引擎进行批量对战测试
+
+echo ========================================
+echo 掼蛋AI批量对战系统 - M1版本
+echo ========================================
+echo.
+echo 配置：YiFei M1 vs lalala一等奖AI
+echo 队伍A：yf1_m1 (0号) + yf2_m1 (2号)
+echo 队伍B：lalala client3 (1号) + client4 (3号)
+echo.
+echo 特性：M1硬编码规则引擎
+echo   - 5阶段细分路由（开局、中局前期、中局后期、残局前期、残局后期）
+echo   - 主动/被动出牌分离
+echo   - 策略引擎集成（队友保护、优先级系统、牌值系统）
+echo   - 手牌结构分析器增强
+echo   - 残局策略类（RushStrategy, DefendStrategy等）
+echo   - 完善的策略逻辑（整合策略函数和知识库文档）
+echo   - 完全独立于V5/V6版本
+echo   - WebSocket配置化连接（自动重连、心跳保活）
+echo.
+echo 重要提示：
+echo   - 请在 m-dev 分支运行
+echo   - M1是硬编码规则引擎，不是机器学习模型
+echo   - 无需模型文件
+echo.
+echo 正在启动GUI...
+echo ========================================
+echo.
+
+REM 注意：必须使用 python.exe（指向 Python 3.13，已装齐 websockets / psutil / torch 等依赖），
+REM 不能用 py.exe（默认指向 Python 3.14，缺 websockets，会导致客户端瞬间崩溃）。
+python scripts/gui/batch_executor_gui_m1.py
+
+pause

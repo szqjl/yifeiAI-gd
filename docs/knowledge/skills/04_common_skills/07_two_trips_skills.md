@@ -16,6 +16,8 @@ last_updated: 2025-01-27 17:25:00
 
 在掼蛋游戏中，钢板（三连三）是一种特殊且重要的牌型。三同连张相当于兵器库中的宣化斧，往往一打出来就势大力沉，让人猝不及防、难以招架。
 
+> **引擎映射**：[`PRINCIPLES_MAPPING.md`](../../../guandan-brain/PRINCIPLES_MAPPING.md) §十七 — **M3 有 `_TwoTrips`/`rankfour`/R6**；牌力分时与组牌取舍 → **V5+** / M1；队友 PASS/喂牌 → **GUA-031**（**无新增 P0/P1 GUA**）。
+
 **平台变量名**：`TwoTrips`（钢板，三连三）
 
 ## 适用阶段

@@ -513,16 +513,7 @@ class YiFeiReplayGUI:
 
         # 7. 计算当前所有玩家的手牌
         self.player_hands = self._calculate_current_hands()
-        status = f"游戏数据加载完成，共 {self.total_steps} 个动作，初始手牌: {len(self.initial_hands)} 个玩家"
-        if self.current_game_data.get("_actions_synthesized"):
-            status += "（由 my_decisions 合成，缺对手出牌步）"
-        elif self.total_steps == 0:
-            duration = self.current_game_data.get("duration")
-            if duration is not None and duration < 1.0:
-                status = "本副几乎无打牌即结束（空壳牌谱），请选同批较大 JSON（如 round 6/8/11）"
-            else:
-                status = "无 actions：未按 M3 契约录 notify 出牌，请用更新后 V7 重跑或选含 my_decisions 的牌谱"
-        self.status_bar.config(text=status)
+        self.status_bar.config(text=f"游戏数据加载完成，共 {self.total_steps} 个动作，初始手牌: {len(self.initial_hands)} 个玩家")
     
     def _resolve_player_labels(self):
         """从 JSON player_name + 文件名 opponent_* 解析 4 个玩家的显示名。"""
@@ -945,18 +936,9 @@ class YiFeiReplayGUI:
         self._draw_level_badges()
 
         if not self.actions:
-            msg = "没有游戏动作数据"
-            if self.current_game_data:
-                if self.current_game_data.get("duration", 99) < 1.0:
-                    msg = "本副为秒结束空壳记录\n（无出牌步，请换 round 6/8/11 等同批牌谱）"
-                elif not (self.current_game_data.get("my_decisions") or []):
-                    msg = "牌谱无 actions 且无 my_decisions\n请用对齐 M3 录制契约的 V7 客户端重跑"
-                else:
-                    msg = "无法合成回放步序\n请更新客户端后重跑以录制完整 notify"
             self.card_canvas.create_text(w // 2, h // 2,
-                                          text=msg, fill="white",
-                                          font=("Arial", 14), anchor=tk.CENTER,
-                                          justify=tk.CENTER)
+                                          text="没有游戏动作数据", fill="white",
+                                          font=("Arial", 14), anchor=tk.CENTER)
             return
 
         # 4 个玩家手牌 + 名字 + 剩余张数

@@ -2,7 +2,7 @@
 """
 1312掼蛋平台数据格式转换器
 将1312格式的JSON数据转换为训练所需的格式
-牌张规则见：docs/rules/牌张与基本概念.md
+牌张规则见：docs/archive/rules/牌张与基本概念.md
 """
 
 import json
@@ -409,7 +409,7 @@ class Replay1312Converter:
             from game_logic.guandan_constants import CARDS_PER_PLAYER
             expected_count = CARDS_PER_PLAYER
         except ImportError:
-            expected_count = 27  # 掼蛋每人27张，规则见 docs/rules/牌张与基本概念.md
+            expected_count = 27  # 掼蛋每人27张，规则见 docs/archive/rules/牌张与基本概念.md
         
         # 统计从actions中打出的所有牌
         played_cards = []

@@ -1,139 +1,48 @@
-# 启动脚本索引
+# 启动脚本（Launchers）
 
-本目录包含所有启动、测试和训练脚本，按版本和功能分类组织。
+> Phase 5（2026-05-29）：根目录 `START_*.bat` 等真源迁入此目录；仓库根仅保留 **薄 stub**（双击旧文件名仍可用）。  
+> 治理说明：[M-V-Series-治理方案.md](../../docs/governance/M-V-Series-治理方案.md) §5.5–§5.7。
 
-## 📁 目录结构
+## 使用方式
 
-```
-scripts/launchers/
-├── v7/           # V7 终极胜率导向版本
-├── m1/           # M1 硬编码规则引擎版本
-├── training/     # 训练相关脚本
-├── tools/        # 工具脚本（回放等）
-└── v-nn/         # V-nn 系列（已有）
-```
-
-## 🚀 V7 启动器（scripts/launchers/v7/）
-
-### GUI批跑（推荐）
-| 脚本 | 说明 |
+| 方式 | 说明 |
 |------|------|
-| `START_V7_GUI.bat` | V7 GUI批跑界面（预填V7配置） |
-| `start_v7_gui.py` | V7 GUI Python入口（兼容） |
+| **习惯路径** | 仍在仓库根双击 `START_M1_GUI.bat` 等（自动 `call` 到本目录） |
+| **直接调用** | `scripts\launchers\m\START_M1_GUI.bat` |
+| **工作目录** | 各脚本通过 `_env.bat` 将 `cd` 设为仓库根（`%REPO_ROOT%`） |
 
-### 手动启动客户端
-| 脚本 | 说明 |
+## 目录结构
+
+| 子目录 | 系列/用途 | 脚本 |
+|--------|-----------|------|
+| `m/` | M1/M2/M3 GUI、M1 训练与工作流 | `START_M1_GUI.bat`、`START_M2_GUI.bat`、`START_M3_GUI.bat`、`START_M1_TRAINING.bat`、`START_M1_WORKFLOW_FULL.bat` |
+| `v-learn/` | V4–V6（deprecated 客户端仍可通过 GUI 批跑） | `START_V4_GUI.bat`、`START_V5_GUI.bat`、`START_V6_GUI.bat`、`START_V5_CLIENTS.bat` |
+| `v-nn/` | V7 | `START_V7_GUI.bat`、`START_V7_COMPLETE.bat`、`START_V7_AUTO.bat`、`START_V7_CLIENTS.bat` |
+| `training/` | 阶段训练 / 智能训练 | `START_STAGE7_TRAINING.bat`、`START_SMART_TRAINING.bat`、`START_STRATEGY_TASKS_TRAINING.bat`、`QUICK_START_STAGE7*.bat`、`INSTALL_STAGE7_DEPENDENCIES.bat`、`run_stage6_training_gui.bat` |
+| `workflow/` | 工作流自动重启 | `START_AUTO_RESTART_WORKFLOW.bat` |
+| `tools/` | 回放、批转换、测试 | `YF_REPLAY.bat`、`batch_convert_replays.bat`、`run_new_test.bat` |
+| `checks/` | 记录一致性 | `CHECK_RECORD_CONSISTENCY.bat` |
+
+## 根目录 GUI 入口（薄 stub）
+
+| 文件 | 真源 |
 |------|------|
-| `START_V7_CLIENTS.bat` | 手动启动4个客户端（服务器需先启动） |
-| `START_V7_COMPLETE.bat` | 完整启动（服务器+4客户端） |
-| `start_v7_complete.py` | 完整启动 Python版 |
+| `batch_executor_gui_m1.py` | `scripts/gui/batch_executor_gui_m1.py` |
+| `start_gui.py` | `scripts/gui/start_gui.py` |
 
-### 批跑（命令行）
-| 脚本 | 说明 |
-|------|------|
-| `run_v7_vs_lalala_games.py` | V7 vs lalala批跑（支持--games参数） |
-| `RUN_V7_VS_LALALA.bat` | 批跑Stub（→v-nn/） |
+日常启动：`scripts/launchers/m/START_M1_GUI.bat` → `python scripts/gui/batch_executor_gui_m1.py`。
 
-### 端到端测试
-| 脚本 | 说明 |
-|------|------|
-| `run_v7_test.bat` | V7端到端测试（批处理版） |
-| `run_v7_e2e_debug.py` | V7调试版测试（详细日志） |
-| `run_e2e_simple.py` | V7简化测试 |
-| `run_12games_test.py` | V7 12局完整测试 |
-| `test_v7_engine_load.py` | V7引擎加载验证 |
+## 维护约定
 
-### V7 配置
-- **客户端**: `yf1_v7.py` + `yf2_v7`（队伍A） vs `run_lalala_client3/4.py`（队伍B）
-- **路径配置**: `config/v7_paths.yaml`
-- **批跑局数**: 建议 3 / 9 / 12（须为3的倍数）
+1. **新增启动器**：只在本目录对应子文件夹添加 `.bat`；根目录增加 3 行 stub（见 `START_M1_GUI.bat`）。
+2. **路径**：脚本内使用 `%REPO_ROOT%` 或相对仓库根路径；禁止写死 `D:\...`（V7 GUI 中 lalala 路径待配置化）。
+3. **Python**：M1 GUI 使用 `python.exe`（非 `py`），见 `m/START_M1_GUI.bat` 注释。
+4. **分支**：日常开发分支为 **`m-dev`**（非 `m1-dev`）。
 
----
+## 迁移工具
 
-## 🎮 M1 启动器（scripts/launchers/m1/）
-
-### GUI批跑
-| 脚本 | 说明 |
-|------|------|
-| `START_M1_GUI.bat` | M1 GUI批跑界面 |
-
-### M1 特性
-- 硬编码规则引擎（非机器学习）
-- 5阶段细分路由
-- 无需模型文件
-
----
-
-## 🏋️ 训练启动器（scripts/launchers/training/）
-
-### Stage 6 训练
-| 脚本 | 说明 |
-|------|------|
-| `run_stage6_training_gui.bat` | Stage 6 GUI训练启动器 |
-| `run_stage6_training_gui.py` | Stage 6 GUI Python入口 |
-
-### Stage 7 训练
-| 脚本 | 说明 |
-|------|------|
-| `QUICK_START_STAGE7.bat` | Stage 7 快速启动 |
-| `QUICK_START_STAGE7_ULTRA.bat` | Stage 7 超级优化版 |
-
----
-
-## 🛠️ 工具脚本（scripts/launchers/tools/）
-
-| 脚本 | 说明 |
-|------|------|
-| `YF_REPLAY.bat` | 回放工具Stub |
-| `yf_replay.py` | 回放引擎 |
-
----
-
-## 📌 根目录Stub入口
-
-为保持根目录整洁，所有启动脚本已移至本目录。根目录保留轻量Stub入口，双击即可启动：
-
-| 根目录Stub | 指向 |
-|-----------|------|
-| `START_V7_GUI.bat` | → `scripts/launchers/v7/START_V7_GUI.bat` |
-| `START_V7_CLIENTS.bat` | → `scripts/launchers/v7/START_V7_CLIENTS.bat` |
-| `START_V7_COMPLETE.bat` | → `scripts/launchers/v7/START_V7_COMPLETE.bat` |
-| `START_M1_GUI.bat` | → `scripts/launchers/m1/START_M1_GUI.bat` |
-| `YF_REPLAY.bat` | → `scripts/launchers/tools/YF_REPLAY.bat` |
-| `RUN_V7_VS_LALALA.bat` | → `scripts/launchers/v-nn/RUN_V7_VS_LALALA.bat` |
-
----
-
-## 💡 使用建议
-
-### 快速开始
-1. **V7批跑**: 双击根目录 `START_V7_GUI.bat`
-2. **M1批跑**: 双击根目录 `START_M1_GUI.bat`
-3. **回放**: 双击根目录 `YF_REPLAY.bat`
-
-### 命令行批跑
 ```bash
-# V7 3局对战
-python scripts/launchers/v7/run_v7_vs_lalala_games.py --games 3
-
-# V7 12局对战
-python scripts/launchers/v7/run_v7_vs_lalala_games.py --games 12
+python scripts/tools/migrate_launchers_phase5.py
 ```
 
-### 测试验证
-```bash
-# V7引擎加载测试
-python scripts/launchers/v7/test_v7_engine_load.py
-
-# V7端到端调试测试
-python scripts/launchers/v7/run_v7_e2e_debug.py
-```
-
----
-
-## 📝 维护说明
-
-- **新增版本**: 创建新子文件夹（如 `v8/`）
-- **新增脚本**: 放入对应子文件夹
-- **根目录Stub**: 保持4-5行代码，仅转发调用
-- **命名规范**: `START_`（启动）/ `RUN_`（批跑）/ `QUICK_START_`（快速启动）
+重新生成 launchers 正文与根 stub（修改映射表后使用）。

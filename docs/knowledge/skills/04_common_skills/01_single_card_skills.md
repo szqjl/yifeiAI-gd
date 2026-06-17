@@ -6,7 +6,7 @@ tags: [single, card_skills, opening, midgame, endgame, teammate_cooperation]
 difficulty: intermediate
 priority: 7
 game_phase: [opening, midgame, endgame]
-source: docs/skill/单张技巧
+source: docs/archive/skill/单张技巧
 related:
   - strategy/04_phase_strategies/01_opening/01_opening_teammate_cooperation.md
   - skills/04_common_skills/02_pair_skills.md
@@ -18,6 +18,8 @@ related:
 ## 📖 概述
 
 单牌（`Single`）是最基本的牌型之一，单张相当于兵器库中的七星宝剑，不适合在大场面的战争中使用，非常适合在一对一的情境中使用。
+
+> **引擎映射**：[`PRINCIPLES_MAPPING.md`](../../../guandan-brain/PRINCIPLES_MAPPING.md) §十一 — **M3 无新增 P1**（残局/送单→**GUA-031**；双贡慎单→**P-H01** §五）；可选 P2：`Single>=5` 主动出单；其余 **V5+**（含文末伪代码）。
 
 **基本策略**："先单张，后对子，然后三二和顺子"。初级选手的打法，先把不要的单张打掉，然后再出对子和顺子。随着水平的提高，会打出一些变化，比如会打自己能控制的牌，有打有收；会打一些死的轮次，追求后控；也有一些打大的轮次，逼枪骗炸；还有一些实在没牌可打，就中高单打起。水平更进一步以后，首发打单的反倒更多。单张出去传递的信息少，也比较隐蔽，还容易迷惑对手。
 
@@ -372,7 +374,7 @@ def choose_single_card(self, hand_cards, game_state, teammate_pos, opponent_pos)
 
 ---
 
-**来源**：`docs/skill/单张技巧`  
+**来源**：`docs/archive/skill/单张技巧`  
 **优先级**：高（7/10）  
 **难度**：中等  
 **适用阶段**：开局、中局、残局

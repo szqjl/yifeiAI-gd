@@ -10,7 +10,6 @@
 |------|------|----------|
 | **M1** | 首个实验 AI（`yf1_m1` / `yf2_m1` + `src/decision/`） | **frozen**（**GUA-022 closed**）— **非交付线**；**勿再开 M1 策略 GUA**；仅 **bugfix**（crash / 协议 / 记录）与 **pytest 回归** |
 | **M3** | **主交付** + **`IDecisionProvider` 底座**（`yf1_m3` / `yf2_m3`、`src/m/m3/`、`src/contracts/`） | **active** — 策略迭代、批跑 KPI、GUA-026+ 跟踪 |
-| **V7** | NN 实验线（`yf1_v7` / `yf2_v7` + `UltimateWinRateEngineV7`） | **active**（`v7-dev`）— **GUA-037+** 改造；**队胜率 KPI 观测**见 `ITERATIONS` V7-007；**禁止 import `src.m.m3.*`**（见 `V7-实施方案.md` §1.2） |
 | **V5+** | 组牌 / 牌力 / 知识层长期路线 | 规划 / 按需 — **P0 以外**的组牌与牌力评估 **不走 M3 硬编码扩张** |
 
 **队胜率 KPI**：自 **2026-05-31** 起**只看 M3 批跑**。**多样本观测**（净盘、同 exe）：S1 **7/10**、S2 **11/12**、S3 **8/10**、S4 **8/10** → **合计 34/42（81.0%）**（见 `ITERATIONS`「M3 队胜率多样本观测」）。M1 净盘 **0/12** 为 frozen 基线对照，**非**口径错误。
@@ -19,8 +18,8 @@
 
 | 优先级 / 能力 | 落点 | 说明 |
 |---------------|------|------|
-| **P0 guard**（可 pytest + 批跑验收的 if-guard） | **M3**：`src/m/m3/m3_decision_engine.py`（及 `m3_utils.py`）；**V7**：`src/decision/ultimate_win_rate_engine_v7.py` 内 **V7-native** 过滤壳（**GUA-045**，不 import M3） | 与 [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) **M3 · P0** 一致；V7 原则对齐见 **GUA-045** §缺陷分类 |
-| **组牌 / 牌力 / 混合决策** | **V5+**（`src/v/`、V 挂接 `IDecisionProvider`） | 不在 M3 引擎内堆整篇策略；M3 保持 lalala 式 guard + 契约底座；V7 组牌类见 **GUA-045** Phase 2 / **V5+-04** |
+| **P0 guard**（可 pytest + 批跑验收的 if-guard） | `src/m/m3/m3_decision_engine.py`（及 `m3_utils.py`） | 与 [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) **M3 · P0** 一致；例 GUA-026/029/031/032 |
+| **组牌 / 牌力 / 混合决策** | **V5+**（`src/v/`、V 挂接 `IDecisionProvider`） | 不在 M3 引擎内堆整篇策略；M3 保持 lalala 式 guard + 契约底座 |
 | **M1 共用层** | `src/decision/`（frozen） | 历史 PHASE2 与 V shim；**不接新开策略迭代** |
 
 ### 复盘发现 → 实现 → 验收（定音 · 2026-06-01）
@@ -76,32 +75,20 @@
 | GUA-032 | closed | P1 | observation, policy | m3 | M3 **记牌+算牌**确定性规则 + `remain_cards_classbynum` 同步 | 文档 §14–§15、§18–§20、**§二十二**（孤张定律 CG-T06、口诀 13）；5/10 法则、顺/夯点位预判（**CALC-M03/M04**）；`remain_cards_classbynum` stale | `m3_decision_engine._update_play_state`、`m3_utils`；[`04_calculation_skills.md`](../knowledge/skills/04_common_skills/04_calculation_skills.md)、[`04_card_grouping_skills.md`](../knowledge/skills/07_opening/04_card_grouping_skills.md)、[`08_straight_skills.md`](../knowledge/skills/04_common_skills/08_straight_skills.md)、[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) | **`closed_in` 2026-05-31**：`sync_remain_cards_classbynum` + `_update_play_state` 同步；MEM-M02；CALC-M01（被动炸过滤）+ CALC-M03（5/10 顺子降权）；`test_m3_gua032.py` **6 passed**；GUA-029/031/033 回归 **34 passed**；**CALC-M02** 待 **P-H01** |
 | GUA-033 | closed | P1 | observation, rules | m3, infra | M3 **批末 `victoryNum` / `gameResult` 解析错误**（批级回填污染） | **客户端已修**；**平台根因**：本包 v1006 exe **argv 无效**，单次会话 **固定 3 局** → WebSocket `settingTimes=3`、`victoryNum` 常 `[0]+[1]=3`；须 **`batch_games` 校验 + fallback** | `yf1_m3.py`、`yf2_m3.py`、`game_result_utils.py`；真源 [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md) **§2** | **`closed_in` 2026-05-31**；`test_m3_gua033.py` **11 passed**；exe 探测 `scripts/tools/probe_exe_argv_ws.py` |
 | GUA-034 | closed | P1 | policy | m3 | M3 **残局：队友走光后 rank 小牌首出 + 被动不拆结构压牌** | round **38** yf2：`20260601112040940931 …-[38]-[4].json` **102–107 步** — 接风 `_active` 拆对 **3** 出单；对手 **6/对6** 可压（9/10/拆三张）却 **PASS**；107 对手三带二 **5 张走完**。**根因**：`_active` 仍走 `rankone/ranktwo` 清小点；`_Single/_Pair.normal()` 只认 `single_member`/`pair_member`，不为压牌拆 trips；缺「队友 rest=0 → 1v2 拦头游」模式。**related** **GUA-014**（泛化拆牌）、**GUA-026**（禁拆 trips 边界）、**GUA-029 R3**（`_Pair` 或未触发 ≤7 阻断） | `m3_decision_engine`（`_active`、`rankone/ranktwo/rankthree`、`_Single`、`_Pair`）；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2 | **`closed_in` 2026-06-01**：方向 A — `_is_solo_sprint` + END-M02–M04；`test_m3_gua034.py` **6 passed**；GUA-026/029/031 回归 **24 passed** |
-| GUA-035 | closed | P1 | policy | m3 | M3 **END-M02+：solo 接风按对手剩张过滤牌型** | GUA-034 END-M02 仅固定优先三带二/三张/对子；缺：**任一对手剩 1 张 → 不宜出小单**；剩 **2 张 → 不宜出对**；剩 **5 张 → 不宜出三带二**（「不宜」非绝对禁，无路可走仍出）。**related** **GUA-034** END-M02、**GUA-031** PASS-P03（下家剩 1 禁小单） | `m3_decision_engine._gua035_solo_wind_pick`、`_gua034_solo_active_pick` | **`closed_in` 2026-06-01**：END-M02+-01–04；`test_m3_gua035.py` **6 passed**；GUA-034/026/029/031 回归 **30 passed** |
+| GUA-035 ★ | closed | P1 | policy | m3 | M3 **★ 模型最优：solo 接风按对手剩张过滤牌型** | GUA-034 END-M02 仅固定优先三带二/三张/对子；缺：**任一对手剩 1 张 → 不宜出小单**；剩 **2 张 → 不宜出对**；剩 **5 张 → 不宜出三带二**（「不宜」非绝对禁，无路可走仍出）。**related** **GUA-034** END-M02、**GUA-031** PASS-P03（下家剩 1 禁小单） | `m3_decision_engine._gua035_solo_wind_pick`、`_gua034_solo_active_pick` | **`closed_in` 2026-06-01**；END-M02+-01–04；`test_m3_gua035.py` **6 passed**；**★ 2026-06-17 模型最优定音**：GUA-035+034 累计 **45 局 37 胜 82.2%**，GUA-036 累计 **69 局 36 胜 52.2%**，差值 30.0pp p<0.001。GUA-035 下 `[3,0,3,0]` 全胜批 **3/4 批**；GUA-036 下 `[0,3,0,3]` 全败批 **2 次**。详见 ITERATIONS「GUA-035 最优模型定音」行。 |
 | GUA-036 | closed | P1 | policy | m3 | M3 **控权 + 接风配合**（非 solo） | batch7 round38 复盘：**①** 接风拆 2 打单，未跟队友对子线；**②** 敌出杂顺可压却 PASS，让权后对手连走。**根因**非「缺顺子函数」，而是 guard 缺口 + `_Straight` 过窄。**related** **GUA-031**（喂牌/让道）、**GUA-032** CALC-M03（被动夺权豁免）、**GUA-034/035**（仅 solo） | `m3_decision_engine`：`_active` 接风、`_Straight` | **closed_in** 2026-06-01（GUA-036 实施）；样例 `replay_word.md` / batch7 round38 **不作关单标准**；**KPI 观测 note**：GUA-034/035 合计 33 局（8 批）出现 **3 次 `[3,0,3,0]`**（批2/3/8，3局全胜各拉高均值），GUA-036 合计 57 局（S6/S7/S8 + 06-01 两次净盘共 5 次 12 局）**仅 S6 出现 1 次 `[3,0,3,0]`**（批1/3），其余各批均为 `[2,1]` 或 `[1,2]`，缺少全胜批导致 GUA-036 样本均值（61.1%）低于 GUA-034/035（78.8%），但 30 局累计仍显著 >50%（73.3%，p<0.01）。方差属发牌随机波动，非 GUA-036 代码引入。
 
-**统计检验 note（2026-06-02 补充，2026-06-02 夜 确认结论）**：GUA-034/035 26/33=78.8% vs GUA-036 36/69=52.2%（S9后），**差值 26.6pp，p=0.009（两比例 z 检验），统计显著**；95% CI [8pp, 45pp]。**关键差异**：`[0,3,0,3]` 在 GUA-036 出现 **2 次**（S8批5、S9批2），GUA-035 出现 **0 次**——GUA-036 下限更差，lalala 队有批能把 M3 队剃光头。批次均值 t 检验 p=0.048（边缘显著）。**结论**：GUA-036 **显著差于** GUA-035，非发牌随机波动可解释，待 CALC-M04/M05 修复。 |
+**统计检验 note（2026-06-02 补充，2026-06-17 增补）**：GUA-034/035 26/33=78.8% vs GUA-036 36/69=52.2%（S9后），**差值 26.6pp，p=0.009（两比例 z 检验），统计显著**；95% CI [8pp, 45pp]。**2026-06-17 增补 12 局**：GUA-035 **11/12=91.7%**，累计 37/45=82.2%；vs GUA-036 36/69=52.2%，**差值 30.0pp，p<0.001（极显著）**。**关键差异**：`[0,3,0,3]` 在 GUA-036 出现 **2 次**（S8批5、S9批2），GUA-035 **0 次**——GUA-036 下限更差，lalala 队有批能把 M3 队剃光头。批次均值 t 检验 p=0.048（边缘显著）。**★ 结论定音**：GUA-035 **= 当前模型最优配置**；非 solo 控权/压顺（GUA-036）破坏 solo guard 有效性，引入下限风险。 |
 
-| GUA-037a | closed | P0 | V-nn, v7 | v7 | V7 静态特征工程（state_牌态 124 维） | `_extract_features` 静态部分全零填充；需重写手牌 108 维 + 级牌/红心配 9 维 + 主动被动/阶段/炸弹/贡局/队友 6 维 + hand count 1 维 = 124 维；actionList 牌型 15 维后移 | `src/v/nn/ultimate_win_rate_engine_v7.py`、`src/v/nn/features/static_features.py`、`src/v/nn/features/belief_state.py` | `closed_in` 2026-06-07：124 维静态特征提取模块实现（`static_features.py`），V7 引擎 `_extract_features` 前 124 维替换零填充；13 项 pytest 验证通过；关联 V7-实施方案.md §2 Phase 1。**Part 3（2026-06-14）**：叠加局面信念分类器（套路一原型）→ 4 维 soft 向量 [进攻型, 防守型, 观望型, 保对家型] 写至特征索引 188-191；特征利用率 188→192/512（37.5%）；见 `docs/guandan-brain/掼蛋AI自我进化-随机应变套路.md` |
+| GUA-037a | open | P0 | V-nn, v7 | v7 | V7 静态特征工程（state_牌态 124 维） | `_extract_features` 静态部分全零填充；需重写手牌 108 维 + 级牌/红心配 9 维 + 主动被动/阶段/炸弹/贡局/队友 6 维 + hand count 1 维 = 124 维；actionList 牌型 15 维后移 | `src/v/nn/ultimate_win_rate_engine_v7.py`、`src/v/nn/features/static_features.py` | 完成定义见 `V7-实施方案.md` §2 Phase 1 GUA-037a；关联评审 §Q1 / 研判 T3 |
 | GUA-037b | open | P1 | V-nn, v7 | v7 | V7 动态特征工程（LSTM 历史编码） | 在 037a 静态特征基础上叠加 LSTM 历史编码（出牌历史 + numof* 序列），目标总维度 188 维 | `src/v/nn/features/dynamic_features.py`、`src/v/nn/ultimate_win_rate_engine_v7.py` | 完成定义见 `V7-实施方案.md` §2 Phase 1 GUA-037b；可与 GUA-038 并行 |
-| GUA-038 | **closed** ✅ | P1 | V-nn, v7 | v7 | V7 M3 知识蒸馏（BC 热启动） | V7-internal 录牌（不依赖 M3 录牌链路）→ 提取 (state, action) 标签对 → BC 训练 → 加载推理；teacher 数据源为 M3 离线 game_records | `src/v/nn/recorder/v7_recorder.py`、`src/v/nn/training/bc_dataset.py`、`src/v/nn/training/bc_trainer.py`、`scripts/v7/run_bc_training.py`、`src/communication/game_recorder.py`、`scripts/train_bc_v7.py` | **`closed_in` 2026-06-07**：V7-internal 录牌器（`v7_recorder.py`）+ BC 数据集（`bc_dataset.py`）+ BC 训练器（`bc_trainer.py`）+ CLI 入口（`run_bc_training.py`）；考试通过：`tests/test_v7_bc.py` **34/34 passed**；回归 72 passed；验收标准：数据加载、特征重建、train/val 切分、masked CE、录牌落盘全部覆盖 |
-| | **(2026-06-16 GUA-038 实际训练完成)** | — | V-nn, v7 | v7 | **BC 模型首次物理落地训练** | **2026-06-16**：从 60 V7 批跑 game_records 提取 **1208 样本**（require_victory_filter=False），全流程跑通：**修复 `decision_context_from_act`** 缺失 `full_state`（追加 handCards/actionList/publicInfo）→ 重新收集游戏记录 → BC 训练 → 模型 `models/v-nn/bc_model_v2.pth`（625 KB，val_acc=82.57%）→ V7 引擎 **100% 模型加载使用**（873/873 模型决策，0 回退）→ 批跑 3 局 **全链路验证通过** | `src/communication/game_recorder.py`、`scripts/train_bc_v7.py`、`models/v-nn/bc_model_v2.pth` | **训练数据**：1208 样本来自 V7 规则回退期对局（Team B 3 胜），BC 模型习得规则引擎行为，故队胜率 0%（预期）。**后续**：用 GUA-051 Reward 信号 + GUA-052 memory_tracker 迭代训练，或用 M3 胜利局数据重训 |
+| GUA-038 | open | P1 | V-nn, v7 | v7 | V7 M3 知识蒸馏（BC 热启动） | V7-internal 录牌（不依赖 M3 录牌链路）→ 提取 (state, action) 标签对 → BC 训练 → 加载推理；teacher 数据源为 M3 离线 game_records | `src/v/nn/recorder/v7_recorder.py`、`src/v/nn/training/bc_dataset.py`、`src/v/nn/training/bc_trainer.py` | 完成定义见 `V7-实施方案.md` §2 Phase 2 GUA-038；**仅读** M3 game_records，**禁止 import** `src.m.m3.*` |
 | GUA-039a | open | P2 | V-nn, v7 | v7 | V7 自对弈 DMC + ZMQ 桥 + Actor 原型 | 搭建 V7 自对弈基础设施：DMC value net 训练 + ZMQ Actor-Learner 通信 + 单 Actor 与 v1006 平台交互原型 | `src/v/nn/training/actor.py`、`learner.py`、`replay_buffer.py`、`zmq_bridge.py`、`reward.py` | 完成定义见 `V7-实施方案.md` §2 Phase 3 GUA-039a；**关单前提**：评审后方可启动 GUA-039b |
 | GUA-039b | open | P2 | V-nn, v7 | v7 | V7 自对弈 top-K + PPO + 30 局评估 | 在 039a 基础上叠加 top-K=2 过滤 + PPO policy net + 两阶段 30 局 lalala 评估基线（含 fallback baseline） | `scripts/v7/eval_vs_lalala.py`、`src/v/nn/training/learner.py`（PPO 扩展） | 完成定义见 `V7-实施方案.md` §2 Phase 3 GUA-039b；仅在 GUA-039a 关单后启动 |
 | GUA-040 | open | P1 | V-nn, v7 | v7 | V7 模型权重管理（COS manifest + 版本切换） | 搭建 V7 模型权重的 COS 上传/下载/版本切换基建，遵循治理 §6.3 目录规范 | `models/v-nn/manifest.json`、`scripts/v7/weight_manager.py`、`scripts/cos/upload_v7_weights.py`、`download_v7_weights.py` | 完成定义见 `V7-实施方案.md` §2 Phase 1 并行 GUA-040；与 Phase 0 + Phase 1 全部并行 |
-| GUA-041 | **closed** ✅ | P1 | V-nn, v7 | v7 | V7 路径债清理 | 消除 V7 客户端与启动器中的 D 盘硬编码路径债，使 V7 在本机任意目录 clone 后可开箱即用 | `config/v7_paths.yaml`、`src/utils/v7_paths.py`、`start_v7_complete.py`、`START_V7_*.bat` | **`closed_in` 2026-06-05**：pytest 6/6 passed；D 盘硬编码在 GUA-041 范围内清零；跨平台 subprocess 由用户在 Windows 下批跑 |
-| GUA-042 | **closed** ✅ | P1 | V-nn, v7 | v7 | ABL-GD 168 伪动作评估（含开源可行性） | 调研 ABL-GD（CCFAI 2025）168 伪动作方案的可获取性与可移植性，给出采纳/弃用/备选结论；仅调研 + 写结论文档，不实施 | `docs/analysis/abl-gd-eval-2026-06.md` | **`closed_in` 2026-06-07**：结论为弃用该方案，作为备选跟踪；详见评估报告 `docs/analysis/abl-gd-eval-2026-06.md` |
-| GUA-043 | **closed** ✅ | P1 | V-nn, v7 | v7 | 专利规避设计审计（CN113018837A 边界） | 审计掼蛋 AI 算法专利 CN113018837A 的权利要求边界，识别 V7 Phase 1-3 实施中被覆盖的子模块，给出规避方案；仅调研，不改代码 | `docs/governance/patent-audit-cn113018837a.md` | **`closed_in` 2026-06-07**：结论为 V7 核心技术路径与专利无实质重叠，仅需对动态分组优化模块做规避设计；详见审计报告 `docs/governance/patent-audit-cn113018837a.md` |
-| GUA-044 | **closed** ✅ | P1 | observation, infra | v7, m1, m3, batch | **批跑四席未就绪即开局 + 首局空等卡顿** | **现象**（V7 批跑 `logs/v7_vs_lalala_20260606_102117.log`）：`wait_for_clients_connected` 在 Windows 新控制台启动下误报 **0/4** 仍继续；**第 4 席连上即开局**（v1006 规则），client4 ~10:22:10 连入、局 ~10:22:11 开始；yf2 `actIndex=9` 于 10:22:13 已回包后 **~51s** 无新 `act`（yf1 同步空窗），似等 lalala/平台。**根因**：批跑侧连接检测不可靠 + 末席连入前前三席未门闩。**非** V7 决策超时（无 `决策超时` 日志） | `batch_executor/client_ready.py`、`websocket_manager.py`、`lalala_adapter.py`、`restart_manager.py`、`executor.py` | **`closed_in` 2026-06-06**：四席就绪门闩 + 就绪表；`tests/test_client_ready.py` **3 passed**；见 `ITERATIONS` 2026-06-06 GUA-044 行、§GUA-044 完成定义 |
-| GUA-045 | **closed** ✅ | **P0** | policy, v7 | v7 | **V7 决策根因：零特征模型 + 无 P0 Guard** | **统一根因**：`UltimateWinRateEngineV7` 对 `actionList` **argmax**；`_extract_features` **无 108 维牌面**（→ **GUA-037a**）；**零条**队友/最小炸/组牌 guard；回退「首个非 PASS」。**发现样例**（`20260606121245769675`，replay 仅作缺陷分类，**不作关单 pass**）：炸队友顺子、5 炸 9 压单 2、5 张 A+红 2 压 4Q、顺子漏带单 6、应压 PASS、拆钢板出对 7 等 → 见 **§GUA-045** 缺陷分类表 | `src/decision/ultimate_win_rate_engine_v7.py`；`src/v/nn/guards/v7_guards.py` | **`closed_in` 2026-06-07**：V7-native `filter_action_list` + `validate_decision`（V7-R01~R06 全部实现）；`decide()` 接入 guard；`tests/test_v7_gua045.py` **24/24 passed**；回归 48 passed；见 §GUA-045 关单条件 |
-| GUA-046 | open | P3 | observation, infra | v7, m1, m3, batch | **副间 ~10s 停顿（服务器内在结算/发牌间隔）** | V7 批跑日志显示每副牌决策集中在 **1 秒内**打完，之后服务器进入 **~10s** 无消息空窗期（episodeOver → 算分 → 贡还 → 发牌 → 下一副 act）。非 V7 客户端问题——M1/M3 同样经历该间隔，只是 GUI 模式下不如 cmd 窗口显眼。**对比验证**：`RUN_V7_VS_LALALA.bat` cmd 窗口停顿 10s 光标不动；`batch_executor_gui_m3.py` 同服同客户端架构，日志框缓冲不觉。**根因**：`guandan_offline_v1006.exe` 内置固定副间结算流程，客户端无法控制。 | 无（服务器行为） | **订正 2026-06-07**：GUA-047 原"4 席全停 20s"误判已 closed；本条恢复原状，仅保留副间/开局 18s 等待等**已确认服务器行为**的观察 |
-| GUA-047 | **closed** ✅ | **P1** | observation, infra | v7, m1, m3, batch | **【误判关单】** ~~同副牌内 4 席全停 ~20s（根因待定位，非副间结算）~~ → **实际是 batch_executor 日志 dump 延迟，非真停摆** | 2026-06-07 V7 批跑 cmd 窗口观察（`docs/analysis/批跑cmd窗口观察.md`）：**原报告"4 席全停 20s"经实测为误判**。**根因复盘（13:55:28 批跑对照，Opencode 协助）**：`batch_executor/restart_manager` 将服务器 stdout **延迟 dump** 到 `v7_vs_lalala_*.log`（13:56:35 出的 actIndex 在主日志中 13:57:48 才出现，延迟 73s）；**实际 4 席节奏完全同步**——yf1_v7=342 / yf2_v7=340 / lalala client3=333 / lalala client4=311 条 actIndex 在 13:56:35-13:57:57 之间持续输出，无任何一端掉队；13:57:58-13:58:31 整段 0 条 send 才是真停（dump 落幕 + 本局结束）。**12:29 那次"暂停 20s"同模式**——15 条决策同 1 秒出完也是 dump 延迟假象。**不构成"4 席全停"现象**。 | `docs/analysis/批跑cmd窗口观察.md`；`logs/v7_vs_lalala_*.log`；`batch_executor/restart_manager.py`（dump 延迟根因） | **closed_in 2026-06-07**：原 GUA-047 误判已订正，根因为 `batch_executor` stdout 缓冲/dump 时机问题（**非**服务器/客户端卡顿，**非**副间结算间隔）。**下一步建议**：新开 **GUA-048** 跟踪 `batch_executor` 日志 dump 延迟（73s 量级，会拉低 V7-007 KPI 观测的实时性） |
-| GUA-048 | open | P2 | observation, infra | v7, m1, m3, batch | **批跑 73s 卡顿：客户端 game_ready 写盘超时（根因 A）+ ServerStdoutReader 启动晚于 game_ready 超时（根因 B）双根因** | 2026-06-07 V7 批跑（`v7_vs_lalala_20260607_205759.log` 20:57 启动）**21:00 复盘**（13:55 + 20:57 双批跑对照）：**73s 卡顿 = 60s game_ready 超时 + 13s dump 落幕叠加**。**实测数据**：主日志 20:59:09~21:00:10 区间只有 8 条 batch_executor 自日志、**0 条 [服务器] 标签输出**（ServerStdoutReader 还没启动）；21:00:10 dump 落幕后才有 [服务器] 日志。**根因 A**（主因）：`batch_executor/executor.py:514` `wait_for_all_clients_game_ready(timeout=60)` **60 秒硬超时**——4 席客户端在 `server:96 20:59:07` 收到 game_start 后未在 60s 内写 `batch_executor/game_ready.json`。**根因 B**（次因）：`ServerStdoutReader` 在 `executor.py:547` 才 `start()`（line 512 game_ready 60s 超时之后），**前 60s 服务器输出全丢**。**trae 误关单**：trae 创建 `batch_executor/server_stdout_reader.py` + `tests/test_batch_stdout_reader.py`（20:37，untracked），b5df0bc commit（20:50）改 executor.py 用 `async for`，**但未实测就把 GUA-048 标 closed ✅**——dump 延迟 60s 实际仍存在。**影响**：V7-007 KPI 实时性 + 队胜率采样有效时间**双受损**；M1/M3 批跑同链路同问题。 | `batch_executor/client_ready.py:180`（`wait_for_all_clients_game_ready`）；`batch_executor/executor.py:514`（timeout=60）；`batch_executor/executor.py:547`（ServerStdoutReader.start 时机晚）；`src/communication/lalala_adapter.py`（`mark_game_ready` 调用）；`logs/v7_vs_lalala_20260607_205759.log`；`logs/batch_executor/game_ready.json` | **登记 2026-06-07**（P2，回退 open）；**双根因**：① 客户端 `mark_game_ready` 写盘耗时 > 60s 触发 batch_executor 超时；② `ServerStdoutReader.start()` 在 `wait_for_all_clients_game_ready` 之后才启动，前 60s 丢弃。**关单条件**：① game_ready 写盘 < 10s 全部 4 席（实测基线）；② ServerStdoutReader 在 `executor.py:488`（四席 WS 连接就绪）后**立即**启动，dump 延迟 ≤ 5s；③ pytest 覆盖 `tests/test_game_ready_timing.py` + `tests/test_server_stdout_reader_startup.py`；④ 跑 ≥3 局批跑实测 dump 延迟 ≤ 5s 验收；⑤ M3/M1 批跑回归不破坏。**相关**：GUA-047（误判关单的根因）；GUA-046（副间 ~10s 观察，仍 open）；**GUA-049**（game_ready 写盘慢专条，P1） |
-| GUA-049 | open | **P1** | observation, infra | v7, m1, m3, batch | **【根因锁定】** 客户端 `mark_game_ready` 写盘 4 进程 race condition，3 子根因：`game_ready.json` 缺 entry 触发 60s 硬超时 | 2026-06-07 V7 批跑（`v7_vs_lalala_20260607_205759.log` 20:57 启动）**22:00 实测**：`batch_executor/game_ready.json` 20:57 批跑后**只有 3 entry**（client3/4 + yf1_v7，**缺 yf2_v7**），单 mtime `20:59:06.519339`。**子根因 A1**（主因）：`batch_executor/client_ready.py:231` `_game_save` 用 `Path.write_text` —— **Windows/Linux 都非原子写**，4 进程并发 _game_load + _game_save 产生中间态 JSON 损坏。**Linux 复现**（`/tmp/race_test` 4 线程 × 50 循环）：`[c2] error: Expecting ',' delimiter: line 1 column 112 (char 111)` —— **JSON 损坏确认**。**子根因 A2**：`mark_game_ready` (`client_ready.py:52`) **无 try/except** + `websocket_manager.py:276` 用 `asyncio.to_thread` —— **异常被 asyncio 静默吞掉**（task exception never retrieved 默认不打印），失败无任何日志。**子根因 A3**：`wait_for_all_clients_game_ready` (`client_ready.py:180`) `expected.issubset(ready.keys())` **期望 4 entry 全到**，`executor.py:514` `timeout=60` —— **差 1 就 60s 超时**。**因果链**：4 席 mark_game_ready 并发 → yf2_v7 entry 写丢（race） → 60s 等不到 → executor WARNING → ServerStdoutReader 晚 60s 启动 → dump 落幕 13s → 73s 卡顿。**根因复盘**：参见 `docs/analysis/gua-049-根因锁定-2026-06.md`（10KB，证据链 + Linux 复现 + 修复方案 + 教训）。**trae 误关单**（GUA-048）：trae 看到 `tests/test_batch_stdout_reader.py` passed 就 closed，未实测 dump 延迟是否真消除。 | `src/communication/lalala_adapter.py`（`mark_game_ready` 调用）；`src/communication/websocket_manager.py:276`（`asyncio.to_thread(mark_game_ready, ...)`）；`src/communication/yf1_v7.py` / `yf2_v7.py`（`handle_game_start` → 触发 mark_game_ready）；`batch_executor/client_ready.py:52`（`mark_game_ready` 写盘）；`batch_executor/client_ready.py:231`（`_game_save` 非原子写）；`batch_executor/game_ready.json`（mtime 落盘时间戳）；`tests/test_game_ready_race.py`（待 Opencode 写） | **登记 2026-06-07**（P1，根因已锁定）；**3 子根因**：① `_game_save` 非原子写（A1 主因）；② `mark_game_ready` 无 try/except + asyncio 静默异常（A2）；③ `wait_for_all_clients_game_ready` 期望 4 entry + 60s 硬超时（A3）。**关单条件**：① 修 A1：`temp + rename` 原子写（`Path.write_text` → `tmp.write_text + tmp.replace`）；② 修 A2：`mark_game_ready` 加 try/except + logger + `await asyncio.to_thread(...)` caller 端 catch；③ 修 A3 可选：维持 4 entry 期望（A1+A2 修好后 100% 满足）；④ pytest 覆盖 `tests/test_game_ready_race.py`（4 进程并发 100 次，0 JSON 损坏 + 4 entry 都在）；⑤ 跑 ≥3 局批跑实测 `executor.py` 日志 `✓ 所有客户端已收到首条游戏消息` 出现且无 WARNING；⑥ M3/M1 批跑回归不破坏。**相关**：**GUA-048**（双根因父条，含 根因 B = ServerStdoutReader 启动晚）；GUA-047（误判关单的根因）；GUA-046（副间 ~10s 观察，仍 open） |
-
-| GUA-050 | open | **P0** | V-nn, v7 | v7 | **局面信念向量 8 维**（扩展 GUA-037a） | V7 需从 `P(action|state)` 升级为 `P(action|state, belief)`。在 037a 静态特征后叠加 8 维信念：my_strength/partner_strength/opponent_pressure/level_progress/trump_ready/bomb_count/opponent_bomb_risk/last_card_meaning。解决套路文档 §1「标准 RL 无信念中间变量」的根本问题。 | `src/v/nn/features/static_features.py`、`src/decision/ultimate_win_rate_engine_v7.py` | **登记 2026-06-16**（P0，GUA-037a 扩展）；来源于 `docs/analysis/v7-re-eval-2026-06.md` §2.2；特征维数 124→132；风险：信念不收敛→降为 4 维核心。**完成定义**：信念向量在线推理 ≤1ms；pytest ≥6 case；V7 净盘 3 局观测（不作关单） |
-| GUA-051 | **closed** ✅ | P1 | V-nn, v7 | v7 | **稠密 Reward 信号 9 种**（扩展 GUA-039a） | 在 GUA-039a reward.py 基础上增加 9 种中间 reward：出牌成功+0.05/接风+0.1/掼蛋+0.3/级牌控制+0.2/配合+0.1/送对家+0.15/炸弹±0.5/本方升级+2.0/对方升级-1.0。解决纯输赢 reward 太稀疏导致信用分配困难（套路文档§4）。 | `src/v/nn/training/reward.py` | **closed_in** 2026-06-16：`reward.py` 实现 9 种信号 + `RewardAccumulator` + 12 项 pytest；完成定义全部满足 |
-| GUA-052 | **closed** ✅ | P1 | V-nn, v7 | v7 | **108 张牌全量追踪 + 排除法推断**（扩展 GUA-037b） | GUA-037b LSTM 仅编码出牌历史序列，缺真正「记忆」。增补：已出牌（花色/点数）、对手/队友出牌牌型、各家剩张、级牌状态；排除法推断对手手牌（套路文档§3）。 | `src/v/nn/features/memory_tracker.py`、`src/v/nn/features/dynamic_features.py` | **closed_in** 2026-06-16：`memory_tracker.py` 实现 108 张全量追踪 + 排除法推断 + 24 维 state_vector + 性能风险管控 >50ms 降级；10 项 pytest；完成定义全部满足 |
-| GUA-053 | open | P2 | V-nn, v7 | v7 | **对手池多样性**（扩展 GUA-039b） | 保留历史 checkpoint 对手池，每次 self-play 从对手池随机选，用 lalala 硬编码 bot 当固定训练对手。解决 self-play 策略多样性崩溃（套路文档§5）。 | `src/v/nn/training/opponent_pool.py`（待建） | **登记 2026-06-16**（P2，GUA-039b 扩展）；来源于 `docs/analysis/v7-re-eval-2026-06.md` §3.3；本项 P2（最低优先级），等 GUA-039a/039b 关单后启动 |
+| GUA-041 | open | P1 | V-nn, v7 | v7 | V7 路径债清理 | 消除 V7 客户端与启动器中的 D 盘硬编码路径债，使 V7 在本机任意目录 clone 后可开箱即用 | `lalala_adapter.py`、`scripts/v7/start_v7_gui.py`、`start_v7_complete.py`、`START_V7_AUTO.bat`、`START_V7_CLIENTS.bat` | 完成定义见 `V7-实施方案.md` §2 Phase 0 GUA-041；**建议从本条入手**（0.5 迭代） |
+| GUA-042 | open | P1 | V-nn, v7 | v7 | ABL-GD 168 伪动作评估（含开源可行性） | 调研 ABL-GD（CCFAI 2025）168 伪动作方案的可获取性与可移植性，给出采纳/弃用/备选结论；仅调研 + 写结论文档，不实施 | `docs/analysis/abl-gd-eval-2026-06.md` | 完成定义见 `V7-实施方案.md` §2 Phase 0 GUA-042；关联研判 T2.2 |
+| GUA-043 | open | P1 | V-nn, v7 | v7 | 专利规避设计审计（CN113018837A 边界） | 审计掼蛋 AI 算法专利 CN113018837A 的权利要求边界，识别 V7 Phase 1-3 实施中被覆盖的子模块，给出规避方案；仅调研，不改代码 | `docs/governance/patent-audit-cn113018837a.md` | 完成定义见 `V7-实施方案.md` §2 Phase 0 GUA-043；关联研判 T7 |
 
 ---
 
@@ -120,25 +107,6 @@
 | GUA-034 | [`GUA-034-方案评审.md`](GUA-034-方案评审.md)（**方向 A 已实施**）；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2；[`01_bomb_techniques.md`](../knowledge/skills/02_main_attack/01_bomb_techniques.md) §五；[`10_three_with_two_skills.md`](../knowledge/skills/04_common_skills/10_three_with_two_skills.md) §5 残局；**related** **GUA-014**、**GUA-026**、**GUA-029 R3**、**GUA-035**；样例 `replay_word.md` / `game_records/20260601112040940931 [yf2_m3]-…-[38]-[4].json` |
 | GUA-035 | **GUA-034** END-M02+；[`GUA-034-方案评审.md`](GUA-034-方案评审.md) 方向 E 前置；[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md) BUG2（两手枚举 → V5+）；[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) P-C01 / CALC-M05 |
 | GUA-036 | batch7 round38 复盘（[`ITERATIONS.md`](ITERATIONS.md)「batch7 replay」行）；[`08_straight_skills.md`](../knowledge/skills/04_common_skills/08_straight_skills.md) §控权；[`01_passing_skills.md`](../knowledge/skills/03_assist_attack/01_passing_skills.md)；**related** **GUA-031**、**GUA-032**、**GUA-034/035**（solo 边界）；[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §复盘与验收理念 |
-| GUA-044 | [`platform-data-interpretation.md`](../knowledge/platform-data-interpretation.md) §局与副；[`服务器与客户端连接座位顺序排查.md`](../troubleshooting/服务器与客户端连接座位顺序排查.md)；**related** **GUA-033**（批跑 infra）、**GUA-008**（victoryNum 链路）；日志 `logs/yf2_v7_20260606_102201.log`（10:22:13→10:23:04 空窗） |
-| GUA-045 | [`V7-实施方案.md`](V7-实施方案.md) §0–§2、[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) §复盘与验收理念；**related** **GUA-029 R5**（M3 队友不炸，V7 须 V7-native 复刻语义）、**GUA-031 P-F02**、**GUA-014**（拆牌泛化）、**GUA-037a/b**、**GUA-038**、**V5+-04**；发现样例 `game_records/20260606121245769675 [yf2_v7]-…-[1]-[2].json`（**非**关单标准） |
-
----
-
-## GUA-044 完成定义（批跑四席就绪门闩）
-
-> **定音**：离线 v1006 **第 4 个 WebSocket 连上即自动开局**；批跑须保证 **按序连入 + 末席连入前前三席已登记就绪**，且批跑侧**不得**在就绪不足时继续。
-
-| 项 | 要求 |
-|----|------|
-| **就绪表** | `batch_executor/clients_ready.json`；每席 WS `connect` 成功后 `mark_client_ready(user_info)` |
-| **顺位门闩** | `CONNECT_ORDER_INDEX` + **按席位** `_peers_ready`（非纯计数）；client4 进程延迟 **11s**、末席连入前稳定 **7s**（2026-06-06 由 2s+5s）；`websocket_manager` + `lalala_adapter` 连前 `wait_for_connect_turn` |
-| **批跑等待** | `executor` 批次前 `clear_all_ready()`；`wait_for_clients_connected` 读就绪表；**四席未齐 → 中止本批**（不再「超时仍继续」） |
-| **验收** | `pytest tests/test_client_ready.py` pass；批跑日志含 `✓ 四席已全部连上，平台可安全开局` |
-| **复发排查** | 单席日志在 `发送动作` 后长时间无新 `act` → 先查**他席**是否未回包（非本席决策 hang）；对照四席就绪表时间戳 |
-| **手动单测** | `YF_SKIP_CONNECT_GATE=1` 可跳过门闩（仅本地调试） |
-
-**后续 Agent**：若再报「首局卡顿 ~30–60s」，先读就绪表与 yf1/yf2/lalala 四席日志时间线；若门闩已存在仍卡，另开 GUA 查 lalala `rule_parse` 慢路径（**非**本关单范围）。
 
 ---
 
@@ -148,7 +116,7 @@
 
 | 规则 | 条件（M3 可观测） | 动作 | 文档依据 | 涉及模块 |
 |------|-------------------|------|----------|----------|
-| **R1** | `actionList` 含 `Bomb`/`StraightFlush` 且进入 `choose_bomb` | **先修** `choose_bomb`：点数读 `action[1]`（对齐 lalala 参考实现），同花顺分支一并查；单元测 v1006 格式 `['Bomb','8',[…]]` | 前置；不修则 R2–R6 均可能异常→PASS | `m3_utils.choose_bomb` |
+| **R1** | `actionList` 含 `Bomb`/`StraightFlush` 且进入 `choose_bomb` | **先修** `choose_bomb`：点数读 `action[1]`（对齐 `first_prize/utils.py`），同花顺分支一并查；单元测 v1006 格式 `['Bomb','8',[…]]` | 前置；不修则 R2–R6 均可能异常→PASS | `m3_utils.choose_bomb` |
 | **R2** | `beatAction[0] in (Bomb, StraightFlush)` 且 `choose_bomb != -1` | **必回炸**（最小够用炸弹） | §二.3 追炸；§二.6 炸对手炸弹 | `_Bomb`；取消/绕过 `cur_Bomb_num>=3` 硬门槛 |
 | **R3** | `numofplayers[greaterPos] <= 7` 且当前牌型分支无可跟牌 且 `choose_bomb != -1` | **必炸**（防冲刺/听牌） | §三.5.3 剩 5–7 张；§五.2 逢 5 必防 | 各 `_Single`/`_Pair`/`_ThreeWithTwo`/… 统一兜底 |
 | **R4** | `numofplayers[greaterPos] == 4` | **默认不炸**；白名单：① 我剩 ≤2 手且炸后一手走完；② 仅炸弹能压且炸后可接风领出 | §五.1 炸不打四 | `_Bomb` 与各被动分支 guard |
@@ -290,70 +258,6 @@
 - 重写 `combine_handcards` 多顺子槽 / 红配杂顺全局最优
 - 「再跑 batch7 round38 须赢局或逐步一致」作 pass 标准
 
-## GUA-045 完成定义（V7 决策根因 · P0 Guard 壳 + 改进路线）
-
-> 登记 **2026-06-06**：V7 净盘 3 局 replay 复盘（`game_id=20260606121245769675`）。**定音**：108 张分 4 家，**同发牌复现概率 ≈ 0**（见上表「复盘发现 → 实现 → 验收」）；**不得**为该局手牌写特例策略；replay 步数仅用于**缺陷分类**与 pytest **构造态**命名，**不作**关单 pass 标准。
-
-### 统一根因（三层）
-
-| 层 | 现状（`ultimate_win_rate_engine_v7.py`） | 后果 |
-|----|------------------------------------------|------|
-| **A · P0 Guard 壳** | **零条**；`decide()` 直接模型 argmax 或「首个非 PASS」回退 | 炸队友、过度拆炸、应压 PASS、最小代价缺失 |
-| **B · 特征 / 模型** | `_extract_features` 无牌面编码（**GUA-037a** open）；训练目标为 index 匹配率非掼蛋原则 | 同局内决策不稳定（如 SB 有时出、有时 PASS） |
-| **C · V5+ 组牌** | 无 `enumerate_groupings` / 结构评分（**V5+-04**） | 顺子漏带单张、钢板被拆、外对子未优先 |
-
-**升格约束**（`V7-实施方案.md` §1.2）：Guard 须 **V7-native** 实现；**禁止** `import src.m.m3.*`；可**只读** M3 `game_records` 作 **GUA-038** BC teacher。
-
-### 缺陷分类 → 原则 → 落点（不迎合单局）
-
-| 缺陷类 | 原则 ID（M3/V5 对齐） | Phase 0 **GUA-045** Guard | Phase 1+ GUA |
-|--------|----------------------|---------------------------|--------------|
-| 队友领出仍出炸（replay step 14 类） | **P-F02**、GUA-029 **R5** | **V7-R05**：`greaterPos==(myPos+2)%4` 且队友非 PASS → 剔除 `Bomb`/`StraightFlush` | — |
-| 压单级牌用炸 / 拆 5→4 炸（step 6 类） | **P-H04**、**P-G01** | **V7-R01**：压 `Single` 且 `curRank` 在场 → 优先 `Single B`/`Single` 最小点；禁为压单选 `Bomb` 若存在更小单牌选项 | **GUA-037a**（牌面特征） |
-| 同型炸弹多配牌（step 8：4A+红2 五炸） | **P-H04**、**P-G02** | **V7-R02**：同牌型能压时选 **`len(cards)` 最小** 合法炸；禁逢人配凑炸若纯炸可压 | **GUA-038** BC |
-| 被动应压却 PASS（step 40：有 555 不过 333） | **CALC-M03**、控权 | **V7-R03**：被动且 `greaterPos` 为对手；`actionList` 有同型非 PASS → **禁默认 PASS**（取最小够用） | **GUA-037b**（历史编码） |
-| 有王/级牌压单却 PASS（step 58 类） | **P-H06** | **V7-R04**：对手 `Single` 且己方可 `Single B` → 优先非 PASS | **GUA-038** |
-| 拆钢板/连对出小对（step 62 类） | **P-G01**、P-F02 | **V7-R06**（轻量）：存在**不拆结构**的更大 `Pair` 可压时，剔除拆 `ThreePair`/钢板的 `Pair` | **V5+-04** |
-| 顺子未带掉单张（step 12 类） | **P-G01**、CG-T06 | Guard **不覆盖**（需组牌枚举） | **V5+-04** + **GUA-037a** |
-
-### 改进路线（与现有 GUA 对齐）
-
-```
-Phase 0（~1 迭代）  GUA-045  P0 Guard 壳
-    │  V7-R01–R06（上表）；decide() 前 filter → 模型 → 后校验
-    │  tests/test_v7_gua045.py（构造 actionList/greaterPos，不绑 game_id）
-    ▼
-Phase 1（~1.5–2 迭代）  GUA-037a 静态特征 → GUA-037b 动态特征（可并行 GUA-040）
-    │  真牌面 124 维 + actionList 语义；替换零填充
-    ▼
-Phase 2（1 迭代）  GUA-038  M3 game_records BC 蒸馏（只读 teacher，不 import M3）
-    ▼
-Phase 3（~3 迭代）  GUA-039a/b  自对弈 + PPO；队胜率 vs lalala（V7-007 KPI）
-    │
-    └── 贯穿 Phase 2–3：V5+-04 整手组牌（顺子带单、钢板保护）— 不在 GUA-045 关单范围
-```
-
-| Phase | GUA | 优先级 | 验收 |
-|-------|-----|--------|------|
-| **0** | **GUA-045** | **P0** | `pytest tests/test_v7_gua045.py` **≥8 case**（R01–R06 覆盖）；`ultimate_win_rate_engine_v7` 无 M3 import；可选 V7 净盘 3 局 **观测**（不作关单） |
-| **1** | **GUA-037a** → **037b** | P0 / P1 | 特征维数契约 + 推理延迟基线（`V7-实施方案.md` §2） |
-| **2** | **GUA-038** | P1 | BC 加载后 `model_usage_rate` 稳定；构造态与 M3 标签一致率抽检 |
-| **3** | **GUA-039a/b** | P2 | 30 局 lalala 评估；**V7-007** 队胜率多样本 |
-| **并行** | **V5+-04** | P1+ | 组牌枚举关单独立于 GUA-045 |
-
-### 关单条件（GUA-045）
-
-| 项 | 要求 |
-|----|------|
-| **代码** | `decide()` 接入 **V7-native** `filter_action_list()`（或等价）；实现 **V7-R01、R02、R03、R04、R05** 为 **必达**；**R06** 为 **应达**（可 Phase 0 末条迭代） |
-| **测试** | `tests/test_v7_gua045.py` pass；**GUA-037a** 未关单前 guard 须可独立运行（模型可为 mock） |
-| **回归** | 不破坏 `IDecisionProvider` 契约；`tests/test_v7_paths.py` / `test_v7_notify_routing.py`（若有）不回归 |
-| **不作关单** | 再跑 `20260606121245769675` 逐步一致；V7 队胜率 >50%（归 **V7-007** / **GUA-039b**） |
-
-**后续 Agent**：实施 GUA-045 前读本节 + [`V7-实施方案.md`](V7-实施方案.md) §1.2 黑名单；M3 队胜率 KPI **仍只看 M3 批跑**；V7 KPI 见 `ITERATIONS` **V7-007**。
-
----
-
 ## V5+ priority（GUA-034 / GUA-036 后续 · 不在 M3 本轮）
 
 > 登记 **2026-06-01**；与 [`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) P1+→V5+ 对齐。
@@ -374,9 +278,3 @@ Phase 3（~3 迭代）  GUA-039a/b  自对弈 + PPO；队胜率 vs lalala（V7-0
 | ID | 状态 | 严重级别 | 标签 | 版本 | 简述 | 现象 / 复现要点 | 涉及模块 | 备注 |
 |----|------|----------|------|------|------|-----------------|----------|------|
 | GUA-xxx | open / closed | P0–P3 | rules, observation, policy | m1/v4/v5/v6/训练/docs | | | | `closed_in` / `duplicate of` |
-
-## 紧急通知
-
-**GUA-050** 已登记，**P0 严重**，需立即停止训练并诊断问题。模型从 Round 1-3 的 55-64% 胜率暴跌至 Round 4-10 的 0% 胜率，完全崩溃。所有 V7 BC 训练工作必须暂停，问题必须立即解决。
-
-**GUA-050 详细信息**：Stage6 V7 BC 训练失败，模型完全崩溃，胜率从 60% 暴跌至 0%。需要立即停止训练，诊断问题根源，修复训练流程，并验证模型稳定性和适应性。

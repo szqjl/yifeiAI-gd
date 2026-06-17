@@ -14,8 +14,167 @@ from pathlib import Path
 
 from .process_monitor import ProcessMonitor
 
+# 用于强制清理残留服务器进程
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
 
 logger = logging.getLogger(__name__)
+
+
+def _pids_for_client_script(script_basename: str) -> List[int]:
+    """按脚本文件名查找仍在运行的客户端 Python 进程 PID。"""
+    if psutil is None:
+        return []
+    target = script_basename.lower()
+    own_pid = os.getpid()
+    pids: List[int] = []
+    for proc in psutil.process_iter(["pid", "name"]):
+        try:
+            pid = proc.info["pid"]
+            if pid == own_pid:
+                continue
+            name = (proc.info.get("name") or "").lower()
+            if "python" not in name:
+                continue
+            cmdline = proc.cmdline()
+            cmd_str = " ".join(cmdline).lower()
+            # batch_executor --clients  argv 也含脚本名，须排除以免批次间 cleanup 自杀
+            if "batch_executor" in cmd_str:
+                continue
+            if target not in cmd_str:
+                continue
+            # 只认「python …/script.py」式启动，排除仅被引用的路径
+            if not any(arg.lower().endswith(target) for arg in cmdline):
+                continue
+            pids.append(pid)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    return pids
+
+
+def _wait_port_free(port: int = 23456, timeout: float = 20.0) -> bool:
+    """等待本地端口释放（批次间避免旧服/旧连接占坑）。"""
+    import socket
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.5)
+        try:
+            if sock.connect_ex(("127.0.0.1", port)) != 0:
+                return True
+        finally:
+            sock.close()
+        time.sleep(0.5)
+    return False
+
+
+def _kill_all_client_script_processes(client_scripts: List[str]) -> None:
+    """按脚本名结束全部匹配的 Python 客户端（含 start 壳未跟踪到的残留）。"""
+    if psutil is None:
+        return
+    for script in client_scripts:
+        basename = os.path.basename(script)
+        for pid in _pids_for_client_script(basename):
+            try:
+                psutil.Process(pid).kill()
+                logger.info("已结束客户端 Python PID=%s (%s)", pid, basename)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+
+def _count_live_client_scripts(client_scripts: List[str]) -> int:
+    """统计仍在运行的客户端进程数（按脚本名去重 PID）。"""
+    if psutil is None:
+        return len(client_scripts)
+    seen: set = set()
+    for script in client_scripts:
+        for pid in _pids_for_client_script(os.path.basename(script)):
+            seen.add(pid)
+    return len(seen)
+
+
+class TrackedClientProcess:
+    """
+    Windows start/cmd 模式下跟踪真实客户端 Python 进程。
+    VirtualProcess 只跟踪 start 壳进程，会导致误判客户端已退出并触发无限重启。
+    """
+
+    def __init__(self, script_basename: str, window_title: str):
+        self.script_basename = script_basename
+        self.window_title = window_title
+        self.pid: Optional[int] = None
+        self.returncode: Optional[int] = None
+
+    def resolve_pid(
+        self,
+        wait_seconds: float = 8.0,
+        exclude_pids: Optional[set] = None,
+    ) -> Optional[int]:
+        exclude = set(exclude_pids or [])
+        deadline = time.time() + wait_seconds
+        while time.time() < deadline:
+            pids = _pids_for_client_script(self.script_basename)
+            candidates = [p for p in pids if p not in exclude]
+            if candidates:
+                if psutil is not None:
+                    def _create_time(pid: int) -> float:
+                        try:
+                            return psutil.Process(pid).create_time()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            return 0.0
+                    self.pid = max(candidates, key=_create_time)
+                else:
+                    self.pid = candidates[-1]
+                return self.pid
+            time.sleep(0.5)
+        return None
+
+    def poll(self) -> Optional[int]:
+        if self.returncode is not None:
+            return self.returncode
+        if self.pid is None:
+            self.resolve_pid(wait_seconds=0)
+        if self.pid is None:
+            # 尚未解析到 PID：可能仍在启动，不视为已退出
+            return None
+        if psutil is None:
+            return None
+        try:
+            if psutil.pid_exists(self.pid):
+                return None
+        except Exception:
+            return None
+        self.returncode = -1
+        return self.returncode
+
+    def terminate(self) -> None:
+        if self.pid is not None and psutil is not None:
+            try:
+                psutil.Process(self.pid).terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/FI", f"WINDOWTITLE eq {self.window_title}*"],
+                capture_output=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        except Exception:
+            pass
+
+    def kill(self) -> None:
+        if self.pid is not None and psutil is not None:
+            try:
+                psutil.Process(self.pid).kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        self.terminate()
+
+    def wait(self, timeout=None):
+        return self.returncode
 
 
 class RestartManager:
@@ -60,15 +219,21 @@ class RestartManager:
         Returns:
             成功启动的服务器进程，如果失败返回None
         """
-        # 在启动服务器之前，先清理所有服务器进程（避免端口冲突）
-        logger.info("启动服务器前清理所有服务器进程...")
-        process_names = ['guandan_offline_v1006.exe']
-        self.process_monitor.kill_all(process_names)
-        # 额外等待1秒，确保进程完全终止
-        time.sleep(1)
-        logger.info("服务器进程清理完成")
-        
         for attempt in range(max_retries):
+            # 强制清理残留的旧服务器进程，确保端口释放（解决 WinError 10048 端口占用）
+            if psutil is not None:
+                for proc in psutil.process_iter(['name']):
+                    try:
+                        if proc.info['name'] and 'guandan_offline_v1006.exe' in proc.info['name']:
+                            logger.warning(f"强制结束残留服务器进程 PID={proc.pid}，确保端口释放")
+                            proc.kill()
+                            proc.wait(timeout=3)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                        pass
+            else:
+                # 降级方案：使用 PowerShell 命令清理
+                os.system('powershell -Command "Get-Process guandan_offline_v1006 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"')
+
             try:
                 logger.info(f"尝试启动服务器 (尝试 {attempt + 1}/{max_retries})")
                 logger.info(f"服务器路径: {server_path}")
@@ -80,13 +245,7 @@ class RestartManager:
                     return None
                 
                 # 构建启动命令
-                # 如果game_count是single_run_limit（3），不传递参数让服务器无限运行
-                # 这样可以通过外部控制来停止服务器，而不是让服务器自己决定何时停止
-                if game_count == 3:  # single_run_limit的默认值
-                    command = [server_path]  # 不传递参数，让服务器无限运行
-                    logger.info("使用无限运行模式启动服务器（不传递游戏次数参数）")
-                else:
-                    command = [server_path, str(game_count)]
+                command = [server_path, str(game_count)]
                 
                 # 获取服务器所在目录作为工作目录
                 server_dir = os.path.dirname(server_path) or "."
@@ -206,53 +365,20 @@ class RestartManager:
                     else:
                         logger.warning("无服务器输出，服务器可能未正常启动")
 
-                # Final check - 确保服务器进程仍在运行
+                # Final check
                 if process.poll() is None:
-                    # 再次验证端口是否监听（额外检查）
-                    import socket
-                    port_ready = False
-                    for check_attempt in range(3):
-                        try:
-                            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                            sock.settimeout(1)
-                            result = sock.connect_ex(('127.0.0.1', 23456))
-                            sock.close()
-                            if result == 0:
-                                logger.info(f"✓ 验证成功: 服务器端口23456已监听 (检查 {check_attempt + 1}/3)")
-                                port_ready = True
-                                break
-                        except Exception as e:
-                            logger.debug(f"端口检查 {check_attempt + 1} 失败: {e}")
-                        if check_attempt < 2:
-                            time.sleep(1)
-                    
-                    if port_ready or visible_server:
-                        # 如果端口就绪，或者服务器窗口可见（可能无法检测端口），认为启动成功
-                        logger.info("✓ 服务器启动成功，进程正在运行")
-                        if not port_ready and visible_server:
-                            logger.info("  注意: 服务器窗口可见，无法验证端口，但进程正在运行")
-                        self.server_process = process
-                        return process
-                    else:
-                        logger.warning("⚠️ 服务器进程运行中，但端口23456未监听")
-                        logger.warning("  可能原因: 服务器需要更多时间启动，或端口配置不同")
-                        # 即使端口未监听，如果进程在运行，也返回（可能是服务器启动较慢）
-                        self.server_process = process
-                        return process
+                    logger.info("✓ 服务器启动成功，进程正在运行")
+                    self.server_process = process
+                    return process
                 else:
                     return_code = process.returncode
                     logger.error(f"✗ 服务器进程已终止，返回码: {return_code}")
                     if server_output_lines:
-                        logger.error("服务器错误输出 (最后20行):")
-                        for line in server_output_lines[-20:]:
+                        logger.error("服务器错误输出 (最后10行):")
+                        for line in server_output_lines[-10:]:
                             logger.error(f"  {line}")
                     else:
-                        logger.error("提示: 服务器可能启动失败，请检查:")
-                        logger.error("  1. 服务器路径是否正确")
-                        logger.error("  2. 服务器参数是否正确（游戏场数）")
-                        logger.error("  3. 是否有权限执行服务器")
-                        logger.error("  4. 端口23456是否被占用")
-                        logger.error("  5. 服务器依赖文件是否完整")
+                        logger.error("提示: 服务器可能启动失败，请检查服务器路径、参数和权限")
                     
             except FileNotFoundError:
                 logger.error(f"服务器可执行文件不存在: {server_path}")
@@ -274,7 +400,7 @@ class RestartManager:
     def restart_clients(
         self,
         client_scripts: List[str],
-        wait_between: int = 8  # 8 seconds between clients to ensure connection order (increased for client startup and internal delay)
+        wait_between: int = 3  # 3 seconds between clients to ensure connection order
     ) -> List[subprocess.Popen]:
         """
         重启所有客户端
@@ -284,32 +410,14 @@ class RestartManager:
         
         Args:
             client_scripts: 客户端脚本路径列表
-            wait_between: 每个客户端之间的等待时间（秒），默认8秒
+            wait_between: 每个客户端之间的等待时间（秒），默认3秒
             
         Returns:
             成功启动的客户端进程列表
         """
-        # 验证客户端脚本列表，确保没有重复
-        seen_scripts = set()
-        for script in client_scripts:
-            script_name = os.path.basename(script).lower()
-            if script_name in seen_scripts:
-                logger.error(f"⚠️ 发现重复的客户端脚本: {script}")
-                logger.error(f"   客户端脚本列表: {client_scripts}")
-            seen_scripts.add(script_name)
-        
-        if len(seen_scripts) != len(client_scripts):
-            logger.warning(f"⚠️ 客户端脚本列表可能有重复，已发现 {len(seen_scripts)} 个唯一脚本，但列表有 {len(client_scripts)} 个")
-        
-        logger.info("=" * 60)
-        logger.info("客户端启动顺序验证")
-        logger.info("=" * 60)
-        for i, script in enumerate(client_scripts):
-            script_name = os.path.basename(script)
-            logger.info(f"  {i+1}. {script_name}")
-        logger.info("=" * 60)
-        
         processes = []
+        self._last_client_scripts = list(client_scripts)
+        assigned_pids: set = set()
         
         for i, script_path in enumerate(client_scripts):
             try:
@@ -338,82 +446,62 @@ class RestartManager:
                 logger.info(f"启动客户端 {i + 1}/{len(client_scripts)}: {script_path}")
                 logger.info(f"  绝对路径: {abs_script_path}")
                 
-                # 确定如何启动客户端（Python脚本）
-                command = ['python', abs_script_path]
+                # 确定如何启动客户端（Python脚本）— 与 test_t9 使用同一解释器
+                python_exe = sys.executable.replace("/", "\\")
+                command = [python_exe, abs_script_path]
                 
                 # 启动客户端进程
                 # 不捕获输出，让输出显示在控制台窗口中
                 # Windows上使用start命令创建新窗口，其他平台使用默认方式
                 if sys.platform == 'win32':
-                    # Windows: 使用start命令创建带标题的控制台窗口，显示客户端输出
+                    # Windows: 使用start命令创建新的控制台窗口显示客户端输出
+                    # start命令会打开新窗口并执行命令
+                    # 使用start命令在新窗口中启动，窗口标题包含脚本名便于识别
+                    window_title = f"客户端{i+1}: {os.path.basename(abs_script_path)}"
+                    # 确保工作目录是项目根目录，这样相对导入才能正常工作
                     work_dir = str(self.project_root.resolve())
-                    script_name = os.path.basename(abs_script_path)
-                    window_title = f"客户端{i+1}: {script_name}"
-                    
-                    # 使用start命令创建带标题的新窗口
-                    # start "窗口标题" cmd /k "python 脚本路径"
-                    # /k 参数表示执行后保持窗口打开
+                    # 计算相对于项目根目录的路径（与CMD文件格式一致）
                     try:
                         rel_path = os.path.relpath(abs_script_path, work_dir)
                         rel_path_normalized = rel_path.replace('/', '\\')
                     except ValueError:
+                        # 如果无法计算相对路径，使用绝对路径
                         rel_path_normalized = abs_script_path.replace('/', '\\')
-                    
-                    start_command = f'start "{window_title}" cmd /k "cd /d {work_dir} && python {rel_path_normalized}"'
-                    
+                    # 使用与CMD文件相同的格式：start "窗口标题" cmd /k "python 相对路径"
+                    # 这样工作目录会自动设置为当前目录（项目根目录）
+                    start_command = (
+                        f'start "{window_title}" cmd /c "cd /d {work_dir} && '
+                        f'"{python_exe}" {rel_path_normalized}"'
+                    )
                     process = subprocess.Popen(
                         start_command,
-                        shell=True,
-                        cwd=work_dir,
+                        shell=True,  # 使用shell=True来执行start命令
+                        cwd=work_dir,  # 设置工作目录
                         creationflags=subprocess.CREATE_NO_WINDOW  # 隐藏启动命令本身的窗口
                     )
-                    
-                    logger.info(f"客户端 {i + 1} 已启动 (新控制台窗口，标题: {window_title})")
+                    # 注意：使用start命令时，返回的process是start命令的进程，不是客户端进程
+                    # 实际客户端会在新窗口中运行
+                    logger.info(f"客户端 {i + 1} 已在新窗口中启动")
                     logger.info(f"  原始路径: {script_path}")
                     logger.info(f"  绝对路径: {abs_script_path}")
+                    logger.info(f"  相对路径: {rel_path_normalized}")
                     logger.info(f"  工作目录: {work_dir}")
                     logger.info(f"  窗口标题: {window_title}")
-                    logger.info(f"  PID: {process.pid}")
-                    
-                    # 创建一个虚拟进程对象用于跟踪（start命令返回的是start进程，不是客户端进程）
-                    class VirtualProcess:
-                        def __init__(self, pid, window_title, script_name):
-                            self.pid = pid
-                            self.returncode = None
-                            self.window_title = window_title
-                            self.script_name = script_name
-                        def poll(self):
-                            # 检查python进程是否还存在（通过tasklist查找包含脚本名的python进程）
-                            try:
-                                result = subprocess.run(
-                                    ['tasklist', '/FI', 'IMAGENAME eq python.exe', '/FO', 'CSV', '/V'],
-                                    capture_output=True,
-                                    creationflags=subprocess.CREATE_NO_WINDOW,
-                                    timeout=2
-                                )
-                                output = result.stdout.decode('gbk', errors='ignore')
-                                # 检查是否有python进程包含我们的脚本名
-                                if self.script_name.lower() in output.lower():
-                                    return None  # 进程还在运行
-                                else:
-                                    return 0  # 进程已结束
-                            except:
-                                return None  # 检查失败，假设进程还在
-                        def terminate(self):
-                            # 通过窗口标题终止进程
-                            try:
-                                subprocess.run(
-                                    ['taskkill', '/F', '/FI', f'WINDOWTITLE eq {self.window_title}*'],
-                                    capture_output=True,
-                                    creationflags=subprocess.CREATE_NO_WINDOW,
-                                    timeout=3
-                                )
-                            except:
-                                pass
-                        def kill(self):
-                            self.terminate()
-                    
-                    process = VirtualProcess(process.pid, window_title, script_name)
+                    logger.info(f"  启动命令: {start_command}")
+                    logger.info(f"  提示: 如果看不到窗口，请检查任务栏或使用 Alt+Tab 切换")
+                    process = TrackedClientProcess(
+                        os.path.basename(abs_script_path),
+                        window_title,
+                    )
+                    process.resolve_pid(wait_seconds=6.0, exclude_pids=assigned_pids)
+                    if process.pid:
+                        assigned_pids.add(process.pid)
+                        logger.info(f"  已解析客户端 Python PID: {process.pid}")
+                    else:
+                        logger.warning(
+                            f"  暂未解析到 {os.path.basename(abs_script_path)} 的 Python PID，"
+                            "后续将按脚本名继续检测"
+                        )
                 else:
                     # Linux/Mac: 使用默认方式
                     process = subprocess.Popen(command)
@@ -422,42 +510,9 @@ class RestartManager:
                 processes.append(process)
                 
                 # 等待后再启动下一个客户端 (确保顺序连接)
-                # 客户端内部延迟（与脚本内 DELAY / _lalala_launcher 对齐）：
-                # yf1_v7=2s, run_lalala_client3=3s, yf2_v7=4s, run_lalala_client4=6s
                 if i < len(client_scripts) - 1:
-                    current_script = os.path.basename(script_path).lower()
-                    if 'yf1_v7' in current_script:
-                        wait_time = 4
-                        logger.info(f"等待 {wait_time} 秒（yf1_v7 内部延迟 2s + 缓冲）...")
-                    elif 'yf1_m1' in current_script:
-                        wait_time = 6
-                        logger.info(f"等待 {wait_time} 秒（yf1_m1需要5秒内部延迟，确保它开始连接后再启动下一个）...")
-                    elif 'run_lalala_client3' in current_script or (
-                        'client3' in current_script and 'lalala' in current_script
-                    ):
-                        wait_time = 5
-                        logger.info(f"等待 {wait_time} 秒（run_lalala_client3 内部延迟 3s + 缓冲）...")
-                    elif 'client3' in current_script:
-                        wait_time = 11
-                        logger.info(f"等待 {wait_time} 秒（client3需要10秒内部延迟，确保它开始连接后再启动下一个）...")
-                    elif 'yf2_v7' in current_script:
-                        wait_time = 6
-                        logger.info(f"等待 {wait_time} 秒（yf2_v7 内部延迟 4s + 缓冲）...")
-                    elif 'yf2_m1' in current_script:
-                        wait_time = 16
-                        logger.info(f"等待 {wait_time} 秒（yf2_m1需要15秒内部延迟，确保它开始连接后再启动下一个）...")
-                    elif 'run_lalala_client4' in current_script or (
-                        'client4' in current_script and 'lalala' in current_script
-                    ):
-                        wait_time = 8
-                        logger.info(f"等待 {wait_time} 秒（run_lalala_client4 内部延迟 6s + 缓冲）...")
-                    else:
-                        wait_time = wait_between
-                        logger.info(f"等待 {wait_time} 秒后启动下一个客户端（确保连接顺序）...")
-                    
-                    logger.info(f"⏳ 等待中... ({wait_time}秒)")
-                    time.sleep(wait_time)
-                    logger.info(f"✓ 等待完成，准备启动下一个客户端")
+                    logger.info(f"等待 {wait_between} 秒后启动下一个客户端（确保连接顺序）...")
+                    time.sleep(wait_between)
                     
                     # 验证当前客户端进程仍在运行
                     if process.poll() is None:
@@ -490,69 +545,98 @@ class RestartManager:
         expected_client_ids: Optional[List[str]] = None,
     ) -> bool:
         """
-        等待所有客户端 WebSocket 就绪（读取 batch_executor/clients_ready.json）。
-
+        等待所有客户端连接到服务器
+        
+        通过检测服务器端口连接数或WebSocket连接状态来判断客户端是否已连接。
+        
         Args:
-            expected_count: 期望连接的客户端数量
-            timeout: 超时时间（秒）
-            check_interval: 轮询间隔（秒）
-            expected_client_ids: 各席 user_info；缺省时仅按数量判断
-
+            expected_count: 期望连接的客户端数量，默认4个
+            timeout: 超时时间（秒），默认30秒
+            check_interval: 检查间隔（秒），默认2秒
+            
         Returns:
             四席全部登记就绪返回 True
         """
-        from batch_executor.client_ready import count_ready, get_ready_clients, wait_for_all_clients
-
-        targets = list(expected_client_ids) if expected_client_ids else []
-
-        logger.info(f"等待 {expected_count} 个客户端 WebSocket 就绪...")
-        logger.info(f"超时时间: {timeout} 秒，就绪表: batch_executor/clients_ready.json")
-        if targets:
-            logger.info(f"期望席位: {', '.join(targets)}")
-
-        if targets:
-            ok = wait_for_all_clients(
-                targets,
-                timeout=float(timeout),
-                poll_interval=float(check_interval),
-            )
-            if ok:
-                ready = get_ready_clients()
-                logger.info("✓ 四席已全部连上并就绪（末席连入后平台将开局）")
-                for cid in targets:
-                    ts = ready.get(cid, {}).get("timestamp", "?")
-                    logger.info(f"  - {cid}: {ts}")
-                return True
-            ready = get_ready_clients()
-            missing = [cid for cid in targets if cid not in ready]
-            logger.warning(f"⚠️ 等待客户端就绪超时 ({timeout}s)")
-            logger.warning(f"   已就绪: {list(ready.keys())}")
-            logger.warning(f"   未就绪: {missing}")
-            logger.warning("   建议: 查看各客户端控制台是否有「前序席位未就绪」或连接错误")
-            return False
-
-        start = time.time()
-        while time.time() - start < timeout:
-            n = count_ready()
-            if n >= expected_count:
-                logger.info(f"✓ 就绪席位数 {n}/{expected_count}")
-                return True
-            time.sleep(check_interval)
-        logger.warning(f"⚠️ 就绪席位不足: {count_ready()}/{expected_count}")
+        logger.info(f"等待 {expected_count} 个客户端连接到服务器...")
+        logger.info(f"超时时间: {timeout} 秒，检查间隔: {check_interval} 秒")
+        
+        import socket
+        import time
+        
+        start_time = time.time()
+        elapsed = 0
+        active_clients = 0
+        
+        while elapsed < timeout:
+            try:
+                # 方法1: 尝试连接到服务器端口，检测是否有监听
+                # 注意：这只能检测服务器是否在监听，不能检测客户端连接数
+                # 但我们可以通过多次尝试连接来间接判断
+                
+                # 方法2: 按脚本名检查真实 Python 客户端（避免 VirtualProcess 误报）
+                if psutil is not None and self.client_processes:
+                    script_paths = getattr(self, "_last_client_scripts", [])
+                    if script_paths:
+                        active_clients = _count_live_client_scripts(script_paths)
+                    else:
+                        active_clients = sum(
+                            1 for p in self.client_processes if p.poll() is None
+                        )
+                else:
+                    active_clients = 0
+                    for i, process in enumerate(self.client_processes):
+                        if process.poll() is None:
+                            active_clients += 1
+                        else:
+                            logger.warning(
+                                f"客户端 {i+1} 进程已退出，返回码: {process.returncode}"
+                            )
+                
+                if active_clients >= expected_count:
+                    logger.info(f"✓ 检测到 {active_clients} 个客户端进程正在运行")
+                    # 额外等待几秒，确保连接建立
+                    logger.info("等待 5 秒确保所有连接完全建立...")
+                    time.sleep(5)
+                    return True
+                
+                # 方法3: 尝试检测服务器端口连接数（需要服务器支持）
+                # 这里我们简化处理，只检查进程状态
+                
+                elapsed = time.time() - start_time
+                remaining = timeout - elapsed
+                if remaining > 0:
+                    logger.info(f"已等待 {elapsed:.1f} 秒，剩余 {remaining:.1f} 秒... (活跃客户端: {active_clients}/{expected_count})")
+                    time.sleep(check_interval)
+                
+            except Exception as e:
+                logger.warning(f"检测客户端连接状态时出错: {e}")
+                time.sleep(check_interval)
+                elapsed = time.time() - start_time
+        
+        logger.warning(f"⚠️ 等待客户端连接超时 ({timeout} 秒)")
+        logger.warning(f"   活跃客户端进程数: {active_clients}/{expected_count}")
+        logger.warning("   可能原因:")
+        logger.warning("   1. 客户端连接失败")
+        logger.warning("   2. 服务器未正确启动")
+        logger.warning("   3. 网络连接问题")
+        logger.warning("   4. 客户端脚本执行错误")
+        logger.warning("   建议: 检查客户端窗口的输出日志")
+        
         return False
+    
     def cleanup(self) -> None:
         """
         清理所有进程
         
         终止所有服务器和客户端进程，释放资源。
-        确保彻底清理，包括通过窗口标题查找的客户端进程。
         """
-        logger.info("=" * 60)
         logger.info("开始清理所有进程...")
-        logger.info("=" * 60)
+
+        # 先按脚本名强杀全部客户端，避免批次间 yf1/yf2 残留占 1/3 号位
+        if getattr(self, "_last_client_scripts", None):
+            _kill_all_client_script_processes(self._last_client_scripts)
         
-        # 第一步：终止所有已知的客户端进程
-        logger.info("步骤1: 终止已知的客户端进程...")
+        # 终止所有客户端进程
         for i, process in enumerate(self.client_processes):
             try:
                 if process.poll() is None:  # 进程仍在运行
@@ -566,29 +650,7 @@ class RestartManager:
             except Exception as e:
                 logger.error(f"终止客户端进程时发生错误: {e}")
         
-        # 第二步：通过窗口标题清理所有客户端窗口（Windows）
-        if sys.platform == 'win32':
-            logger.info("步骤2: 通过窗口标题清理所有客户端窗口...")
-            client_window_titles = [
-                "客户端1:", "客户端2:", "客户端3:", "客户端4:",
-                "client1:", "client2:", "client3:", "client4:"
-            ]
-            for title in client_window_titles:
-                try:
-                    # 使用taskkill通过窗口标题终止进程
-                    result = subprocess.run(
-                        ['taskkill', '/F', '/FI', f'WINDOWTITLE eq {title}*'],
-                        capture_output=True,
-                        timeout=5,
-                        creationflags=subprocess.CREATE_NO_WINDOW
-                    )
-                    if result.returncode == 0:
-                        logger.info(f"已清理窗口标题包含 '{title}' 的进程")
-                except Exception as e:
-                    logger.debug(f"清理窗口标题 '{title}' 时出错: {e}")
-        
-        # 第三步：终止服务器进程
-        logger.info("步骤3: 终止服务器进程...")
+        # 终止服务器进程
         if self.server_process is not None:
             try:
                 if self.server_process.poll() is None:  # 进程仍在运行
@@ -602,40 +664,36 @@ class RestartManager:
             except Exception as e:
                 logger.error(f"终止服务器进程时发生错误: {e}")
         
-        # 第四步：使用进程监控器确保服务器进程已终止
-        logger.info("步骤4: 确保所有服务器进程已终止...")
+        # 使用进程监控器确保服务器进程已终止
+        # 注意：不要杀死所有python.exe进程，因为GUI本身也是Python进程
         process_names = ['guandan_offline_v1006.exe']
         self.process_monitor.kill_all(process_names)
         
-        # 第五步：等待一小段时间，确保所有进程完全终止
-        logger.info("步骤5: 等待进程完全终止...")
-        time.sleep(2)
+        # 清理由 start 启动的残留 Python 客户端（按脚本名匹配）
+        if psutil is not None and getattr(self, "_last_client_scripts", None):
+            _kill_all_client_script_processes(self._last_client_scripts)
         
-        # 第六步：验证清理结果
-        logger.info("步骤6: 验证清理结果...")
-        remaining_servers = 0
-        try:
-            for proc in psutil.process_iter(['name']):
-                try:
-                    if proc.info['name'] and proc.info['name'].lower() == 'guandan_offline_v1006.exe':
-                        remaining_servers += 1
-                        logger.warning(f"发现残留的服务器进程: PID {proc.pid}")
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-        except Exception as e:
-            logger.debug(f"验证清理结果时出错: {e}")
-        
-        if remaining_servers == 0:
-            logger.info("✓ 所有服务器进程已清理")
-        else:
-            logger.warning(f"⚠️ 仍有 {remaining_servers} 个服务器进程未清理，将再次尝试...")
-            self.process_monitor.kill_all(process_names)
-            time.sleep(1)
+        # 额外清理由 start "客户端X: ..." 打开的残留 cmd 窗口
+        # 仅匹配窗口标题前缀“客户端”，避免误杀普通终端
+        if sys.platform == 'win32':
+            try:
+                subprocess.run(
+                    ['taskkill', '/F', '/FI', 'WINDOWTITLE eq 客户端*'],
+                    capture_output=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                logger.info("已执行客户端 cmd 窗口清理（标题: 客户端*）")
+            except Exception as e:
+                logger.debug(f"清理客户端 cmd 窗口失败（可忽略）: {e}")
         
         # 清空进程列表
         self.client_processes = []
         self.server_process = None
+
+        if not _wait_port_free():
+            logger.warning("端口 23456 仍被占用，下一批连接可能失败")
+        else:
+            logger.info("端口 23456 已释放")
+        time.sleep(2)
         
-        logger.info("=" * 60)
         logger.info("清理完成")
-        logger.info("=" * 60)

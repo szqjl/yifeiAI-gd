@@ -21,9 +21,20 @@ ENG2CH = {
 
 class M3DecisionEngine:
 
+    # Guard toggle: set False to disable specific GUA guards at runtime.
+    # GUA-035: solo wind opponent rest filtering (78.8% with GUA-034 base) ← ENABLED
+    # GUA-036: non-solo team wind + straight control (regression: 52.2% vs 78.8%) ← DISABLED
+    GUARD_ENABLED = {
+        "GUA-035": True,
+        "GUA-036": False,
+    }
+
     def __init__(self, player_id):
         self.player_id = player_id
         self._reset_state()
+
+    def _guard_enabled(self, name):
+        return self.GUARD_ENABLED.get(name, True)
 
     def _dbg(self, msg: str):
         """Detailed debug for M3 PASS investigation.
@@ -1522,18 +1533,19 @@ class M3DecisionEngine:
         cmp_val[rank_card[-1]] = 15
 
         if not self._is_teammate_greater(myPos, greaterPos):
-            idx = self._gua036_pick_min_straight_beat(
-                actionList, curAction, cmp_val, bomb_member, rank_card,
-            )
-            if idx > 0:
-                self._dbg(f"GUA-036 CTRL-P01 straight seize -> {idx}")
-                return idx
-            bomb_idx = self._gua029_try_bomb(
-                actionList, handcards, rank_card, cmp_val, myPos, greaterPos, numofplayers,
-            )
-            if bomb_idx > 0:
-                self._dbg(f"GUA-036 bomb over break-bomb straight -> {bomb_idx}")
-                return bomb_idx
+            if self._guard_enabled("GUA-036"):
+                idx = self._gua036_pick_min_straight_beat(
+                    actionList, curAction, cmp_val, bomb_member, rank_card,
+                )
+                if idx > 0:
+                    self._dbg(f"GUA-036 CTRL-P01 straight seize -> {idx}")
+                    return idx
+                bomb_idx = self._gua029_try_bomb(
+                    actionList, handcards, rank_card, cmp_val, myPos, greaterPos, numofplayers,
+                )
+                if bomb_idx > 0:
+                    self._dbg(f"GUA-036 bomb over break-bomb straight -> {bomb_idx}")
+                    return bomb_idx
 
         return 0
 
@@ -1727,7 +1739,7 @@ class M3DecisionEngine:
             if len(handcards) == len(i[2]):
                 return actionList.index(i)
 
-        if solo_wind:
+        if solo_wind and self._guard_enabled("GUA-035"):
             opponent_rests = self._gua035_solo_opponent_rests(numofplayers, mypos)
             idx, skip_tw, skip_pair, skip_single = self._gua035_solo_wind_pick(
                 actionList, threetwo_actionlist, trips_actionlist, pair_actionlist, opponent_rests,
@@ -1740,7 +1752,7 @@ class M3DecisionEngine:
                     self._dbg(f"GUA-035 solo wind single -> {idx}")
                     return idx
 
-        if self._gua036_is_team_wind(data, numofplayers, mypos):
+        if self._guard_enabled("GUA-036") and self._gua036_is_team_wind(data, numofplayers, mypos):
             idx = self._gua036_team_wind_pick(
                 data, actionList, rank_card, card_val, sorted_cards,
                 single_actionlist, pair_actionlist, trips_actionlist, threetwo_actionlist,

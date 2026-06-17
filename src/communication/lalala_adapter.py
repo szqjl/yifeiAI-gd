@@ -14,26 +14,19 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
-from src.utils.v7_paths import get_lalala_dir
-
-try:
-    from batch_executor.client_ready import mark_client_ready, mark_game_ready, wait_for_connect_turn
-except ImportError:
-    def mark_client_ready(_client_id: str) -> None:
-        pass
-
-    def mark_game_ready(_client_id: str) -> None:
-        pass
-
-    def wait_for_connect_turn(_client_id: str, *, timeout: float = 120.0, poll_interval: float = 0.5) -> bool:
-        return True
-
-LALALA_PATH = get_lalala_dir()
-print(f"[lalala_adapter] LALALA_PATH={LALALA_PATH}", flush=True)
+# 添加lalala目录到路径（优先读环境变量 LALALA_DIR，fallback config/v7_paths.yaml）
+_LALALA_DIR = os.environ.get("LALALA_DIR", "")
+if not _LALALA_DIR:
+    import yaml
+    _cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "v7_paths.yaml")
+    if os.path.exists(_cfg_path):
+        with open(_cfg_path, encoding="utf-8") as _f:
+            _cfg = yaml.safe_load(_f)
+        _LALALA_DIR = _cfg.get("lalala_dir", "")
+        _LALALA_DIR = _LALALA_DIR.replace("%REPO_ROOT%", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if not _LALALA_DIR:
+    _LALALA_DIR = r"D:\NYGD\lalala"
+LALALA_PATH = _LALALA_DIR
 if LALALA_PATH not in sys.path:
     sys.path.insert(0, LALALA_PATH)
 

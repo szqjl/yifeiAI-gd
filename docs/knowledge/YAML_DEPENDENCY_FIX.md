@@ -64,7 +64,7 @@ Loaded 32 knowledge items.
 - `src/knowledge/knowledge_loader.py` - 已实现优雅降级
 - `src/knowledge/knowledge_translator.py` - 已实现优雅降级
 - `requirements.txt` - 包含 `pyyaml>=6.0`
-- `INSTALL_DEPENDENCIES.md` - 依赖安装指南
+- [INSTALL_DEPENDENCIES.md](../development/INSTALL_DEPENDENCIES.md) - 依赖安装指南
 
 ## 建议
 

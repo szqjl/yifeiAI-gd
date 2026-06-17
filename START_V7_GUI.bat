@@ -1,4 +1,4 @@
 @echo off
-REM Stub: 根目录 → scripts/launchers/v7/START_V7_GUI.bat
+REM Phase 5 stub → scripts/launchers/v-nn/START_V7_GUI.bat
 cd /d "%~dp0"
-call scripts\launchers\v7\START_V7_GUI.bat %*
+call "%~dp0scripts\launchers\v-nn\START_V7_GUI.bat" %*

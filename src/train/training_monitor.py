@@ -83,9 +83,15 @@ class TrainingMonitor:
         try:
             import mlflow
             import mlflow.pytorch
+            import os
             
             # 设置跟踪 URI（本地文件系统）
-            tracking_uri = kwargs.get("tracking_uri", f"file://{self.log_dir.absolute()}/mlruns")
+            if "tracking_uri" in kwargs:
+                tracking_uri = kwargs["tracking_uri"]
+            else:
+                # 使用 pathlib 的 as_uri() 方法自动处理 Windows 路径
+                mlruns_path = self.log_dir.absolute() / "mlruns"
+                tracking_uri = mlruns_path.as_uri()
             mlflow.set_tracking_uri(tracking_uri)
             
             # 创建或获取实验

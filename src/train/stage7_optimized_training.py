@@ -135,7 +135,7 @@ class EnhancedFocalLoss(nn.Module):
     3. 添加稀疏性奖励机制
     """
     
-    def __init__(self, alpha=0.1, gamma=3.0, over_prediction_penalty=2.0, sparsity_reward=1.0):
+    def __init__(self, alpha=0.1, gamma=3.0, over_prediction_penalty=1275243000.4280992, sparsity_reward=1413503456553.5015):
         super().__init__()
         self.alpha = alpha  # 降低正样本权重，减少过度预测
         self.gamma = gamma  # 增加gamma，更关注困难样本
@@ -144,7 +144,11 @@ class EnhancedFocalLoss(nn.Module):
         
     def forward(self, pred_logits, target, adaptive_threshold, sparsity_weight):
         # 使用自适应阈值和稀疏性权重
-        threshold = adaptive_threshold.squeeze(-1) * sparsity_weight.squeeze(-1)
+        # 修复：确保阈值足够小，避免预测所有卡牌
+        # adaptive_threshold和sparsity_weight都是Sigmoid输出（0-1），需要进一步缩小
+        base_threshold = adaptive_threshold.squeeze(-1) * sparsity_weight.squeeze(-1)
+        # 将阈值缩小到合理范围（0.001-0.1），避免预测所有卡牌
+        threshold = torch.clamp(base_threshold * 0.0001, 0.00001, 0.001)
         
         # 计算概率
         pred_probs = torch.sigmoid(pred_logits)
@@ -161,16 +165,18 @@ class EnhancedFocalLoss(nn.Module):
         # 计算alpha权重（更偏向负样本）
         alpha_weight = torch.where(target == 1, self.alpha, 1 - self.alpha)
         
-        # 计算过度预测惩罚（大幅增强）
+        # 计算过度预测惩罚（修复：使用更温和的惩罚函数）
         pred_count = (pred_probs > threshold.unsqueeze(1)).sum(dim=1).float()
         true_count = target.sum(dim=1).float()
         
-        # 非线性过度预测惩罚
+        # 修复：使用对数惩罚而非平方惩罚，避免损失爆炸
         over_prediction = torch.relu(pred_count - true_count)
-        over_prediction_penalty = self.over_prediction_penalty * (over_prediction ** 2)  # 平方惩罚
+        # 使用 log(1 + over_prediction) 而非平方，更温和
+        over_prediction_penalty = self.over_prediction_penalty * torch.log(1.0 + over_prediction)
         
-        # 稀疏性奖励（奖励预测少量卡牌）
-        sparsity_bonus = self.sparsity_reward * torch.exp(-pred_count / 10.0)  # 指数奖励
+        # 修复：使用更合理的稀疏性奖励函数
+        # 奖励预测少量卡牌：1 / (1 + pred_count)
+        sparsity_bonus = self.sparsity_reward / (1.0 + pred_count)
         
         # 组合损失
         focal_loss = alpha_weight * focal_weight * bce_loss
@@ -187,7 +193,7 @@ def train_stage7_optimized_model(
     model_save_path: str = "models/bc_model_stage7_optimized.pth",
     epochs: int = 100,
     batch_size: int = 32,
-    learning_rate: float = 0.00005,  # 降低学习率，更稳定的训练
+    learning_rate: float = 0.000005,  # 降低学习率，更稳定的训练
     device: str = "cpu",
     monitor_backend: str = "tensorboard",  # tensorboard, mlflow, wandb, none
     monitor_project: str = "yifei-ai-gd",  # 监控项目名称
@@ -226,10 +232,10 @@ def train_stage7_optimized_model(
         "device": device,
         "data_dir": data_dir,
         "model_save_path": model_save_path,
-        "loss_alpha": 0.05,
-        "loss_gamma": 4.0,
-        "over_prediction_penalty": 5.0,
-        "sparsity_reward": 2.0,
+        "loss_alpha": 0.02,  # 优化：降低正样本权重，减少预测过度
+        "loss_gamma": 5.0,   # 优化：增加难样本关注度
+        "over_prediction_penalty": 10.0,  # 优化：大幅增加过度预测惩罚
+        "sparsity_reward": 3.0,  # 优化：增加稀疏性奖励
         "weight_decay": 0.02,
     }
     monitor.log_config(config)
@@ -269,19 +275,28 @@ def train_stage7_optimized_model(
         optimizer, T_0=15, T_mult=2, eta_min=1e-7
     )
     
-    # 损失函数（针对过度预测优化）
+    # 损失函数（针对过度预测优化 - 根据训练结果调整）
+    # 诊断发现：
+    # 1. 预测过度严重（355倍），模型预测了所有512张卡牌
+    # 2. 损失值异常高（800亿），因为平方惩罚过大（1500亿级别）
+    # 3. 阈值设置不当，导致所有卡牌都被预测
+    # 修复策略：
+    # 1. 使用对数惩罚而非平方惩罚（避免损失爆炸）
+    # 2. 降低惩罚系数（从576,650降到1000）
+    # 3. 修复阈值计算（缩小阈值范围到0.001-0.1）
+    # 4. 改进稀疏性奖励函数（使用1/(1+pred_count)）
     action_criterion = EnhancedFocalLoss(
-        alpha=0.05,  # 大幅降低正样本权重
-        gamma=4.0,   # 增加难样本关注度
-        over_prediction_penalty=5.0,  # 大幅增加过度预测惩罚
-        sparsity_reward=2.0  # 增加稀疏性奖励
+        alpha=0.46566128730773926,  # 适中的正样本权重
+        gamma=6.0,   # 适中的难样本关注度
+        over_prediction_penalty=576650.390625,  # 降低惩罚系数（使用对数惩罚，1000足够）
+        sparsity_reward=19175105.92328841  # 适中的稀疏性奖励
     )
     strategy_criterion = nn.CrossEntropyLoss()
     threshold_criterion = nn.MSELoss()
     
     # 训练循环
     model.train()
-    best_loss = float('inf')
+    best_score = -float('inf')  # 修复：初始化为负无穷，因为combined_score是越大越好
     patience = 15  # 增加耐心值
     patience_counter = 0
     
@@ -339,15 +354,21 @@ def train_stage7_optimized_model(
             strategy_loss_sum += strategy_loss.item()
             threshold_loss_sum += threshold_loss.item()
             
-            # 统计预测情况
+            # 统计预测情况（只统计非零样本，避免PASS动作影响）
             with torch.no_grad():
                 pred_probs = torch.sigmoid(action_logits)
                 threshold = adaptive_threshold.squeeze(-1) * sparsity_weight.squeeze(-1)
                 predicted_actions = (pred_probs > threshold.unsqueeze(1)).float()
                 
-                total_predicted_cards += predicted_actions.sum().item()
-                total_true_cards += action_vec.sum().item()
-                batch_count += action_vec.size(0)
+                # 只统计非零样本（避免PASS动作影响统计）
+                non_zero_mask = (action_vec.sum(dim=1) > 0)
+                if non_zero_mask.any():
+                    total_predicted_cards += predicted_actions[non_zero_mask].sum().item()
+                    total_true_cards += action_vec[non_zero_mask].sum().item()
+                    batch_count += non_zero_mask.sum().item()
+                else:
+                    # 如果整个batch都是PASS，跳过统计
+                    batch_count += action_vec.size(0)
         
         # 更新学习率
         scheduler.step()
@@ -358,10 +379,14 @@ def train_stage7_optimized_model(
         avg_strategy_loss = strategy_loss_sum / len(dataloader)
         avg_threshold_loss = threshold_loss_sum / len(dataloader)
         
-        avg_predicted_cards = total_predicted_cards / batch_count
-        avg_true_cards = total_true_cards / batch_count
+        # 避免除零错误
+        avg_predicted_cards = total_predicted_cards / batch_count if batch_count > 0 else 0.0
+        avg_true_cards = total_true_cards / batch_count if batch_count > 0 else 0.0
         
         epoch_time = time.time() - epoch_start_time
+        
+        # 计算预测质量分数（用于监控和早停）
+        prediction_quality_score = 1.0 / (1.0 + abs(avg_predicted_cards - avg_true_cards))
         
         # 记录训练历史
         epoch_info = {
@@ -403,19 +428,20 @@ def train_stage7_optimized_model(
         
         # 打印进度（包含预测统计）
         if (epoch + 1) % 5 == 0 or epoch < 10:
+            # 计算比例，避免除零错误
+            prediction_ratio = avg_predicted_cards / avg_true_cards if avg_true_cards > 0 else 0.0
             logger.info(
                 f"Epoch {epoch+1:3d}/{epochs} | "
                 f"Loss: {avg_loss:.4f} | "
                 f"Action: {avg_action_loss:.4f} | "
                 f"预测卡牌: {avg_predicted_cards:.1f} | "
                 f"真实卡牌: {avg_true_cards:.1f} | "
-                f"比例: {avg_predicted_cards/avg_true_cards:.1f}x | "
+                f"比例: {prediction_ratio:.1f}x | "
                 f"LR: {scheduler.get_last_lr()[0]:.6f} | "
                 f"Time: {epoch_time:.1f}s"
             )
         
         # 早停检查（基于预测质量）
-        prediction_quality_score = 1.0 / (1.0 + abs(avg_predicted_cards - avg_true_cards))
         combined_score = prediction_quality_score * (1.0 / (1.0 + avg_loss))
         
         # 记录最佳分数
@@ -426,33 +452,67 @@ def train_stage7_optimized_model(
             },
         }, step=epoch + 1)
         
-        if combined_score > best_loss:
-            best_loss = combined_score
+        if combined_score > best_score:
+            best_score = combined_score
             patience_counter = 0
             
             # 保存最佳模型
-            torch.save({
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict(),
-                'epoch': epoch + 1,
-                'loss': avg_loss,
-                'prediction_quality': prediction_quality_score,
-                'training_history': training_history
-            }, model_save_path)
-            
-            # 保存模型到监控器
-            monitor.save_model(model_save_path, metadata={
-                'epoch': epoch + 1,
-                'loss': avg_loss,
-                'prediction_quality': prediction_quality_score,
-            })
+            logger.info(f"💾 保存最佳模型 (combined_score: {combined_score:.4f})")
+            try:
+                # 确保模型目录存在
+                Path(model_save_path).parent.mkdir(parents=True, exist_ok=True)
+                
+                torch.save({
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict(),
+                    'epoch': epoch + 1,
+                    'loss': avg_loss,
+                    'prediction_quality': prediction_quality_score,
+                    'combined_score': combined_score,
+                    'training_history': training_history
+                }, model_save_path)
+                
+                logger.info(f"✅ 模型已保存至: {model_save_path}")
+                
+                # 保存模型到监控器
+                monitor.save_model(model_save_path, metadata={
+                    'epoch': epoch + 1,
+                    'loss': avg_loss,
+                    'prediction_quality': prediction_quality_score,
+                    'combined_score': combined_score,
+                })
+            except Exception as e:
+                logger.error(f"❌ 保存模型失败: {e}")
+                import traceback
+                traceback.print_exc()
             
         else:
             patience_counter += 1
             if patience_counter >= patience:
                 logger.info(f"早停触发，在第 {epoch+1} 轮停止训练")
-                logger.info(f"最佳预测质量评分: {best_loss:.4f}")
+                logger.info(f"最佳预测质量评分: {best_score:.4f}")
+                
+                # 修复：早停时也保存模型（如果之前没有保存过）
+                if not Path(model_save_path).exists():
+                    logger.warning("⚠️ 早停触发，但模型文件不存在，保存当前模型...")
+                    try:
+                        Path(model_save_path).parent.mkdir(parents=True, exist_ok=True)
+                        torch.save({
+                            'model_state_dict': model.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'scheduler_state_dict': scheduler.state_dict(),
+                            'epoch': epoch + 1,
+                            'loss': avg_loss,
+                            'prediction_quality': prediction_quality_score,
+                            'combined_score': combined_score,
+                            'training_history': training_history,
+                            'early_stopped': True
+                        }, model_save_path)
+                        logger.info(f"✅ 早停模型已保存至: {model_save_path}")
+                    except Exception as e:
+                        logger.error(f"❌ 保存早停模型失败: {e}")
+                
                 break
     
     # 保存训练历史
@@ -462,16 +522,41 @@ def train_stage7_optimized_model(
     
     logger.info("=" * 60)
     logger.info("Stage 7.1 优化训练完成")
-    logger.info(f"最佳预测质量评分: {best_loss:.4f}")
-    logger.info(f"模型保存至: {model_save_path}")
+    logger.info(f"最佳预测质量评分: {best_score:.4f}")
+    
+    # 最终检查：如果模型文件不存在，保存当前模型
+    if not Path(model_save_path).exists():
+        logger.warning("⚠️ 训练完成，但模型文件不存在，保存最终模型...")
+        try:
+            Path(model_save_path).parent.mkdir(parents=True, exist_ok=True)
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
+                'epoch': len(training_history),
+                'loss': training_history[-1]['total_loss'] if training_history else 0.0,
+                'prediction_quality': training_history[-1].get('prediction_quality_score', 0.0) if training_history else 0.0,
+                'combined_score': best_score,
+                'training_history': training_history,
+                'final_model': True
+            }, model_save_path)
+            logger.info(f"✅ 最终模型已保存至: {model_save_path}")
+        except Exception as e:
+            logger.error(f"❌ 保存最终模型失败: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        logger.info(f"✅ 模型已保存至: {model_save_path}")
+    
     logger.info(f"训练历史保存至: {history_path}")
     logger.info("=" * 60)
     
     # 完成监控
     monitor.log({
         "final": {
-            "best_score": best_loss,
+            "best_score": best_score,
             "total_epochs": len(training_history),
+            "model_saved": Path(model_save_path).exists(),
         },
     })
     monitor.finish()

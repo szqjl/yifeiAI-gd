@@ -1,4 +1,5 @@
 @echo off
+call "%~dp0..\_env.bat"
 REM Stage 7 快速启动脚本
 
 echo ========================================

@@ -13,7 +13,7 @@
 ### 命令行
 
 ```bash
-python batch_executor_gui.py
+python scripts/gui/batch_executor_gui.py
 ```
 
 ## 界面功能

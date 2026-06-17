@@ -87,7 +87,7 @@ pause
 echo ========================================
 echo 批量游戏执行系统
 echo ========================================
-python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --target-games 100 --clients src\communication\Test1.py src\communication\Test2.py client3.py client4.py
+python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --target-games 12 --clients src\communication\Test1.py src\communication\Test2.py client3.py client4.py
 pause
 ```
 
@@ -96,11 +96,14 @@ pause
 #### 基本用法
 
 ```bash
-# 执行100场游戏（默认）
+# 执行 12 场游戏（默认，须为 3 的倍数）
 python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe"
 
-# 执行200场游戏
-python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --target-games 200
+# 中批量验证（9 场 = 3 批 × 3 局）
+python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --target-games 9
+
+# 小批量快速验证（3 局）
+python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --target-games 3
 
 # 仅运行诊断
 python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" --diagnose-only
@@ -111,7 +114,7 @@ python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan
 ```bash
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 100 ^
+    --target-games 12 ^
     --clients src\communication\Test1.py src\communication\Test2.py client3.py client4.py
 ```
 
@@ -120,7 +123,7 @@ python -m batch_executor ^
 ```bash
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 100 ^
+    --target-games 12 ^
     --clients client1.py client2.py client3.py client4.py ^
     --log-level DEBUG ^
     --log-dir logs ^
@@ -140,7 +143,7 @@ python -m batch_executor ^
 
 | 参数 | 说明 | 默认值 | 示例 |
 |------|------|--------|------|
-| `--target-games` | 目标游戏场数 | 100 | `--target-games 200` |
+| `--target-games` | 目标游戏场数（**须为 3 的倍数**；推荐 3/9/12） | 12 | `--target-games 12` |
 | `--clients` | 客户端脚本路径列表（空格分隔） | [] | `--clients c1.py c2.py c3.py c4.py` |
 | `--diagnose-only` | 仅运行诊断，不执行游戏 | False | `--diagnose-only` |
 | `--state-file` | 执行状态保存文件路径 | execution_state.json | `--state-file state.json` |
@@ -255,6 +258,19 @@ python -m batch_executor ^
 ```
 
 **用途**: 用于崩溃恢复和状态查询
+
+**与 `game_records/` 的一致性（M1 / GUA-022 口径）**：
+
+- 一次完整执行 `--target-games N` 结束后，文件中的 **`target_games` 应等于本次传入的 N**（进程启动后即写入，不再沿用磁盘旧值）。
+- **`completed_games` = 平台局数累计**（每批正常结束 `+= batch_games`），与离线 exe 参数 `N`（每批 ≤3）同口径：**N 局 ≠ N 副**。副数看 `game_records` match_key 或 `game_scores.total_rounds`。
+- **胜率 / 队胜负**：读每批末 `gameResult.victoryNum`（**`[0]` vs `[1]`** = 各队本批 **赢局数**；平台整局结束计胜；同队只取一席）。**不是**副数。全文 → [docs/knowledge/platform-data-interpretation.md](../docs/knowledge/platform-data-interpretation.md)。
+- **副数 / PASS**：`game_records` **每条 JSON = 一副**；成对 match_key 或 `total_rounds`。
+- 若某批次被超时强杀或客户端异常退出，该批不计入 `completed_games`。
+
+**批等待超时（可选环境变量）**：
+
+- `BATCH_EXECUTOR_SECONDS_PER_GAME_ESTIMATE`：单场预估秒数，默认 `720`（12 分钟）。
+- `BATCH_EXECUTOR_MIN_BATCH_SECONDS`：单批最短等待秒数，默认 `180`。
 
 ## 进度显示
 
@@ -480,7 +496,7 @@ python -m batch_executor --server-path "D:\guandan_offline_v1006\windows\guandan
 ```bash
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 1000 ^
+    --target-games 999 ^
     --clients src\communication\Test1.py src\communication\Test2.py client3.py client4.py
 ```
 
@@ -491,7 +507,7 @@ python -m batch_executor ^
 ```bash
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 10 ^
+    --target-games 12 ^
     --log-level DEBUG
 ```
 
@@ -500,10 +516,10 @@ python -m batch_executor ^
 ### 场景4: 测试新客户端
 
 ```bash
-# 使用少量场次测试
+# 小批量快速验证（3 局）
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 10 ^
+    --target-games 3 ^
     --clients new_client.py client2.py client3.py client4.py ^
     --log-level DEBUG
 ```
@@ -516,7 +532,7 @@ python -m batch_executor ^
 echo 开始夜间批量执行...
 python -m batch_executor ^
     --server-path "D:\guandan_offline_v1006\windows\guandan_offline_v1006.exe" ^
-    --target-games 1000 ^
+    --target-games 999 ^
     --clients src\communication\Test1.py src\communication\Test2.py client3.py client4.py ^
     --log-level INFO
 echo 执行完成！

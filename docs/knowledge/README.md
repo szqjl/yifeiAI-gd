@@ -1,5 +1,7 @@
 # 知识库目录结构
 
+> **离线平台 / lalala 对局数据怎么读**（**平台局 ≠ 副**；`completed_games` 是局数；match_key/`total_rounds` 是副数）→ **[platform-data-interpretation.md](platform-data-interpretation.md)**（分析、批跑、迭代均适用）
+
 ## 📁 目录说明
 
 本知识库按照**知识库格式化方案**和**决策流程架构**组织，分为三个层次：
@@ -10,9 +12,8 @@
 **访问方式**: O(1) 直接调用  
 **更新方式**: 代码修改
 
-- `01_basic_rules/` - 基础规则（牌型定义、牌张分配、游戏流程、升级规则）
-- `02_competition_rules/` - 比赛规则（竞赛形式、计分规则、违规处理）
-- `03_advanced_rules/` - 高级规则（进贡规则、报牌规则）
+- `01_basic_rules/` - 基础规则（含 [06_game_flow.md](rules/01_basic_rules/06_game_flow.md) 进贡流程）
+- `02_competition_rules/` - 比赛规则（实体赛：竞赛形式、计分、违规处理）
 
 ### 2. Strategy (策略知识) - 内存加载层
 **位置**: `strategy/`  
@@ -46,12 +47,12 @@
   - 位置分析、牌值评估、局势判断
 
 ### 3. Skills (技巧知识) - 按需查询层
-**位置**: `skills/`  
+**位置**: `skills/`（索引见 [skills/README.md](skills/README.md)）  
 **实现方式**: 按需查询知识库文件，结果缓存  
 **访问方式**: 首次 O(n) 查询，后续 O(1) 缓存访问  
 **更新方式**: 知识库文件更新，缓存失效
 
-- `01_foundation/` - 基础技巧
+- `01_foundation/` - 基础技巧（含 `03_basic_strategy`、`04_practice_tips`）
 - `02_main_attack/` - 主攻技巧
 - `03_assist_attack/` - 助攻技巧
 - `04_common_skills/` - 通用技巧（配牌、出牌、记牌等）
