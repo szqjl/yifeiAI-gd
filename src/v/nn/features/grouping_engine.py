@@ -794,40 +794,87 @@ def _score_flexibility(plan: "GroupingPlan", all_plans: List["GroupingPlan"]) ->
 
 def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     """
-    GUA-062 P1：牌力计分（基于 04_card_grouping_skills.md §一）。
+    GUA-062 P1：牌力计分（基于 04_card_grouping_skills.md §一 + V7 增强）。
 
     加分项：
       - 登基牌炸弹 +3（同花顺 / 5头+炸 / 4个级牌）
       - 普通四头炸 +2
+      - 6张及以上炸弹 +3
+      - 四大天王（2大王+2小王） +4/组
+      - 逢人配（百搭）+1/张（配成炸弹/同花顺不再重复加分）
       - 登基牌 +1（大王 / 对级牌）
+      - 稀有牌型 +1（三连对）
 
-    减分项：
-      - 赘牌 -1（444以下三带二 / 6以下顺子）
+    减分项（每满足一类扣 1 分，多张多组叠加扣）：
+      - 单张：＜10 的孤立单张，每张 -1
+      - 对子：＜对6 孤立小对子（无三带二组合），每组 -1
+      - 三带二：＜4 小三头带对，每组 -1
+      - 组合：6及以下小顺子 / 小木板 / 小钢板，每组 -1
     """
     score = 0
+
+    # ═══════════════════════════════════
+    # 加分项
+    # ═══════════════════════════════════
 
     # 登基牌炸弹 +3：同花顺
     score += len(plan.straight_flushes) * 3
 
-    # 登基牌炸弹 +3：5头+
+    # 炸弹计分
     for b in plan.bombs:
-        if len(b) >= 5:
-            score += 3
+        n = len(b)
+        if n >= 6:
+            score += 3          # 6张及以上炸弹
+        elif n == 5:
+            score += 3          # 5头炸（登基牌炸弹）
+        elif n == 4:
+            # 4头炸：区分登基炸 vs 普通炸
+            if all(_parse_rank(c) == cur_rank for c in b):
+                score += 3      # 4个级牌
+            else:
+                score += 2      # 普通四头炸
 
-    # 登基牌炸弹 +3：4个级牌
-    for b in plan.bombs:
-        if len(b) == 4 and all(_parse_rank(c) == cur_rank for c in b):
-            score += 3
+    # 四大天王 +4：2大王 + 2小王（统计方案中所有 JOKER 牌）
+    def _count_jokers(plan: "GroupingPlan") -> tuple:
+        """统计方案中大王(RJ)和小王(BJ)的总张数。
+        遍历 singles / pairs / bombs / trips 等所有结构。"""
+        rj_total = 0
+        bj_total = 0
+        # 需要遍历的牌容器
+        containers = [
+            plan.singles,
+            *plan.pairs,
+            *plan.bombs,
+            *plan.straights,
+            *plan.straight_flushes,
+            *plan.trips,
+        ]
+        for tp in plan.three_pairs:
+            containers.extend(tp)  # 每个三连对有 3 个对子
+        for sp in plan.steel_plates:
+            containers.extend(sp)
+        for twt in plan.three_with_twos:
+            containers.append(twt[0])
+            containers.append(twt[1])
+        for container in containers:
+            for card in container:
+                r = _parse_rank(card)
+                if r in ("RJ", "R"):
+                    rj_total += 1
+                elif r in ("BJ", "B"):
+                    bj_total += 1
+        return rj_total, bj_total
 
-    # 普通四头炸 +2
-    for b in plan.bombs:
-        if len(b) == 4 and not all(_parse_rank(c) == cur_rank for c in b):
-            score += 2
+    rj_count, bj_count = _count_jokers(plan)
+    if rj_count >= 2 and bj_count >= 2:
+        score += 4
 
-    # 登基牌 +1：大王
-    for s in plan.singles:
-        if _parse_rank(s) in ("RJ", "R"):
-            score += 1
+    # 逢人配（百搭）：未配入炸弹/同花顺的 +1/张
+    # plan.wild_cards 中是未被消耗的逢人配
+    score += len(plan.wild_cards)
+
+    # 登基牌 +1：大王（每张 +1）
+    score += rj_count
 
     # 登基牌 +1：对级牌
     for p in plan.pairs:
@@ -837,15 +884,67 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     # 稀有牌型 +1：三连对
     score += len(plan.three_pairs)
 
-    # 赘牌 -1：444以下三带二
-    for t in plan.trips:
-        if _card_rank_value(t[0], cur_rank) <= _rank_to_value("4"):
+    # ═══════════════════════════════════
+    # 减分项
+    # ═══════════════════════════════════
+
+    # 收集三带二中已消耗的对子（用于排除被三带二保护的对子）
+    twt_pair_ids: set = set()
+    for twt in plan.three_with_twos:
+        # twt = (trip, pair)
+        pair = twt[1]
+        twt_pair_ids.add(tuple(sorted(pair)))
+
+    # 逢人配集合（排除在单张减分之外）
+    wild_set = set(plan.wild_cards)
+
+    # 单张：＜10 的孤立单张，每张 -1
+    for s in plan.singles:
+        if s in wild_set:
+            continue  # 百搭不计为小单张
+        r = _parse_rank(s)
+        if r in ("RJ", "R", "BJ", "B"):
+            continue  # 王不计为小单张
+        if _card_rank_value(s, cur_rank) < _rank_to_value("T"):  # T=10, rank 2~9
             score -= 1
 
-    # 赘牌 -1：最高牌在 6 以下的顺子
+    # 对子：＜对6 孤立小对子（无三带二组合），每组 -1
+    rank6_threshold = _rank_to_value("6")
+    for p in plan.pairs:
+        if tuple(sorted(p)) in twt_pair_ids:
+            continue  # 已在三带二中，受保护不扣
+        r = _parse_rank(p[0])
+        if r in ("RJ", "R", "BJ", "B"):
+            continue  # 王对子不扣
+        if _card_rank_value(p[0], cur_rank) < rank6_threshold:
+            score -= 1
+
+    # 三带二：＜4 小三头带对，每组 -1
+    rank4_threshold = _rank_to_value("4")
+    for twt in plan.three_with_twos:
+        trip = twt[0]
+        if _card_rank_value(trip[0], cur_rank) < rank4_threshold:
+            score -= 1
+
+    # 组合：6及以下小顺子 / 小木板 / 小钢板，每组 -1
+    rank6_limit = _rank_to_value("6")
     for s in plan.straights:
         max_val = max(_card_rank_value(c, cur_rank) for c in s)
-        if max_val <= _rank_to_value("6"):
+        if max_val <= rank6_limit:
+            score -= 1
+
+    for tp in plan.three_pairs:
+        # tp = [[pair1], [pair2], [pair3]] — 每个对子 2 张，共 6 张
+        all_cards = [c for pair in tp for c in pair]
+        max_val = max(_card_rank_value(c, cur_rank) for c in all_cards)
+        if max_val <= rank6_limit:
+            score -= 1
+
+    for sp in plan.steel_plates:
+        # sp = [[trip1], [trip2]] — 每个三张 3 张，共 6 张
+        all_cards = [c for trip in sp for c in trip]
+        max_val = max(_card_rank_value(c, cur_rank) for c in all_cards)
+        if max_val <= rank6_limit:
             score -= 1
 
     return score
