@@ -963,6 +963,11 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     # 稀有牌型 +1：三连对
     score += len(plan.three_pairs)
 
+    # GUA-069 举一反三 (2026-06-19): 钢板（连续三张对）也应计入牌力
+    # 钢板消耗 6 张牌 → 1 轮，相比 2 个独立 trip 省 1 轮，属于稀有牌型
+    # 例如 888-999 钢板 = +1（防止因不记分导致 role 被低估）
+    score += len(plan.steel_plates)
+
     # ═══════════════════════════════════
     # 减分项
     # ═══════════════════════════════════

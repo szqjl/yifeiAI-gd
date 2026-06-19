@@ -53,7 +53,7 @@
 
 > **status**: `open`（蓝色）= 待处理；`closed` ✅ = 已关单。  
 > **完成定义**：已关单项的详细实施条件见 `issues/GUA-xxx-completion.md`。  
-> **当前活跃 P0**：GUA-054、GUA-055、GUA-059、**GUA-063**、GUA-064、**GUA-065**、**GUA-068**
+> **当前活跃 P0**：GUA-054、GUA-055、GUA-059、**GUA-063**、GUA-064、**GUA-065**、**GUA-068**、**GUA-069**
 
 | ID | 状态 | 严重级别 | 标签 | 版本 | 简述 | 现象 / 复现要点 | 涉及模块 | 备注 |
 |----|------|----------|------|------|------|-----------------|----------|------|
@@ -129,6 +129,7 @@
 | GUA-065 | open | **P0** | V-nn, v7, policy, guard | v7 | **导入 M3 队友识别与保护到 V7 Guard 体系** | V7 当前完全缺失队友识别与保护逻辑——不知道「队友是谁」、不保护队友控牌权、不送队友关键张。M3 已有 8 条队友相关规则（`_is_teammate_greater`、`_gua031_passive_teammate_yield`、`_gua031_active_min_single`、`_gua031_active_feed_five`、`_gua036_teammate_trick_anchor`、`_gua036_team_wind_pick`、`_is_solo_sprint`、`_gua029_try_bomb` R5 不炸队友），但 M3 队友保护也被评估为「极弱」（M3_DIAGNOSIS.md：仅检查 `(myPos+2)%4==greaterPos`，无队友手牌分析、无主动送牌）。导入方式：① V7 guard 新增 R07（队友控牌不压除非残局冲刺）、R08（队友剩 1 张送最小单）、R09（队友剩 5 张送 Pair/ThreeWithTwo）；② `_group_consistency_filter` 场景 [队友] 下不拆对子（队友可能接）；③ 接风优先跟随队友线（Pair/Pomb）。| `src/v/nn/guards/v7_guards.py`（追加 R07-R09）、`ultimate_win_rate_engine_v7.py`（导入 `greaterPos`/`numofplayers` 上下文）、`grouping_engine.py`（`_group_consistency_filter` 队友场景） | **登记 2026-06-18**，**已实施+批跑 2026-06-19**。实施：3 文件改动 ~155 行，pytest 83/83 pass。批跑：3 局（6 局含诊断），队胜 0/6（0%），副胜 28/110（**25.5%**，环比 +18.5pp vs 前次 7.0%）。pytest 条件①已满足 ✓。队友保护大幅提升副胜率但局级仍 0——GUA-064 argmax collapse 仍是硬瓶颈。关单尚需：② 批跑日志证实队友控牌时 PASS 率变化；③ 证实不拆队友牌型。**相关**：GUA-031（M3 队友保护已建）、GUA-034（solo 冲刺）、GUA-036（接风队友配合） |
 | GUA-067 | open | P1 | V-nn, v7, training, data | v7 | **训练数据 initial_hand 为贡前手牌，current_hand 推算错误** | `initial_hand` 来自 gameStart notify 的 `handCards`（发牌后、还贡前的 27 张）。`bc_dataset.py` 策略2 `current_hand = initial_hand - played_cards` 只能减不能加：已还走的牌多算、收到的贡牌少算 → 训练样本手牌特征偏移 | `v7_game_recorder.py`、`yf1_v7.py`、`yf2_v7.py`、`bc_dataset.py` | **登记 2026-06-18**。**已实施（GUA-067 联动 GUA-063）**：`adjust_initial_hand_for_tribute_back()` 在 4 条贡牌/还贡路径上实时调整 `initial_hand`：收贡→add、收还→add、进贡→remove、还牌→remove。修改文件：`v7_game_recorder.py`（新增方法）、`yf1_v7.py`/`yf2_v7.py`（各 2 处调用）。关单条件：批跑验证 `initial_hand` 张数 = 27（贡后）且不含已贡出牌。 |
 | GUA-068 | **open** | **P0** | V-nn, v7, guard, policy | v7 | **V7-R11 全局抑制牌检查 + 节流：对手出不可压牌时的炸决策** | M3 `_Single()` 仅凭 `pass_num`/对手剩牌判断是否炸，**不知道全局还有多少压制牌未出**。场景：对手出级牌♠8，大王小王全未出 → M3 可能浪费炸弹；大王小王全出完 → 该炸不炸。V7-R11 通过 MemoryTracker 先查「已出 HR/SB/级牌/高点数」，再按剩余抑制牌数做节流。三阶段：①抑制牌≥2（还有人能压）→ 坚决 PASS；②抑制牌=1+没人PASS → PASS 等队友；③抑制牌=0（真无人能压）→ 允许炸弹 | `src/v/nn/guards/v7_guards.py`（+R11 + 3 辅助函数 ~200行）、`ultimate_win_rate_engine_v7.py`（+2行注入 `_memory_tracker`）、`tests/test_r11_integration.py`（6 case） | **登记 2026-06-19**。实施：`_rule_r11_unbeatable_card_throttle` + `_count_remaining_suppressors`（查 MemoryTracker 已出牌）、`_compute_pass_num`（从 recentPlays 计算当前轮 PASS 数）、`_is_single_beater`（掼蛋单张真实排序：HR>SB>级牌>A>K>…>2）。Guard 管道接入在 R05 之后 R01 之前。pytest 6/6 pass + 模块导入正常。与 M3 `_Single()` 关键区别：**有全局牌记忆**（大王出了几张/小王出了几张/级牌出了几张）。关单条件：批跑验证 R11 触发频率 + 副胜率影响。**相关**：GUA-052（MemoryTracker）、GUA-045（V7 Guard 壳） |
+| GUA-069 | **open** | **P0** | V-nn, v7, guard, policy | v7 | **超弱/助攻角色不应拆核心牌型：`_group_consistency_filter` 全放行 BUG** | yf2_v7 手牌含 4x4 炸弹（S4,S4,C4,D4），组牌引擎正确识别为炸弹且标记 `is_core=1.0`，但 `_score_power` 未对钢板计分 → power_score=1 → "超弱"角色 → `_group_consistency_filter` 中 `role in ("助攻","超弱")` 全放行所有动作 → C4 Single 未被过滤 → NN 选中 → 浪费唯一炸弹。**举一反三**：同样影响"助攻"角色下任何 core 牌型（炸弹/同花顺/顺子/三张）。**根因链**：① 钢板缺 power 记分 → 手牌被低估为"超弱"；② 超弱/助攻全放行绕过了 is_core 保护 | `ultimate_win_rate_engine_v7.py`（`_group_consistency_filter` 移除角色全放行）、`grouping_engine.py`（`_score_power` 钢板+1）、`tests/test_gua069_weak_role_core_protection.py`（8 case） | **登记 2026-06-19**。实施：① 移除 `role in ("助攻","超弱")` 前置全放行 → 所有角色走 `_action_breaks_core` 过滤；② `_score_power` 新增 `score += len(plan.steel_plates)` 防止钢板手牌被低估。pytest 8/8 pass + 回归 26/26 pass。关单条件：批跑验证超弱手牌下不再拆核心牌型。**相关**：GUA-063（组牌衔接 is_core 保护）、GUA-062（组牌引擎 v2） |
 
 ---
 
@@ -154,6 +155,7 @@
 | GUA-067 | 贡牌未调整 initial_hand；`adjust_initial_hand_for_tribute_back` 修复；联动 GUA-063 |
 | GUA-065 | 导入 M3 队友识别与保护到 V7 Guard；`_is_teammate_greater` → V7 R07-R09；联动 GUA-031/034/036 |
 | GUA-068 | V7-R11 全局抑制牌检查+节流；`_count_remaining_suppressors` 通过 MemoryTracker 查已出牌（HR/SB/级牌/高点数）；联动 GUA-052/GUA-045 |
+| GUA-069 | 超弱/助攻角色不应拆核心牌型；移除 `_group_consistency_filter` 角色全放行 BUG + `_score_power` 钢板记分；yf2 回放 20260619082227220155 复现；联动 GUA-062/GUA-063 |
 
 ---
 

@@ -408,9 +408,12 @@ class UltimateWinRateEngineV7:
         if greater_pos == (my_pos_for_filter + 2) % 4:
             role = "助攻"
 
-        # 助攻/超弱：全部放行
-        if role in ("助攻", "超弱"):
-            return action_list, list(range(len(action_list)))
+        # ── GUA-069 fix (2026-06-19): 助攻/超弱不再全部放行 ──
+        # 旧行为: role in ("助攻", "超弱") → return 全部放行
+        # Bug: yf2 hand 仅 1 炸+1 钢板 → power_score=1 → "超弱"
+        #      4x4 炸弹被 Single C4 拆散（core 保护被跳过）
+        # 新行为: 所有角色都应用 core 保护（炸弹/同花顺/顺子/三张不可拆）
+        # 助攻/超弱角色继续走硬例外和安全阀，只是不能拆 core 牌组
 
         # 硬例外检查
         my_pos = game_state.get("myPos", self.player_id)
