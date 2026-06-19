@@ -156,6 +156,7 @@ python scripts/wiki.py lint         # 健康检查（断链/孤立/格式）
 | **LLM Wiki 入口** | `scripts/wiki.py`（`status`/`query`/`ingest`/`lint`） |
 | **V7 副级等级分析** | `scripts/tools/analyze_v7_round_levels.py` |
 | **组牌引擎独立测试** | `scripts/checks/check_grouping_engine.py` |
+| **V7 调试 GUI** | `tests/debug_v7_gui.py`（`START_V7_GUI.bat` 启动；手牌录入→组局→对手出牌→V7应对全流程可视化；含随机发牌 + localStorage 记忆） |
 
 > **V7 副级分析工具**（每次 V7 批跑后必跑）：
 > ```bash
