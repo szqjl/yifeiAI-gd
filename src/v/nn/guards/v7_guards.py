@@ -24,8 +24,8 @@ SUITS = ("S", "H", "D", "C")
 RANK_STR = ("2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A")
 # 牌面数值（越大越强）
 CARD_RANK_ORDER: Dict[str, int] = {r: i for i, r in enumerate(RANK_STR)}  # 2=0 … A=12
-JOKER_VALUE_BJ = 13
-JOKER_VALUE_RJ = 14
+JOKER_VALUE_SB = 13  # 小王
+JOKER_VALUE_HR = 14  # 大王
 
 # ── 牌型枚举 ──────────────────────────────────────────
 ACTION_TYPE_PASS = "PASS"
@@ -46,8 +46,10 @@ ACTION_TYPE_FREE = "Free"                  # 其他/未知
 # ═══════════════════════════════════════════════════════
 
 def get_card_rank(card: str) -> str:
-    """从 'S2' / 'BJ' / 'RJ' 提取等级字符。"""
-    if card in ("RJ", "BJ"):
+    """从 'S2' / 'SB' / 'HR' 提取等级字符。"""
+    if card is None:
+        return ""
+    if card in ("HR", "SB"):
         return card
     if len(card) >= 2:
         return card[1]
@@ -57,12 +59,12 @@ def get_card_rank(card: str) -> str:
 def get_card_value(card: str, cur_rank: str = None) -> int:
     """
     牌面数值（越大越强）。
-    BJ=13, RJ=14, curRank=15（级牌提升一级）。
+    SB=13, HR=14, curRank=15（级牌提升一级）。
     """
-    if card == "BJ":
-        return JOKER_VALUE_BJ
-    if card == "RJ":
-        return JOKER_VALUE_RJ
+    if card == "SB":
+        return JOKER_VALUE_SB
+    if card == "HR":
+        return JOKER_VALUE_HR
     rank = get_card_rank(card)
     base = CARD_RANK_ORDER.get(rank, 0)
     if cur_rank and rank == cur_rank:
@@ -75,6 +77,10 @@ def get_action_type(action: List[str]) -> str:
     判断一手牌的类型。
     输入示例：["S2"], ["S2","H2"], ["PASS"] ...
     """
+    if not action:
+        return ACTION_TYPE_PASS
+    # 防御：过滤列表中可能的 None 元素
+    action = [c for c in action if c is not None]
     if not action:
         return ACTION_TYPE_PASS
     if action[0] == "PASS":
@@ -392,7 +398,7 @@ def _rule_r04_single_b_non_pass(
         for i, act in enumerate(action_list):
             if get_action_type(act) == ACTION_TYPE_SINGLE:
                 r = get_card_rank(act[0])
-                if r == "BJ" or r == "RJ":
+                if r == "SB" or r == "HR":
                     has_beating_single = True
                     break
 
@@ -452,6 +458,131 @@ def _rule_r06_no_break_structure_pair(
     return kept if kept else list(range(len(action_list)))
 
 
+# ── GUA-065 队友保护规则 ──────────────────────────────
+
+def _rule_r07_teammate_yield(
+    action_list: List[List[str]],
+    greater_pos: int,
+    my_pos: int,
+    numofplayers: List[int],
+) -> List[int]:
+    """
+    V7-R07（GUA-065）：队友控牌且非残局（自己 >10 张）→ 剔除所有非 PASS 动作，让队友继续。
+    等价 M3 `_gua031_passive_teammate_yield`。
+    """
+    teammate = (my_pos + 2) % 4
+    if greater_pos != teammate:
+        return list(range(len(action_list)))
+
+    if not numofplayers or len(numofplayers) < 4:
+        return list(range(len(action_list)))
+
+    numofmy = numofplayers[my_pos]
+    if numofmy <= 10:
+        # 自己已进入残局冲刺 → 不放行，需积极出牌
+        return list(range(len(action_list)))
+
+    # 队友控牌 + 自己牌多 → 只留 PASS
+    pass_indices = [i for i, act in enumerate(action_list)
+                    if get_action_type(act) == ACTION_TYPE_PASS]
+    if pass_indices:
+        return pass_indices
+    # 万一无 PASS（极端情况）→ 保留全部
+    return list(range(len(action_list)))
+
+
+def _rule_r08_feed_teammate_single(
+    action_list: List[List[str]],
+    cur_pos: int,
+    my_pos: int,
+    numofplayers: List[int],
+    cur_rank: str,
+) -> List[int]:
+    """
+    V7-R08（GUA-065）：主动 + 队友剩 1 张 → 出最小 Single 送队友。
+    等价 M3 `_gua031_active_min_single`。
+    """
+    if cur_pos != my_pos and cur_pos != -1:
+        return list(range(len(action_list)))
+
+    if not numofplayers or len(numofplayers) < 4:
+        return list(range(len(action_list)))
+
+    teammate = (my_pos + 2) % 4
+    numoffri = numofplayers[teammate]
+
+    # 仅当队友确实只剩 1 张时才触发
+    if numoffri != 1:
+        return list(range(len(action_list)))
+
+    # 找所有 Single 选项
+    singles = []
+    for i, act in enumerate(action_list):
+        if get_action_type(act) == ACTION_TYPE_SINGLE:
+            val = get_card_value(act[0], cur_rank)
+            singles.append((i, val))
+
+    if not singles:
+        return list(range(len(action_list)))
+
+    # 队友剩 1 张 → 出最小单（最容易接）
+    singles.sort(key=lambda x: x[1])
+    best_idx = singles[0][0]
+
+    # 保留最优单牌 + PASS
+    kept = [i for i in range(len(action_list))
+            if i == best_idx or get_action_type(action_list[i]) == ACTION_TYPE_PASS]
+    return kept if kept else list(range(len(action_list)))
+
+
+def _rule_r09_feed_teammate_5(
+    action_list: List[List[str]],
+    cur_pos: int,
+    my_pos: int,
+    numofplayers: List[int],
+) -> List[int]:
+    """
+    V7-R09（GUA-065）：主动 + 队友剩 5 张 → 优先 Pair / ThreeWithTwo。
+    队友剩 5 张大概率是对子+三张或三带二组合，送对应牌型帮助队友冲刺。
+    等价 M3 `_gua031_active_feed_five`。
+    """
+    if cur_pos != my_pos and cur_pos != -1:
+        return list(range(len(action_list)))
+
+    if not numofplayers or len(numofplayers) < 4:
+        return list(range(len(action_list)))
+
+    teammate = (my_pos + 2) % 4
+    numoffri = numofplayers[teammate]
+
+    # 仅当队友确实只剩 5 张时才触发（5 张很可能是对子+三张组合）
+    if numoffri != 5:
+        return list(range(len(action_list)))
+
+    # 收集目标牌型
+    pair_indices = [i for i, act in enumerate(action_list)
+                    if get_action_type(act) == ACTION_TYPE_PAIR]
+    threetwo_indices = [i for i, act in enumerate(action_list)
+                        if get_action_type(act) == ACTION_TYPE_THREE_WITH_TWO]
+
+    feed_indices = pair_indices + threetwo_indices
+    if not feed_indices:
+        return list(range(len(action_list)))
+
+    # 保留目标牌型 + PASS
+    pass_indices = [i for i, act in enumerate(action_list)
+                    if get_action_type(act) == ACTION_TYPE_PASS]
+    kept = feed_indices + pass_indices
+    # 去重保序
+    seen = set()
+    ordered = []
+    for i in kept:
+        if i not in seen:
+            seen.add(i)
+            ordered.append(i)
+    return ordered if ordered else list(range(len(action_list)))
+
+
 # ═══════════════════════════════════════════════════════
 #  主入口
 # ═══════════════════════════════════════════════════════
@@ -486,14 +617,22 @@ def _filter_action_list_impl(
     my_pos = game_state.get("myPos", game_state.get("player_id", 0))
     greater_pos = game_state.get("greaterPos", -1)
     greater_action = game_state.get("greaterAction", [])
+    cur_pos = game_state.get("curPos", -1)
+    # 防御：greaterAction 可能为 None（首出牌或无压牌场景）
+    if greater_action is None:
+        greater_action = []
     if isinstance(greater_action, str):
         import ast
         try:
             greater_action = ast.literal_eval(greater_action)
         except (ValueError, SyntaxError):
             greater_action = []
+    # 防御：过滤列表中可能的 None 元素（脏数据）
+    if isinstance(greater_action, list):
+        greater_action = [a for a in greater_action if a is not None]
     cur_rank = game_state.get("curRank", "2")
     hand_cards = game_state.get("handCards", [])
+    numofplayers = game_state.get("numofplayers", [])
 
     # 收集各规则产生的 index 约束
     # 用 set 累积被排除的索引
@@ -517,6 +656,12 @@ def _filter_action_list_impl(
     r06_kept = _rule_r06_no_break_structure_pair(action_list, hand_cards)
     excluded |= {i for i in range(len(action_list)) if i not in set(r06_kept)}
 
+    # 5) GUA-065 R07: 队友控牌且非残局 → 剔除非 PASS（让队友走）
+    if numofplayers:
+        r07_kept = _rule_r07_teammate_yield(
+            action_list, greater_pos, my_pos, numofplayers)
+        excluded |= {i for i in range(len(action_list)) if i not in set(r07_kept)}
+
     # R03/R04 重排（不真正剔除，影响后续模型选择顺序）
     # 这些规则不剔除元素，只返回排序
     r03_order = _rule_r03_passive_no_pass(
@@ -524,17 +669,24 @@ def _filter_action_list_impl(
     r04_order = _rule_r04_single_b_non_pass(
         action_list, greater_action, greater_pos, my_pos, cur_rank)
 
+    # GUA-065 R08/R09 重排（队友送牌优先）
+    r08_order = list(range(len(action_list)))
+    r09_order = list(range(len(action_list)))
+    if numofplayers:
+        r08_order = _rule_r08_feed_teammate_single(
+            action_list, cur_pos, my_pos, numofplayers, cur_rank)
+        r09_order = _rule_r09_feed_teammate_5(
+            action_list, cur_pos, my_pos, numofplayers)
+
     # 构建最终过滤列表
     kept = [i for i in range(len(action_list)) if i not in excluded]
     if not kept:
         # 全被过滤了 → 保留全部
         kept = list(range(len(action_list)))
 
-    # 应用重排（R03 和 R04 同时适用时，取交集顺序）
-    # 先取 r03_order 在 kept 中的顺序，再取 r04_order 在 kept 中的顺序
-    # 简单做法：取最后一个重排规则
+    # 应用重排（R03/R04/R08/R09 同时适用时，取交集顺序）
     final_order = kept[:]
-    for ordering in (r03_order, r04_order):
+    for ordering in (r03_order, r04_order, r08_order, r09_order):
         filtered_order = [i for i in ordering if i in set(kept)]
         if filtered_order and filtered_order != final_order:
             final_order = filtered_order
@@ -542,12 +694,13 @@ def _filter_action_list_impl(
     filtered = [action_list[i] for i in final_order]
 
     logger.debug(
-        "filter_action_list: %d→%d actions (excluded %d rules: R05=%s R01=%s R02=%s R06=%s)",
+        "filter_action_list: %d→%d actions (excluded %d rules: R05=%s R01=%s R02=%s R06=%s R07=%s)",
         len(action_list), len(filtered), len(excluded),
         len(action_list) - len(r05_kept) if r05_kept != list(range(len(action_list))) else 0,
         len(action_list) - len(r01_kept) if r01_kept != list(range(len(action_list))) else 0,
         len(action_list) - len(r02_kept) if r02_kept != list(range(len(action_list))) else 0,
         len(action_list) - len(r06_kept) if r06_kept != list(range(len(action_list))) else 0,
+        len(action_list) - len(r07_kept) if numofplayers and r07_kept != list(range(len(action_list))) else 0,
     )
 
     return filtered, final_order
@@ -591,12 +744,16 @@ def _validate_decision_impl(
     my_pos = game_state.get("myPos", game_state.get("player_id", 0))
     greater_pos = game_state.get("greaterPos", -1)
     greater_action = game_state.get("greaterAction", [])
+    if greater_action is None:
+        greater_action = []
     if isinstance(greater_action, str):
         import ast
         try:
             greater_action = ast.literal_eval(greater_action)
         except (ValueError, SyntaxError):
             greater_action = []
+    if isinstance(greater_action, list):
+        greater_action = [a for a in greater_action if a is not None]
     opponent_positions = [(my_pos + 1) % 4, (my_pos + 3) % 4]
 
     # 1) 检查是否在炸队友
