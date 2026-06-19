@@ -397,7 +397,7 @@ class TestEdgeCases:
         assert mapping == [], "空 actionList 映射应为空"
 
     def test_no_greater_action(self):
-        """greaterAction 为空（领出）→ 不触发 guard。"""
+        """greaterAction 为空（领出）→ R10 应过滤炸弹，其他保留。"""
         state = _make_state(
             actionList=[["S3"], ["S4"], ["S5", "S5", "S5", "S5"]],
             greaterPos=-1,
@@ -405,8 +405,10 @@ class TestEdgeCases:
             myPos=0,
         )
         filtered, mapping = filter_action_list(state)
-        assert len(mapping) == len(state["actionList"]), \
-            "领出时应全部保留"
+        # R10 领出不炸：炸弹应被过滤，只剩2个单牌
+        assert len(mapping) == 2, (
+            f"领出时炸弹应被过滤(预期2动作)，实际 mapping={mapping}"
+        )
 
 
 # ═══════════════════════════════════════════════════════

@@ -121,50 +121,63 @@ class GroupingPlan:
 
     # ── GUA-063 Phase 1: card-level grouping mask ──────────────────
 
-    def to_card_mask(self) -> Dict[str, tuple]:
+    def to_card_mask(self) -> Tuple[Dict[str, tuple], Dict[int, str]]:
         """构建牌级组牌掩码，供前置过滤使用。
 
-        返回 Dict[card_str, (group_id, is_core, group_size)]：
-          - group_id:   同组牌共享同一 ID，散牌/单张 = -1
-          - is_core:    1.0 = 核心不可轻拆（炸弹/同花顺），0.0 = 普通牌型
-          - group_size: 该组共有几张牌（用于判断是否完整打出）
+        返回 (mask, group_type_map)：
+          mask: Dict[card_str, (group_id, is_core, group_size)]
+            - group_id:   同组牌共享同一 ID，散牌/单张 = -1
+            - is_core:    1.0 = 核心不可轻拆（炸弹/同花顺），0.0 = 普通牌型
+            - group_size: 该组共有几张牌（用于判断是否完整打出）
+          group_type_map: Dict[group_id, type_string]
+            - type_string: "bomb"/"straight_flush"/"straight"/"trips"/"pair"
+              /"trip_in_three_with_two"/"pair_in_three_with_two"
+              /"pair_in_three_pair"/"trip_in_steel_plate"
 
-        核心牌型判定（GUA-063 修复 2026-06-18）：
+        核心牌型判定（GUA-063 修复 2026-06-18 + GUA-070 子结构拆分 2026-06-19）：
           - bombs / straight_flushes → is_core=1.0
           - straights / trips → is_core=1.0（掼蛋牌理：顺子和三张是结构化牌型，不可轻拆）
-          - 其他牌型（pairs/three_pairs/three_with_twos/steel_plates）→ is_core=0.0
+          - three_with_twos → 拆分为 trip_in_three_with_two + pair_in_three_with_two，各自 is_core=1.0
+          - three_pairs → 拆分为 3 × pair_in_three_pair，各自 is_core=1.0
+          - steel_plates → 拆分为 2 × trip_in_steel_plate，各自 is_core=1.0
+          - pairs → is_core=0.0（普通对子可重配）
           - 散牌（singles / 未消耗的 wild_cards）→ group_id=-1, is_core=0.0, group_size=1
         """
         mask: Dict[str, tuple] = {}
+        group_type_map: Dict[int, str] = {}
 
         # ── 收集所有牌组 ──
-        groups: List[Tuple[List[str], bool]] = []
+        # groups: List[(cards, is_core, type_string)]
+        groups: List[Tuple[List[str], bool, str]] = []
 
         # 核心牌型（炸弹/同花顺）
         for b in self.bombs:
-            groups.append((list(b), True))
+            groups.append((list(b), True, "bomb"))
         for sf in self.straight_flushes:
-            groups.append((list(sf), True))
+            groups.append((list(sf), True, "straight_flush"))
 
         # 结构化牌型（顺子/三张 → is_core=1.0，GUA-063）
         for s in self.straights:
-            groups.append((list(s), True))
+            groups.append((list(s), True, "straight"))
         for t in self.trips:
-            groups.append((list(t), True))
+            groups.append((list(t), True, "trips"))
         for p in self.pairs:
-            groups.append((list(p), False))
+            groups.append((list(p), False, "pair"))
         for tp in self.three_pairs:
-            # tp = [pair1, pair2, pair3], 每个 pair 是 2 张牌
-            flat = [c for pair in tp for c in pair]
-            groups.append((flat, False))
+            # GUA-070 同款：三连对拆分为 3 个独立对子子组
+            # 每个 pair 各自 is_core=True，防止拆三连对拿对子单出静默放行
+            for pair in tp:
+                groups.append((list(pair), True, "pair_in_three_pair"))
         for twt in self.three_with_twos:
-            # twt = (trip, pair)
-            flat = list(twt[0]) + list(twt[1])
-            groups.append((flat, False))
+            # GUA-070: 三带二拆分为 trip + pair 两个独立子组
+            # trip 和 pair 各自 is_core=True，防止拆对子/拆三张静默放行
+            groups.append((list(twt[0]), True, "trip_in_three_with_two"))
+            groups.append((list(twt[1]), True, "pair_in_three_with_two"))
         for sp in self.steel_plates:
-            # sp = [trip1, trip2]
-            flat = [c for trip in sp for c in trip]
-            groups.append((flat, False))
+            # GUA-070 同款：钢板拆分为 2 个独立三张子组
+            # 每个 trip 各自 is_core=True，防止拆钢板拿三张单出静默放行
+            for trip in sp:
+                groups.append((list(trip), True, "trip_in_steel_plate"))
 
         # 散牌（单张 / 未消耗逢人配）
         for s in self.singles:
@@ -172,14 +185,15 @@ class GroupingPlan:
 
         # ── 分配 group_id ──
         gid = 0
-        for group_cards, is_core in groups:
+        for group_cards, is_core, type_str in groups:
             gsize = len(group_cards)
             is_core_f = 1.0 if is_core else 0.0
+            group_type_map[gid] = type_str
             for card in group_cards:
                 mask[card] = (gid, is_core_f, gsize)
             gid += 1
 
-        return mask
+        return mask, group_type_map
 
 
 # ── 牌面解析 ──────────────────────────────────────────────
@@ -1024,13 +1038,7 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
         if max_val <= rank6_limit:
             score -= 1
 
-    for sp in plan.steel_plates:
-        # sp = [[trip1], [trip2]] — 每个三张 3 张，共 6 张
-        all_cards = [c for trip in sp for c in trip]
-        max_val = max(_card_rank_value(c, cur_rank) for c in all_cards)
-        if max_val <= rank6_limit:
-            score -= 1
-
+    # GUA-070: 移除小钢板减分 — 钢板不论大小都是加分项（稀有牌型，天然难被压制）
     return score
 
 
@@ -1038,17 +1046,17 @@ def determine_role(power_score: int) -> str:
     """
     GUA-062 P1：根据牌力分确定角色。
 
-    角色映射（04_card_grouping_skills.md §一）：
-      - ≥8 → 超强主攻
-      - 5-7 → 主攻
-      - 2-4 → 助攻
-      - <2 → 超弱
+    角色映射（2026-06-19 调优：降阈让 yf 更积极）：
+      - ≥7 → 超强主攻
+      - 4-6 → 主攻
+      - 1-3 → 助攻
+      - <1 → 超弱
     """
-    if power_score >= 8:
+    if power_score >= 7:
         return "超强主攻"
-    elif power_score >= 5:
+    elif power_score >= 4:
         return "主攻"
-    elif power_score >= 2:
+    elif power_score >= 1:
         return "助攻"
     else:
         return "超弱"

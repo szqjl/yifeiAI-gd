@@ -85,17 +85,17 @@ class TestSteelPlatePowerScore:
             f"预期 role≠超弱"
         )
 
-    def test_steel_plate_small_net_zero(self):
-        """小钢板（≤6）加分被小牌惩罚抵消，net=0。"""
+    def test_steel_plate_small_net_positive(self):
+        """小钢板（≤6）也是加分项（GUA-070：钢板不管大小都是加分项）。"""
         # 3-3-3 + 4-4-4 = 小钢板（max=4 ≤6）
         hand = make_hand(
             "3", "3", "3", "4", "4", "4",
         )
         best, _ = enumerate_groupings(hand, "2")
         power = _score_power(best, "2")
-        # 钢板 +1, 小钢板 -1 → net 0
-        assert power == 0, (
-            f"小钢板加分+1 应被小牌惩罚-1抵消，net=0，got power={power}"
+        # 钢板 +1，移除小钢板减分后 → net +1
+        assert power == 1, (
+            f"所有钢板不管大小均应+1，got power={power}"
         )
 
 
@@ -116,7 +116,7 @@ class TestWeakRoleCoreProtection:
             "7", "3", "J", "Q",   # 散牌
         )
         best, _ = enumerate_groupings(hand, "2")
-        mask = best.to_card_mask()
+        mask, _ = best.to_card_mask()
 
         # 找到炸弹牌
         bomb_cards = [c for c, info in mask.items() if info[1] >= 1.0]
@@ -143,7 +143,7 @@ class TestWeakRoleCoreProtection:
             "5", "5",                      # 小对子
         )
         best, _ = enumerate_groupings(hand, "2")
-        mask = best.to_card_mask()
+        mask, _ = best.to_card_mask()
         role = best.role
         power = best.power_score
 
@@ -190,7 +190,7 @@ class TestWeakRoleCoreProtection:
             "HK", "DK",
         ]
         best, all_plans = enumerate_groupings(hand, "8")
-        mask = best.to_card_mask()
+        mask, _ = best.to_card_mask()
         role = best.role
         power = best.power_score
 

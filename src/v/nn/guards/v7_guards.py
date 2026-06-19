@@ -327,18 +327,21 @@ def _rule_r02_minimal_bomb(
 def _rule_r10_no_lead_bomb(
     action_list: List[List[str]],
     greater_pos: int,
+    my_pos: int = -1,
 ) -> List[int]:
     """
-    V7-R10：自己领出（greaterPos == -1）时禁用炸弹。
+    V7-R10：自己领出时禁用炸弹。
+    领出判定：greaterPos == myPos（v1006 平台语义）或 greaterPos == -1（旧平台）。
     当手牌有非炸弹选项时，剔除 Bomb/StraightFlush 动作，
     避免浪费炸弹领出（自己炸自己）。
 
     设计要点：
-    - 仅在 greaterPos == -1（新轮领出）时触发
+    - 领出判定：greaterPos in (-1, my_pos)（新轮领出 / 自己是greater）
     - 如果全被过滤（只剩炸弹）→ 保留最小的一张炸弹（不能无动作）
     - 不依赖 greater_action（领出时无 greater_action）
     """
-    if greater_pos != -1:
+    is_lead = (greater_pos == -1) or (0 <= my_pos <= 3 and greater_pos == my_pos)
+    if not is_lead:
         return list(range(len(action_list)))
 
     banned = {ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH}
@@ -692,10 +695,25 @@ def _rule_r07_teammate_yield(
     greater_pos: int,
     my_pos: int,
     numofplayers: List[int],
+    greater_action: List[str] = None,
+    cur_rank: str = "2",
 ) -> List[int]:
     """
-    V7-R07（GUA-065）：队友控牌且非残局（自己 >10 张）→ 剔除所有非 PASS 动作，让队友继续。
-    等价 M3 `_gua031_passive_teammate_yield`。
+    V7-R07（GUA-065 + 决议 9 细化）：队友控牌时按牌型阈值让道。
+
+    决议 9 升级（2026-06-19）：从一刀切改为按 6 种牌型的 curVal 阈值分别判断。
+    等价 M3 的 _Single/_Pair/_Three/... 各自 curVal 判断逻辑。
+
+    阈值表：
+      - Single:         curVal >= 15 → 让道
+      - Pair:           curVal >= 12 → 让道
+      - Trips:          curVal >= 11 → 让道
+      - ThreeWithTwo:   curVal >= 12 → 让道
+      - Straight:       curVal >= 10 → 让道
+      - StraightFlush:  curVal >= 10 → 让道
+      - Bomb/Unknown:   保持原行为（只留 PASS）
+
+    队友近尾例外：numoffri <= 4 → 不让道，返回全部（帮队友冲线）。
     """
     teammate = (my_pos + 2) % 4
     if greater_pos != teammate:
@@ -709,12 +727,72 @@ def _rule_r07_teammate_yield(
         # 自己已进入残局冲刺 → 不放行，需积极出牌
         return list(range(len(action_list)))
 
-    # 队友控牌 + 自己牌多 → 只留 PASS
-    pass_indices = [i for i, act in enumerate(action_list)
-                    if get_action_type(act) == ACTION_TYPE_PASS]
-    if pass_indices:
-        return pass_indices
-    # 万一无 PASS（极端情况）→ 保留全部
+    # ── 决议 9: 队友近尾例外 ──
+    numoffri = numofplayers[teammate]
+    if numoffri <= 4:
+        # 队友快走完了，不让道，帮队友冲线
+        return list(range(len(action_list)))
+
+    # ── 读取 greaterAction ──
+    if greater_action is None or not greater_action or greater_action[0] == "PASS":
+        # 队友 PASS 了 → 实际上队友没控牌，不触发让道
+        return list(range(len(action_list)))
+
+    ga_type = get_action_type(greater_action)
+    # greater_action 可能是 ["Single", "S2", ["S2"]] 格式，get_action_type 对前2元素不识别
+    # 从 card list (元素[2]) 重新判定牌型
+    if ga_type == ACTION_TYPE_FREE and len(greater_action) >= 3:
+        ga_type = get_action_type(greater_action[2])
+
+    if ga_type == ACTION_TYPE_PASS or ga_type == ACTION_TYPE_FREE:
+        return list(range(len(action_list)))
+
+    # ── 决议 9: 按牌型 curVal 阈值 ──
+    # Bomb/StraightFlush: 保持原行为（curVal 无关，只留 PASS）
+    if ga_type in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+        pass_indices = [i for i, act in enumerate(action_list)
+                        if get_action_type(act) == ACTION_TYPE_PASS]
+        if pass_indices:
+            logger.debug("R07 细化: 队友出炸/同花顺 → 只留 PASS")
+            return pass_indices
+        return list(range(len(action_list)))
+
+    # 计算 curVal
+    cur_val = 0
+    if ga_type == ACTION_TYPE_SINGLE:
+        cur_val = get_card_value(greater_action[1], cur_rank) if len(greater_action) >= 2 else 99
+    elif ga_type == ACTION_TYPE_PAIR:
+        rank = get_action_rank(greater_action)
+        cur_val = CARD_RANK_ORDER.get(rank, 99)
+    elif ga_type in (ACTION_TYPE_TRIPS, ACTION_TYPE_THREE_WITH_TWO, ACTION_TYPE_STRAIGHT):
+        rank = get_action_rank(greater_action)
+        cur_val = CARD_RANK_ORDER.get(rank, 99)
+    else:
+        # 未知牌型 → 保守，不让道
+        return list(range(len(action_list)))
+
+    # 按牌型阈值判断
+    thresholds = {
+        ACTION_TYPE_SINGLE: 15,
+        ACTION_TYPE_PAIR: 12,
+        ACTION_TYPE_TRIPS: 11,
+        ACTION_TYPE_THREE_WITH_TWO: 12,
+        ACTION_TYPE_STRAIGHT: 10,
+        ACTION_TYPE_STRAIGHT_FLUSH: 10,
+    }
+    threshold = thresholds.get(ga_type, 99)
+
+    if cur_val >= threshold:
+        # 队友出高牌 → 安全让道，只留 PASS
+        pass_indices = [i for i, act in enumerate(action_list)
+                        if get_action_type(act) == ACTION_TYPE_PASS]
+        if pass_indices:
+            logger.debug("R07 细化: 队友%s curVal=%d>=%d → 让道 PASS",
+                         ga_type, cur_val, threshold)
+            return pass_indices
+        return list(range(len(action_list)))
+
+    # curVal 低于阈值 → 不让道（对手可能压队友，自己应参与）
     return list(range(len(action_list)))
 
 
@@ -865,8 +943,8 @@ def _filter_action_list_impl(
     # 用 set 累积被排除的索引
     excluded = set()
 
-    # 0) R10: 自己领出不炸（greaterPos == -1 → 新轮领出 → 炸自己）
-    r10_kept = _rule_r10_no_lead_bomb(action_list, greater_pos)
+    # 0) R10: 自己领出不炸（greaterPos == myPos 或 -1 → 新轮领出 → 炸自己）
+    r10_kept = _rule_r10_no_lead_bomb(action_list, greater_pos, my_pos)
     excluded |= {i for i in range(len(action_list)) if i not in set(r10_kept)}
 
     # 1) R05: 队友领出不炸
@@ -892,10 +970,10 @@ def _filter_action_list_impl(
     r06_kept = _rule_r06_no_break_structure_pair(action_list, hand_cards)
     excluded |= {i for i in range(len(action_list)) if i not in set(r06_kept)}
 
-    # 5) GUA-065 R07: 队友控牌且非残局 → 剔除非 PASS（让队友走）
+    # 5) GUA-065 R07: 队友控牌且非残局 → 按牌型阈值让道（决议 9 细化）
     if numofplayers:
         r07_kept = _rule_r07_teammate_yield(
-            action_list, greater_pos, my_pos, numofplayers)
+            action_list, greater_pos, my_pos, numofplayers, greater_action, cur_rank)
         excluded |= {i for i in range(len(action_list)) if i not in set(r07_kept)}
 
     # R03/R04 重排（不真正剔除，影响后续模型选择顺序）
@@ -1005,7 +1083,7 @@ def _validate_decision_impl(
         if non_bomb:
             logger.info("validate_decision: 覆盖炸队友 (idx %d → %d)", model_idx, non_bomb[0])
             return non_bomb[0]
-    elif is_bomb(chosen) and greater_pos == -1:
+    elif is_bomb(chosen) and (greater_pos == -1 or greater_pos == my_pos):
         # R10: 自己领出用炸弹 → 不合理，找非炸动作
         non_bomb = [i for i, act in enumerate(filtered_actions)
                     if not is_bomb(act)]
@@ -1023,6 +1101,32 @@ def _validate_decision_impl(
                 # 选最小够用的
                 logger.info("validate_decision: 覆盖被动 PASS (idx %d → %d)", model_idx, same_type[0])
                 return same_type[0]
+
+    # 3) Q12: Solo 模式强化 — 队友已走完 + 对手出牌 + 模型选 PASS → 强制用同型压制
+    numofplayers = game_state.get("numofplayers", [])
+    if (chosen_type == ACTION_TYPE_PASS and numofplayers and
+            len(numofplayers) >= 4):
+        teammate = (my_pos + 2) % 4
+        if numofplayers[teammate] == 0:
+            # Solo: 队友已走完，只剩自己对抗两个对手
+            if greater_action and greater_action[0] != "PASS":
+                if greater_pos in opponent_positions:
+                    greater_type = get_action_type(greater_action)
+                    # 优先同型，其次任意非 PASS 非炸弹
+                    same_type = [i for i, act in enumerate(filtered_actions)
+                                 if get_action_type(act) == greater_type]
+                    if same_type:
+                        logger.info("validate_decision: Solo 覆盖 PASS → 同型压制 (idx %d → %d)",
+                                    model_idx, same_type[0])
+                        return same_type[0]
+                    # 无同型 → 找任意非炸弹非PASS动作
+                    any_counter = [i for i, act in enumerate(filtered_actions)
+                                   if get_action_type(act) not in
+                                   (ACTION_TYPE_PASS, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH)]
+                    if any_counter:
+                        logger.info("validate_decision: Solo 覆盖 PASS → 非炸压制 (idx %d → %d)",
+                                    model_idx, any_counter[0])
+                        return any_counter[0]
 
     return model_idx
 

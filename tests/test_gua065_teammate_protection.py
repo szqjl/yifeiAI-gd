@@ -25,38 +25,45 @@ from src.v.nn.guards.v7_guards import (
 
 class TestR07TeammateYield:
     def test_teammate_controls_non_sprint(self):
-        """队友控牌 + 自己 >10 张 → 只留 PASS"""
+        """队友控牌 + 自己 >10 张 + 队友出大牌(curVal>=阈值) → 只留 PASS"""
         actions = [["PASS"], ["S2"], ["S3","H3"], ["S4","H4","D4","C4"]]
+        # 队友出 Single S2(curVal=15) >= 15 阈值 → 让道
         result = _rule_r07_teammate_yield(
-            actions, greater_pos=2, my_pos=0, numofplayers=[15, 20, 20, 20])
+            actions, greater_pos=2, my_pos=0, numofplayers=[15, 20, 20, 20],
+            greater_action=["Single", "S2", ["S2"]], cur_rank="2")
         assert result == [0], f"预期只留PASS，实际 {result}"
 
     def test_teammate_controls_sprint(self):
         """队友控牌 + 自己 ≤10 张 → 全部放行（残局冲刺）"""
         actions = [["PASS"], ["S2"], ["S3","H3"]]
         result = _rule_r07_teammate_yield(
-            actions, greater_pos=2, my_pos=0, numofplayers=[8, 20, 20, 20])
+            actions, greater_pos=2, my_pos=0, numofplayers=[8, 20, 20, 20],
+            greater_action=["Single", "SA", ["SA"]], cur_rank="2")
         assert result == [0, 1, 2], f"预期全部放行，实际 {result}"
 
     def test_teammate_controls_boundary_10(self):
         """队友控牌 + 自己 =10 张 → 放行（边界值）"""
         actions = [["PASS"], ["S2"]]
         result = _rule_r07_teammate_yield(
-            actions, greater_pos=2, my_pos=0, numofplayers=[10, 20, 20, 20])
+            actions, greater_pos=2, my_pos=0, numofplayers=[10, 20, 20, 20],
+            greater_action=["Single", "SA", ["SA"]], cur_rank="2")
         assert result == [0, 1]
 
     def test_opponent_controls(self):
         """对手控牌 → 不放行"""
         actions = [["PASS"], ["S2"], ["S3","H3"]]
         result = _rule_r07_teammate_yield(
-            actions, greater_pos=1, my_pos=0, numofplayers=[15, 20, 20, 20])
+            actions, greater_pos=1, my_pos=0, numofplayers=[15, 20, 20, 20],
+            greater_action=["Single", "SA", ["SA"]], cur_rank="2")
         assert result == [0, 1, 2], f"对手控牌不应过滤，实际 {result}"
 
     def test_teammate_controls_11_cards(self):
-        """队友控牌 + 自己 =11 张 → 只留 PASS"""
+        """队友控牌 + 自己 =11 张 + 队友出大Single → 只留 PASS"""
         actions = [["PASS"], ["S2"]]
+        # 队友出 S2 curVal=15 >= 15 阈值 → 让道
         result = _rule_r07_teammate_yield(
-            actions, greater_pos=2, my_pos=0, numofplayers=[11, 20, 20, 20])
+            actions, greater_pos=2, my_pos=0, numofplayers=[11, 20, 20, 20],
+            greater_action=["Single", "S2", ["S2"]], cur_rank="2")
         assert result == [0]
 
 
