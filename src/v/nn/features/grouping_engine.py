@@ -37,8 +37,11 @@ import copy
 # ── 常量 ──────────────────────────────────────────────────
 SUITS = ("S", "H", "D", "C")
 RANKS = ("2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A")
-JOKERS = ("BJ", "RJ")
-ALL_RANKS = RANKS + ("BJ", "RJ")
+JOKERS = ("SB", "HR")  # 平台原生：SB=小王, HR=大王
+ALL_RANKS = RANKS + ("SB", "HR")
+
+# 旧编码兼容（BJ→SB, RJ→HR，用于历史训练数据读取）
+_LEGACY_NORMALIZE = {"BJ": "SB", "RJ": "HR"}
 
 # 特征维度
 GROUPING_ENGINE_DIM = 24  # 24 维方案级组牌特征
@@ -52,6 +55,7 @@ NORM_MAX_LONGEST_RUN = 12.0
 NORM_MAX_WILDS = 2.0
 NORM_MAX_ROUNDS = 20.0
 NORM_MAX_THREE_PAIRS = 2.0
+NORM_MAX_POWER = 12.0
 
 # ── 数据结构 ──────────────────────────────────────────────
 
@@ -75,7 +79,7 @@ class GroupingPlan:
     score: float = 0.0
 
     # GUA-062 v2 评分子分
-    bomb_score: float = 0.0          # 炸弹数 0.3
+    bomb_score: float = 0.0          # 牌力分（归一化 power_score / NORM_MAX_POWER），权重 0.3
     rounds_score: float = 0.0        # 手数 0.2
     recovery_score: float = 0.0      # 静态回收评估 0.3
     flexibility_score: float = 0.0   # 灵活性 0.1
@@ -115,11 +119,78 @@ class GroupingPlan:
             d["SteelPlate"] = [[list(t) for t in sp] for sp in self.steel_plates]
         return d
 
+    # ── GUA-063 Phase 1: card-level grouping mask ──────────────────
+
+    def to_card_mask(self) -> Dict[str, tuple]:
+        """构建牌级组牌掩码，供前置过滤使用。
+
+        返回 Dict[card_str, (group_id, is_core, group_size)]：
+          - group_id:   同组牌共享同一 ID，散牌/单张 = -1
+          - is_core:    1.0 = 核心不可轻拆（炸弹/同花顺），0.0 = 普通牌型
+          - group_size: 该组共有几张牌（用于判断是否完整打出）
+
+        核心牌型判定（GUA-063 修复 2026-06-18）：
+          - bombs / straight_flushes → is_core=1.0
+          - straights / trips → is_core=1.0（掼蛋牌理：顺子和三张是结构化牌型，不可轻拆）
+          - 其他牌型（pairs/three_pairs/three_with_twos/steel_plates）→ is_core=0.0
+          - 散牌（singles / 未消耗的 wild_cards）→ group_id=-1, is_core=0.0, group_size=1
+        """
+        mask: Dict[str, tuple] = {}
+
+        # ── 收集所有牌组 ──
+        groups: List[Tuple[List[str], bool]] = []
+
+        # 核心牌型（炸弹/同花顺）
+        for b in self.bombs:
+            groups.append((list(b), True))
+        for sf in self.straight_flushes:
+            groups.append((list(sf), True))
+
+        # 结构化牌型（顺子/三张 → is_core=1.0，GUA-063）
+        for s in self.straights:
+            groups.append((list(s), True))
+        for t in self.trips:
+            groups.append((list(t), True))
+        for p in self.pairs:
+            groups.append((list(p), False))
+        for tp in self.three_pairs:
+            # tp = [pair1, pair2, pair3], 每个 pair 是 2 张牌
+            flat = [c for pair in tp for c in pair]
+            groups.append((flat, False))
+        for twt in self.three_with_twos:
+            # twt = (trip, pair)
+            flat = list(twt[0]) + list(twt[1])
+            groups.append((flat, False))
+        for sp in self.steel_plates:
+            # sp = [trip1, trip2]
+            flat = [c for trip in sp for c in trip]
+            groups.append((flat, False))
+
+        # 散牌（单张 / 未消耗逢人配）
+        for s in self.singles:
+            mask[s] = (-1, 0.0, 1)
+
+        # ── 分配 group_id ──
+        gid = 0
+        for group_cards, is_core in groups:
+            gsize = len(group_cards)
+            is_core_f = 1.0 if is_core else 0.0
+            for card in group_cards:
+                mask[card] = (gid, is_core_f, gsize)
+            gid += 1
+
+        return mask
+
 
 # ── 牌面解析 ──────────────────────────────────────────────
 
+
 def _parse_rank(card: str) -> str:
-    """从 'S2' / 'BJ' 提取 rank，统一 '10' → 'T'。"""
+    """从 'S2' / 'SB' 提取 rank，统一 '10' → 'T'。"""
+    if card in JOKERS:
+        return card
+    # 归一化旧编码兼容（BJ→SB, RJ→HR）
+    card = _LEGACY_NORMALIZE.get(card, card)
     if card in JOKERS:
         return card
     if len(card) >= 2 and card[0] in SUITS:
@@ -375,9 +446,9 @@ def _detect_steel_plate(
 
 def _rank_to_value(rank_char: str) -> int:
     """将纯 rank 字符转为数值（用于大小比较，不含级牌特殊处理）。"""
-    if rank_char in ("BJ", "B"):
+    if rank_char in ("SB",):  # 小王
         return 16
-    if rank_char in ("RJ", "R"):
+    if rank_char in ("HR",):  # 大王
         return 17
     idx_map = {r: i + 2 for i, r in enumerate(RANKS)}
     return idx_map.get(rank_char, 0)
@@ -393,6 +464,13 @@ def _detect_straights(
     从剩余牌中检测顺子（支持逢人配填补缺口）。
     返回 (straights, remaining_singles, remaining_pairs, remaining_trips, remaining_wilds)。
     贪心策略：找最长连续 rank 段 → 5 张窗口扫描 → 缺口用 wilds 填补。
+
+    GUA-063 去小单化策略（2026-06-18）：
+    - 窗口扫描从低→高（而非高→低）。原因：
+      ① 掼蛋核心原则：去小单化——越小的单越难顺掉，组顺子首要目标就是吸收小单。
+        如手牌 2-7 六连张，优先组 2-6 而非 3-7，把大单 7 留给其他组合（对子/三带二）。
+      ② 大顺子的压制力在动态出牌中体现（逼炸/盖牌），初始组牌不应为此牺牲去小单化。
+      ③ 单牌有灵活性——大单（8-K-A）比小单（2-3-4）更容易找到搭档形成对子或三条。
     """
     # 构建 rank 计数（不含 wild）
     card_by_rank: Dict[str, List[str]] = {}
@@ -475,19 +553,20 @@ def _detect_straights(
     used_cards: Counter[str] = Counter()
     wilds_consumed = 0
 
-    # 从最长段取顺子（从高到低，贪心取 5 张）
+    # 从最长段取顺子（从低到高，去小单化：优先吸收小牌组顺子，剩大单更易处理）
     if best_is_wrap:
         # 包接段：尾段 (....A) + 首段 (2,3,...)
         tail_start = len(rank_indices) - wrap_tail_len
         seg_ranks = rank_indices[tail_start:] + rank_indices[:wrap_head_len]
     else:
         seg_ranks = rank_indices[best_start:best_start + best_len]
-    pos = len(seg_ranks) - 5
-    while pos >= 0:
+    pos = 0
+    pos_max = len(seg_ranks) - 5
+    while pos <= pos_max:
         window_ranks = seg_ranks[pos:pos + 5]
         # A→2 包接段：A 只能当 1 用（窗口第一位），跳过 A 在中间/末尾的无效窗口
         if best_is_wrap and 'A' in window_ranks and window_ranks[0] != 'A':
-            pos -= 1
+            pos += 1
             continue
         straight_cards = []
         tentative: Counter[str] = Counter()
@@ -524,7 +603,7 @@ def _detect_straights(
             straights.append(straight_cards)
             used_cards.update(tentative)
             wilds_consumed += tent_wilds_used
-        pos -= 1
+        pos += 1
 
     # 剩余牌重新分类
     rem_used = Counter(used_cards)
@@ -836,7 +915,7 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
 
     # 四大天王 +4：2大王 + 2小王（统计方案中所有 JOKER 牌）
     def _count_jokers(plan: "GroupingPlan") -> tuple:
-        """统计方案中大王(RJ)和小王(BJ)的总张数。
+        """统计方案中大王(HR)和小王(SB)的总张数。
         遍历 singles / pairs / bombs / trips 等所有结构。"""
         rj_total = 0
         bj_total = 0
@@ -859,9 +938,9 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
         for container in containers:
             for card in container:
                 r = _parse_rank(card)
-                if r in ("RJ", "R"):
+                if r in ("HR",):
                     rj_total += 1
-                elif r in ("BJ", "B"):
+                elif r in ("SB",):
                     bj_total += 1
         return rj_total, bj_total
 
@@ -903,7 +982,7 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
         if s in wild_set:
             continue  # 百搭不计为小单张
         r = _parse_rank(s)
-        if r in ("RJ", "R", "BJ", "B"):
+        if r in ("HR", "SB"):
             continue  # 王不计为小单张
         if _card_rank_value(s, cur_rank) < _rank_to_value("T"):  # T=10, rank 2~9
             score -= 1
@@ -914,7 +993,7 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
         if tuple(sorted(p)) in twt_pair_ids:
             continue  # 已在三带二中，受保护不扣
         r = _parse_rank(p[0])
-        if r in ("RJ", "R", "BJ", "B"):
+        if r in ("HR", "SB"):
             continue  # 王对子不扣
         if _card_rank_value(p[0], cur_rank) < rank6_threshold:
             score -= 1
@@ -988,8 +1067,8 @@ def _score_plan_v2(plan: "GroupingPlan", all_plans: List["GroupingPlan"]) -> Non
     """
     GUA-062 P0-C：文档标准 5 维加权评分。
 
-    权重调优 2026-06-18：手数+去单化提权，回收降权（同花顺曾因回收 0.3 被压过）。
-      - 炸弹数 0.3
+    权重调优 2026-06-18：
+      - 牌力分 0.3（含炸弹+同花顺+登基牌+稀有牌型-减分，归一化到 NORM_MAX_POWER）
       - 手数 0.3
       - 静态回收评估 0.1
       - 灵活性 0.1
@@ -997,8 +1076,12 @@ def _score_plan_v2(plan: "GroupingPlan", all_plans: List["GroupingPlan"]) -> Non
     """
     n_rounds = plan.num_rounds()
 
-    # 炸弹数 0.3
-    plan.bomb_score = min(len(plan.bombs) / NORM_MAX_BOMBS, 1.0)
+    # 牌力计分 + 角色定位（先算，因为总分用它）
+    plan.power_score = _score_power(plan, plan.cur_rank)
+    plan.role = determine_role(plan.power_score)
+
+    # 牌力分 0.3（替代原炸弹数，同花顺/登基炸/普通炸统一纳入牌力）
+    plan.bomb_score = min(plan.power_score / NORM_MAX_POWER, 1.0)
 
     # 手数 0.3（轮次越少越好）
     plan.rounds_score = max(0.0, 1.0 - n_rounds / NORM_MAX_ROUNDS)
@@ -1011,10 +1094,6 @@ def _score_plan_v2(plan: "GroupingPlan", all_plans: List["GroupingPlan"]) -> Non
 
     # 去单化 0.2（路径 B — 显式惩罚单张多）
     plan.de_singleton_score = _score_de_singleton(plan)
-
-    # 牌力计分 + 角色定位
-    plan.power_score = _score_power(plan, plan.cur_rank)
-    plan.role = determine_role(plan.power_score)
 
     # 5 维加权总分
     plan.score = (
@@ -1451,7 +1530,7 @@ def _extract_features(
      13:  best_has_straight        — 最优方案有顺子 → 1
      14:  wild_count_norm          — 逢人配数 / 2
      15:  longest_run_norm         — 最长连续 rank 数 / 12
-     16:  control_card_norm        — 控场牌 (BJ+RJ+curRank) 数 / 6
+     16:  control_card_norm        — 控场牌 (SB+HR+curRank) 数 / 6
      17:  avg_bomb_level_norm      — 炸弹平均等级 / 15
      18:  plan_stability           — 首末方案分差 → 稳定性
      19:  best_rounds_vs_worst     — 最优 vs 最差轮数差
@@ -1567,7 +1646,7 @@ def enumerate_groupings(
     枚举所有组牌方案并返回最优方案 + 全部方案。
 
     Args:
-        hand_cards: 手牌列表，格式 ["S2", "H3", "C3", "BJ", ...]
+        hand_cards: 手牌列表，格式 ["S2", "H3", "C3", "SB", ...]
         cur_rank:   当前级牌，默认 "2"
 
     Returns:

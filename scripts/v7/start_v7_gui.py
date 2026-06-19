@@ -4,12 +4,14 @@ V7终极胜率导向GUI启动脚本
 预配置V7客户端 vs lalala客户端的对战
 """
 
+import os
 import sys
 from pathlib import Path
 import tkinter as tk
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "gui"))
+sys.path.insert(0, str(REPO_ROOT))
 
 try:
     from batch_executor_gui import BatchExecutorGUI
@@ -27,30 +29,22 @@ try:
             # 设置默认参数
             self.target_games_var.set("3")  # 默认3场（3的倍数）
             
-            # 读取 v7_paths.yaml
-            _cfg = {}
-            _cfg_path = REPO_ROOT / "config" / "v7_paths.yaml"
-            if _cfg_path.exists():
-                try:
-                    import yaml
-                    with open(_cfg_path, encoding="utf-8") as _f:
-                        _cfg = yaml.safe_load(_f) or {}
-                except Exception:
-                    pass
-            _lalala_dir = os.environ.get("LALALA_DIR", "") or _cfg.get("lalala_dir", "").replace("%REPO_ROOT%", str(REPO_ROOT)) or str(REPO_ROOT / "reference" / "lalala")
+            # 使用 v7_paths 统一解析路径
+            from src.utils.v7_paths import get_server_exe
+            
+            _server_exe = get_server_exe(REPO_ROOT)
             
             # 设置V7客户端配置
             v7_clients = [
                 "python src/communication/yf1_v7.py",
-                f"python {_lalala_dir}\\client3.py",
+                "python src/communication/run_lalala_client3.py",
                 "python src/communication/yf2_v7.py",
-                f"python {_lalala_dir}\\client4.py"
+                "python src/communication/run_lalala_client4.py",
             ]
             
             self.clients_var.set(",".join(v7_clients))
             
             # 设置服务器配置
-            _server_exe = os.environ.get("SERVER_EXE", "") or _cfg.get("server_exe", "").replace("%REPO_ROOT%", str(REPO_ROOT)) or str(REPO_ROOT / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
             self.server_path_var.set(f"{_server_exe} 10")
             
             # 在日志区域显示V7配置信息
@@ -65,7 +59,7 @@ try:
             self.log_text.insert(tk.END, "\n")
             
             # 检查模型文件
-            model_path = Path("models/bc_model_ultimate_win_rate.pth")
+            model_path = REPO_ROOT / "models" / "bc_model_ultimate_win_rate.pth"
             if model_path.exists():
                 self.log_text.insert(tk.END, "✓ 终极胜率导向模型已加载\n")
             else:

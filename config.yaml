@@ -1,106 +1,106 @@
-# Şèµ°AI¿Í»§¶ËÅäÖÃÎÄ¼ş
+# æ¼è›‹AIå®¢æˆ·ç«¯é…ç½®æ–‡ä»¶
 # Guandan AI Client Configuration
 
-# Æ½Ì¨ÅäÖÃ
+# å¹³å°é…ç½®
 platform:
-  name: "ÄÏ¾©ÓÊµç´óÑ§Şèµ°AIÆ½Ì¨"
+  name: "å—äº¬é‚®ç”µå¤§å­¦æ¼è›‹AIå¹³å°"
   version: "v1006"
   url: "https://gameai.njupt.edu.cn/gameaicompetition/gameGD/index.html"
 
-# WebSocketÁ¬½ÓÅäÖÃ
+# WebSocketè¿æ¥é…ç½®
 websocket:
-  # ±¾µØÁ¬½Ó
+  # æœ¬åœ°è¿æ¥
   local_url: "ws://127.0.0.1:23456/game/{user_info}"
-  # ¾ÖÓòÍøÁ¬½Ó£¨ĞèÒªÊ±Ìæ»»IP£©
-  network_url: "ws://[¾ÖÓòÍøIP]:23456/game/{user_info}"
+  # å±€åŸŸç½‘è¿æ¥ï¼ˆéœ€è¦æ—¶æ›¿æ¢IPï¼‰
+  network_url: "ws://[å±€åŸŸç½‘IP]:23456/game/{user_info}"
   reconnect_interval: 5
   heartbeat_interval: 30
-  timeout: 10  # Á¬½Ó³¬Ê±Ê±¼ä£¨Ãë£©
+  timeout: 10  # è¿æ¥è¶…æ—¶æ—¶é—´ï¼ˆç§’ï¼‰
 
-# AI¾ö²ßÅäÖÃ
+# AIå†³ç­–é…ç½®
 decision:
-  # ×î´ó¾ö²ßÊ±¼ä£¨Ãë£©
+  # æœ€å¤§å†³ç­–æ—¶é—´ï¼ˆç§’ï¼‰
   max_decision_time: 0.8
-  # ÆôÓÃ¼ÇÅÆ¹¦ÄÜ
+  # å¯ç”¨è®°ç‰ŒåŠŸèƒ½
   enable_card_tracking: true
-  # ÆôÓÃÍÆÀí¹¦ÄÜ
+  # å¯ç”¨æ¨ç†åŠŸèƒ½
   enable_inference: true
-  # ÆôÓÃÅäºÏ²ßÂÔ
+  # å¯ç”¨é…åˆç­–ç•¥
   enable_cooperation: true
-  # ¾ö²ß»º´æ´óĞ¡
+  # å†³ç­–ç¼“å­˜å¤§å°
   cache_size: 1000
 
-# ¼ÇÅÆÄ£¿éÅäÖÃ
+# è®°ç‰Œæ¨¡å—é…ç½®
 card_tracking:
-  # ¸ú×ÙÀúÊ·
+  # è·Ÿè¸ªå†å²
   track_history: true
-  # ¸ú×ÙÊ£ÓàÅÆ
+  # è·Ÿè¸ªå‰©ä½™ç‰Œ
   track_remaining: true
-  # ÆôÓÃ¸ÅÂÊ¼ÆËã
+  # å¯ç”¨æ¦‚ç‡è®¡ç®—
   enable_probability: true
 
-# ¶àÒòËØÆÀ¹ÀÈ¨ÖØÅäÖÃ
+# å¤šå› ç´ è¯„ä¼°æƒé‡é…ç½®
 evaluation:
   weights:
-    # Ê£ÓàÅÆÊıÒòËØÈ¨ÖØ
+    # å‰©ä½™ç‰Œæ•°å› ç´ æƒé‡
     remaining_cards: 0.25
-    # ÅÆĞÍ´óĞ¡ÒòËØÈ¨ÖØ
+    # ç‰Œå‹å¤§å°å› ç´ æƒé‡
     card_type_value: 0.20
-    # ÅäºÏÒòËØÈ¨ÖØ
+    # é…åˆå› ç´ æƒé‡
     cooperation: 0.20
-    # ·çÏÕÒòËØÈ¨ÖØ
+    # é£é™©å› ç´ æƒé‡
     risk: 0.15
-    # Ê±»úÒòËØÈ¨ÖØ
+    # æ—¶æœºå› ç´ æƒé‡
     timing: 0.10
-    # ÊÖÅÆ½á¹¹ÒòËØÈ¨ÖØ
+    # æ‰‹ç‰Œç»“æ„å› ç´ æƒé‡
     hand_structure: 0.10
 
-# ÅäºÏ²ßÂÔÅäÖÃ
+# é…åˆç­–ç•¥é…ç½®
 cooperation:
-  # ¶ÓÓÑÅÆĞÍÖµãĞÖµ£¨´óÓÚ´ËÖµÓ¦¸ÃPASSÅäºÏ£©
+  # é˜Ÿå‹ç‰Œå‹å€¼é˜ˆå€¼ï¼ˆå¤§äºæ­¤å€¼åº”è¯¥PASSé…åˆï¼‰
   support_threshold: 15
-  # ¶ÔÊÖÊ£ÓàÅÆÊıÎ£ÏÕãĞÖµ£¨Ğ¡ÓÚ´ËÖµÓ¦¸ÃÅäºÏ£©
+  # å¯¹æ‰‹å‰©ä½™ç‰Œæ•°å±é™©é˜ˆå€¼ï¼ˆå°äºæ­¤å€¼åº”è¯¥é…åˆï¼‰
   danger_threshold: 4
-  # ×î´óÅÆÖµãĞÖµ
+  # æœ€å¤§ç‰Œå€¼é˜ˆå€¼
   max_val_threshold: 14
 
-# ÊÖÅÆ×éºÏÅäÖÃ
+# æ‰‹ç‰Œç»„åˆé…ç½®
 hand_combiner:
-  # ×éÅÆÓÅÏÈ¼¶£¨ÊıÖµÔ½´óÓÅÏÈ¼¶Ô½¸ß£©
+  # ç»„ç‰Œä¼˜å…ˆçº§ï¼ˆæ•°å€¼è¶Šå¤§ä¼˜å…ˆçº§è¶Šé«˜ï¼‰
   priorities:
-    StraightFlush: 100  # Í¬»¨Ë³
-    Bomb: 80            # Õ¨µ¯
-    Straight: 60        # Ë³×Ó
-    ThreeWithTwo: 50    # Èı´ø¶ş
-    TwoTrips: 45        # ¸Ö°å
-    ThreePair: 40       # ÈıÁ¬¶Ô
-    Trips: 30           # ÈıÕÅ
-    Pair: 20            # ¶Ô×Ó
-    Single: 10          # µ¥ÕÅ
+    StraightFlush: 100  # åŒèŠ±é¡º
+    Bomb: 80            # ç‚¸å¼¹
+    Straight: 60        # é¡ºå­
+    ThreeWithTwo: 50    # ä¸‰å¸¦äºŒ
+    TwoTrips: 45        # é’¢æ¿
+    ThreePair: 40       # ä¸‰è¿å¯¹
+    Trips: 30           # ä¸‰å¼ 
+    Pair: 20            # å¯¹å­
+    Single: 10          # å•å¼ 
 
-# Êı¾İ´æ´¢ÅäÖÃ
+# æ•°æ®å­˜å‚¨é…ç½®
 data:
   save_path: "./replays"
   auto_save: true
   format: "json"
 
-# ÈÕÖ¾ÅäÖÃ
+# æ—¥å¿—é…ç½®
 logging:
   level: "INFO"  # DEBUG/INFO/WARNING/ERROR
   file: "ai_client.log"
-  console: true  # ÊÇ·ñÊä³öµ½¿ØÖÆÌ¨
+  console: true  # æ˜¯å¦è¾“å‡ºåˆ°æ§åˆ¶å°
 
-# ÁªÏµ·½Ê½
+# è”ç³»æ–¹å¼
 contact:
   research: "chenxg@njupt.edu.cn"
   feedback: "wuguduofeng@gmail.com"
   qq: "519301156"
 
-# ĞÅÏ¢¼à¿ØÅäÖÃ£¨¿ÉÑ¡£©
+# ä¿¡æ¯ç›‘æ§é…ç½®ï¼ˆå¯é€‰ï¼‰
 info_monitor:
-  enabled: false  # ÊÇ·ñÆôÓÃĞÅÏ¢¼à¿Ø
-  check_interval: 21600  # ¼ì²é¼ä¸ô£¨Ãë£©£¬Ä¬ÈÏ6Ğ¡Ê±
-  quiet_hours:  # ¾²Ä¬Ê±¶Î£¬²»½øĞĞ¼ì²é
+  enabled: false  # æ˜¯å¦å¯ç”¨ä¿¡æ¯ç›‘æ§
+  check_interval: 21600  # æ£€æŸ¥é—´éš”ï¼ˆç§’ï¼‰ï¼Œé»˜è®¤6å°æ—¶
+  quiet_hours:  # é™é»˜æ—¶æ®µï¼Œä¸è¿›è¡Œæ£€æŸ¥
     enabled: true
     start: "00:00"
     end: "06:00"

@@ -28,83 +28,54 @@
 - .batch_executor.lock 已加入 .gitignore。
 - 批跑对账看 latest_victory_num.json 的 server_vn_raw / vn_source。
 
-## 批跑路径准备（新电脑首次拉取必读）
+## LLM Wiki 调用策略
 
-### 1. 仓库内依赖（git clone 自带，不需额外操作）
-- 所有 Python 源码、批跑脚本、配置文件已纳入版本控制
-- `config/v7_paths.yaml` — 路径配置模板（可选修改）
-- `scripts/launchers/m/START_M3_BATCH.bat` — M3 批跑双击入口
-- `scripts/launchers/v7/START_V7_COMPLETE.bat` — V7 交互启动入口
-- `scripts/launchers/v7/run_v7_vs_lalala_games.py` — V7 批跑入口
+Wiki（`wiki/wiki/`）是 LLM 从 `docs/` 编译的静态索引，**不会自动同步原文件**。必须区分实时数据与综合知识查询。
 
-### 2. 仓库外依赖（需手动准备，不在 git 中）
+### 决策表
 
-| 必需项 | 目标路径 | 说明 |
-|--------|----------|------|
-| 离线服务器 exe | `offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe` | 离线掼蛋引擎，每会话固定 3 局 |
-| lalala 核心文件 | `reference/lalala/`（含 `state.py` `action.py` `utils.py`） | lalala 一等奖 AI，需纯 ASCII 路径 |
-| V7 模型文件 | `models/bc_model_ultimate_win_rate.pth` 或 `models/v-nn/bc_model_ultimate_win_rate.pth` | V7 胜率模型（M3 不需要模型） |
+| 查询类型 | Wiki | 原文件 | 原因 |
+|----------|:----:|:-----:|------|
+| ITERATIONS 最新 N 条、未完成任务 | ❌ | `docs/guandan-brain/ITERATIONS.md` | 实时状态，Wiki 是旧快照 |
+| GUA 当前 open/closed 状态 | ❌ | `docs/guandan-brain/ISSUES.md` | 实时状态 |
+| 最新 handoff | ❌ | `docs/governance/分析接续-handoff.md` | 每日更新 |
+| V7/M3 跨文件综合状态 | ✅ | — | 多文件已编译为 synthesis 页 |
+| GUA 是什么、怎么做 | ✅ 先 | 不确定再翻原文件 | Wiki 先给概要 |
+| 批跑配置/参数约束 | ✅ | — | concepts 页已提炼 |
+| 概念：弃让/牌力/组牌 | ✅ | — | concepts 页完整 |
+| 模块关系、工具链 | ✅ | — | synthesis 页已汇总 |
 
-### 3. 路径解析规则（`src/utils/v7_paths.py`）
-
-所有路径按优先级解析：**环境变量 > `config/v7_paths.yaml` > 仓库内候选路径**
-
-| 环境变量 | 默认候选路径 |
-|----------|-------------|
-| `SERVER_EXE` | `offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe` 等 |
-| `LALALA_DIR` | `reference/lalala/` → `offline_platform/guandan_offline_v1006/lalala/` 等 |
-| `MODEL_DIR` / `V7_MODEL_PATH` | `models/` → `models/v-nn/` |
-
-**快速提示**：如果你原离线 exe 不在仓库内（如 `D:/guandanscore/guandan-offline-serve/`），强烈建议设环境变量 `SERVER_EXE=完整路径`，避免踩候选路径。
-
-### 4. 首次准备 checklist
+### 调用方式
 
 ```bash
-# 1) 确保离线 exe 就位（以下任一路径均可）
-#    - 仓库内：offline_platform/guandan_offline_v1006/windows/guandan_offline_v1006.exe
-#    - 或设环境变量：SERVER_EXE=D:/your/path/guandan_offline_v1006.exe
+# Wiki 查询（综合知识 → 全貌）
+python scripts/wiki.py query "V7 当前状态和未完成 GUA"
 
-# 2) 同步 lalala 到 reference/（纯 ASCII 路径）
-python -c "from src.utils.v7_paths import sync_lalala_to_reference; sync_lalala_to_reference(); print('OK')"
-
-# 3) 模型文件就位（仅 V7 需要）
-#    - 放到 models/bc_model_ultimate_win_rate.pth 或 models/v-nn/
-
-# 4) 安装 Python 依赖
-pip install pyyaml psutil
-# pyyaml：配置文件解析（缺失时自动降级用候选路径）
-# psutil：进程管理（缺失时用 subprocess 回退）
+# 实时数据（必须直接读原文件）
+read_file docs/guandan-brain/ITERATIONS.md
+read_file docs/guandan-brain/ISSUES.md
+read_file docs/governance/分析接续-handoff.md
 ```
 
-### 5. 验证就绪
+### 原则
+
+1. **Wiki 是地图，原文件是 GPS** — 先看地图定位，再翻原文件取实时坐标
+2. 查询时效性数据（ITERATIONS、ISSUES、handoff）一律走原文件，不走 Wiki
+3. `ingest` 后 Wiki 才会更新；改了 docs 记得补一句 `python scripts/wiki.py ingest`
+4. 如果 Wiki query 返回"信息不足"，fallback 到直接读原文件
+
+### Wiki 更新步骤
 
 ```bash
-# 验证路径解析
-python -c "from src.utils.v7_paths import get_server_exe, get_lalala_dir, get_model_file; print('server:', get_server_exe()); print('lalala:', get_lalala_dir()); print('model:', get_model_file())"
+# 1. 查看状态（新/变更/删除文件数）
+python scripts/wiki.py status
 
-# M3 批跑快速启动
-cd <repo_root>
-py scripts/launchers/m/run_m3_vs_lalala_games.py --games 3
+# 2. 摄入变更（自动调用 LLM 编译为 Wiki 页面）
+python scripts/wiki.py ingest
 
-# V7 批跑快速启动
-cd <repo_root>
-py scripts/launchers/v7/run_v7_vs_lalala_games.py --games 3
+# 3. 如果大文件导致截断（"仅处理前 0 个文件"），增大限制再重试
+python scripts/wiki.py config set max_source_chars 500000
+python scripts/wiki.py ingest
 ```
 
-### 6. 常见问题
-
-| 现象 | 原因 | 解决方案 |
-|------|------|----------|
-| `FileNotFoundError: 服务器 exe 未找到` | 候选路径全不存在 | `set SERVER_EXE=D:/your/path/guandan_offline_v1006.exe` |
-| 客户端启动后秒退 | lalala 目录缺文件或含中文路径 | `python -c "from src.utils.v7_paths import sync_lalala_to_reference; sync_lalala_to_reference()"` |
-| V7 启动报模型找不到 | 模型未放到 correct 路径 | `set V7_MODEL_PATH=D:/your/models/bc_model_ultimate_win_rate.pth` 或放到 `models/` 下 |
-| `ImportError: No module named 'yaml'` | 没有 pyyaml | `pip install pyyaml`（缺失时自动降级，非阻塞） |
-
-### 7. 启动命令速查
-
-```
-M3 批跑    → scripts/launchers/m/START_M3_BATCH.bat       （双击）
-              py scripts/launchers/m/run_m3_vs_lalala_games.py --games 9
-V7 批跑    → py scripts/launchers/v7/run_v7_vs_lalala_games.py --games 9
-V7 交互    → scripts/launchers/v7/START_V7_COMPLETE.bat     （双击）
-```
+> **首次拉取 / 新电脑环境搭建**：见 [[SETUP_GUIDE]]（`docs/guandan-brain/SETUP_GUIDE.md`）。日常会话不需要加载，仅在环境异常时查阅。

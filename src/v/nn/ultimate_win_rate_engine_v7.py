@@ -164,6 +164,10 @@ class UltimateWinRateEngineV7:
         # ── GUA-065: 注入 numofplayers 到 game_state（队友保护需要知道各家剩张）──
         self._inject_numofplayers(game_state)
 
+        # ── GUA-068: 注入 MemoryTracker 到 game_state（R11 全局抑制牌检查需要）──
+        if self._tracker is not None:
+            game_state["_memory_tracker"] = self._tracker
+
         # ── GUA-045 Guard filter ──
         filtered_actions = action_list
         action_map = list(range(len(action_list)))

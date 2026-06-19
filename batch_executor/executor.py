@@ -17,7 +17,7 @@ import time
 import threading
 import queue
 from pathlib import Path
-from typing import Callable, Optional, Set
+from typing import Callable, List, Optional, Set
 import logging
 
 try:
@@ -549,21 +549,26 @@ class BatchExecutor:
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         os.environ["BATCH_GAMES"] = str(batch_games)
 
-    def _validate_batch_victory_num(self, batch_games: int) -> None:
-        """批末交叉验证：latest_victory_num.json 与 batch_games / RAW gameResult 口径。"""
+    def _validate_batch_victory_num(self, batch_games: int) -> Optional[List[int]]:
+        """批末交叉验证：latest_victory_num.json 与 batch_games / RAW gameResult 口径。
+        
+        Returns:
+            校验通过时返回 vn 列表 [pos0_win, pos1_win, pos2_win, pos3_win]；
+            校验失败或文件不存在时返回 None。
+        """
         shared = self.project_root / "batch_executor" / "latest_victory_num.json"
         if not shared.exists():
             self.logger.warning(
                 "批末未找到 latest_victory_num.json，无法交叉验证 victoryNum（batch_games=%d）",
                 batch_games,
             )
-            return
+            return None
         try:
             payload = json.loads(shared.read_text(encoding="utf-8"))
             vn = payload.get("victoryNum", [])
             if not isinstance(vn, list) or len(vn) < 4:
                 self.logger.warning("latest_victory_num.json 格式无效: %s", payload)
-                return
+                return None
             team_total = int(vn[0]) + int(vn[1])
             raw = payload.get("server_vn_raw")
             if raw and isinstance(raw, list) and len(raw) >= 4:
@@ -583,10 +588,10 @@ class BatchExecutor:
                     team_total,
                     batch_games,
                 )
-                return
+                return None
             if int(vn[0]) != int(vn[2]) or int(vn[1]) != int(vn[3]):
                 self.logger.warning("批末 victoryNum 同队不一致: %s", vn)
-                return
+                return None
             self.logger.info(
                 "批末 victoryNum 校验通过: vn=%s, batch_games=%d, Team0=%d Team1=%d",
                 vn,
@@ -594,8 +599,10 @@ class BatchExecutor:
                 int(vn[0]),
                 int(vn[1]),
             )
+            return [int(v) for v in vn]
         except (json.JSONDecodeError, TypeError, ValueError, OSError) as e:
             self.logger.warning("读取 latest_victory_num.json 失败: %s", e)
+            return None
 
     def _sync_state_before_persist(self) -> None:
         """供信号处理 / stop 前调用：刷新诊断日志，不改动 completed_games。"""
@@ -718,10 +725,6 @@ class BatchExecutor:
         self.tracker.team_b_wins = 0
         self.tracker.total_games = 0
         self.logger.info("已清空之前的战绩，开始新的对战")
-        
-        # 记录初始战绩，用于计算增量
-        initial_team_a = 0
-        initial_team_b = 0
         
         records_dir = self.project_root / "game_records"
         self._game_records_files_baseline = {
@@ -1086,44 +1089,26 @@ class BatchExecutor:
                     batch_start_stats=batch_start_stats,
                 )
                 if not server_terminated_by_kill:
-                    self._validate_batch_victory_num(batch_games)
-                
-                # 从服务器输出读取本批次战绩
-                # 服务器输出格式: "达到设定场次, 其中0号位胜利X次，1号位胜利Y次，2号位胜利Z次，3号位胜利W次"
-                try:
-                    import re
-                    # 从服务器输出中查找战绩
-                    for line in reversed(server_output):
-                        if "达到设定场次" in line or "其中" in line:
-                            # 提取各位置胜利次数
-                            matches = re.findall(r'(\d+)号位胜利(\d+)次', line)
-                            if matches:
-                                wins = {int(pos): int(count) for pos, count in matches}
-                                # 0号和2号是team_a，1号和3号是team_b
-                                current_team_a = wins.get(0, 0) + wins.get(2, 0)
-                                current_team_b = wins.get(1, 0) + wins.get(3, 0)
-                                
-                                # 计算本批次的增量
-                                delta_a = current_team_a - initial_team_a
-                                delta_b = current_team_b - initial_team_b
-                                
-                                # 累加到tracker
-                                for _ in range(delta_a):
-                                    self.tracker.record_game("team_a")
-                                for _ in range(delta_b):
-                                    self.tracker.record_game("team_b")
-                                
-                                # 更新初始值
-                                initial_team_a = current_team_a
-                                initial_team_b = current_team_b
-                                
-                                self.logger.info(f"本批次增量: Team A +{delta_a}, Team B +{delta_b}")
-                                self.logger.info(f"累计战绩: Team A {self.tracker.team_a_wins}胜, Team B {self.tracker.team_b_wins}胜")
-                                break
-                except Exception as e:
-                    self.logger.warning(f"读取战绩失败: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    vn = self._validate_batch_victory_num(batch_games)
+                    if vn is not None:
+                        # 直接用 latest_victory_num.json 真源更新 tracker
+                        # pos 0+2 = Team A（V7），pos 1+3 = Team B（Lalala）
+                        team_a_wins = vn[0]
+                        team_b_wins = vn[1]
+                        for _ in range(team_a_wins):
+                            self.tracker.record_game("team_a")
+                        for _ in range(team_b_wins):
+                            self.tracker.record_game("team_b")
+                        self.logger.info(
+                            "本批战绩(来自victoryNum): Team A +%d, Team B +%d",
+                            team_a_wins,
+                            team_b_wins,
+                        )
+                        self.logger.info(
+                            "累计战绩: Team A %d胜, Team B %d胜",
+                            self.tracker.team_a_wins,
+                            self.tracker.team_b_wins,
+                        )
                 
                 # 保存战绩和状态
                 try:

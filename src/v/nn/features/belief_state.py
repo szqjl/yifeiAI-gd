@@ -33,7 +33,7 @@ SITUATION_NAMES = ["aggressive", "defensive", "waiting", "protect"]
 # 54 种牌型
 SUITS = ["S", "H", "D", "C"]
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
-JOKERS = ["BJ", "RJ"]
+JOKERS = ["SB", "HR"]  # 平台原生王编码：SB=小王, HR=大王
 HIGH_RANKS = {"A", "K", "Q", "J"}  # 高牌判定
 
 

@@ -1,6 +1,6 @@
 """
-GUA-038 BC Training Entry Point
-从 game_records_v7 加载 V7 对战数据，训练 BC 模型并保存到 models/v-nn/bc_model_v2.pth
+GUA-038 BC Training Entry Point (v3 — grouping_engine 24 维)
+从 game_records_v7 加载 V7 对战数据，训练 BC 模型并保存到 models/v-nn/bc_model_v3.pth
 """
 import logging
 import sys
@@ -21,14 +21,15 @@ from src.v.nn.training.bc_trainer import train
 def main():
     logger = logging.getLogger("train_bc_v7")
 
-    # Step 1: Load samples from game_records
+    # Step 1: Load samples from game_records_v7（含 full_state + handCards）
     logger.info("=" * 60)
-    logger.info("GUA-038 BC Training Start")
+    logger.info("GUA-061 BC Training Start (grouping_engine 24-dim)")
     logger.info("=" * 60)
 
     samples = load_samples(
-        record_dir="game_records",  # M3胜局数据（100%胜率，366局）
-        require_victory_filter=False,  # M3胜局数据 + 新特征（static+dynamic+belief+MT=220维）
+        record_dir="game_records_v7",  # V7 录牌（含 full_state，grouping_engine 需要 handCards）
+        require_victory_filter=False,   # V7 数据无 victoryNum，全量使用
+        use_grouping_engine=True,       # GUA-061: 使用 grouping_engine 24 维特征
     )
     logger.info("Loaded %d samples", len(samples))
     if len(samples) < 100:
@@ -39,7 +40,7 @@ def main():
     train_samples, val_samples = train_val_split(samples, val_ratio=0.2)
 
     # Step 3: Train
-    # B-α 调参（2026-06-17）：lr 1e-3 -> 5e-4 + patience 5 -> 10，配合 label_smoothing=0.1 防 top1 collapse
+    # GUA-061 升级：grouping_engine 24 维 → bc_model_v3.pth
     record = train(
         train_samples=train_samples,
         val_samples=val_samples,
@@ -49,7 +50,7 @@ def main():
         max_epochs=50,
         patience=10,
         output_dir="models/v-nn",
-        model_name="bc_model_v2",
+        model_name="bc_model_v3",
     )
 
     logger.info("Training complete!")

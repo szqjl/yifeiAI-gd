@@ -12,14 +12,14 @@ import os
 import socket
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.utils.v7_paths import (
+    get_lalala_dir,
     get_model_file,
     get_server_argv,
     get_server_exe,
-    get_v7_client_scripts,
 )
 
 
@@ -46,29 +46,10 @@ def check_port_listening(port, timeout=30):
     print(f"✗ 端口 {port} 在 {timeout} 秒内未监听")
     return False
 
-def _resolve_path(key, default, env_var=""):
-    """从 v7_paths.yaml 解析路径，优先级：环境变量 > config > 默认值"""
-    import yaml
-    # 1) 环境变量
-    if env_var:
-        val = os.environ.get(env_var, "")
-        if val:
-            return val
-    # 2) config/v7_paths.yaml
-    cfg_path = Path(__file__).resolve().parents[2] / "config" / "v7_paths.yaml"
-    if cfg_path.exists():
-        with open(cfg_path, encoding="utf-8") as f:
-            cfg = yaml.safe_load(f) or {}
-        val = cfg.get(key, "")
-        if val:
-            return val.replace("%REPO_ROOT%", str(Path(__file__).resolve().parents[2]))
-    # 3) 默认值
-    return default
-
 def start_server():
     """启动服务器"""
-    _default_exe = str(Path(__file__).resolve().parents[2] / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
-    server_path = _resolve_path("server_exe", _default_exe, "SERVER_EXE")
+    server_path = get_server_exe(REPO_ROOT)
+    server_argv = get_server_argv(REPO_ROOT)
     
     if not os.path.exists(server_path):
         print(f"✗ 服务器文件不存在: {server_path}")
@@ -102,15 +83,24 @@ def start_client(script_path, delay=0, window_title="客户端"):
 
     print(f"🚀 启动 {window_title}: {script_path}")
 
-    if not os.path.exists(script_path):
-        print(f"✗ 客户端文件不存在: {script_path}")
+    script_abs = Path(script_path)
+    if not script_abs.is_absolute():
+        script_abs = REPO_ROOT / script_abs
+
+    if not script_abs.is_file():
+        print(f"✗ 客户端文件不存在: {script_abs}")
         return None
 
-    rel = Path(script_path).relative_to(REPO_ROOT)
+    try:
+        rel = script_abs.relative_to(REPO_ROOT)
+    except ValueError:
+        rel = script_abs  # 仓库外路径保留绝对路径
+
     if sys.platform == "win32":
+        # 使用 sys.executable 而非裸 python，确保新窗口用的是装过依赖（torch等）的解释器
         cmd = (
             f'start "{window_title}" cmd /k '
-            f'"cd /d {REPO_ROOT} && python {rel.as_posix()}"'
+            f'"cd /d {REPO_ROOT} && {sys.executable} {rel}"'
         )
         process = subprocess.Popen(
             cmd,
@@ -118,7 +108,7 @@ def start_client(script_path, delay=0, window_title="客户端"):
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
     else:
-        process = subprocess.Popen(["python", str(script_path)], cwd=str(REPO_ROOT))
+        process = subprocess.Popen(["python", str(rel)], cwd=str(REPO_ROOT))
 
     print(f"✓ {window_title} 已启动，PID: {process.pid}")
     return process
@@ -131,15 +121,14 @@ def main():
     print("=" * 60)
     
     # 检查必要文件
-    _default_lalala = str(Path(__file__).resolve().parents[2] / "reference" / "lalala")
-    _lalala_dir = _resolve_path("lalala_dir", _default_lalala, "LALALA_DIR")
-    _default_exe = str(Path(__file__).resolve().parents[2] / "offline_platform" / "guandan_offline_v1006" / "windows" / "guandan_offline_v1006.exe")
+    _lalala_dir = get_lalala_dir(REPO_ROOT)
+    _server_exe = get_server_exe(REPO_ROOT)
     required_files = [
-        _resolve_path("server_exe", _default_exe, "SERVER_EXE"),
+        _server_exe,
         "src/communication/yf1_v7.py",
-        os.path.join(_lalala_dir, "client3.py"),
+        "src/communication/run_lalala_client3.py",
         "src/communication/yf2_v7.py",
-        os.path.join(_lalala_dir, "client4.py")
+        "src/communication/run_lalala_client4.py",
     ]
     
     print("检查必要文件...")
@@ -190,9 +179,8 @@ def main():
         if client1:
             clients.append(client1)
         
-        # client3 (10秒内部延迟) - 等待yf1_v7连接后启动
-        _lalala_dir = _resolve_path("lalala_dir", _default_lalala, "LALALA_DIR")
-        client2 = start_client(os.path.join(_lalala_dir, "client3.py"), delay=4, window_title="client3")
+        # client3 (lalala适配器) - 等待yf1_v7连接后启动
+        client2 = start_client("src/communication/run_lalala_client3.py", delay=4, window_title="client3")
         if client2:
             clients.append(client2)
         
@@ -201,8 +189,8 @@ def main():
         if client3:
             clients.append(client3)
         
-        # client4 (20秒内部延迟) - 等待yf2_v7连接后启动
-        client4 = start_client(os.path.join(_lalala_dir, "client4.py"), delay=10, window_title="client4")
+        # client4 (lalala适配器) - 等待yf2_v7连接后启动
+        client4 = start_client("src/communication/run_lalala_client4.py", delay=10, window_title="client4")
         if client4:
             clients.append(client4)
         

@@ -80,6 +80,10 @@ def parse_args(argv: list = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42,
                         help="随机种子 (default: 42)")
 
+    # GUA-061: 组牌引擎
+    parser.add_argument("--use-grouping-engine", action="store_true",
+                        help="使用 GUA-061 grouping_engine 24 维（默认 GUA-054 grouping_scanner 9 维）")
+
     # 其他
     parser.add_argument("--dry-run", action="store_true",
                         help="仅加载数据并打印统计，不训练")
@@ -127,6 +131,7 @@ def main():
         max_records=args.max_records,
         require_victory_filter=not args.no_victory_filter,
         player_filter=args.player_filter,
+        use_grouping_engine=args.use_grouping_engine,
     )
 
     if not samples:

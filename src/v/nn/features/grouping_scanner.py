@@ -19,7 +19,7 @@ V7 组牌质量中间表示 — grouping_scanner 9 维（GUA-054，2026-06-17 �
   5: longest_run       最长连续 rank 数 / 12 → "牌型连贯"原则
   6: wild_flexibility  逢人配数 / 2 → "逢人配留变化"原则（v4 经验：留变化）
   7: round_efficiency  1 - single_count（出牌轮次效率） → "减少轮次"原则
-  8: hand_strength     高级牌(BJ+RJ+级牌)数 / 6 → "小火大轮次"原则（牌力基础）
+  8: hand_strength     高级牌(SB+HR+级牌)数 / 6 → "小火大轮次"原则（牌力基础）
 
 GUA-054 实施前 v4 教训（V7-实施方案.md / 掼蛋AI客户端架构方案.md §3.3.6）：
   - v4 ActionSpaceOptimizer 用启发式 Top-K 解决 5000+ 动作空间，但因
@@ -36,7 +36,7 @@ from collections import Counter
 GROUPING_SCORE_DIM = 9
 SUITS = ("S", "H", "D", "C")
 RANKS = ("2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A")
-JOKERS = ("BJ", "RJ")
+JOKERS = ("SB", "HR")  # 平台原生：SB=小王, HR=大王
 ALL_RANKS = RANKS + JOKERS  # 15 种 rank
 HAND_SIZE_LIMIT = 27  # 每人最多 27 张
 
@@ -54,7 +54,7 @@ NORM_HIGH_MAX = 6.0         # 高级牌 6 张（2 王 + 4 张级牌）
 # ── 牌面解析辅助 ──────────────────────────────────────
 
 def _parse_rank(card: str) -> str:
-    """从 'S2' / 'BJ' 提取 rank。"""
+    """从 'S2' / 'SB' 提取 rank。"""
     if card in JOKERS:
         return card
     if len(card) >= 2 and card[0] in SUITS:
@@ -203,7 +203,7 @@ def _count_wilds(hand_cards: List[str], cur_rank: str) -> int:
 
 
 def _high_card_strength(hand_cards: List[str], cur_rank: str) -> int:
-    """高级牌数：BJ + RJ + curRank 各花色持有数。"""
+    """高级牌数：SB + HR + curRank 各花色持有数。"""
     cnt = 0
     for c in hand_cards:
         if c in JOKERS:

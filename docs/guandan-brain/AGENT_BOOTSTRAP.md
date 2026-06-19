@@ -78,10 +78,35 @@ victoryNum[0] vs [1] = 各队赢几局；须 [0]=[2]、[1]=[3]；批跑 N 局时
 
 ---
 
+## 3.5. 快速查上下文（LLM Wiki）🆕
+
+> **从 v7.2 开始**，`docs/guandan-brain/` + `docs/analysis/` 已接入 LLM Wiki。  
+> 知识被 LLM「编译」一次后持久化，新 Agent 不需要逐文件探索。
+
+```bash
+# 初始化 & 首次摄入（一次性）
+python scripts/wiki.py init         # 已执行
+python scripts/wiki.py ingest       # 摄入 107 个源文件 → 生成 Wiki 页面
+
+# 日常查询（不跑 ingest，直接问）
+python scripts/wiki.py query "V7 当前 P0 是什么？"
+python scripts/wiki.py query "最近批跑胜率？GUA-061 是什么？"
+
+# 维护
+python scripts/wiki.py status       # 查看待摄入变化
+python scripts/wiki.py lint         # 健康检查（断链/孤立/格式）
+```
+
+> **Wiki 目录**：`wiki/`（`purpose.md` 定义目标，`schema.md` 定义结构规则）  
+> **来源**：`docs/guandan-brain/` + `docs/analysis/`
+
+---
+
 ## 4. 改代码前必读顺序
 
-1. **`docs/guandan-brain/ISSUES.md`** — open 条目，确认与本轮相关（关注 `v7` 标签）
-2. **`docs/guandan-brain/ITERATIONS.md`** — 最新一行，确认目标与完成定义
+0. **`python scripts/wiki.py query "当前状态"`** — 🆕 快速了解 P0 / 最新迭代 / 关键指标
+1. **`docs/guandan-brain/ISSUES.md`** — open 条目 + P0 标签；完成定义见 `issues/GUA-xxx-completion.md`
+2. **`docs/guandan-brain/ITERATIONS.md`** — 最新一行，确认目标与完成定义；用法见顶部「如何使用」
 3. **`docs/guandan-brain/TASKS.md`** — 当前活跃任务
 4. **`docs/guandan-brain/EVAL.md`** — 评测入口与通过标准
 
@@ -128,7 +153,9 @@ victoryNum[0] vs [1] = 各队赢几局；须 [0]=[2]、[1]=[3]；批跑 N 局时
 | **仓库治理** | `docs/governance/M-V-Series-治理方案.md` |
 | **牌谱回放** | `scripts/tools/yf_replay.py` / `YF_REPLAY.bat` |
 | **本地评测清单** | `docs/guandan-brain/LOCAL_EVAL_CHECKLIST.md` |
+| **LLM Wiki 入口** | `scripts/wiki.py`（`status`/`query`/`ingest`/`lint`） |
 | **V7 副级等级分析** | `scripts/tools/analyze_v7_round_levels.py` |
+| **组牌引擎独立测试** | `scripts/checks/check_grouping_engine.py` |
 
 > **V7 副级分析工具**（每次 V7 批跑后必跑）：
 > ```bash
@@ -138,6 +165,15 @@ victoryNum[0] vs [1] = 各队赢几局；须 [0]=[2]、[1]=[3]；批跑 N 局时
 > 输出：每副「起始级 / V7末级 / lalala推断级 / 赢家 / 剩余牌数 / 出牌顺序」
 > 用途：解释 0-3 局战绩背后的真实副级博弈——V7 赢了几副、谁先跑光、谁先双上过 A。
 > 替代：手动 grep `curRank` / `order`（已废弃，不再手动统计）。
+
+> **组牌引擎独立测试**（改 `grouping_engine.py` 后必跑）：
+> ```bash
+> python scripts/checks/check_grouping_engine.py                          # 默认测试手牌（27张，rank=3）
+> python scripts/checks/check_grouping_engine.py --rank 4                 # 指定级牌
+> python scripts/checks/check_grouping_engine.py --hand RJ,RJ,S6,CA,...   # 自定义手牌
+> ```
+> 输出：所有枚举方案的 5 维评分明细表（炸弹/手数/回收/灵活/去单化）+ 27/27 完整性校验 + best_plan 牌型摘要 + 总分回算验证。
+> 用途：验证组牌引擎改动后评分逻辑正确、方案枚举完整、无回归。
 
 ---
 

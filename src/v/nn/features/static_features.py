@@ -35,7 +35,7 @@ BELIEF_DIM = 8          # GUA-050: 局面信念向量
 # 54 种牌型定义（52 花色牌 + 2 王）
 SUITS = ["S", "H", "D", "C"]
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
-JOKERS = ["BJ", "RJ"]
+JOKERS = ["SB", "HR"]  # 平台原生王编码：SB=小王, HR=大王
 
 CARD_TYPES: List[str] = []
 for rank in RANKS:

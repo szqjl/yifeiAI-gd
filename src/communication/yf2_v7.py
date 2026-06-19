@@ -69,7 +69,7 @@ class YF2_V7_Client:
         
         # Initialize Ultimate Win Rate Decision Engine V7
         self.logger.info("🎯 Initializing Ultimate Win Rate Engine V7")
-        self.decision_engine = UltimateWinRateEngineV7(player_id)
+        self.decision_engine = UltimateWinRateEngineV7(player_id, use_grouping_engine=True)
         
         self.hand_cards = []
         
@@ -315,6 +315,8 @@ class YF2_V7_Client:
         act_index = 0
         selected = action_list[act_index]
         print(f"[进贡] 轮到自己进贡，选择: {selected}")
+        # GUA-067: 送出进贡 → 从 initial_hand 移除
+        self.game_recorder.adjust_initial_hand_for_tribute_back(selected, "remove")
         self.game_recorder.record_decision(
             act_index,
             selected,
@@ -337,6 +339,8 @@ class YF2_V7_Client:
         act_index = 0
         selected = action_list[act_index]
         print(f"[还贡] 轮到自己还贡，选择: {selected}")
+        # GUA-067: 送出还牌 → 从 initial_hand 移除
+        self.game_recorder.adjust_initial_hand_for_tribute_back(selected, "remove")
         self.game_recorder.record_decision(
             act_index,
             selected,

@@ -27,7 +27,8 @@ RECORD_FILENAME_RE = re.compile(
 def normalize_cards_to_string_list(cards: List) -> List[str]:
     """
     将服务器下发的卡牌列表统一为字符串列表（入口规范化）。
-    支持 "S2" 与 ["S","2"] 两种格式，供决策引擎与记录器一致使用。
+    支持 "S2" 与 ["S","2"] 两种格式。
+    平台王编码 SB(小王)/HR(大王) 直接透传，不再转换。
     """
     if not cards:
         return []
@@ -756,6 +757,39 @@ class GameRecorder:
             return raw[0].upper() + raw[1:].upper()
         return raw
 
+    def adjust_initial_hand_for_tribute_back(self, card_raw: Any, operation: str) -> None:
+        """
+        贡牌/还贡后调整 current_game["initial_hand"]，使记录的是还贡后的手牌。
+
+        - "add": 收到进贡/还牌 → 将牌加入 initial_hand
+        - "remove": 送出进贡/还牌 → 从 initial_hand 移除该牌
+
+        GUA-067: gameStart handCards 是贡前手牌，训练侧 initial_hand 需反映贡后真实手牌。
+        """
+        if not self.current_game:
+            return
+        card_str = self._normalize_tribute_back_card(card_raw)
+        if not card_str:
+            return
+        initial_hand = self.current_game.get("initial_hand")
+        if not isinstance(initial_hand, list):
+            return
+        import logging
+        logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        if operation == "add":
+            initial_hand.append(card_str)
+            logger.info("✓ 贡牌调整: %s 加入 initial_hand (共%d张)", card_str, len(initial_hand))
+        elif operation == "remove":
+            # 找到并移除该牌（只移除第一张匹配的，避免误删同名牌）
+            for i, c in enumerate(initial_hand):
+                if c == card_str:
+                    initial_hand.pop(i)
+                    logger.info("✓ 贡牌调整: %s 从 initial_hand 移除 (剩余%d张)", card_str, len(initial_hand))
+                    return
+            logger.warning("⚠ 贡牌调整: %s 不在 initial_hand 中，无法移除 (共%d张)", card_str, len(initial_hand))
+        else:
+            logger.warning("⚠ 未知贡牌调整操作: %s", operation)
+
     def _already_recorded_tribute_received(self, card_str: str, tribute_pos: int) -> bool:
         for md in self.current_game.get("my_decisions", []) if self.current_game else []:
             action = md.get("action") or []
@@ -799,6 +833,8 @@ class GameRecorder:
                 continue
             if self._already_recorded_tribute_received(card_str, tribute_pos_i):
                 continue
+            # GUA-067: 收到进贡 → 加入 initial_hand
+            self.adjust_initial_hand_for_tribute_back(card_str, "add")
             self.record_decision(
                 0,
                 ["tribute", "tribute", [card_str]],
@@ -835,6 +871,8 @@ class GameRecorder:
                 continue
             if self._already_recorded_back(card_str):
                 continue
+            # GUA-067: 收到还牌 → 加入 initial_hand
+            self.adjust_initial_hand_for_tribute_back(card_str, "add")
             self.record_decision(
                 0,
                 ["back", "back", [card_str]],
@@ -965,11 +1003,11 @@ class GameRecorder:
                         f"但初始手牌中只有{initial_count}次！"
                     )
             
-            # 检查特殊卡牌（大王、小王）的数量
-            joker_cards = [card for card in action_cards if card.endswith('R') or card.endswith('B')]
+            # 检查特殊卡牌（大王、小王）的数量（平台原生 SB=小王, HR=大王）
+            joker_cards = [card for card in action_cards if card in ("SB", "HR")]
             if len(joker_cards) > 2:
                 logger.warning(
-                    f"⚠ 检测到异常：位置{cur_pos}的动作中包含{len(joker_cards)}张王牌（R或B），"
+                    f"⚠ 检测到异常：位置{cur_pos}的动作中包含{len(joker_cards)}张王牌（SB/HR），"
                     f"这超过了正常数量（最多2张）！"
                 )
                 print(

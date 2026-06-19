@@ -25,7 +25,7 @@ logger = logging.getLogger("memory_tracker")
 
 SUITS = ["S", "H", "D", "C"]
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
-JOKERS = ["BJ", "RJ"]
+JOKERS = ["SB", "HR"]  # 平台原生：SB=小王, HR=大王
 
 ALL_CARD_TYPES: List[str] = []
 for rank in RANKS:
@@ -42,8 +42,11 @@ RANK_LETTERS = {"2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"}
 # GUA-054 升级（2026-06-17）：24 维 + 9 维 grouping_score = 33 维
 # 24 维 = 4(seat 剩张) + 15(rank 已出比例) + 4(seat 炸弹数) + 1(级牌剩余)
 #  9 维 = extract_grouping_score（v7-internal，0~1 归一化独立软信号）
-MEMORY_TRACKER_DIM = 33
-GROUPING_SCORE_DIM = 9
+# GUA-061 升级（2026-06-18）：24 维 + 24 维 grouping_engine = 48 维（可选）
+MEMORY_TRACKER_DIM = 33           # 当前默认（兼容已训练模型）
+MEMORY_TRACKER_DIM_V061 = 48      # GUA-061 升级：24 追踪 + 24 grouping_engine
+GROUPING_SCORE_DIM = 9            # GUA-054 grouping_scanner 维度
+GROUPING_ENGINE_DIM = 24          # GUA-061 grouping_engine 维度
 
 # ── GUA-054 grouping_scanner 接入（2026-06-17）──────
 try:
@@ -56,10 +59,21 @@ except ImportError as e:
     _grouping_import_ok = False
     print(f"[Warning] grouping_scanner 导入失败: {e}, grouping_score 退化为零向量")
 
+# ── GUA-061 grouping_engine 接入（2026-06-18）──────
+try:
+    from src.v.nn.features.grouping_engine import (
+        extract_grouping_features as extract_grouping_engine_features,
+        get_grouping_engine_dim,
+    )
+    _grouping_engine_import_ok = True
+except ImportError as e:
+    _grouping_engine_import_ok = False
+    print(f"[Warning] grouping_engine 导入失败: {e}, 退化为 grouping_scanner 模式")
+
 
 def _parse_card_rank(card: str) -> str:
-    """从牌面字符串提取点数。"""
-    if card in ("BJ", "RJ"):
+    """从牌面字符串提取点数。平台原生 SB(小王)/HR(大王)。"""
+    if card in ("SB", "HR"):
         return card
     return card[1:] if len(card) > 1 else card[-1]
 
@@ -85,10 +99,11 @@ class MemoryTracker:
     PLAYED = 4  # 已打出
 
     def __init__(self, my_pos: int = 0, enable_inference: bool = True,
-                 max_infer_depth: int = 0):
+                 max_infer_depth: int = 0, use_grouping_engine: bool = False):
         self.my_pos = my_pos
         self.partner_pos = (my_pos + 2) % 4
         self.opponents = {(my_pos + 1) % 4, (my_pos + 3) % 4}
+        self.use_grouping_engine = use_grouping_engine  # GUA-061 开关
 
         # core state: 每张牌（54 种 × 2 副本）的 4 席分配
         # card_state[card_type][copy_idx] = seat (0-3) or -1(unknown) or 4(played)
@@ -237,15 +252,13 @@ class MemoryTracker:
         bomb_likely = remaining <= 10 and played < 2
         return min(1.0, (HAND_SIZE - remaining) / HAND_SIZE * 2.0) if bomb_likely else 0.0
 
-    def get_state_vector(self, game_state: Optional[Dict[str, Any]] = None) -> List[float]:
-        """获取记忆追踪状态向量（用于特征拼接）。
+    def get_tracking_vector(self) -> List[float]:
+        """GUA-063：仅返回追踪部分（24 维），不含组牌特征。
 
-        33 维（GUA-054 升级）= 4(seat 剩张) + 15(各 rank 已出比例) + 4(各 seat 炸弹数) + 1(级牌剩余)
-                         + 9(grouping_score, GUA-054 软信号)
+        组牌特征由 V7 引擎在 _extract_features() 中直接调 enumerate_groupings()
+        获取后外部拼接，不再通过 MemoryTracker 内部计算。
 
-        Args:
-            game_state: 游戏状态（GUA-054 追加 grouping_score 需要 handCards/curRank）。
-                       传 None 时退化为 24 维（向后兼容）。
+        24 维 = 4(seat 剩张) + 15(各 rank 已出比例) + 4(各 seat 炸弹数) + 1(级牌剩余)
         """
         vec: List[float] = []
 
@@ -260,8 +273,8 @@ class MemoryTracker:
             played = sum(1 for c in copies if c == self.PLAYED)
             if played > 0:
                 rank_counts[rank] += played
-        for r in RANKS + ["BJ", "RJ"]:
-            vec.append(rank_counts.get(r, 0) / 8.0)  # 最多 8 张/rank
+        for r in RANKS + ["SB", "HR"]:
+            vec.append(rank_counts.get(r, 0) / 8.0)
 
         # 4 席炸弹数
         for i in range(4):
@@ -279,8 +292,39 @@ class MemoryTracker:
                         lc += 1
         vec.append(min(1.0, lc / 4.0))
 
-        # ── GUA-054 追加 9 维 grouping_score（2026-06-17）────
-        if _grouping_import_ok and game_state is not None:
+        return vec
+
+    def get_state_vector(self, game_state: Optional[Dict[str, Any]] = None) -> List[float]:
+        """获取记忆追踪状态向量（用于特征拼接）。
+
+        33 维（GUA-054 升级）= 4(seat 剩张) + 15(各 rank 已出比例) + 4(各 seat 炸弹数) + 1(级牌剩余)
+                        + 9(grouping_score, GUA-054 软信号)
+
+        GUA-063 说明：此方法保留向后兼容。新架构中推荐用 get_tracking_vector()
+        获取 24 维追踪向量，再由 V7 引擎外部拼接一次 enumerate_groupings() 的组牌特征。
+
+        Args:
+            game_state: 游戏状态（GUA-054 追加 grouping_score 需要 handCards/curRank）。
+                       传 None 时退化为 24 维（向后兼容）。
+        """
+        vec = self.get_tracking_vector()
+
+        # ── GUA-054/061 追加组牌特征（2026-06-17/18）────
+        if self.use_grouping_engine and _grouping_engine_import_ok and game_state is not None:
+            # GUA-061: 使用 grouping_engine 24 维
+            try:
+                hand_cards = game_state.get("handCards", []) or []
+                cur_rank = str(game_state.get("curRank", "2"))
+                grouping = extract_grouping_engine_features(hand_cards, cur_rank)
+                if len(grouping) == GROUPING_ENGINE_DIM:
+                    vec.extend(grouping)
+                else:
+                    vec.extend([0.0] * GROUPING_ENGINE_DIM)
+            except Exception as e:
+                logger.warning(f"grouping_engine 失败: {e}, 退化零向量")
+                vec.extend([0.0] * GROUPING_ENGINE_DIM)
+        elif _grouping_import_ok and game_state is not None:
+            # GUA-054: 使用 grouping_scanner 9 维（默认）
             try:
                 grouping = extract_grouping_score(game_state)
                 if len(grouping) == GROUPING_SCORE_DIM:
@@ -292,9 +336,11 @@ class MemoryTracker:
                 vec.extend([0.0] * GROUPING_SCORE_DIM)
         else:
             # 向后兼容：game_state 为 None 时填零向量
-            vec.extend([0.0] * GROUPING_SCORE_DIM)
+            default_dim = GROUPING_ENGINE_DIM if self.use_grouping_engine else GROUPING_SCORE_DIM
+            vec.extend([0.0] * default_dim)
 
-        assert len(vec) == MEMORY_TRACKER_DIM, f"state_vector 维度异常: {len(vec)} (期望 {MEMORY_TRACKER_DIM})"
+        expected_dim = MEMORY_TRACKER_DIM_V061 if self.use_grouping_engine else MEMORY_TRACKER_DIM
+        assert len(vec) == expected_dim, f"state_vector 维度异常: {len(vec)} (期望 {expected_dim})"
         return vec
 
     # ── 内部方法 ──────────────────────────────────────
@@ -324,8 +370,8 @@ class MemoryTracker:
 
     @staticmethod
     def _canonical_type(card: str) -> str:
-        """标准化牌面类型（如 'C2'→'C2', '2C'→'C2' 暂时不支持）。"""
-        if card in ("BJ", "RJ"):
+        """标准化牌面类型（平台原生 SB=小王, HR=大王）。"""
+        if card in ("SB", "HR"):
             return card
         if len(card) == 2 and card[0] in SUITS and (card[1].isdigit() or card[1] in RANK_LETTERS):
             return card
@@ -333,7 +379,7 @@ class MemoryTracker:
         if len(card) >= 2:
             suit = card[0].upper()
             rank = card[1:].upper()
-            if suit in SUITS and (rank in RANK_LETTERS or rank in ("BJ", "RJ")):
+            if suit in SUITS and (rank in RANK_LETTERS or rank in ("SB", "HR")):
                 return f"{suit}{rank}"
         return card
 

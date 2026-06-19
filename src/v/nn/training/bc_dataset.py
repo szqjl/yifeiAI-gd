@@ -27,20 +27,30 @@ import numpy as np
 
 from src.v.nn.features.static_features import extract_static_features, STATIC_STATE_DIM, extract_state_belief, BELIEF_DIM
 from src.v.nn.features.dynamic_features import extract_dynamic_features, DYNAMIC_HIDDEN_DIM
-from src.v.nn.features.memory_tracker import MemoryTracker, MEMORY_TRACKER_DIM
+from src.v.nn.features.memory_tracker import MemoryTracker, MEMORY_TRACKER_DIM, MEMORY_TRACKER_DIM_V061
 
 logger = logging.getLogger("bc_dataset")
 
-TARGET_FEATURE_DIM = 512
-# GUA-059 修复（2026-06-17）：action_head 改回 512（M3 胜局 action_index < 512 子集保留，≥ 512 跳过）
-# v2 的 2048 引入稀疏退化（val_acc 6 epoch 纹丝不动 0.3519），v1 = 512 表达力足够覆盖主样本
-TARGET_ACTION_DIM = 512
 # GUA-054 升级（2026-06-17）：EFFECTIVE_FEATURE_DIM 220 → 229（24 → 33，含 grouping_score 9 维）
 # 229 = 124(static) + 64(dynamic) + 8(belief) + 24(MT_GUA052) + 9(grouping_GUA054)
 EFFECTIVE_FEATURE_DIM = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM + MEMORY_TRACKER_DIM  # 124 + 64 + 8 + 33 = 229
+# GUA-061 升级（2026-06-18）：229 → 268（grouping_engine 替换 grouping_scanner，+15 维）
+# 268 = 124(static) + 64(dynamic) + 8(belief) + 24(MT_GUA052) + 24(grouping_GUA061) + 24(extra pad)
+EFFECTIVE_FEATURE_DIM_V061 = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM + MEMORY_TRACKER_DIM_V061  # 124+64+8+48=244
+TARGET_FEATURE_DIM = 512
+TARGET_ACTION_DIM = 512
 RECORD_DIR = Path("game_records")
 
 # ── 工具函数 ──────────────────────────────────────────
+
+
+# GUA-061 牌格式标准化（历史数据 BJ/RJ → 平台原生 SB/HR）
+_LEGACY_NORMALIZE = {"BJ": "SB", "RJ": "HR"}
+
+
+def _normalize_cards(cards: List[str]) -> List[str]:
+    """标准化牌面格式，将旧编码 BJ→SB, RJ→HR。"""
+    return [_LEGACY_NORMALIZE.get(c, c) for c in cards]
 
 
 def _get_victory_num(game_data: Dict[str, Any]) -> Optional[List[int]]:
@@ -66,22 +76,26 @@ def _filter_by_victory_num(game_data: Dict[str, Any]) -> bool:
     return team_a_wins >= 2
 
 
-def _build_memory_tracker_state(game_state: Dict[str, Any]) -> List[float]:
+def _build_memory_tracker_state(game_state: Dict[str, Any],
+                                 use_grouping_engine: bool = False) -> List[float]:
     """
-    从 game_state 构建 memory_tracker 并返回 33 维 state_vector（GUA-052 24 + GUA-054 9）。
+    从 game_state 构建 memory_tracker 并返回 state_vector。
+
+    GUA-054 模式（默认）：33 维（GUA-052 24 + GUA-054 9）
+    GUA-061 模式（use_grouping_engine=True）：48 维（GUA-052 24 + GUA-061 24）
 
     replay 逻辑：
       1. 初始化 tracker（手牌 + curRank）
       2. 从 history/recentPlays 回放每步出牌
-      3. 从 actions 列表（若可用）补充历史
-      4. GUA-054 追加：get_state_vector(game_state) 拼接 9 维 grouping_score
+      3. get_state_vector(game_state) 拼接组牌特征
     """
     try:
         my_pos = game_state.get("myPos", 0)
         hand_cards = game_state.get("handCards", [])
         cur_rank = str(game_state.get("curRank", "2"))
 
-        tracker = MemoryTracker(my_pos=my_pos, enable_inference=False, max_infer_depth=0)
+        tracker = MemoryTracker(my_pos=my_pos, enable_inference=False, max_infer_depth=0,
+                                use_grouping_engine=use_grouping_engine)
         if hand_cards:
             tracker.init_from_hand(hand_cards)
         tracker.set_level_rank(cur_rank)
@@ -107,22 +121,29 @@ def _build_memory_tracker_state(game_state: Dict[str, Any]) -> List[float]:
                 action_type = rp.get("type", "Unknown")
                 tracker.record_play(seat, [action_type, "", cards])
 
-        # GUA-054 升级（2026-06-17）：传 game_state 让 grouping_score 拼接 9 维
         return tracker.get_state_vector(game_state=game_state)
     except Exception:
-        return [0.0] * MEMORY_TRACKER_DIM
+        default_dim = MEMORY_TRACKER_DIM_V061 if use_grouping_engine else MEMORY_TRACKER_DIM
+        return [0.0] * default_dim
 
 
 def _reconstruct_features_from_full_state(
     full_state: Dict[str, Any],
+    use_grouping_engine: bool = False,
 ) -> Optional[np.ndarray]:
-    """从 full_state 重建 512 维特征向量（GUA-037a 静态 + GUA-037b 动态 + GUA-050 信念 + GUA-052 记忆追踪 + GUA-054 grouping_score）。
+    """从 full_state 重建 512 维特征向量。
 
-    维度分段（512 维）：
+    GUA-054 模式（默认）：
       0-123:     extract_static_features (124)
       124-187:   extract_dynamic_features (64)
-      188-195:   extract_state_belief (8) — GUA-050
+      188-195:   extract_state_belief (8)
       196-228:   _build_memory_tracker_state (33) — GUA-052 24 + GUA-054 9
+
+    GUA-061 模式（use_grouping_engine=True）：
+      0-123:     extract_static_features (124)
+      124-187:   extract_dynamic_features (64)
+      188-195:   extract_state_belief (8)
+      196-243:   _build_memory_tracker_state (48) — GUA-052 24 + GUA-061 24
     """
     try:
         static_features = extract_static_features(full_state)
@@ -134,7 +155,7 @@ def _reconstruct_features_from_full_state(
             dynamic_features = extract_dynamic_features(full_state, static_features)
             features[STATIC_STATE_DIM:STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM] = dynamic_features
         except Exception:
-            pass  # 动态特征失败不影响静态特征
+            pass
 
         # GUA-050: 叠加局面信念向量（188-195 维）
         try:
@@ -142,13 +163,14 @@ def _reconstruct_features_from_full_state(
             belief_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM
             features[belief_start:belief_start + BELIEF_DIM] = belief
         except Exception:
-            pass  # 信念提取失败不影响核心特征
+            pass
 
-        # GUA-052 + GUA-054: 叠加记忆追踪状态向量 + grouping_score（196-228 维 = 33 维）
+        # GUA-052 + GUA-054/061: 叠加记忆追踪 + 组牌特征
         try:
-            mt_state = _build_memory_tracker_state(full_state)
+            mt_state = _build_memory_tracker_state(full_state, use_grouping_engine=use_grouping_engine)
             mt_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM
-            features[mt_start:mt_start + MEMORY_TRACKER_DIM] = mt_state
+            mt_dim = MEMORY_TRACKER_DIM_V061 if use_grouping_engine else MEMORY_TRACKER_DIM
+            features[mt_start:mt_start + mt_dim] = mt_state
         except Exception:
             pass
 
@@ -161,19 +183,27 @@ def _reconstruct_features_from_full_state(
 def _reconstruct_features_from_my_decision(
     my_decision: Dict[str, Any],
     game_info: Optional[Dict[str, Any]] = None,
+    use_grouping_engine: bool = False,
+    current_hand_cards: Optional[List[str]] = None,
 ) -> Optional[np.ndarray]:
     """从 my_decisions 条目 + game_info 尽力重建特征（GUA-037a 静态 + GUA-037b 动态 + GUA-050 信念）。
 
     这是 M3 旧格式的 fallback，缺少 handCards 和完整 actionList。
     构造一个最小可用状态用于 extract_static_features（大部分维为 0）。
+
+    GUA-061 升级：current_hand_cards 从 initial_hand - 历史出牌重建，
+    使 grouping_engine 24 维特征可计算。
     """
     ctx = my_decision.get("context") or {}
     action = my_decision.get("action") or []
     stage = ctx.get("stage", "play")
 
+    # GUA-061: 用重建的 handCards 替换空列表
+    hand_cards = current_hand_cards if current_hand_cards is not None else []
+
     # 伪造 state 字典，尽可能从 context 中提取信息
     fake_state: Dict[str, Any] = {
-        "handCards": [],
+        "handCards": hand_cards,
         "actionList": [],
         "myPos": ctx.get("myPos", 0),
         "curPos": ctx.get("curPos", -1),
@@ -210,11 +240,12 @@ def _reconstruct_features_from_my_decision(
         except Exception:
             pass
 
-        # GUA-052 + GUA-054: 叠加记忆追踪状态向量 + grouping_score（M3 旧格式无出牌历史 → fallback 零向量）
+        # GUA-052 + GUA-054/061: 叠加记忆追踪状态向量（M3 旧格式无出牌历史 → fallback 零向量）
         try:
-            mt_state = _build_memory_tracker_state(fake_state)
+            mt_state = _build_memory_tracker_state(fake_state, use_grouping_engine=use_grouping_engine)
             mt_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM
-            features[mt_start:mt_start + MEMORY_TRACKER_DIM] = mt_state
+            mt_dim = MEMORY_TRACKER_DIM_V061 if use_grouping_engine else MEMORY_TRACKER_DIM
+            features[mt_start:mt_start + mt_dim] = mt_state
         except Exception:
             pass
 
@@ -256,6 +287,7 @@ def load_samples(
     max_records: Optional[int] = None,
     require_victory_filter: bool = True,
     player_filter: Optional[str] = None,
+    use_grouping_engine: bool = False,
 ) -> List[BCSample]:
     """从 game_records 加载 BC 训练样本。
 
@@ -264,6 +296,7 @@ def load_samples(
         max_records: 最多读取的记录数（用于快速测试）
         require_victory_filter: 是否要求 victoryNum[0] >= 2
         player_filter: 玩家名过滤（如 "yf1_m3"），None 表示所有 yf 玩家
+        use_grouping_engine: 是否使用 GUA-061 grouping_engine 24 维特征（默认 False=GUA-054 9 维）
 
     Returns:
         BCSample 列表
@@ -315,7 +348,7 @@ def load_samples(
                 full_state = step.get("full_state")
                 if not full_state:
                     continue
-                features = _reconstruct_features_from_full_state(full_state)
+                features = _reconstruct_features_from_full_state(full_state, use_grouping_engine=use_grouping_engine)
                 if features is None:
                     skipped_feature += 1
                     continue
@@ -334,13 +367,24 @@ def load_samples(
             loaded += 1
             continue
 
-        # 策略 2：从 my_decisions 重建（M3 旧格式）
+        # 策略 2：从 my_decisions 重建（M3 旧格式 / V7 录牌格式）
         my_decisions = game_data.get("my_decisions")
         if my_decisions and isinstance(my_decisions, list):
+            # GUA-061: 从 initial_hand 重建每步手牌（旧编码 BJ→SB, RJ→HR）
+            initial_hand = _normalize_cards(game_data.get("initial_hand", []) or [])
+            played_cards: set = set()
             for dec in my_decisions:
+                # 当前手牌 = initial_hand - 之前所有决策的出牌
+                current_hand = [c for c in initial_hand if c not in played_cards]
+
                 # 只保留 play 阶段
                 ctx = dec.get("context") or {}
                 if ctx.get("stage") not in (None, "", "play"):
+                    # 非 play 阶段也要更新 played_cards（如 gang）
+                    action = dec.get("action") or []
+                    if len(action) >= 3 and isinstance(action[2], list):
+                        for c in _normalize_cards(action[2]):
+                            played_cards.add(c)
                     continue
                 action_index = dec.get("action_index")
                 if action_index is None or action_index >= TARGET_ACTION_DIM:
@@ -352,12 +396,21 @@ def load_samples(
                 # 优先从 context 中找完整 state
                 full_state = ctx.get("full_state")
                 if full_state:
-                    features = _reconstruct_features_from_full_state(full_state)
+                    features = _reconstruct_features_from_full_state(full_state, use_grouping_engine=use_grouping_engine)
                 else:
-                    features = _reconstruct_features_from_my_decision(dec, game_info)
+                    features = _reconstruct_features_from_my_decision(
+                        dec, game_info,
+                        use_grouping_engine=use_grouping_engine,
+                        current_hand_cards=current_hand,
+                    )
 
                 if features is None:
                     skipped_feature += 1
+                    # 仍然更新 played_cards
+                    action = dec.get("action") or []
+                    if len(action) >= 3 and isinstance(action[2], list):
+                        for c in _normalize_cards(action[2]):
+                            played_cards.add(c)
                     continue
 
                 samples.append(BCSample(
@@ -366,6 +419,12 @@ def load_samples(
                     action_list_size=action_list_size,
                     source_file=str(fp),
                 ))
+
+                # 更新 played_cards
+                action = dec.get("action") or []
+                if len(action) >= 3 and isinstance(action[2], list):
+                    for c in _normalize_cards(action[2]):
+                        played_cards.add(c)
             loaded += 1
             continue
 

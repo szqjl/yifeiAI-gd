@@ -324,6 +324,38 @@ def _rule_r02_minimal_bomb(
     return kept if kept else list(range(len(action_list)))
 
 
+def _rule_r10_no_lead_bomb(
+    action_list: List[List[str]],
+    greater_pos: int,
+) -> List[int]:
+    """
+    V7-R10：自己领出（greaterPos == -1）时禁用炸弹。
+    当手牌有非炸弹选项时，剔除 Bomb/StraightFlush 动作，
+    避免浪费炸弹领出（自己炸自己）。
+
+    设计要点：
+    - 仅在 greaterPos == -1（新轮领出）时触发
+    - 如果全被过滤（只剩炸弹）→ 保留最小的一张炸弹（不能无动作）
+    - 不依赖 greater_action（领出时无 greater_action）
+    """
+    if greater_pos != -1:
+        return list(range(len(action_list)))
+
+    banned = {ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH}
+    kept = [i for i, act in enumerate(action_list)
+            if get_action_type(act) not in banned]
+    if not kept:
+        # 全是炸弹 → 保留最小的一个
+        bombs = [(i, len(act)) for i, act in enumerate(action_list)
+                 if get_action_type(act) in banned]
+        if bombs:
+            bombs.sort(key=lambda x: x[1])  # 最少张
+            kept = [bombs[0][0]]
+        else:
+            kept = list(range(len(action_list)))
+    return kept
+
+
 def _rule_r03_passive_no_pass(
     action_list: List[List[str]],
     greater_action: List[str],
@@ -456,6 +488,201 @@ def _rule_r06_no_break_structure_pair(
     # 保留天然对子在前
     kept = [i for i in range(len(action_list)) if i not in break_pair_indices]
     return kept if kept else list(range(len(action_list)))
+
+
+# ── V7-R11: 全局抑制牌检查 + 节流（GUA-068）────────────
+
+def _compute_pass_num(
+    game_state: Dict[str, Any],
+    my_pos: int,
+) -> Tuple[int, int]:
+    """
+    从 recentPlays 计算当前轮的连续 PASS 数。
+
+    Returns:
+        (pass_num, my_pass_num)
+        - pass_num: 本圈已有多少人 PASS
+        - my_pass_num: 自己在本圈 PASS 了多少次
+    """
+    recent = game_state.get("recentPlays", [])
+    if not recent:
+        return (0, 0)
+
+    pass_num = 0
+    my_pass_num = 0
+    for rp in reversed(recent):
+        cards = rp.get("cards", [])
+        if not cards:
+            pass_num += 1
+            if rp.get("pos", -1) == my_pos:
+                my_pass_num += 1
+        else:
+            break  # 遇到非 PASS → 轮次边界
+    return (pass_num, my_pass_num)
+
+
+def _is_single_beater(played_rank: str, suppressor_rank: str, cur_rank: str) -> bool:
+    """
+    判断 suppressor_rank 能否在 Single 中压制 played_rank。
+
+    掼蛋单张真实排序：大王 > 小王 > 级牌 > A > K > ... > 2
+    """
+    # 大王压制一切
+    if suppressor_rank == "HR":
+        return played_rank != "HR"  # 大王互压需要炸弹
+    # 小王压制除大王外一切
+    if suppressor_rank == "SB":
+        return played_rank not in ("HR", "SB")
+    # 级牌压制除王外的所有牌（但同级牌不互压）
+    if suppressor_rank == cur_rank:
+        return played_rank not in ("HR", "SB", cur_rank)
+    # 对方是级牌 → 普通牌无法压制
+    if played_rank == cur_rank:
+        return False
+    # 对方是王 → 普通牌无法压制
+    if played_rank in ("HR", "SB"):
+        return False
+    # 普通牌 → 更大的普通牌可压（但级牌不算普通牌）
+    suppressor_base = CARD_RANK_ORDER.get(suppressor_rank, 0)
+    played_base = CARD_RANK_ORDER.get(played_rank, 0)
+    return suppressor_base > played_base
+
+
+def _count_remaining_suppressors(
+    tracker,  # MemoryTracker 实例
+    greater_rank: str,
+    cur_rank: str,
+) -> int:
+    """
+    统计全局未打出的「能压制 greater_rank」的牌张数。
+
+    仅统计 Single 维度（对子炸弹暂不涉及）。
+    通过 MemoryTracker.get_played_cards() 查询已出数，
+    总张数 - 已出 = 剩余可压制数。
+    """
+    if tracker is None:
+        return -1  # 无 tracker 时用节流模式
+
+    try:
+        played = tracker.get_played_cards()
+    except Exception:
+        return -1
+
+    remaining = 0
+
+    # 大王（HR）：共 2 张
+    if _is_single_beater(greater_rank, "HR", cur_rank):
+        remaining += max(0, 2 - played.get("HR", 0))
+
+    # 小王（SB）：共 2 张
+    if _is_single_beater(greater_rank, "SB", cur_rank):
+        remaining += max(0, 2 - played.get("SB", 0))
+
+    # 级牌：共 8 张（4 花色 × 2 副本）
+    if _is_single_beater(greater_rank, cur_rank, cur_rank):
+        for suit in SUITS:
+            ct = f"{suit}{cur_rank}"
+            remaining += max(0, 2 - played.get(ct, 0))
+
+    # 更高普通牌（A/K/Q...）：每种 8 张
+    for r in RANK_STR:
+        if r == cur_rank:
+            continue  # 级牌已统计
+        if _is_single_beater(greater_rank, r, cur_rank):
+            for suit in SUITS:
+                ct = f"{suit}{r}"
+                remaining += max(0, 2 - played.get(ct, 0))
+
+    return remaining
+
+
+def _rule_r11_unbeatable_card_throttle(
+    action_list: List[List[str]],
+    greater_action: List[str],
+    greater_pos: int,
+    my_pos: int,
+    cur_rank: str,
+    game_state: Dict[str, Any] = None,
+) -> List[int]:
+    """
+    V7-R11（GUA-068）：对手出不可压牌时的全局抑制牌检查 + 节流。
+
+    两阶段决策：
+      Phase A（全局检查）：MemoryTracker 查询「还有几张能压住对手的牌」。
+        - 剩余 ≥ 2 张 → 断定有他人能压 → 过滤炸弹（保留 PASS/普通牌）
+        - 剩余 = 1 张 → 模糊地带（可能队友/对手持有）→ 低 pass_num 时过滤炸弹
+        - 剩余 = 0 张 → 真正无人能压 → 进入 Phase B
+      Phase B（节流）：无可压制牌时，按紧迫度决定是否炸弹。
+        - pass_num < 3 且 my_pass_num < 2 → 过早，过滤炸弹
+        - 否则 → 允许炸弹（再不炸可能失控）
+
+    与 M3 _Single() 的关键区别：
+      - M3 仅看 pass_num / 对手剩牌，不知道外面还有没有王
+      - V7-R11 先查全局牌记忆，有王剩余就放心 PASS，无王才考虑节流
+    """
+    # ── 前置条件：对手出牌 + 非 PASS ──
+    if not greater_action or greater_action[0] == "PASS":
+        return list(range(len(action_list)))
+
+    opponent_positions = [(my_pos + 1) % 4, (my_pos + 3) % 4]
+    if greater_pos not in opponent_positions:
+        return list(range(len(action_list)))
+
+    # 只处理 Single（其他牌型暂不覆盖）
+    if get_action_type(greater_action) != ACTION_TYPE_SINGLE:
+        return list(range(len(action_list)))
+
+    # ── 检查自己是否有非炸弹、非 PASS 的压制动作 ──
+    bomb_indices: List[int] = []
+    has_normal_counter = False
+    for i, act in enumerate(action_list):
+        t = get_action_type(act)
+        if t in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+            bomb_indices.append(i)
+        elif t != ACTION_TYPE_PASS:
+            has_normal_counter = True
+
+    if has_normal_counter:
+        # 有正常牌可压 → R01/R04 已处理，R11 不干预
+        return list(range(len(action_list)))
+
+    if not bomb_indices:
+        # 无炸弹可选 → 放行
+        return list(range(len(action_list)))
+
+    # ── Phase A: 全局抑制牌检查 ──
+    tracker = game_state.get("_memory_tracker", None) if game_state else None
+    greater_rank = get_action_rank(greater_action)
+    suppressors_remaining = _count_remaining_suppressors(tracker, greater_rank, cur_rank)
+
+    # Phase A-1: 抑制牌充足（≥2）→ 坚决 PASS，让队友/对手自然压
+    if suppressors_remaining >= 2:
+        kept = [i for i in range(len(action_list)) if i not in bomb_indices]
+        if kept:
+            logger.debug(
+                "R11 抑制牌充足(剩余%d张可压%s) → 过滤 %d 个炸弹",
+                suppressors_remaining, greater_rank, len(bomb_indices),
+            )
+            return kept
+
+    # Phase A-2: 仅剩 1 张抑制牌 → 队友还没回应时可以等（pass_num==0）
+    if suppressors_remaining == 1:
+        pass_num, _ = _compute_pass_num(game_state or {}, my_pos)
+        if pass_num == 0:
+            kept = [i for i in range(len(action_list)) if i not in bomb_indices]
+            if kept:
+                logger.debug(
+                    "R11 抑制牌仅剩1张 pass_num=0 → 等等看，过滤 %d 个炸弹",
+                    len(bomb_indices),
+                )
+                return kept
+        # pass_num >= 1 → 有人已 PASS，那1张可能不在他们手里，允许炸弹
+
+    # Phase A-3: 抑制牌为 0 → 真正无人能压，允许炸弹
+    # （再等也没用，不如抢牌权）
+
+    # 其余情况：允许炸弹
+    return list(range(len(action_list)))
 
 
 # ── GUA-065 队友保护规则 ──────────────────────────────
@@ -638,10 +865,19 @@ def _filter_action_list_impl(
     # 用 set 累积被排除的索引
     excluded = set()
 
+    # 0) R10: 自己领出不炸（greaterPos == -1 → 新轮领出 → 炸自己）
+    r10_kept = _rule_r10_no_lead_bomb(action_list, greater_pos)
+    excluded |= {i for i in range(len(action_list)) if i not in set(r10_kept)}
+
     # 1) R05: 队友领出不炸
     r05_kept = _rule_r05_teammate_no_bomb(
         action_list, greater_action, greater_pos, my_pos)
     excluded |= {i for i in range(len(action_list)) if i not in set(r05_kept)}
+
+    # 1.5) R11: 对手出不可压牌 → 全局抑制牌检查 + 节流（GUA-068）
+    r11_kept = _rule_r11_unbeatable_card_throttle(
+        action_list, greater_action, greater_pos, my_pos, cur_rank, game_state)
+    excluded |= {i for i in range(len(action_list)) if i not in set(r11_kept)}
 
     # 2) R01: 压单不用炸
     r01_kept = _rule_r01_no_bomb_for_single(
@@ -694,9 +930,11 @@ def _filter_action_list_impl(
     filtered = [action_list[i] for i in final_order]
 
     logger.debug(
-        "filter_action_list: %d→%d actions (excluded %d rules: R05=%s R01=%s R02=%s R06=%s R07=%s)",
+        "filter_action_list: %d→%d actions (excluded %d rules: R10=%s R05=%s R11=%s R01=%s R02=%s R06=%s R07=%s)",
         len(action_list), len(filtered), len(excluded),
+        len(action_list) - len(r10_kept) if r10_kept != list(range(len(action_list))) else 0,
         len(action_list) - len(r05_kept) if r05_kept != list(range(len(action_list))) else 0,
+        len(action_list) - len(r11_kept) if r11_kept != list(range(len(action_list))) else 0,
         len(action_list) - len(r01_kept) if r01_kept != list(range(len(action_list))) else 0,
         len(action_list) - len(r02_kept) if r02_kept != list(range(len(action_list))) else 0,
         len(action_list) - len(r06_kept) if r06_kept != list(range(len(action_list))) else 0,
@@ -766,6 +1004,13 @@ def _validate_decision_impl(
                     if not is_bomb(act)]
         if non_bomb:
             logger.info("validate_decision: 覆盖炸队友 (idx %d → %d)", model_idx, non_bomb[0])
+            return non_bomb[0]
+    elif is_bomb(chosen) and greater_pos == -1:
+        # R10: 自己领出用炸弹 → 不合理，找非炸动作
+        non_bomb = [i for i, act in enumerate(filtered_actions)
+                    if not is_bomb(act)]
+        if non_bomb:
+            logger.info("validate_decision: 覆盖领出炸弹 (idx %d → %d)", model_idx, non_bomb[0])
             return non_bomb[0]
 
     # 2) 被动且对手出牌，模型选了 PASS，但有同型非 PASS

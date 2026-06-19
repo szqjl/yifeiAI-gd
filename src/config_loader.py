@@ -31,12 +31,16 @@ class ConfigLoader:
     def load(self):
         """Load configuration file"""
         if self.config_path.exists():
-            try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    self.config = yaml.safe_load(f) or {}
-            except Exception as e:
-                print(f"Warning: Failed to load config file: {e}")
-                self.config = {}
+            # 尝试多种编码（Windows 中文环境可能用 GBK）
+            for enc in ('utf-8', 'gbk', 'utf-8-sig'):
+                try:
+                    with open(self.config_path, 'r', encoding=enc) as f:
+                        self.config = yaml.safe_load(f) or {}
+                    return
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+            print(f"Warning: Failed to decode config file: {self.config_path}")
+            self.config = {}
         else:
             print(f"Warning: Config file not found: {self.config_path}")
             self.config = {}

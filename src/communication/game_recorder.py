@@ -26,7 +26,8 @@ RECORD_FILENAME_RE = re.compile(
 def normalize_cards_to_string_list(cards: List) -> List[str]:
     """
     将服务器下发的卡牌列表统一为字符串列表（入口规范化）。
-    支持 "S2" 与 ["S","2"] 两种格式，供决策引擎与记录器一致使用。
+    支持 "S2" 与 ["S","2"] 两种格式。
+    平台王编码 SB(小王)/HR(大王) 直接透传，不再转换。
     """
     if not cards:
         return []

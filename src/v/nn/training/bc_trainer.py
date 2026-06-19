@@ -83,13 +83,14 @@ def masked_cross_entropy(
     action_list_sizes: torch.Tensor,  # (batch,)  int64
     label_smoothing: float = 0.1,  # B-α 调参（2026-06-17）：防 collapse 到 top1
 ) -> torch.Tensor:
-    """仅对有效 actionList 范围计算交叉熵。
+    """仅对有效 actionList 范围计算交叉熵（含 label_smoothing）。
 
     对于每个样本，创建一个 mask 使得 logits 中前 action_list_size 个位置有效，
-    其余位置被屏蔽（-inf）。然后在有效位置计算 CE loss。
+    其余位置被屏蔽（-inf）。label_smoothing 仅在有效类上分布，
+    不会泄漏到 masked 的 -1e9 类（修复 GUA-061 95M loss bug）。
 
     Args:
-        label_smoothing: B-α 调参加入，0.1 防 top1 collapse（35.75% 占比 → val_acc 锁死 36.46%）
+        label_smoothing: B-α 调参加入，0.1 防 top1 collapse
     """
     batch_size = logits.size(0)
     max_size = logits.size(1)
@@ -102,7 +103,24 @@ def masked_cross_entropy(
     # 屏蔽无效位置
     masked_logits = logits * mask + (1 - mask) * (-1e9)
 
-    return nn.functional.cross_entropy(masked_logits, targets, label_smoothing=label_smoothing)
+    # log_softmax
+    log_probs = torch.log_softmax(masked_logits, dim=-1)  # (batch, max_size)
+
+    # NLL of target
+    nll = -log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)  # (batch,)
+
+    # label_smoothing: 仅在有效类上分布
+    valid_counts = sizes.squeeze(1).float().clamp(min=2)  # (batch,)
+    # 所有有效类的平均 log_prob（含 target）
+    sum_valid_log_probs = (log_probs * mask).sum(dim=1)  # (batch,)
+    # 排除 target 后平均
+    target_log_probs = log_probs.gather(1, targets.unsqueeze(1)).squeeze(1)
+    other_mean_log_prob = (sum_valid_log_probs - target_log_probs) / (valid_counts - 1)
+
+    # Smoothed loss: (1-α) * NLL(target) + α * mean(NLL(others))
+    smoothed_loss = (1 - label_smoothing) * nll + label_smoothing * (-other_mean_log_prob)
+
+    return smoothed_loss.mean()
 
 
 # ── 训练循环 ──────────────────────────────────────────
