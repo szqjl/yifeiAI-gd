@@ -5,31 +5,36 @@ GUA-061→GUA-062 GroupingEngine — M3 组牌逻辑提取 + v2 升级（静态�
 设计约束（§7.4 升格硬约束）：
   - 纯函数，无类状态，无 if-else 硬规则决策
   - V7-internal：禁止 `from src.m.m3 import ...`
-  - 多方案枚举（6 策略，STRAIGHT_FIRST 已融入 SF_FIRST Phase 1c）+ 独立评分 + 特征向量输出
+  - 多方案枚举（统一新流水线）+ 独立评分 + Top 3 输出（GUA-074）
   - 推理延迟 < 5ms（108 张手牌最坏情况）
+
+2026-06-20 重构：统一新流水线
+  所有策略统一使用：
+    1. 同花顺检测（天然 → wild辅助，枚举所有 SF 候选）
+    2. 拆弹 → singles 池（≤10 小炸可拆，J/Q/K/A 炸保护）
+    3. wild → 升炸（逢人配固化炸弹，避免被顺子/三带二消耗）
+    4. {} 多 pass 循环（三带二 → 顺子1 → 顺子2 → 三连对 → 钢板
+       → trip降级+三连对扩展+trip恢复 → 单张合并对子）
+    5. 剩余牌重分类
+  生成方案：每个 SF 候选 → SF_FIRST/ROUND_OPTIMAL/ALL_COMBOS ×3
+  无 SF 时 → BOMB_FIRST/ROUND_OPTIMAL/ALL_COMBOS ×3（基准）
 
 GUA-062 v2 升级（2026-06-18）：
   - P0-A：静态回收评估（方案中牌型兜底大牌比例，文档权重 0.3）
   - P0-B：灵活性评分（牌型多样性 + 方案差异性，文档权重 0.2）
-  - P0-C：评分公式 4 维加权（炸弹0.3+手数0.2+回收0.3+灵活0.2）
+  - P0-C：评分公式 5 维加权（牌力0.3+手数0.3+回收0.1+灵活0.1+去单化0.2）
   - P1：牌力计分 + 角色定位（登基牌+3/普通炸+2/赘牌-1）
-  - P2：真回溯多方案（4 策略 + NO_STRAIGHTS + ALL_COMBOS = 6 方案，STRAIGHT_FIRST 融入 SF_FIRST）
-
-核心流程：
-  1. 手牌 → 按 rank 分组 → 基础结构识别（Single/Pair/Trips/Bomb）
-  2. 多策略枚举：BOMB_FIRST / BALANCED / ROUND_OPTIMAL / NO_STRAIGHTS / ALL_COMBOS / SF_FIRST（STRAIGHT_FIRST 已融入）
-  3. 独立评分（4 维加权 + 牌力 + 角色）
-  4. 输出 best_plan + plans + 24 维特征向量
+  - P2：真回溯多方案（3 策略 × SF候选 枚举）
 
 与 grouping_scanner.py (GUA-054) 的关系：
   - grouping_scanner: 9 维软信号（统计计数，不枚举方案）
-  - grouping_engine:  24 维特征（6 方案枚举 + 方案级特征）
+  - grouping_engine:  24 维特征（多方案枚举 + 方案级特征）
   - grouping_scanner 保留作为兼容基线，grouping_engine 作为增强替代
 """
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple, Optional, NamedTuple
+from typing import Dict, List, Set, Tuple, Optional, NamedTuple
 from collections import Counter
 from dataclasses import dataclass, field
 import copy
@@ -55,7 +60,7 @@ NORM_MAX_LONGEST_RUN = 12.0
 NORM_MAX_WILDS = 2.0
 NORM_MAX_ROUNDS = 20.0
 NORM_MAX_THREE_PAIRS = 2.0
-NORM_MAX_POWER = 12.0
+NORM_MAX_POWER = 10.0
 
 # ── 数据结构 ──────────────────────────────────────────────
 
@@ -1062,6 +1067,31 @@ def determine_role(power_score: int) -> str:
         return "超弱"
 
 
+def determine_score_tier(score: float) -> str:
+    """
+    GUA-062 总分角色分级（2026-06-20）：
+      根据 4 维加权总分划分牌力档次，独立于 power_score 的角色定位。
+      让 NN 同时看到「火力角色」+「结构档次」两个信号。
+
+      阈值基于 11 副真实手牌样本：
+        - ≥0.50 → 天胡
+        - 0.40-0.50 → 好牌
+        - 0.30-0.40 → 尚可
+        - 0.20-0.30 → 偏弱
+        - <0.20 → 烂牌
+    """
+    if score >= 0.50:
+        return "天胡"
+    elif score >= 0.40:
+        return "好牌"
+    elif score >= 0.30:
+        return "尚可"
+    elif score >= 0.20:
+        return "偏弱"
+    else:
+        return "烂牌"
+
+
 # ── 方案评分（GUA-062 v2 升级） ────────────────────────────
 
 def _score_de_singleton(plan: "GroupingPlan") -> float:
@@ -1080,12 +1110,12 @@ def _score_plan_v2(plan: "GroupingPlan", all_plans: List["GroupingPlan"]) -> Non
     """
     GUA-062 P0-C：文档标准 5 维加权评分。
 
-    权重调优 2026-06-18：
-      - 牌力分 0.3（含炸弹+同花顺+登基牌+稀有牌型-减分，归一化到 NORM_MAX_POWER）
+    权重调优 2026-06-20：
+      - 牌力分 0.5（含炸弹+同花顺+登基牌+稀有牌型-减分，归一化到 NORM_MAX_POWER）
       - 手数 0.3
       - 静态回收评估 0.1
       - 灵活性 0.1
-      - 去单化 0.2
+      - 去单化已移除（牌力分权重从0.3→0.5，去单化0.2砍掉）
     """
     n_rounds = plan.num_rounds()
 
@@ -1093,7 +1123,7 @@ def _score_plan_v2(plan: "GroupingPlan", all_plans: List["GroupingPlan"]) -> Non
     plan.power_score = _score_power(plan, plan.cur_rank)
     plan.role = determine_role(plan.power_score)
 
-    # 牌力分 0.3（替代原炸弹数，同花顺/登基炸/普通炸统一纳入牌力）
+    # 牌力分 0.5（替代原炸弹数，同花顺/登基炸/普通炸统一纳入牌力）
     plan.bomb_score = min(plan.power_score / NORM_MAX_POWER, 1.0)
 
     # 手数 0.3（轮次越少越好）
@@ -1102,20 +1132,17 @@ def _score_plan_v2(plan: "GroupingPlan", all_plans: List["GroupingPlan"]) -> Non
     # 静态回收评估 0.1
     plan.recovery_score = _score_recovery_static(plan, plan.cur_rank)
 
-    # 灵活性 0.1（已不含单张 — 去单化路径 A）
+    # 灵活性 0.1
     plan.flexibility_score = _score_flexibility(plan, all_plans)
 
-    # 去单化 0.2（路径 B — 显式惩罚单张多）
-    plan.de_singleton_score = _score_de_singleton(plan)
-
-    # 5 维加权总分
+    # 4 维加权总分
     plan.score = (
-        0.3 * plan.bomb_score +
+        0.5 * plan.bomb_score +
         0.3 * plan.rounds_score +
         0.1 * plan.recovery_score +
-        0.1 * plan.flexibility_score +
-        0.2 * plan.de_singleton_score
+        0.1 * plan.flexibility_score
     )
+    plan.score_tier = determine_score_tier(plan.score)
 
 
 # ── 方案枚举 ──────────────────────────────────────────────
@@ -1177,339 +1204,304 @@ def _build_plan(
     return plan
 
 
+def _run_multi_pass_loop(
+    singles: List[str], pairs: List[List[str]], trips: List[List[str]],
+    wilds: List[str], cur_rank: str, double_straights: bool,
+) -> Tuple[
+    List[str], List[List[str]], List[List[str]], List[str],
+    List[List[str]], List[List[List[str]]], List[List[List[str]]],
+    List[Tuple[List[str], List[str]]],
+]:
+    """
+    新流水线 Step 4：{} 多 pass 循环（2026-06-20 重构）。
+
+    每轮依次：三带二 → 顺子1 → 顺子2(可选) → 三连对 → 钢板
+            → trip降级+三连对扩展+trip恢复 → 单张合并对子
+    循环直到无变化（退化为不变）。
+
+    返回 (singles, pairs, trips, wilds, straights, three_pairs, steel_plates, three_with_twos)
+    """
+    s = list(singles)
+    p = [pp[:] for pp in pairs]
+    t = [tt[:] for tt in trips]
+    w = list(wilds)
+
+    straights: List[List[str]] = []
+    three_pairs: List[List[List[str]]] = []
+    steel_plates: List[List[List[str]]] = []
+    three_with_twos: List[Tuple[List[str], List[str]]] = []
+
+    MAX_PASS = 20
+    for _pass_idx in range(MAX_PASS):
+        prev_total = len(s) + sum(len(pp) for pp in p) * 2 + sum(len(tt) for tt in t) * 3
+
+        # 1. 三带二
+        new_twt, t, p = _detect_three_with_two(t, p, cur_rank)
+        three_with_twos.extend(new_twt)
+
+        # 2. 三张 — 保留 trip 结构（不做额外检测，trip 在步骤 7 降级前保持原样）
+
+        # 3. 顺子（第 1 轮）
+        new_st, s, p, t, w = _detect_straights(s, p, t, cur_rank, w)
+        straights.extend(new_st)
+
+        # 4. 顺子（第 2 轮 / 双重）
+        if double_straights:
+            new_st2, s, p, t, w = _detect_straights(s, p, t, cur_rank, w)
+            straights.extend(new_st2)
+
+        # 5. 三连对
+        new_tp, p = _detect_three_pairs(p, cur_rank)
+        three_pairs.extend(new_tp)
+
+        # 6. 钢板
+        new_sp, t = _detect_steel_plate(t, cur_rank)
+        steel_plates.extend(new_sp)
+
+        # 7. trip 降级 → 三连对扩展 → trip 恢复
+        if t:
+            # 7a: 每个 trip 拆为 pair + single
+            tp_idx_to_leftover: Dict[int, str] = {}
+            tp_pair_set: set = set()
+            ext_pairs = list(p)
+            for i, tt_ in enumerate(t):
+                pair = sorted(tt_, key=lambda c: _card_rank_value(c, cur_rank))[:2]
+                leftover_counts = Counter(tt_) - Counter(pair)
+                leftover = list(leftover_counts.elements())[0]
+                ext_pairs.append(pair)
+                tp_idx_to_leftover[i] = leftover
+                tp_pair_set.add(frozenset(pair))
+
+            # 7b: 三连对检测（含降级产生的扩展对子）
+            ext_tp, ext_rem_pairs = _detect_three_pairs(ext_pairs, cur_rank)
+            if ext_tp:
+                # 有新增三连对
+                new_from_ext = ext_tp[len(three_pairs):] if len(ext_tp) > len(three_pairs) else ext_tp
+                three_pairs.extend(new_from_ext if new_from_ext else [])
+
+                # 7c: trip 恢复 — 未被三连对消耗的 trip-pair 恢复为完整 trip
+                restored_trips: List[List[str]] = []
+                extra_singles: List[str] = []
+                real_pairs: List[List[str]] = []
+                for rp in ext_rem_pairs:
+                    key = frozenset(rp)
+                    if key in tp_pair_set:
+                        # 此 pair 来自 trip → 恢复为完整 trip
+                        leftover_card = next(
+                            tp_idx_to_leftover[i] for i, tt_ in enumerate(t)
+                            if frozenset(sorted(tt_, key=lambda c: _card_rank_value(c, cur_rank))[:2]) == key
+                        )
+                        restored_trips.append(rp + [leftover_card])
+                    else:
+                        real_pairs.append(rp)
+
+                # 7d: 被三连对消耗的 trip-pair，其 leftover 加入 singles
+                consumed_tp = set()
+                for new_tp_group in (new_from_ext if new_from_ext else ext_tp):
+                    for pr in new_tp_group:
+                        consumed_tp.add(frozenset(pr))
+                for key in consumed_tp:
+                    if key in tp_pair_set:
+                        for tt_ in t:
+                            tp_key = frozenset(sorted(tt_, key=lambda c: _card_rank_value(c, cur_rank))[:2])
+                            if tp_key == key:
+                                for i, orig_tt in enumerate(t):
+                                    if orig_tt is tt_:
+                                        extra_singles.append(tp_idx_to_leftover[i])
+                                        break
+                                break
+
+                t = restored_trips
+                p = real_pairs
+                s.extend(extra_singles)
+
+        # 8. 单张合并对子
+        rank_map: Dict[str, List[str]] = {}
+        for c in s:
+            r = _parse_rank(c)
+            if r not in rank_map:
+                rank_map[r] = []
+            rank_map[r].append(c)
+        s = []
+        for r, cards in rank_map.items():
+            while len(cards) >= 2:
+                p.append([cards.pop(0), cards.pop(0)])
+            s.extend(cards)
+
+        curr_total = len(s) + sum(len(pp) for pp in p) * 2 + sum(len(tt) for tt in t) * 3
+        if curr_total >= prev_total:
+            break
+
+    return s, p, t, w, straights, three_pairs, steel_plates, three_with_twos
+
+
 def _enumerate_plans(
     hand_cards: List[str], cur_rank: str,
 ) -> List[GroupingPlan]:
     """
-    GUA-062 P2：多策略枚举组牌方案（含回溯变体）+ SF_FIRST 主力策略。
+    GUA-062 P2 + 2026-06-20 重构：统一新流水线枚举组牌方案。
 
-    策略（共 6 个，STRAIGHT_FIRST 已融入 SF_FIRST Phase 1c）:
-      - SF_FIRST:      同花顺优先（天然→wild→拆≤1炸→炸弹→平级循环）★ 主力
-      - BOMB_FIRST:    优先保留炸弹（不拆炸弹去组顺子）
-      - BALANCED:      平衡方案（先组顺子再组炸弹）
-      - ROUND_OPTIMAL: 最少轮次（优先牌型组合）
-      - NO_STRAIGHTS:  不组任何顺子/同花顺（最小组牌，P2 回溯变体）
-      - ALL_COMBOS:    拆一切组复杂牌型（最大组牌，P2 回溯变体）
+    新流水线（所有策略统一）：
+      1. 同花顺检测（天然 → wild辅助 → 拆弹辅助，枚举所有SF候选）
+      2. 拆弹 → singles 池
+      3. wild → 升炸（逢人配固化炸弹，避免被后续顺子/三带二消耗）
+      4. {} 多 pass 循环（三带二/三张/顺子1/顺子2/三连对/钢板/trip降级+trip恢复/单张合并对子）
+      5. 剩余牌重分类
 
-    返回 6 个方案（去重后可能 4-6 个有效方案）。
+    生成方案：
+      - SF_FIRST:     每个同花顺候选生成一个方案
+      - ROUND_OPTIMAL: 拆弹 + 单顺子（基准）
+      - ALL_COMBOS:    拆弹 + 双重顺子（最大组牌）
+      - BOMB_FIRST:    不拆弹 + 单顺子（保炸弹）
+      - BALANCED:      不拆弹 + 单顺子（同BOMB_FIRST，评分时依赖跨方案比较）
     """
     groups = _rank_groups(hand_cards, cur_rank)
-    wilds = groups.get("__wild__", [])
+    wilds_all = groups.get("__wild__", [])
     del groups["__wild__"]
 
     singles, pairs, trips, bombs = _basic_classify(groups)
     plans: List[GroupingPlan] = []
 
-    # ── 策略 0: SF_FIRST — 同花顺优先（天然→配牌→拆≤1炸→炸弹）→ 平级去单化循环 ──
-    # 设计规范 2026-06-18 v2:
-    #   1. Phase 1: 同花顺检测（天然→wild→拆≤1炸辅助），非必要不拆两个炸
-    #   2. Phase 2: 剩余牌重组炸弹
-    #   3. Phase 3-5: Multi-pass 平级循环 — 三连对/钢板/顺子/三带二/对子 无先后顺序
-    #   Phase 1b 枚举所有可行同花顺候选（不同花色/不同 rank），各生成一个方案
-    sf_bomb4 = []   # 4-card bombs (reserved, can sacrifice 1 for SF)
-    sf_bomb5 = []   # 5+ card bombs (safe to break → 4 remain)
-    sf_nb = []      # non-bomb cards (<4 per rank)
-    for rank, cards in groups.items():
-        n = len(cards)
-        if n >= 5:
-            sf_bomb5.extend(cards)
-        elif n == 4:
-            sf_bomb4.extend(cards)
+    # ═══════════════════════════════════
+    # 拆弹阈值：仅 ≤10 的小炸弹可拆（GUA-072），保护 J/Q/K/A 炸弹
+    # ═══════════════════════════════════
+    def _safe_to_break_bomb(bomb: List[str]) -> bool:
+        if not bomb:
+            return True
+        return _card_rank_value(bomb[0], cur_rank) <= 10
+
+    # ═══════════════════════════════════
+    # Step 1: 同花顺检测（枚举所有候选）
+    # ═══════════════════════════════════
+    # 候选池：非炸弹牌 + 可安全拆解的小炸弹（≤10）
+    sf_singles = singles[:]
+    sf_pairs = [p[:] for p in pairs]
+    sf_trips = [t[:] for t in trips]
+    safe_bomb_cards = []
+    protected_bombs: List[List[str]] = []
+    for b in bombs:
+        if _safe_to_break_bomb(b):
+            safe_bomb_cards.extend(b)
         else:
-            sf_nb.extend(cards)
+            protected_bombs.append(b)
 
-    # Phase 1: SF detection
-    sf_cards = sf_nb + sf_bomb5
-    sf_cg = _rank_groups(sf_cards, cur_rank)
-    del sf_cg["__wild__"]
-    sf_cs, sf_cp, sf_ct, sf_cb = _basic_classify(sf_cg)
+    sf_all_cards = sf_singles + [x for px in sf_pairs for x in px] + [x for tx in sf_trips for x in tx] + safe_bomb_cards
+    sf_rg = _rank_groups(sf_all_cards, cur_rank)
+    del sf_rg["__wild__"]
+    sf_cs, sf_cp, sf_ct, sf_cb = _basic_classify(sf_rg)
     for bb in sf_cb:
-        sf_cs.extend(bb)  # flatten any accidental 4+ groups from 5plus cards
+        sf_cs.extend(bb)  # flatten any accidental bombs
 
-    # 1a: Natural SF (no wilds, no bombs touched)
-    sf_nat, sf_n1, sf_p1, sf_t1, sf_w1 = _detect_straight_flushes(
+    # 1a: 天然 SF（不用 wild）
+    sf_nat, sf_n1, sf_p1, sf_t1, _ = _detect_straight_flushes(
         sf_cs, sf_cp, sf_ct, cur_rank, [])
 
-    def _make_sf_first_plan(
-        nat: List[List[str]], wild: List[List[str]],
-        rem_singles: List[str], rem_pairs: List[List[str]],
-        rem_trips: List[List[str]], rem_wilds: List[str],
-        bomb4_pool: List[str],
-    ) -> GroupingPlan:
-        """Phase 2-5: 从 SF 消耗后的剩余牌生成完整方案。"""
-        sf_all_rem = (rem_singles +
-                      [x for p in rem_pairs for x in p] +
-                      [x for t in rem_trips for x in t] +
-                      bomb4_pool)
-        sf_rg = _rank_groups(sf_all_rem, cur_rank)
-        del sf_rg["__wild__"]
-        sf_rs, sf_rp, sf_rt, sf_rbombs = _basic_classify(sf_rg)
+    # 1b: 收集所有 SF 候选（天然 + wild 辅助）
+    all_sf_results: List[Tuple[List[List[str]], List[List[str]], List[str], List[List[str]], List[List[str]], List[str], List[List[str]]]] = []
+    if sf_nat:
+        # 天然同花顺 → 第一个候选
+        all_sf_results.append((sf_nat, [], sf_n1, sf_p1, sf_t1, wilds_all[:], protected_bombs))
 
-        sf_straights: List[List[str]] = []
-        sf_tp: List[List[List[str]]] = []
-        sf_sp: List[List[List[str]]] = []
-        sf_twt: List[Tuple[List[str], List[str]]] = []
-        sf_rw = list(rem_wilds)
-        sf_s = list(sf_rs)
-        sf_p = [p[:] for p in sf_rp]
-        sf_t = [t[:] for t in sf_rt]
-
-        MAX_OUTER_PASS = 20
-        for _pass_outer in range(MAX_OUTER_PASS):
-            prev_total = len(sf_s) + sum(len(p) for p in sf_p) * 2 + sum(len(t) for t in sf_t) * 3
-
-            new_tp, sf_p = _detect_three_pairs(sf_p, cur_rank)
-            sf_tp.extend(new_tp)
-
-            new_sp, sf_t = _detect_steel_plate(sf_t, cur_rank)
-            sf_sp.extend(new_sp)
-
-            MAX_INNER_PASS = 20
-            for _pass_inner in range(MAX_INNER_PASS):
-                new_st, sf_s, sf_p, sf_t, sf_rw = _detect_straights(
-                    sf_s, sf_p, sf_t, cur_rank, sf_rw)
-                if not new_st:
-                    break
-                sf_straights.extend(new_st)
-
-            new_twt, sf_t, sf_p = _detect_three_with_two(sf_t, sf_p, cur_rank)
-            sf_twt.extend(new_twt)
-
-            rank_map: Dict[str, List[str]] = {}
-            for c in sf_s:
-                r = _parse_rank(c)
-                rank_map.setdefault(r, []).append(c)
-            sf_s = []
-            for r, cards in rank_map.items():
-                while len(cards) >= 2:
-                    sf_p.append([cards.pop(0), cards.pop(0)])
-                sf_s.extend(cards)
-
-            curr_total = len(sf_s) + sum(len(p) for p in sf_p) * 2 + sum(len(t) for t in sf_t) * 3
-            if curr_total >= prev_total:
-                break
-
-        sf_up, sf_t, sf_rw = _upgrade_bombs_with_wilds(sf_t, sf_rw)
-        all_sf = nat + wild
-        return _build_plan(sf_s, sf_p, sf_t, sf_rbombs + sf_up,
-                           sf_straights, all_sf, sf_tp, sf_rw, cur_rank, "SF_FIRST",
-                           three_with_twos=sf_twt, steel_plates=sf_sp)
-
-    # 1b: Wild-assisted SF — 枚举所有候选同花顺
-    sf_plans_with_sf: List[GroupingPlan] = []
+    # Wild-assisted SF — 枚举所有候选（不同花色/不同 rank）
+    base_s = list(sf_n1) if sf_nat else sf_cs
+    base_p = [p[:] for p in (sf_p1 if sf_nat else sf_cp)]
+    base_t = [t[:] for t in (sf_t1 if sf_nat else sf_ct)]
     for sf_idx in range(10):
         sf_w, sf_n, sf_p, sf_t, sf_rw = _detect_straight_flushes(
-            sf_n1, sf_p1, sf_t1, cur_rank, wilds, return_idx=sf_idx)
+            base_s, base_p, base_t, cur_rank, wilds_all, return_idx=sf_idx)
         if not sf_w:
             break
-        plan = _make_sf_first_plan(sf_nat, sf_w, sf_n, sf_p, sf_t, sf_rw, sf_bomb4)
-        sf_plans_with_sf.append(plan)
+        all_sf_results.append((sf_nat, sf_w, sf_n, sf_p, sf_t, sf_rw, protected_bombs))
 
-    # 1c: Bomb-assisted SF — 非必要不拆两个炸弹组同花顺（≤1 bomb）
-    if not sf_plans_with_sf and sf_bomb4:
-        bomb4_sorted = sorted(sf_bomb4, key=lambda c: _card_rank_value(c, cur_rank))
-        sacrifice = bomb4_sorted[:4]  # 1 bomb = 4 cards
-        bomb4_rem = bomb4_sorted[4:]
+    # ── SF candidate → 完整方案生成器 ──
+    def _make_plan_from_sf(
+        nat_sf: List[List[str]], wild_sf: List[List[str]],
+        rem_s: List[str], rem_p: List[List[str]], rem_t: List[List[str]],
+        rem_w: List[str], reserved_bombs: List[List[str]],
+        strategy: str, break_bombs: bool, double_st: bool,
+    ) -> GroupingPlan:
+        all_sf = nat_sf + wild_sf
 
-        bc_singles = sf_n1 + sacrifice
-        bc_pairs = [p[:] for p in sf_p1]
-        bc_trips = [t[:] for t in sf_t1]
+        # Step 2: 拆弹 → singles 池
+        pool_s = list(rem_s)
+        pool_p = [p_[:] for p_ in rem_p]
+        pool_t = [t_[:] for t_ in rem_t]
+        pool_w = list(rem_w)
 
-        # Try natural SF with bomb cards
-        bc_sf_nat, bc_s1, bc_p1, bc_t1, _ = _detect_straight_flushes(
-            bc_singles, bc_pairs, bc_trips, cur_rank, [])
-
-        # Try wild-assisted SF (enumerate candidates)
-        for sf_idx in range(10):
-            bc_sf_w, bc_s2, bc_p2, bc_t2, bc_w2 = _detect_straight_flushes(
-                bc_s1, bc_p1, bc_t1, cur_rank, wilds, return_idx=sf_idx)
-            if not bc_sf_w:
-                break
-            plan = _make_sf_first_plan(bc_sf_nat, bc_sf_w, bc_s2, bc_p2, bc_t2, bc_w2, bomb4_rem)
-            sf_plans_with_sf.append(plan)
-
-    if sf_plans_with_sf:
-        plans.extend(sf_plans_with_sf)
-    else:
-        # 无同花顺：用原始逻辑生成基底方案
-        plan = _make_sf_first_plan([], [], sf_n1, sf_p1, sf_t1, sf_w1, sf_bomb4)
-        plans.append(plan)
-
-    # ── 策略 1: BOMB_FIRST — 完整保留炸弹，三连对→同花顺→顺子→wilds升炸（SF优先用wilds） ──
-    bf_singles, bf_pairs, bf_trips = singles[:], pairs[:], trips[:]
-    bf_three_pairs, bf_rem_pairs = _detect_three_pairs(bf_pairs, cur_rank)
-    bf_sf, bf_s1, bf_p1, bf_t1, bf_wilds1 = _detect_straight_flushes(
-        bf_singles, bf_rem_pairs, bf_trips, cur_rank, wilds)
-    bf_straights, bf_s2, bf_p2, bf_t2, bf_wilds2 = _detect_straights(
-        bf_s1, bf_p1, bf_t1, cur_rank, bf_wilds1)
-    bf_new_bombs, bf_rem_trips, bf_wilds3 = _upgrade_bombs_with_wilds(bf_t2, bf_wilds2)
-
-    plan = _build_plan(bf_s2, bf_p2, bf_rem_trips, bombs[:] + bf_new_bombs,
-                       bf_straights, bf_sf, bf_three_pairs, bf_wilds3, cur_rank, "BOMB_FIRST")
-    plans.append(plan)
-
-    # ── 策略 2: STRAIGHT_FIRST — 已注释（拆弹逻辑已融入 SF_FIRST Phase 1c） ──
-    # sf_three_pairs, sf_rem_pairs = _detect_three_pairs(pairs[:], cur_rank)
-    # sf_all_singles = singles[:]
-    # for b in bombs:
-    #     sf_all_singles.extend(b)
-    #
-    # sf_sf, sf_s1, sf_p1, sf_t1, sf_wilds1 = _detect_straight_flushes(
-    #     sf_all_singles, sf_rem_pairs, trips[:], cur_rank, wilds)
-    # sf_straights, sf_s2, sf_p2, sf_t2, sf_wilds2 = _detect_straights(
-    #     sf_s1, sf_p1, sf_t1, cur_rank, sf_wilds1)
-    #
-    # rem_all = sf_s2 + [x for p in sf_p2 for x in p] + [x for t in sf_t2 for x in t]
-    # rem_groups = _rank_groups(rem_all, cur_rank)
-    # del rem_groups["__wild__"]
-    # sf_rem_s, sf_rem_p, sf_rem_t, sf_new_bombs = _basic_classify(rem_groups)
-    # sf_up_bombs, sf_rem_t2, sf_wilds3 = _upgrade_bombs_with_wilds(sf_rem_t, sf_wilds2)
-    #
-    # plan = _build_plan(sf_rem_s, sf_rem_p, sf_rem_t2, sf_new_bombs + sf_up_bombs,
-    #                    sf_straights, sf_sf, sf_three_pairs, sf_wilds3, cur_rank, "STRAIGHT_FIRST")
-    # plans.append(plan)
-
-    # ── 策略 3: BALANCED — 保留炸弹，三连对→同花顺→顺子→wilds升炸（SF优先用wilds） ──
-    bal_singles, bal_pairs, bal_trips = singles[:], pairs[:], trips[:]
-    bal_three_pairs, bal_rem_pairs = _detect_three_pairs(bal_pairs, cur_rank)
-    bal_sf, bal_s1, bal_p1, bal_t1, bal_wilds1 = _detect_straight_flushes(
-        bal_singles, bal_rem_pairs, bal_trips, cur_rank, wilds)
-    bal_straights, bal_s2, bal_p2, bal_t2, bal_wilds2 = _detect_straights(
-        bal_s1, bal_p1, bal_t1, cur_rank, bal_wilds1)
-    bal_new_bombs, bal_rem_trips, bal_wilds3 = _upgrade_bombs_with_wilds(bal_t2, bal_wilds2)
-
-    plan = _build_plan(bal_s2, bal_p2, bal_rem_trips, bombs[:] + bal_new_bombs,
-                       bal_straights, bal_sf, bal_three_pairs, bal_wilds3, cur_rank, "BALANCED")
-    plans.append(plan)
-
-    # ── 策略 4: ROUND_OPTIMAL — 三连对优先→拆弹→同花顺→顺子→wilds升炸（SF优先用wilds） ──
-    ro_three_pairs, ro_rem_pairs = _detect_three_pairs(pairs[:], cur_rank)
-    ro_all_singles = singles[:]
-    for b in bombs:
-        ro_all_singles.extend(b)
-
-    ro_sf, ro_s1, ro_p1, ro_t1, ro_wilds1 = _detect_straight_flushes(
-        ro_all_singles, ro_rem_pairs, trips[:], cur_rank, wilds)
-    ro_straights, ro_s2, ro_p2, ro_t2, ro_wilds2 = _detect_straights(
-        ro_s1, ro_p1, ro_t1, cur_rank, ro_wilds1)
-
-    rem_all = ro_s2 + [x for p in ro_p2 for x in p] + [x for t in ro_t2 for x in t]
-    rem_groups = _rank_groups(rem_all, cur_rank)
-    del rem_groups["__wild__"]
-    ro_rem_s, ro_rem_p, ro_rem_t, ro_new_bombs = _basic_classify(rem_groups)
-    ro_up_bombs, ro_rem_t2, ro_wilds3 = _upgrade_bombs_with_wilds(ro_rem_t, ro_wilds2)
-
-    plan = _build_plan(ro_rem_s, ro_rem_p, ro_rem_t2, ro_new_bombs + ro_up_bombs,
-                       ro_straights, ro_sf, ro_three_pairs, ro_wilds3, cur_rank, "ROUND_OPTIMAL")
-    plans.append(plan)
-
-    # ── P2 回溯变体 5: NO_STRAIGHTS — 三连对(含trip降级)→顺子→升炸 ──
-    # trip 降级规则：若某 rank 有 trip 但无 pair，将 trip 拆为 pair+single
-    # 以扩展三连对搜索空间（如 999 trip 拆为 99+9，启用 778899 三连对）
-    ns_singles_base = list(singles)
-    ns_pairs_base = list(pairs)
-    ns_trips_base = list(trips)
-
-    # Step 1: trips 拆为 pair + single
-    tp_idx_to_leftover: Dict[int, str] = {}
-    tp_pair_set: set = set()  # frozenset of trip-pair
-    for i, t in enumerate(ns_trips_base):
-        pair = sorted(t, key=lambda c: _card_rank_value(c, cur_rank))[:2]
-        # 用 Counter 差值取 leftover（处理重复牌如 C2,C2）
-        leftover_counts = Counter(t) - Counter(pair)
-        leftover = list(leftover_counts.elements())[0]
-        ns_pairs_base.append(pair)
-        tp_idx_to_leftover[i] = leftover
-        tp_pair_set.add(frozenset(pair))
-
-    # Step 2: 检测三连对
-    ns_three_pairs, ns_rem_pairs = _detect_three_pairs(ns_pairs_base, cur_rank)
-
-    # Step 3: 分类 remaining pairs → 还原未消耗的 trip
-    ns_restored_trips: List[List[str]] = []
-    ns_extra_singles: List[str] = []
-    ns_real_pairs: List[List[str]] = []
-
-    for rp in ns_rem_pairs:
-        key = frozenset(rp)
-        if key in tp_pair_set:
-            # 此 pair 来自 trip → 恢复为完整 trip
-            ns_restored_trips.append(rp + [next(
-                tp_idx_to_leftover[i] for i, t in enumerate(ns_trips_base)
-                if frozenset(sorted(t, key=lambda c: _card_rank_value(c, cur_rank))[:2]) == key
-            )])
+        if break_bombs:
+            for rb in reserved_bombs:
+                if _safe_to_break_bomb(rb):
+                    pool_s.extend(rb)
+                else:
+                    # 受保护炸弹不拆
+                    pass
+            remaining_bombs = [rb for rb in reserved_bombs if not _safe_to_break_bomb(rb)]
         else:
-            ns_real_pairs.append(rp)
+            remaining_bombs = list(reserved_bombs)
 
-    # Step 4: 被三连对消耗的 trip-pair，其 leftover 加入 singles
-    consumed_tp = set()
-    for tp in ns_three_pairs:
-        for pr in tp:
-            consumed_tp.add(frozenset(pr))
-    for key in consumed_tp:
-        if key in tp_pair_set:
-            for i, t in enumerate(ns_trips_base):
-                tp_key = frozenset(sorted(t, key=lambda c: _card_rank_value(c, cur_rank))[:2])
-                if tp_key == key:
-                    ns_extra_singles.append(tp_idx_to_leftover[i])
-                    break
+        # Step 3: wild → 升炸（逢人配先固化，避免被顺子/三带二消耗）
+        up_bombs, pool_t, pool_w = _upgrade_bombs_with_wilds(pool_t, pool_w)
+        remaining_bombs = remaining_bombs + up_bombs
 
-    ns_all_singles = ns_singles_base + ns_extra_singles
+        # Step 4: {} 多 pass 循环
+        pool_s, pool_p, pool_t, pool_w, straights, three_pairs, steel_plates, twt_list = _run_multi_pass_loop(
+            pool_s, pool_p, pool_t, pool_w, cur_rank, double_st)
 
-    # ── 变体 5a: trips 不参与顺子（保留给 wild 升炸） ──
-    ns_straights_a: List[List[str]] = []
-    ns_s_a, ns_p_a = ns_all_singles, ns_real_pairs
-    MAX_ST_PASS = 10
-    for _ in range(MAX_ST_PASS):
-        new_st, ns_s_a, ns_p_a, _, _ = _detect_straights(
-            ns_s_a, ns_p_a, [], cur_rank, [])
-        if not new_st:
-            break
-        ns_straights_a.extend(new_st)
-    ns_new_bombs_a, ns_rem_trips_a, ns_wr_a = _upgrade_bombs_with_wilds(ns_restored_trips, wilds)
-    plan_a = _build_plan(ns_s_a, ns_p_a, ns_rem_trips_a, bombs[:] + ns_new_bombs_a,
-                         ns_straights_a, [], ns_three_pairs, ns_wr_a, cur_rank,
-                         "NO_STRAIGHTS")
-    plans.append(plan_a)
+        # Step 5: 剩余牌重分类
+        rem_all = pool_s + [x for px in pool_p for x in px] + [x for tx in pool_t for x in tx]
+        rem_rg = _rank_groups(rem_all, cur_rank)
+        del rem_rg["__wild__"]
+        rem_rs, rem_rp, rem_rt, new_bombs = _basic_classify(rem_rg)
+        # _basic_classify 可能从剩余牌重新识别炸弹（4+ 同 rank）
+        remaining_bombs = remaining_bombs + new_bombs
 
-    # ── 变体 5b: trips 可参与顺子（如无单 9 仅 10-K，AAA 出 1 张 A 组 10-A 顺子） ──
-    ns_straights_b: List[List[str]] = []
-    ns_s_b, ns_p_b, ns_t_b = ns_all_singles, ns_real_pairs, ns_restored_trips
-    for _ in range(MAX_ST_PASS):
-        new_st, ns_s_b, ns_p_b, ns_t_b, _ = _detect_straights(
-            ns_s_b, ns_p_b, ns_t_b, cur_rank, [])
-        if not new_st:
-            break
-        ns_straights_b.extend(new_st)
-    ns_new_bombs_b, ns_rem_trips_b, ns_wr_b = _upgrade_bombs_with_wilds(ns_t_b, wilds)
-    plan_b = _build_plan(ns_s_b, ns_p_b, ns_rem_trips_b, bombs[:] + ns_new_bombs_b,
-                         ns_straights_b, [], ns_three_pairs, ns_wr_b, cur_rank,
-                         "NO_STRAIGHTS")
-    plans.append(plan_b)
+        return _build_plan(rem_rs, rem_rp, rem_rt, remaining_bombs,
+                           straights, all_sf, three_pairs, pool_w, cur_rank, strategy,
+                           three_with_twos=twt_list, steel_plates=steel_plates)
 
-    # ── P2 回溯变体 6: ALL_COMBOS — 三连对→拆弹→同花顺→双重顺子→wilds升炸（SF优先用wilds） ──
-    ac_three_pairs, ac_rem_pairs = _detect_three_pairs(pairs[:], cur_rank)
-    ac_all_singles = singles[:]
-    for b in bombs:
-        ac_all_singles.extend(b)
+    # ═══════════════════════════════════
+    # 生成各策略方案
+    # ═══════════════════════════════════
 
-    ac_sf, ac_s1, ac_p1, ac_t1, ac_wilds1 = _detect_straight_flushes(
-        ac_all_singles, ac_rem_pairs, trips[:], cur_rank, wilds)
-    ac_straights, ac_s2, ac_p2, ac_t2, ac_wilds2 = _detect_straights(
-        ac_s1, ac_p1, ac_t1, cur_rank, ac_wilds1)
-    ac_straights2, ac_s3, ac_p3, ac_t3, ac_wilds3 = _detect_straights(
-        ac_s2, ac_p2, ac_t2, cur_rank, ac_wilds2)
-    ac_all_straights = ac_straights + ac_straights2
+    if all_sf_results:
+        # 有同花顺候选：为每个候选生成 SF_FIRST + ROUND_OPTIMAL + ALL_COMBOS
+        for nat, wild, rem_s, rem_p, rem_t, rem_w, res_b in all_sf_results:
+            plans.append(_make_plan_from_sf(
+                nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
+                "SF_FIRST", break_bombs=True, double_st=True))
+            plans.append(_make_plan_from_sf(
+                nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
+                "ROUND_OPTIMAL", break_bombs=True, double_st=False))
+            plans.append(_make_plan_from_sf(
+                nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
+                "ALL_COMBOS", break_bombs=True, double_st=True))
+    else:
+        # 无同花顺：生成 BOMB_FIRST + ROUND_OPTIMAL + ALL_COMBOS 基准方案
+        plans.append(_make_plan_from_sf(
+            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], protected_bombs,
+            "BOMB_FIRST", break_bombs=False, double_st=False))
+        plans.append(_make_plan_from_sf(
+            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], protected_bombs,
+            "ROUND_OPTIMAL", break_bombs=True, double_st=False))
+        plans.append(_make_plan_from_sf(
+            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], protected_bombs,
+            "ALL_COMBOS", break_bombs=True, double_st=True))
 
-    rem_all = ac_s3 + [x for p in ac_p3 for x in p] + [x for t in ac_t3 for x in t]
-    rem_groups = _rank_groups(rem_all, cur_rank)
-    del rem_groups["__wild__"]
-    ac_rem_s, ac_rem_p, ac_rem_t, ac_new_bombs = _basic_classify(rem_groups)
-    ac_up_bombs, ac_rem_t2, ac_wilds4 = _upgrade_bombs_with_wilds(ac_rem_t, ac_wilds3)
-
-    plan = _build_plan(ac_rem_s, ac_rem_p, ac_rem_t2, ac_new_bombs + ac_up_bombs,
-                       ac_all_straights, ac_sf, ac_three_pairs, ac_wilds4, cur_rank, "ALL_COMBOS")
-    plans.append(plan)
+    # ═══════════════════════════════════
+    # 去重：相同得分相同结构的方案只保留一个
+    # ═══════════════════════════════════
+    seen_keys: set = set()
+    dedup: List[GroupingPlan] = []
+    for p in plans:
+        key = (
+            len(p.singles), len(p.pairs), len(p.trips), len(p.bombs),
+            len(p.straights), len(p.straight_flushes), len(p.three_pairs),
+            len(p.three_with_twos), len(p.steel_plates),
+        )
+        if key not in seen_keys:
+            seen_keys.add(key)
+            dedup.append(p)
+    plans = dedup
 
     # ── v2 评分：生成全部方案后统一评分（灵活性需要跨方案比较） ──
     for p in plans:
@@ -1536,7 +1528,7 @@ def _extract_features(
       6:  best_single_count_norm   — 最优方案单张数（去单化反向）
       7:  best_strategy_id         — 最优方案策略 ID / 6（6 策略）
       8:  score_variance           — 方案间评分方差
-      9:  n_plans                  — 方案数 / 6（最多 6 方案）
+      9:  n_plans                  — 方案数 / 3（最多 3 方案，GUA-074）
      10:  bomb_score_range         — 各方案炸弹数极差 / 4
      11:  rounds_range_norm        — 各方案轮数极差 / 10
      12:  best_has_sf              — 最优方案有同花顺 → 1
@@ -1577,7 +1569,7 @@ def _extract_features(
     # 方案多样性
     scores = [p.score for p in plans_sorted]
     f[8] = min(max(0.0, (max(scores) - min(scores)) if len(scores) > 1 else 0.0) * 5, 1.0)
-    f[9] = min(len(plans) / 6.0, 1.0)
+    f[9] = min(len(plans) / 3.0, 1.0)
 
     bomb_counts = [len(p.bombs) for p in plans_sorted]
     f[10] = min((max(bomb_counts) - min(bomb_counts)) / NORM_MAX_BOMBS, 1.0) if bomb_counts else 0.0
@@ -1665,7 +1657,7 @@ def enumerate_groupings(
     Returns:
         (best_plan, all_plans)
           - best_plan:  评分最高的 GroupingPlan
-          - all_plans:  所有方案（按评分降序）
+          - all_plans:  Top 3 方案（按评分降序，GUA-074）
     """
     if not hand_cards:
         empty = GroupingPlan(cur_rank=cur_rank, strategy="empty")
@@ -1673,7 +1665,7 @@ def enumerate_groupings(
 
     plans = _enumerate_plans(hand_cards, cur_rank)
     plans.sort(key=lambda p: p.score, reverse=True)
-    return plans[0], plans
+    return plans[0], plans[:3]  # GUA-074: 只保留 Top 3 方案，节约算力
 
 
 def extract_grouping_features(
@@ -1683,7 +1675,7 @@ def extract_grouping_features(
     """
     提取 24 维组牌特征向量（GUA-062 v2 增强版）。
 
-    先枚举多方案（6 策略含回溯变体）→ 4 维加权评分 → 提取方案级+多样性特征。
+    先枚举多方案（6 策略含回溯变体）→ 4 维加权评分 → 取 Top 3 → 提取方案级+多样性特征。
     纯函数，无状态，推理延迟 < 5ms。
 
     Args:
