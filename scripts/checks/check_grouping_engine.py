@@ -6,9 +6,12 @@
     python scripts/checks/check_grouping_engine.py                           # 默认测试手牌
     python scripts/checks/check_grouping_engine.py --hand RJ,RJ,S6,CA,HA,HA,SA,DK,SK,DQ,DJ,CJ,CT,ST,D9,C9,D8,D7,C7,C7,H5,D4,S3,D2,C2,H2,H2   # 自定义手牌
     python scripts/checks/check_grouping_engine.py --rank 4                  # 指定级牌（默认 3）
+    python scripts/checks/check_grouping_engine.py --hand D2,C3,... --rank J --pre-dedup
+                                                                             # 去重前三策略（BOMB_FIRST/ROUND_OPTIMAL/ALL_COMBOS）
 
 输出：
     - 所有枚举方案的评分明细表（bomb/rounds/recovery/flexibility/de_singleton/总分）
+    - --pre-dedup：去重前各策略分支（最多 3 条，GUA-080 诊断用）
     - 27/27 完整性校验
     - best_plan 摘要
 """
@@ -22,7 +25,7 @@ import argparse
 # 确保 src/ 在 path 中
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
-from v.nn.features.grouping_engine import enumerate_groupings
+from v.nn.features.grouping_engine import enumerate_groupings, _enumerate_plans
 
 
 DEFAULT_HAND = [
@@ -37,7 +40,7 @@ DEFAULT_HAND = [
 
 
 def card_count(plan) -> int:
-    """统计方案覆盖的牌数（应为 27）。"""
+    """统计方案覆盖的牌数（应为 27）。GUA-076：计入所有牌型类型。"""
     count = (
         len(plan.singles)
         + sum(len(pr) for pr in plan.pairs)
@@ -61,6 +64,11 @@ def main():
     parser.add_argument("--hand", default=",".join(DEFAULT_HAND),
                         help="手牌，逗号分隔（如 RJ,RJ,S6,CA,...）")
     parser.add_argument("--rank", default="3", help="级牌 rank（默认 3）")
+    parser.add_argument(
+        "--pre-dedup",
+        action="store_true",
+        help="输出去重前三策略分支（BOMB_FIRST/ROUND_OPTIMAL/ALL_COMBOS 或 SF 变体）",
+    )
     args = parser.parse_args()
 
     hand = [h.strip() for h in args.hand.split(",") if h.strip()]
@@ -73,24 +81,41 @@ def main():
     print(f"  级牌: {cur_rank}")
     print()
 
-    best_plan, plans = enumerate_groupings(hand, cur_rank)
+    if args.pre_dedup:
+        pre_plans = _enumerate_plans(hand, cur_rank, dedup=False)
+        pre_plans.sort(key=lambda p: p.score, reverse=True)
+        best_plan = pre_plans[0]
+        plans = pre_plans[:3]
+        plan_label = "去重前三策略"
+    else:
+        best_plan, all_plans = enumerate_groupings(hand, cur_rank)
+        plans = all_plans
+        plan_label = "Top3（去重后）"
 
     # 完整性校验
-    all_ok = all(card_count(p) == 27 for p in plans)
+    check_pool = pre_plans if args.pre_dedup else plans
+    all_ok = all(card_count(p) == 27 for p in check_pool)
     print(f"  {'✓' if all_ok else '✗'} 27/27 完整性: {'全部通过' if all_ok else '存在非27方案!'}")
-    print(f"  方案总数: {len(plans)}")
+    if args.pre_dedup:
+        print(f"  去重前策略数: {len(pre_plans)}  |  展示: {plan_label} {len(plans)} 条")
+    else:
+        print(f"  方案总数: {len(plans)}  ({plan_label})")
     print()
 
     # 方案明细表
-    header = f"  {'策略':18s} {'总分':>7s} {'牌力':>6s} {'手数':>6s} {'回收':>6s} {'灵活':>6s} {'火力角色':>8s} {'结构档次':>8s} {'单张':>4s} {'炸弹数':>5s} {'手轮':>4s}"
+    header = (
+        f"  {'#':>2} {'策略':18s} {'power':>5s} {'总分':>7s} {'牌力':>6s} {'手数':>6s} "
+        f"{'回收':>6s} {'灵活':>6s} {'火力角色':>8s} {'结构档次':>8s} {'单张':>4s} {'炸弹数':>5s} {'手轮':>4s}"
+    )
     print(header)
-    print("  " + "-" * 70)
+    print("  " + "-" * 90)
 
-    for p in plans:
+    for i, p in enumerate(plans, 1):
         n_rounds = p.num_rounds()
         marker = " ← BEST" if p is best_plan else ""
         print(
-            f"  {p.strategy:18s} "
+            f"  {i:>2} {p.strategy:18s} "
+            f"{p.power_score:5d} "
             f"{p.score:7.4f} "
             f"{p.bomb_score:6.3f} "
             f"{p.rounds_score:6.3f} "

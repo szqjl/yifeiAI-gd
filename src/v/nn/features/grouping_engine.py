@@ -11,7 +11,7 @@ GUA-061→GUA-062 GroupingEngine — M3 组牌逻辑提取 + v2 升级（静态�
 2026-06-20 重构：统一新流水线
   所有策略统一使用：
     1. 同花顺检测（天然 → wild辅助，枚举所有 SF 候选）
-    2. 拆弹 → singles 池（≤10 小炸可拆，J/Q/K/A 炸保护）
+    2. 拆弹 → singles 池（≤10 小炸可拆，J/Q/K/A 炸保护；**仅在 _make_plan_from_sf Step2、break_bombs=True 时执行**，不在 SF 池预拆）
     3. wild → 升炸（逢人配固化炸弹，避免被顺子/三带二消耗）
     4. {} 多 pass 循环（三带二 → 顺子1 → 顺子2 → 三连对 → 钢板
        → trip降级+三连对扩展+trip恢复 → 单张合并对子）
@@ -38,6 +38,7 @@ from typing import Dict, List, Set, Tuple, Optional, NamedTuple
 from collections import Counter
 from dataclasses import dataclass, field
 import copy
+import warnings
 
 # ── 常量 ──────────────────────────────────────────────────
 SUITS = ("S", "H", "D", "C")
@@ -126,15 +127,14 @@ class GroupingPlan:
 
     # ── GUA-063 Phase 1: card-level grouping mask ──────────────────
 
-    def to_card_mask(self) -> Tuple[Dict[str, tuple], Dict[int, str]]:
+    def to_card_mask(self) -> Tuple[Dict[str, tuple], Dict[int, str], Dict[int, List[str]]]:
         """构建牌级组牌掩码，供前置过滤使用。
 
-        返回 (mask, group_type_map)：
+        返回 (mask, group_type_map, group_members)：
           mask: Dict[card_str, (group_id, is_core, group_size)]
-            - group_id:   同组牌共享同一 ID，散牌/单张 = -1
-            - is_core:    1.0 = 核心不可轻拆（炸弹/同花顺），0.0 = 普通牌型
-            - group_size: 该组共有几张牌（用于判断是否完整打出）
+            - 同牌串多枚（如双 SQ）共 key，lookup 仍可用；**张数/成员以 group_members 为准**
           group_type_map: Dict[group_id, type_string]
+          group_members: Dict[group_id, List[str]] — 保留重复牌串的多集合真源（4~8 星炸等）
             - type_string: "bomb"/"straight_flush"/"straight"/"trips"/"pair"
               /"trip_in_three_with_two"/"pair_in_three_with_two"
               /"pair_in_three_pair"/"trip_in_steel_plate"
@@ -150,6 +150,7 @@ class GroupingPlan:
         """
         mask: Dict[str, tuple] = {}
         group_type_map: Dict[int, str] = {}
+        group_members: Dict[int, List[str]] = {}
 
         # ── 收集所有牌组 ──
         # groups: List[(cards, is_core, type_string)]
@@ -187,6 +188,7 @@ class GroupingPlan:
         # 散牌（单张 / 未消耗逢人配）
         for s in self.singles:
             mask[s] = (-1, 0.0, 1)
+            group_members.setdefault(-1, []).append(s)
 
         # ── 分配 group_id ──
         gid = 0
@@ -194,11 +196,12 @@ class GroupingPlan:
             gsize = len(group_cards)
             is_core_f = 1.0 if is_core else 0.0
             group_type_map[gid] = type_str
+            group_members[gid] = list(group_cards)
             for card in group_cards:
                 mask[card] = (gid, is_core_f, gsize)
             gid += 1
 
-        return mask, group_type_map
+        return mask, group_type_map, group_members
 
 
 # ── 牌面解析 ──────────────────────────────────────────────
@@ -1336,14 +1339,14 @@ def _run_multi_pass_loop(
 
 
 def _enumerate_plans(
-    hand_cards: List[str], cur_rank: str,
+    hand_cards: List[str], cur_rank: str, *, dedup: bool = True,
 ) -> List[GroupingPlan]:
     """
     GUA-062 P2 + 2026-06-20 重构：统一新流水线枚举组牌方案。
 
     新流水线（所有策略统一）：
       1. 同花顺检测（天然 → wild辅助 → 拆弹辅助，枚举所有SF候选）
-      2. 拆弹 → singles 池
+      2. 拆弹 → singles 池（GUA-072：≤10 可拆；**仅 break_bombs=True 时在 Step2 执行**）
       3. wild → 升炸（逢人配固化炸弹，避免被后续顺子/三带二消耗）
       4. {} 多 pass 循环（三带二/三张/顺子1/顺子2/三连对/钢板/trip降级+trip恢复/单张合并对子）
       5. 剩余牌重分类
@@ -1372,20 +1375,18 @@ def _enumerate_plans(
 
     # ═══════════════════════════════════
     # Step 1: 同花顺检测（枚举所有候选）
+    # GUA-080/GUA-072 时序：SF 池仅用非炸牌；全部炸弹保留至 Step2，由 break_bombs 控制是否拆
     # ═══════════════════════════════════
-    # 候选池：非炸弹牌 + 可安全拆解的小炸弹（≤10）
     sf_singles = singles[:]
     sf_pairs = [p[:] for p in pairs]
     sf_trips = [t[:] for t in trips]
-    safe_bomb_cards = []
-    protected_bombs: List[List[str]] = []
-    for b in bombs:
-        if _safe_to_break_bomb(b):
-            safe_bomb_cards.extend(b)
-        else:
-            protected_bombs.append(b)
+    all_bombs = [b[:] for b in bombs]
 
-    sf_all_cards = sf_singles + [x for px in sf_pairs for x in px] + [x for tx in sf_trips for x in tx] + safe_bomb_cards
+    sf_all_cards = (
+        sf_singles
+        + [x for px in sf_pairs for x in px]
+        + [x for tx in sf_trips for x in tx]
+    )
     sf_rg = _rank_groups(sf_all_cards, cur_rank)
     del sf_rg["__wild__"]
     sf_cs, sf_cp, sf_ct, sf_cb = _basic_classify(sf_rg)
@@ -1400,7 +1401,7 @@ def _enumerate_plans(
     all_sf_results: List[Tuple[List[List[str]], List[List[str]], List[str], List[List[str]], List[List[str]], List[str], List[List[str]]]] = []
     if sf_nat:
         # 天然同花顺 → 第一个候选
-        all_sf_results.append((sf_nat, [], sf_n1, sf_p1, sf_t1, wilds_all[:], protected_bombs))
+        all_sf_results.append((sf_nat, [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs))
 
     # Wild-assisted SF — 枚举所有候选（不同花色/不同 rank）
     base_s = list(sf_n1) if sf_nat else sf_cs
@@ -1411,7 +1412,7 @@ def _enumerate_plans(
             base_s, base_p, base_t, cur_rank, wilds_all, return_idx=sf_idx)
         if not sf_w:
             break
-        all_sf_results.append((sf_nat, sf_w, sf_n, sf_p, sf_t, sf_rw, protected_bombs))
+        all_sf_results.append((sf_nat, sf_w, sf_n, sf_p, sf_t, sf_rw, all_bombs))
 
     # ── SF candidate → 完整方案生成器 ──
     def _make_plan_from_sf(
@@ -1478,30 +1479,31 @@ def _enumerate_plans(
     else:
         # 无同花顺：生成 BOMB_FIRST + ROUND_OPTIMAL + ALL_COMBOS 基准方案
         plans.append(_make_plan_from_sf(
-            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], protected_bombs,
+            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
             "BOMB_FIRST", break_bombs=False, double_st=False))
         plans.append(_make_plan_from_sf(
-            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], protected_bombs,
+            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
             "ROUND_OPTIMAL", break_bombs=True, double_st=False))
         plans.append(_make_plan_from_sf(
-            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], protected_bombs,
+            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
             "ALL_COMBOS", break_bombs=True, double_st=True))
 
     # ═══════════════════════════════════
     # 去重：相同得分相同结构的方案只保留一个
     # ═══════════════════════════════════
-    seen_keys: set = set()
-    dedup: List[GroupingPlan] = []
-    for p in plans:
-        key = (
-            len(p.singles), len(p.pairs), len(p.trips), len(p.bombs),
-            len(p.straights), len(p.straight_flushes), len(p.three_pairs),
-            len(p.three_with_twos), len(p.steel_plates),
-        )
-        if key not in seen_keys:
-            seen_keys.add(key)
-            dedup.append(p)
-    plans = dedup
+    if dedup:
+        seen_keys: set = set()
+        deduped: List[GroupingPlan] = []
+        for p in plans:
+            key = (
+                len(p.singles), len(p.pairs), len(p.trips), len(p.bombs),
+                len(p.straights), len(p.straight_flushes), len(p.three_pairs),
+                len(p.three_with_twos), len(p.steel_plates),
+            )
+            if key not in seen_keys:
+                seen_keys.add(key)
+                deduped.append(p)
+        plans = deduped
 
     # ── v2 评分：生成全部方案后统一评分（灵活性需要跨方案比较） ──
     for p in plans:
@@ -1631,17 +1633,35 @@ def _extract_features(
                     len(best.straight_flushes) + len(best.three_pairs))
     f[22] = min(struct_count / max(n, 1) * 3, 1.0)
 
-    # 牌利用率
+    # 牌利用率（GUA-076 修复：计入 three_with_twos 和 steel_plates）
     used = (len(best.singles) + sum(len(p) for p in best.pairs) +
             sum(len(t) for t in best.trips) + sum(len(b) for b in best.bombs) +
             sum(len(s) for s in best.straights) + sum(len(sf) for sf in best.straight_flushes) +
-            sum(sum(len(pr) for pr in tp) for tp in best.three_pairs))
+            sum(sum(len(pr) for pr in tp) for tp in best.three_pairs) +
+            sum(len(twt[0]) + len(twt[1]) for twt in best.three_with_twos) +
+            sum(sum(len(t) for t in sp) for sp in best.steel_plates))
     f[23] = min(used / max(n, 1), 1.0)
 
     return f
 
 
 # ── 主入口 ────────────────────────────────────────────────
+
+def _count_all_cards_in_plan(plan: GroupingPlan) -> int:
+    """GUA-076：统计方案中所有牌张数（用于完整性校验）。"""
+    count = (
+        len(plan.singles)
+        + sum(len(pr) for pr in plan.pairs)
+        + sum(len(t) for t in plan.trips)
+        + sum(len(b) for b in plan.bombs)
+        + sum(len(s) for s in plan.straights)
+        + sum(len(sf) for sf in plan.straight_flushes)
+        + sum(sum(len(pr) for pr in tp) for tp in plan.three_pairs)
+        + sum(len(twt[0]) + len(twt[1]) for twt in plan.three_with_twos)
+        + sum(sum(len(t) for t in sp) for sp in plan.steel_plates)
+    )
+    return count
+
 
 def enumerate_groupings(
     hand_cards: List[str],
@@ -1664,8 +1684,59 @@ def enumerate_groupings(
         return empty, [empty]
 
     plans = _enumerate_plans(hand_cards, cur_rank)
-    plans.sort(key=lambda p: p.score, reverse=True)
-    return plans[0], plans[:3]  # GUA-074: 只保留 Top 3 方案，节约算力
+
+    # GUA-076：方案完整性校验 — 每个方案必须覆盖全部手牌
+    # 2026-06-21 修复：不完整方案用 warning 记录并剔除，不崩溃
+    expected = len(hand_cards)
+    complete_plans: List[GroupingPlan] = []
+    for i, p in enumerate(plans):
+        actual = _count_all_cards_in_plan(p)
+        if actual != expected:
+            # 收集各组件牌张以诊断丢牌根因
+            plan_cards = set()
+            for s in p.singles:
+                plan_cards.add(s)
+            for pr in p.pairs:
+                plan_cards.update(pr)
+            for t in p.trips:
+                plan_cards.update(t)
+            for b in p.bombs:
+                plan_cards.update(b)
+            for s in p.straights:
+                plan_cards.update(s)
+            for sf in p.straight_flushes:
+                plan_cards.update(sf)
+            for tp in p.three_pairs:
+                for pr in tp:
+                    plan_cards.update(pr)
+            for twt in p.three_with_twos:
+                plan_cards.update(twt[0])
+                plan_cards.update(twt[1])
+            for sp in p.steel_plates:
+                for t in sp:
+                    plan_cards.update(t)
+            missing = sorted(set(hand_cards) - plan_cards)
+            extra = sorted(plan_cards - set(hand_cards))
+            warnings.warn(
+                f"GUA-076: Plan {i} ({p.strategy}) card count mismatch: "
+                f"expected={expected} actual={actual} "
+                f"missing={missing} extra={extra} — 剔除不完整方案",
+                RuntimeWarning,
+            )
+        else:
+            complete_plans.append(p)
+
+    if not complete_plans:
+        # 所有方案都不完整 — 保留原 plans 防止下游空列表崩溃
+        warnings.warn(
+            f"GUA-076: 全部 {len(plans)} 个方案均不完整 (expected={expected}), "
+            f"保留原始方案避免空列表",
+            RuntimeWarning,
+        )
+        complete_plans = plans
+
+    complete_plans.sort(key=lambda p: p.score, reverse=True)
+    return complete_plans[0], complete_plans[:3]  # GUA-074: 只保留 Top 3 方案，节约算力
 
 
 def extract_grouping_features(
