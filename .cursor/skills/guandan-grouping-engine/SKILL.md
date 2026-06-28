@@ -35,3 +35,7 @@ python -m pytest tests/test_grouping_engine.py -q
 ## 真源
 
 `src/v/nn/features/grouping_engine.py` — `_enumerate_plans` / `_detect_straight_flushes`
+
+## 典范 Playbook
+
+- [PB-001 拆炸时序押后](../../docs/guandan-brain/playbooks/PB-001-gua072-bomb-break-timing.md)（WF-11）

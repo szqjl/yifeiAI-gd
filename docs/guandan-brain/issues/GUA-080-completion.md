@@ -47,7 +47,7 @@ python scripts/checks/check_grouping_engine.py \
 
 ## 根因链（`grouping_engine.py`）
 
-0. **GUA-080 时序修复（2026-06-22）**：GUA-072 拆弹从 Step1 SF 池 **押后** 至 `_make_plan_from_sf` Step2，由 `break_bombs` 控制。SF 池仅用非炸牌；`BOMB_FIRST` 保全部炸弹，`ROUND_OPTIMAL/ALL_COMBOS` 仍拆 ≤10 炸去单化。
+0. **GUA-080 时序修复（2026-06-22）**：GUA-072 拆弹从 Step1 SF 池 **押后** 至 `_make_plan_from_sf` Step2，由 `break_bombs` 控制。SF 池仅用非炸牌；`BOMB_FIRST` 保全部炸弹，`ROUND_OPTIMAL/ALL_COMBOS` 仍拆 ≤10 炸去单化。**典范模板**：[`playbooks/PB-001-gua072-bomb-break-timing.md`](../playbooks/PB-001-gua072-bomb-break-timing.md)（WF-11）。
 
 1. **GUA-072 拆弹阈值**：`_safe_to_break_bomb(bomb)` → 点数 **≤10 可拆**，J/Q/K/A 保护。T 炸、8 炸均落入可拆池。
 2. **`_run_multi_pass_loop` + `_detect_three_pairs`**：为组 **8-9-10 三连对**，从可拆池消耗 `HT HT`（T 炸）与 `C8 C8`（来自 8 炸），余 `CT CT` 降为普通对子。
