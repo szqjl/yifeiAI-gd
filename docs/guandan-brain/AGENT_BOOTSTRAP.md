@@ -1,25 +1,23 @@
 # V7 Agent 启动指南（Bootstrap）
 
-> **新 Agent 第一句**：阅读 `docs/guandan-brain/AGENT_BOOTSTRAP.md`  
-> 版本: v7.1 | 2026-06-17 | **V7-dev 专用**（M 系列请切 `m-dev` 分支）  
-> 本文件 + 根目录 `AGENTS.md` = 新会话全部必读
+> **工作流真源（步骤 / 格式 / Skill）**：[`工作流.md`](./工作流.md)  
+> **新 Agent 第一句**：[`AGENT_FIRST_MESSAGE.md`](./AGENT_FIRST_MESSAGE.md)  
+> 本文件 = V7 **深读**（环境、批跑恢复、命令大全）；新会话优先 **工作流 WF-01**，不必全文通读。
 
 ---
 
 ## 1. 新 Agent · 第一句（复制即用）
 
+见 **[`AGENT_FIRST_MESSAGE.md`](./AGENT_FIRST_MESSAGE.md)**（默认走 **工作流 WF-01**）。
+
+<details>
+<summary>旧版首句（已废弃，展开仅作对照）</summary>
+
 ```text
 先按 docs/guandan-brain/AGENT_BOOTSTRAP.md §1～3 读完并完成自测，再读 ITERATIONS 最新一行，然后等我派任务。
 ```
 
-### 按场景换一句
-
-| 场景 | 第一句 |
-|------|--------|
-| 只分析 log / 胜率 | `先读 AGENT_BOOTSTRAP §1～3，自测通过后再解读数据。` |
-| 换机接续 | `按 handoff 接续：先 AGENT_BOOTSTRAP 自测，再读 ITERATIONS 最新一行 + docs/analysis/handoffs/ 最新一篇。` |
-| 只改 V7 决策/引擎 | `改 V7 前先读 ISSUES open（v7 标签）、ITERATIONS 最新一行、EVAL；局/副口径见 AGENT_BOOTSTRAP §2。` |
-| **提交 / 推送** | 见 **[`AGENT_PUSH_CHECKLIST.md`](./AGENT_PUSH_CHECKLIST.md)** |
+</details>
 
 ---
 
@@ -99,6 +97,23 @@ python scripts/wiki.py lint         # 健康检查（断链/孤立/格式）
 
 > **Wiki 目录**：`wiki/`（`purpose.md` 定义目标，`schema.md` 定义结构规则）  
 > **来源**：`docs/guandan-brain/` + `docs/analysis/`
+
+---
+
+## 3.6. 出牌顺序与上下家策略 🆕
+
+出牌顺序为**固定顺时针轮转**：`pos 0 → pos 1 → pos 2 → pos 3 → pos 0 → ...`
+
+对于 V7（pos 0 或 2），上家/下家出大牌时的策略差别：
+
+| 场景 | 顺序 | 结论 |
+|------|------|------|
+| **上家出大牌**（V7 压不过） | V7 PASS → 下家(对手)先接 → 队友最后 | **不太需要急炸** — 队友还能救 |
+| **下家出大牌**（V7 压不过） | 队友第一个接 → 上家(对手)接 → V7 最后 | **最安全** — 队友先救，V7 最后兜底就行 |
+
+> 上家(pos 1/3，`(my_pos+3)%4`)：V7 之前出牌的人  
+> 下家(pos 3/1，`(my_pos+1)%4`)：V7 之后出牌的人  
+> 队友(pos (my_pos+2)%4)：对角线，始终中间隔一个人
 
 ---
 

@@ -11,7 +11,12 @@ alwaysApply: true
 
 ## 新开 Agent（人类第一句）
 
-复制 **`docs/guandan-brain/AGENT_FIRST_MESSAGE.md`** 里默认那句，粘贴给新 Agent 作为首条消息。
+复制 **`docs/guandan-brain/AGENT_FIRST_MESSAGE.md`** 默认句，或 **`docs/guandan-brain/工作流.md` WF-01**（Agent 自启动，无需重复项目背景）。
+
+## 工作流真源
+
+- **`docs/guandan-brain/工作流.md`** — 步骤、产出格式、Skill 索引
+- 根目录 **`AGENTS.md`** — Cursor 自动加载入口
 
 ## 多步骤 / 换机接续
 

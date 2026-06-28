@@ -1,0 +1,17 @@
+# 新 Agent 首条消息（复制即用）
+
+## 默认（通用）
+
+```text
+按 docs/guandan-brain/工作流.md WF-01 自启动：读 ITERATIONS 最新一行 + ISSUES 的 open P0，完成后汇报当前任务与分支，等我派活。
+```
+
+## 按场景
+
+| 场景 | 首条消息 |
+|------|----------|
+| 换机 / handoff 接续 | `按工作流 WF-07 接续：读 handoff + ITERATIONS 最新一行，执行「下一步唯一动作」。` |
+| 批跑 / 胜率分析 | `按工作流 WF-04：解读批跑数据，局/副/victoryNum 口径见工作流 §2。` |
+| 改 V7 引擎 / 组牌 | `按工作流 WF-02 + WF-05：先读 ISSUES（v7）与 ITERATIONS，再动手。` |
+| 提交 / 推送 | `按工作流 WF-08 + AGENT_PUSH_CHECKLIST 执行 commit/push。` |
+| 组牌引擎单测 | `按工作流 WF-05：python scripts/checks/check_grouping_engine.py` |

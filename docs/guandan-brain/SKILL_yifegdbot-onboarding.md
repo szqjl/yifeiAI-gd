@@ -6,7 +6,11 @@ trigger: 当需要了解yifeGDBOT项目、或接手GUA任务时
 category: productivity
 ---
 
-# yifeGDBOT 掼蛋AI — 入门指南
+> **⚠️ 已 superseded（2026-06-22）**  
+> 请以 **[`工作流.md`](./工作流.md)** + **[`AGENT_BOOTSTRAP.md`](./AGENT_BOOTSTRAP.md)** + 根目录 **`AGENTS.md`** 为准。  
+> 下文保留作历史参考，GUA 列表等内容可能过时。
+
+# yifeGDBOT 掼蛋AI — 入门指南（历史）
 
 ## 项目是什么
 
