@@ -1,0 +1,499 @@
+# -*- coding: utf-8 -*-
+"""
+EndgamePreprocessor — 残局上下文注入器
+========================================
+在 decide() 入口统一注入 _endgame_context，供 Guard / 推荐引擎 / heuristic 读取。
+
+注入点：_inject_numofplayers 之后，GUA-075 主路径之前。
+不修改 actionList，纯上下文注入。
+
+四家角色路由：
+  - 敌方（myPos+1, myPos+3）→ 封锁管线（endgame_rule + BAOSHU_RULE）
+  - 队友（myPos+2）         → 助攻管线（assist_prefer）
+  - 自己（myPos）           → 冲刺优先 / 助攻兜底
+"""
+
+from typing import List, Dict, Any, Tuple, Optional
+import logging
+
+logger = logging.getLogger("endgame_preprocessor")
+
+# ── 从 v7_guards 导入工具 ──────────────────────────────
+try:
+    from ..guards.v7_guards import (
+
+        get_action_type, get_card_value, get_card_rank,
+        CARD_RANK_ORDER, JOKER_VALUE_SB, JOKER_VALUE_HR,
+        ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR, ACTION_TYPE_TRIPS,
+        ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH, ACTION_TYPE_THREE_PAIR,
+        ACTION_TYPE_TWO_TRIPS, ACTION_TYPE_THREE_WITH_TWO, ACTION_TYPE_STRAIGHT,
+        ACTION_TYPE_PASS, ACTION_TYPE_FREE,
+        is_bomb, _extract_action_cards,
+    )
+    GUARD_TOOLS_OK = True
+except ImportError:
+    try:
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, get_card_value, get_card_rank,
+            CARD_RANK_ORDER, JOKER_VALUE_SB, JOKER_VALUE_HR,
+            ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR, ACTION_TYPE_TRIPS,
+            ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH, ACTION_TYPE_THREE_PAIR,
+            ACTION_TYPE_TWO_TRIPS, ACTION_TYPE_THREE_WITH_TWO, ACTION_TYPE_STRAIGHT,
+            ACTION_TYPE_PASS, ACTION_TYPE_FREE,
+            is_bomb, _extract_action_cards,
+        )
+        GUARD_TOOLS_OK = True
+    except ImportError:
+        GUARD_TOOLS_OK = False
+        # 回退：定义基础常量
+        CARD_RANK_ORDER = {"2":0,"3":1,"4":2,"5":3,"6":4,"7":5,"8":6,"9":7,"T":8,"J":9,"Q":10,"K":11,"A":12}
+        JOKER_VALUE_SB, JOKER_VALUE_HR = 13, 14
+        (
+            ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR, ACTION_TYPE_TRIPS,
+            ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH, ACTION_TYPE_THREE_PAIR,
+            ACTION_TYPE_TWO_TRIPS, ACTION_TYPE_THREE_WITH_TWO, ACTION_TYPE_STRAIGHT,
+            ACTION_TYPE_PASS, ACTION_TYPE_FREE,
+        ) = (
+            "Single", "Pair", "Trips", "Bomb", "StraightFlush",
+            "ThreePair", "TwoTrips", "ThreeWithTwo", "Straight",
+            "PASS", "Free",
+        )
+
+
+# ═══════════════════════════════════════════════════════
+#  常量数据块
+# ═══════════════════════════════════════════════════════
+
+ENEMY_POSITIONS_TEMPLATE = lambda my_pos: [(my_pos + 1) % 4, (my_pos + 3) % 4]
+
+# ── 牌型中文名 → V7 ACTION_TYPE 映射 ──
+_SHAPE_NAME_TO_ACTION_TYPES: Dict[str, List[str]] = {
+    "单张":      ["Single"],
+    "大单张":    ["Single"],      # 大单张需进一步 check value≥K
+    "最大单张":   ["Single"],
+    "小单":      ["Single"],      # 小单张需 check value<K
+    "对子":      ["Pair"],
+    "三张":      ["Trips"],
+    "三同张":    ["Trips"],
+    "三不带":    ["Trips"],
+    "3带2":      ["ThreeWithTwo"],
+    "三带二":    ["ThreeWithTwo"],
+    "顺子":      ["Straight"],
+    "长顺子":    ["Straight"],
+    "钢板":      ["TwoTrips"],
+    "连对":      ["ThreePair"],
+    "三连对":    ["ThreePair"],
+    "长组合牌":   ["Straight", "ThreePair", "TwoTrips"],
+    "炸弹":      ["Bomb", "StraightFlush"],
+    "零散单":    ["Single"],
+    "零散单、对子、三不带": ["Single", "Pair", "Trips"],
+    "所有普通单张": ["Single"],
+}
+
+# ── 牌型 → 所需张数 ──
+_ACTION_TYPE_CARD_COUNT: Dict[str, int] = {
+    "Single": 1, "Pair": 2, "Trips": 3, "ThreeWithTwo": 5,
+    "Straight": 5, "TwoTrips": 6, "ThreePair": 6,
+    "Bomb": 4, "StraightFlush": 5,
+}
+
+# ── endgame_rule：剩 N 张 → (danger_level, recommended_types, banned_types) ──
+endgame_rule: Dict[int, tuple] = {
+    1:  ("极高", ["最大单张"],           ["Single"]),
+    2:  ("高",   ["单张"],               ["Pair"]),
+    3:  ("高",   ["单张", "对子"],        ["Single", "Trips"]),
+    4:  ("中高", ["大单张", "Straight"],  ["Pair"]),
+    5:  ("中",   ["Pair", "Trips", "大单张"], ["Single"]),
+    6:  ("中",   ["Trips"],             ["Single", "Pair"]),
+    7:  ("低",   ["Straight", "TwoTrips", "ThreePair"], []),
+    8:  ("低",   ["Straight", "TwoTrips", "ThreePair"], []),
+    9:  ("低",   ["Straight", "ThreePair", "TwoTrips"], []),
+    10: ("低",   ["Straight", "ThreePair", "TwoTrips"], []),
+}
+
+max_end_card: int = 10
+
+# ── BAOSHU_RULE：报单/报双封锁（≤4 张触发） ──
+# remaining: (可能牌型描述, block_with, never_play)
+BAOSHU_RULE: Dict[int, tuple] = {
+    1: ("单张(听牌)", ["ThreeWithTwo", "TwoTrips", "ThreePair", "Straight", "Bomb"],  ["Single"]),
+    2: ("对子",       ["ThreeWithTwo", "TwoTrips", "ThreePair", "Straight", "Bomb", "Trips"], ["Pair"]),
+    3: ("三同张",     ["Pair", "Single", "TwoTrips", "ThreePair", "Straight", "Bomb"], ["Trips"]),
+    4: ("炸弹/四张",   ["Pair", "ThreeWithTwo", "TwoTrips", "ThreePair", "Straight", "Bomb"], ["Pair"]),
+}
+
+# 危险等级序数映射
+_DANGER_ORDER: Dict[str, int] = {"极高": 0, "高": 1, "中高": 2, "中": 3, "低": 4}
+
+
+# ═══════════════════════════════════════════════════════
+#  公共 API：单函数版本（模块级）
+# ═══════════════════════════════════════════════════════
+
+def endgame_preprocess(game_state: Dict[str, Any]) -> Dict[str, Any]:
+    """模块级快捷调用，等同 EndgamePreprocessor().preprocess(game_state)。"""
+    return EndgamePreprocessor().preprocess(game_state)
+
+
+# ═══════════════════════════════════════════════════════
+#  EndgamePreprocessor
+# ═══════════════════════════════════════════════════════
+
+class EndgamePreprocessor:
+    """
+    残局预处理：读取 numofplayers，注入 _endgame_context。
+
+    不修改 actionList。纯上下文注入器。
+    """
+
+    # ── 牌型映射 ──
+    SHAPE_MAP = _SHAPE_NAME_TO_ACTION_TYPES
+    ACTION_CARD_COUNT = _ACTION_TYPE_CARD_COUNT
+
+    def _map_types(self, chinese_names: List[str]) -> List[str]:
+        """中文牌型名 → V7 ACTION_TYPE 枚举名列表（去重）"""
+        result: List[str] = []
+        for name in chinese_names:
+            result.extend(self.SHAPE_MAP.get(name, []))
+        return list(set(result))
+
+    def _assist_prefer_for(self, remaining: int) -> List[str]:
+        """队友剩 N 张时，精确投喂牌型（按优先序）"""
+        if remaining == 1:
+            return ["Single"]
+        elif remaining == 2:
+            return ["Pair"]
+        elif remaining == 3:
+            return ["Trips", "Pair", "Single"]
+        elif remaining == 4:
+            return ["Pair"]
+        elif remaining == 5:
+            return ["Straight", "ThreeWithTwo"]
+        elif remaining <= 10:
+            return ["Pair"]
+        return []
+
+    # ── 大单张动态阈值 ── IGNORE_STUB_RESOLVE_BIG_SINGLE_THRESHOLD ──
+
+    def _resolve_big_single_threshold(self, game_state: Dict[str, Any]) -> str:
+        """
+        根据 MemoryTracker 中剩余大牌数，K→Q→J 三级动态降级。
+        返回 "K" / "Q" / "J" 之一。
+        """
+        tracker = game_state.get("_memory_tracker")
+        cur_rank = str(game_state.get("curRank", "2"))
+
+        # 检查 K 以上还剩多少
+        k_remaining = self._count_remaining_suppressors(tracker, "K", cur_rank)
+        if k_remaining >= 2:
+            return "K"
+
+        q_remaining = self._count_remaining_suppressors(tracker, "Q", cur_rank)
+        if q_remaining >= 2:
+            return "Q"
+
+        return "J"
+
+    def _count_remaining_suppressors(
+        self, tracker, rank: str, cur_rank: str
+    ) -> int:
+        """
+        统计 ≥rank 的剩余可用牌张数（排除自己已出牌和已见打出的牌）。
+
+        rank: "K" / "Q" / "J" 等
+        返回：剩余可压制牌张数
+        """
+        if tracker is None:
+            return 4  # 无 tracker 时保守估计 4 张都在
+
+        try:
+            # rank 值 → 比较起点
+            threshold = CARD_RANK_ORDER.get(rank, 11)  # K=11
+            # 总张数：每个点数 4 张 + 2 王
+            total = 0
+            for r, val in CARD_RANK_ORDER.items():
+                if val >= threshold and r != cur_rank:
+                    total += 4
+                elif r == cur_rank:
+                    # 级牌 4+1（逢人配算 1 张可炸）
+                    if val >= threshold:
+                        total += 5
+
+            # 小王=13, 大王=14 总是 ≥ threshold
+            if JOKER_VALUE_SB >= CARD_RANK_ORDER.get(rank, 0):
+                total += 1
+            if JOKER_VALUE_HR >= CARD_RANK_ORDER.get(rank, 0):
+                total += 1
+            if str(cur_rank) in ("SB",) and JOKER_VALUE_SB >= CARD_RANK_ORDER.get(rank, 0):
+                total += 1
+            if str(cur_rank) in ("HR",) and JOKER_VALUE_HR >= CARD_RANK_ORDER.get(rank, 0):
+                total += 1
+
+            # 减去已打出的
+            seen = getattr(tracker, 'seen_counts', {}) or {}
+            for card, count in seen.items():
+                if count > 0:
+                    rk = card[1] if len(card) >= 2 and card[0] in "SHDC" else card
+                    if rk in ("SB", "HR") or (rk in CARD_RANK_ORDER and CARD_RANK_ORDER[rk] >= threshold):
+                        total -= count
+
+            # 减去自己手牌中已有的
+            my_hand = getattr(tracker, 'my_initial_hand', []) or []
+            for card in my_hand:
+                rk = card[1] if len(card) >= 2 and card[0] in "SHDC" else card
+                if rk in ("SB", "HR") or (rk in CARD_RANK_ORDER and CARD_RANK_ORDER[rk] >= threshold):
+                    total -= 1
+
+            return max(0, total)
+        except Exception:
+            return 4  # 降级保守返回
+
+    # ── 核心判定 ──
+
+    def _has_two_clean_hands(self, game_state: Dict[str, Any]) -> bool:
+        """
+        两手整牌判定：手牌拆分后总共 ≤2 组。
+
+        基于 grouptype_map（组牌引擎产出）。
+        """
+        grouptype_map = game_state.get("_group_type_map", {})
+        if not grouptype_map:
+            # 回退：没有组牌引擎 → 不敢说两手整牌
+            return False
+        total_groups = sum(grouptype_map.values())
+        return total_groups <= 2
+
+    def _has_bomb(self, game_state: Dict[str, Any]) -> bool:
+        """
+        手牌中是否有炸弹可用。
+
+        先查 grouptype_map（组牌引擎产出），再查 actionList。
+        """
+        grouptype_map = game_state.get("_group_type_map", {})
+        if grouptype_map:
+            # 如果有炸类标记，说明手牌里有炸弹
+            bomb_count = grouptype_map.get("炸", 0) + grouptype_map.get("bomb", 0)
+            sf_count = grouptype_map.get("StraightFlush", 0) + grouptype_map.get("同花顺", 0)
+            if bomb_count > 0 or sf_count > 0:
+                return True
+
+        # 回退：遍历 actionList 找炸弹
+        action_list = game_state.get("actionList", [])
+        if GUARD_TOOLS_OK:
+            for act in action_list:
+                try:
+                    if is_bomb(act):
+                        return True
+                except Exception:
+                    pass
+        else:
+            for act in action_list:
+                if not act or act[0] == "PASS":
+                    continue
+                cards = act[2] if len(act) >= 3 and isinstance(act[2], list) else act
+                if len(cards) >= 4:
+                    # 简单判断：4 张同点数为炸
+                    ranks = [c[1] if len(c) >= 2 else c for c in cards]
+                    if len(set(ranks)) == 1:
+                        return True
+        return False
+
+    def _should_sprint(self, game_state: Dict[str, Any]) -> bool:
+        """自己是否应该冲刺抢头游：两手整牌 + 有炸弹"""
+        return self._has_two_clean_hands(game_state) and self._has_bomb(game_state)
+
+    # ── 静态工具方法 ──
+
+    @staticmethod
+    def _can_clear(game_state: Dict[str, Any], bomb_size: int) -> bool:
+        """
+        炸完剩余手牌能否一轮走完。
+
+        判据：剩余手牌数 ≤5（一手整牌最大张数）且组牌引擎判手数 ≤1。
+        """
+        hand_cards = game_state.get("handCards", [])
+        remaining = len(hand_cards) - bomb_size
+        if remaining <= 0:
+            return True
+        if remaining > 5:
+            return False
+
+        # 尝试用组牌引擎判断
+        grouptype_map = game_state.get("_group_type_map", {})
+        if grouptype_map:
+            # 简易：剩余少判一手
+            if remaining <= 5:
+                return True
+        return remaining <= 5
+
+    @staticmethod
+    def _will_lose(game_state: Dict[str, Any]) -> bool:
+        """
+        不炸必输判定：敌人是否极可能一手走完。
+
+        致命张数：1, 2, 3, 5
+        4 张规则：炸不压四（火不打四），但两手整牌可冲刺例外。
+        """
+        ec = game_state.get("_endgame_context", {})
+        enemies = ec.get("enemies", {})
+
+        for opp_pos, ectx in enemies.items():
+            rem = ectx.get("remaining", 27)
+            if rem in (1, 2, 3, 5):
+                return True
+            if rem == 4:
+                # 4 张 → 炸不压四，不纳入 will_lose（除非自己可冲刺）
+                pass
+
+        return False
+
+    @staticmethod
+    def _should_bomb(game_state: Dict[str, Any], bomb_size: int) -> Dict[str, Any]:
+        """
+        Q3 炸弹兜底决策表。
+
+        返回：{"should_bomb": bool, "reason": str}
+        """
+        can_clear = EndgamePreprocessor._can_clear(game_state, bomb_size)
+        will_lose = EndgamePreprocessor._will_lose(game_state)
+
+        if can_clear and will_lose:
+            reason = "炸完能走+不炸必输"
+            return {"should_bomb": True, "reason": reason}
+        elif can_clear and not will_lose:
+            reason = "炸完能走但非必须"
+            return {"should_bomb": False, "reason": reason}
+        elif not can_clear and will_lose:
+            reason = "不炸必输但炸也走不掉"
+            return {"should_bomb": False, "reason": reason}
+        else:
+            reason = "炸不走+不会输"
+            return {"should_bomb": False, "reason": reason}
+
+    # ── 敌方危险度排序 ──
+
+    def _enemy_danger_key(
+        self, my_pos: int, enemy_pos: int, remaining: int,
+        danger_level: str, has_baoshu: bool,
+    ) -> tuple:
+        """危险度排序键：越小越危险"""
+        pos_score = 0 if enemy_pos == (my_pos + 1) % 4 else 1
+        return (
+            remaining,
+            pos_score,
+            0 if has_baoshu else 1,
+            _DANGER_ORDER.get(danger_level, 5),
+        )
+
+    # ── 主入口 ──
+
+    def preprocess(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        注入 _endgame_context。
+
+        读取 numofplayers（由 _inject_numofplayers 已注入），
+        计算四家角色，填充封锁/助攻/冲刺上下文。
+
+        Returns:
+            注入后的 game_state
+        """
+        my_pos = game_state.get("myPos", 0)
+        numofplayers = game_state.get("numofplayers", [27, 27, 27, 27])
+
+        # ── 计算位置 ──
+        teammate_pos = (my_pos + 2) % 4
+        enemy_positions = [(my_pos + 1) % 4, (my_pos + 3) % 4]
+
+        # ── is_active：任何一家 ≤10 触发 ──
+        is_active = any(1 <= numofplayers[p] <= max_end_card for p in range(4))
+
+        context: Dict[str, Any] = {
+            "is_active": is_active,
+            "numofplayers": numofplayers,
+            "my_pos": my_pos,
+            "enemies": {},
+            "teammate": {},
+            "self": {},
+        }
+
+        # ── ① 敌方封锁 ──
+        for opp_pos in enemy_positions:
+            remaining = numofplayers[opp_pos]
+            if 1 <= remaining <= max_end_card:
+                rule = endgame_rule.get(remaining, ("低", [], []))
+                danger_level = rule[0]
+                raw_recommended = list(rule[1])
+                raw_banned = list(rule[2])
+
+                # banned_types 过滤：仅保留敌人能出的牌型（张数 ≤ remaining）
+                banned_types = [
+                    t for t in raw_banned
+                    if self.ACTION_CARD_COUNT.get(t, 99) <= remaining
+                ]
+
+                recommended_types = raw_recommended  # 推荐不做张数过滤（出牌不受限制）
+
+                enemy_ctx: Dict[str, Any] = {
+                    "remaining": remaining,
+                    "danger_level": danger_level,
+                    "recommended_types": recommended_types,
+                    "banned_types": banned_types,
+                }
+
+                # BAOSHU 强化（≤4 张）
+                if remaining <= 4 and remaining in BAOSHU_RULE:
+                    bs = BAOSHU_RULE[remaining]
+                    raw_block_with = list(bs[1])
+                    raw_never_play = list(bs[2])
+
+                    # never_play 张数过滤（≤ remaining 的才写入）
+                    never_play = [
+                        t for t in raw_never_play
+                        if self.ACTION_CARD_COUNT.get(t, 99) <= remaining
+                    ]
+
+                    block_with = [
+                        t for t in raw_block_with
+                        if self.ACTION_CARD_COUNT.get(t, 99) <= remaining
+                    ]
+
+                    enemy_ctx["baoshu"] = {
+                        "likely_hand": bs[0],
+                        "block_with": block_with,
+                        "never_play": never_play,
+                    }
+
+                context["enemies"][opp_pos] = enemy_ctx
+
+        # ── ② 队友助攻 ──
+        mate_remaining = numofplayers[teammate_pos]
+        if 1 <= mate_remaining <= max_end_card:
+            context["teammate"] = {
+                "remaining": mate_remaining,
+                "is_close": mate_remaining <= 4,
+                "assist_prefer": self._assist_prefer_for(mate_remaining),
+            }
+
+        # ── ③ 自己冲刺 ──
+        self_remaining = numofplayers[my_pos]
+        context["self"] = {
+            "remaining": self_remaining,
+            "has_two_clean_hands": self._has_two_clean_hands(game_state),
+            "has_bomb": self._has_bomb(game_state),
+            "should_sprint": self._should_sprint(game_state),
+        }
+
+        # ── 注入 ──
+        game_state["_endgame_context"] = context
+
+        if is_active:
+            logger.debug(
+                "残局激活: myPos=%d enemies=%s teammate=%s self_remaining=%d sprint=%s",
+                my_pos,
+                {p: e.get("remaining") for p, e in context["enemies"].items()},
+                context["teammate"].get("remaining"),
+                self_remaining,
+                context["self"]["should_sprint"],
+            )
+
+        return game_state

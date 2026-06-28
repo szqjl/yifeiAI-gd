@@ -681,17 +681,29 @@ def cmd_lint(args):
                 if not re.search(rf'^{field}:', fm, re.MULTILINE):
                     issues.append(("格式", f"{rel} frontmatter 缺少 '{field}'"))
 
-    # 4. 来源文件存在性
+    # 4. 来源文件存在性（仅检查 sources 列表项，不误吞 tags/related_gua）
     print("📂 检测来源引用...")
     for md_file in sorted(WIKI_DIR.rglob("*.md")):
         if md_file.name in ("index.md", "log.md", "overview.md"):
             continue
         content = md_file.read_text(encoding="utf-8")
         rel = str(md_file.relative_to(WIKI_DIR))
-        for m in re.finditer(r'^  - (.+)$', content[content.find("sources:"):content.find("\n---", content.find("sources:"))] if "sources:" in content else "", re.MULTILINE):
-            src = m.group(1).strip()
-            if not (ROOT / src).exists() and not (WIKI_DIR / src).exists():
-                issues.append(("来源", f"{rel}: 引用 '{src}' 不存在"))
+        if "sources:" in content:
+            lines = content.split("\n")
+            in_sources = False
+            sources = []
+            for line in lines:
+                if line.startswith("sources:"):
+                    in_sources = True
+                    continue
+                if in_sources:
+                    if line.startswith("  - "):
+                        sources.append(line[4:].strip())
+                    elif re.match(r'^[a-zA-Z_]', line.strip()) and not line.startswith(" "):
+                        break  # 下一个顶层 YAML key，停止收集
+            for src in sources:
+                if not (ROOT / src).exists() and not (WIKI_DIR / src).exists():
+                    issues.append(("来源", f"{rel}: 引用 '{src}' 不存在"))
 
     # 输出结果
     print(f"\n{'='*60}")

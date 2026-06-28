@@ -428,10 +428,11 @@ class TestGuardUtils:
         assert is_bomb(["S3"]) is False
 
     def test_get_card_value(self):
-        assert get_card_value("BJ") == 13
-        assert get_card_value("RJ") == 14
-        assert get_card_value("S2", "2") >= 15  # 级牌
+        assert get_card_value("BJ") == get_card_value("SB")
+        assert get_card_value("RJ") == get_card_value("HR")
+        assert get_card_value("S2", "2") == 15  # 级牌
         assert get_card_value("SA") == 12
+        assert get_card_value("HR") > get_card_value("S2", "2")
 
 
 if __name__ == "__main__":

@@ -59,6 +59,7 @@ batch_games 真源=current_batch.json；本包 exe 会话固定 3 局；target-g
 | 任务 | 必读 |
 |------|------|
 | 分析批跑胜率、填 ITERATIONS | `AGENTS.md` § 数据解读口径 + `platform-data-interpretation` §3.3 |
+| **分析 yf 某步为何这样出、我方不胜根因** | **[WF-12 决策链路](workflows/WF-12-yf-decision-trace.md)** + `logs/yf*_v7_*.log` + 牌谱 `my_decisions` |
 | 改 `yf*_m*.py`、落盘逻辑 | `guandan-platform-v1006` + `platform-data-interpretation` §3.4 |
 | 改 **M3** 决策 / 策略 | `ISSUES` open（tag=`m3`）、`ITERATIONS` 最新一行、[`PRINCIPLES_MAPPING.md`](PRINCIPLES_MAPPING.md) 相关节、[`M3_DIAGNOSIS.md`](M3_DIAGNOSIS.md)；`guandan-knowledge` §1 + 相关规则节；**M1 frozen 不改策略** |
 | 换机接续 | [分析接续-handoff](../governance/分析接续-handoff.md) + `ITERATIONS` 最新一行 |

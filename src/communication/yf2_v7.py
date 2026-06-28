@@ -190,6 +190,8 @@ class YF2_V7_Client:
             )
 
             self.game_recorder.record_game_start(data)
+            # 清理引擎跨局残留状态（R11记忆/R15相克锁/MemoryTracker等）
+            self.decision_engine.on_game_start(self.player_id)
             self.logger.info(f"🎮 游戏开始 #{self.game_count}: 手牌数={len(self.hand_cards)}, 座位={self.player_id}")
             
         except Exception as e:
@@ -210,9 +212,41 @@ class YF2_V7_Client:
             stats = self.decision_engine.get_statistics()
             self.logger.info(f"🏁 游戏结束 #{self.game_count}")
             self.logger.info(f"  - 总决策次数: {stats['total_decisions']}")
+            self.logger.info(f"  - 启发式决策: {stats.get('heuristic_decisions', 0)}")
             self.logger.info(f"  - 模型决策: {stats['model_decisions']}")
             self.logger.info(f"  - 规则回退: {stats['fallback_decisions']}")
             self.logger.info(f"  - 模型使用率: {stats['model_usage_rate']:.1%}")
+            # GUA-072: 对手无压制牌信念触发统计
+            entered = stats.get('no_suppress_opp_control_entered', 0)
+            blocked = stats.get('no_suppress_belief_says_can', 0)
+            triggered = stats.get('no_suppress_total', 0)
+            diag = stats.get('no_suppress_diag', {})
+            self.logger.info(
+                f"  - GUA-072 进入={entered} 阻={blocked} 触发={triggered}"
+                f" (炸={stats.get('no_suppress_bomb_used', 0)} 大牌={stats.get('no_suppress_max_card_used', 0)})"
+            )
+            self.logger.info(
+                f"  - GUA-072 注入诊断: 无tracker={diag.get('tracker_absent',0)}"
+                f" 非对手控牌={diag.get('not_opp_control',0)}"
+                f" 缺Action={diag.get('no_action',0)}"
+                f" True={diag.get('belief_true',0)}"
+                f" False={diag.get('belief_false',0)}"
+                f" 异常={diag.get('exception',0)}"
+            )
+            # GUA-075: 推荐路径统计
+            self.logger.info(
+                f"  - GUA-075 推荐: 尝试={stats.get('recommend_count',0)}"
+                f" 命中={stats.get('recommend_hit_count',0)}"
+                f" 通过={stats.get('recommend_valid_count',0)}"
+                f" 覆盖率={stats.get('recommend_rate',0):.1%}"
+                f" 命中率={stats.get('recommend_hit_rate',0):.1%}"
+                f" 通过率={stats.get('recommend_valid_rate',0):.1%}"
+            )
+            self.logger.info(
+                f"  - GUA-075 匹配失败分类: type不匹配={stats.get('match_fail_type_mismatch',0)}"
+                f" rank不匹配={stats.get('match_fail_rank_mismatch',0)}"
+                f" cards不匹配={stats.get('match_fail_cards_mismatch',0)}"
+            )
 
         except Exception as e:
             self.logger.error(f"✗ Game end handling error: {e}", exc_info=True)
@@ -287,6 +321,15 @@ class YF2_V7_Client:
             selected_action = action_list[act_index] if act_index < len(action_list) else []
             ctx = decision_context_from_act(action_data, self.player_id, version="v7")
             ctx["engine"] = "ultimate_win_rate"
+            # GUA-075: 将 card_mask + role + group_type_map 写入 context 供诊断
+            try:
+                cm = self.decision_engine._card_mask
+                if cm:
+                    ctx["card_mask"] = {k: list(v) for k, v in cm.items()}
+                    ctx["role"] = self.decision_engine._current_role
+                    ctx["group_type_map"] = {str(k): v for k, v in (self.decision_engine._group_type_map or {}).items()}
+            except Exception:
+                pass
             self.game_recorder.record_decision(act_index, selected_action, context=ctx)
             
             # Validate action index

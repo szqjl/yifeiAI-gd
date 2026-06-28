@@ -508,7 +508,10 @@ class BatchExecutor:
         batch_games: Optional[int] = None,
         batch_start_stats: Optional[GameRecordsStats] = None,
     ) -> None:
-        """方案 C：落盘诊断（match key / game_id），不写入 completed_games。"""
+        """方案 C：落盘诊断（match key / game_id），不写入 completed_games。
+
+        GUA-072: 额外扫描 V7 客户端日志中的 card_mask/组牌引擎退化告警。
+        """
         stats = self._get_game_records_stats()
         state.last_update = datetime.now()
         batch_new_match_keys = None
@@ -535,6 +538,70 @@ class BatchExecutor:
                     "落盘副数不等于平台批次数，分析 PASS/胜率时请区分口径。",
                     batch_new_match_keys,
                     batch_games,
+                )
+
+        # ── GUA-072: card_mask 退化诊断 ──
+        self._log_card_mask_degeneration_diagnostics()
+
+    def _log_card_mask_degeneration_diagnostics(self) -> None:
+        """GUA-072：扫描 V7 客户端日志，统计 card_mask/组牌引擎退化次数。"""
+        logs_dir = self.project_root / "logs"
+        if not logs_dir.is_dir():
+            return
+
+        import re
+        # 找本 run 中最新的 yf1_v7 / yf2_v7 日志
+        for prefix in ("yf1_v7", "yf2_v7"):
+            candidates = sorted(
+                logs_dir.glob(f"{prefix}_*.log"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if not candidates:
+                continue
+            log_path = candidates[0]
+            # 只读最近 500KB（避免大文件全读取）
+            try:
+                fsize = log_path.stat().st_size
+                read_bytes = min(fsize, 500 * 1024)
+                if fsize > read_bytes:
+                    with open(log_path, 'rb') as f:
+                        f.seek(fsize - read_bytes)
+                        raw = f.read(read_bytes)
+                else:
+                    raw = log_path.read_bytes()
+                text = raw.decode('utf-8', errors='replace')
+            except Exception:
+                continue
+
+            # 匹配退化告警行
+            engine_fail = len(re.findall(
+                r'_run_grouping_engine\s*失败', text))
+            basic_classify_ok = len(re.findall(
+                r'_basic_classify\s*降级:\s*识别到\s*\d+\s*个\s*bomb\s*group', text))
+            basic_classify_fail = len(re.findall(
+                r'_basic_classify\s*也失败', text))
+            filter_fail = len(re.findall(
+                r'_group_consistency_filter\s*失败', text))
+            by_handcards_empty = len(re.findall(
+                r'handCards=0,\s*curRank=', text))
+
+            if engine_fail > 0 or basic_classify_fail > 0 or filter_fail > 0:
+                self.logger.warning(
+                    "[card_mask诊断] %s: 组牌引擎失败=%d, _basic_classify降级OK=%d, "
+                    "_basic_classify也失败=%d, filter失败=%d, 因handCards=0=%d",
+                    prefix, engine_fail, basic_classify_ok,
+                    basic_classify_fail, filter_fail, by_handcards_empty,
+                )
+            elif engine_fail == 0 and basic_classify_ok == 0:
+                # 一切正常时不打日志
+                pass
+            else:
+                self.logger.info(
+                    "[card_mask诊断] %s: 组牌引擎失败=%d, _basic_classify降级OK=%d, "
+                    "_basic_classify也失败=%d, filter失败=%d, 因handCards=0=%d (正常降级)",
+                    prefix, engine_fail, basic_classify_ok,
+                    basic_classify_fail, filter_fail, by_handcards_empty,
                 )
 
     def _write_current_batch_context(self, state: ExecutionState, batch_games: int) -> None:

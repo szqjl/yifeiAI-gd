@@ -34,12 +34,54 @@
 
 ---
 
+## 净盘（批跑前标准动作）
+
+**何时**：关单验收、KPI 环比、多样本观测前——须清空本轮 Layer 2 产物，避免旧牌谱/旧 vn 混入统计。对应工作流 **WF-04** 跑批前一步。
+
+**目录分离**：M3 牌谱 → `game_records/`；V7 牌谱 → `game_records_v7/`（**勿混清**——只清本次批跑对应目录，除非明确做全仓净盘）。
+
+| 线 | 必清 |
+|----|------|
+| **M3** | `game_records/*.json` |
+| **V7** | `game_records_v7/*.json` |
+| **共用** | `logs/*`（`batch_executor_*.log`、`m3_vs_lalala_*.log`、`v7_vs_lalala_*.log` 等） |
+
+**同批还应清**（否则 `completed_games`/vn 对账会串批）：`batch_executor/latest_victory_num.json`、`batch_executor/current_batch.json`、`execution_state.json`（若存在）、`tmp/.batch_executor.lock`；以及对应战绩文件 **M3** → `m3_vs_lalala_scores.json` + `m3_vs_lalala_state.json`（+ 若 GUI 用过 `game_scores.json`）；**V7** → `v7_vs_lalala_scores.json` + `v7_vs_lalala_state.json`。
+
+**PowerShell（仓库 Git 根目录）**：
+
+```powershell
+# --- V7 净盘（run_v7_vs_lalala_games 前）---
+Get-Process guandan_offline_v1006 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Remove-Item tmp\.batch_executor.lock -ErrorAction SilentlyContinue
+Get-ChildItem game_records_v7 -Filter *.json -ErrorAction SilentlyContinue | Remove-Item -Force
+Remove-Item v7_vs_lalala_scores.json, v7_vs_lalala_state.json -ErrorAction SilentlyContinue
+Remove-Item batch_executor\latest_victory_num.json, batch_executor\current_batch.json -ErrorAction SilentlyContinue
+Remove-Item execution_state.json -ErrorAction SilentlyContinue
+Get-ChildItem logs -File -ErrorAction SilentlyContinue | Remove-Item -Force
+
+# --- M3 净盘（run_m3_vs_lalala / batch_executor M3 前）---
+# 同上停进程与 lock；改清 game_records 与 m3 战绩：
+Get-ChildItem game_records -Filter *.json -ErrorAction SilentlyContinue | Remove-Item -Force
+Remove-Item m3_vs_lalala_scores.json, m3_vs_lalala_state.json -ErrorAction SilentlyContinue
+# logs / batch_executor 状态文件同上
+```
+
+**注意**：
+
+- 以上均为 **Layer 2**，**禁止 commit**（见治理 §6）。
+- 误清 `game_records` 但 **`logs/` 仍在** → 可从日志恢复 `victoryNum`，勿立刻重跑；见 [`AGENT_BOOTSTRAP.md`](docs/guandan-brain/AGENT_BOOTSTRAP.md) §8。
+- 需保留牌谱作分析时，先 **复制到仓库外** 或 `data/eval/` 再净盘，勿只删不备份。
+
+---
+
 ## 项目 Skill（`.cursor/skills/`）
 
 | 场景 | Skill |
 |------|-------|
 | 新会话 / 自启动 | `guandan-session-start` |
 | 批跑 / 胜率分析 | `guandan-batch-eval` |
+| **yf 出牌决策链路 / 败招根因** | **`guandan-decision-trace`**（WF-12） |
 | 组牌引擎测试 | `guandan-grouping-engine` |
 | handoff 接续 | `guandan-handoff-continue` |
 | commit / push | `guandan-git-push` |

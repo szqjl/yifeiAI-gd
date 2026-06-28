@@ -6,8 +6,18 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.v.nn.guards.v7_guards import filter_action_list, _compute_pass_num
+from src.v.nn.guards.v7_guards import filter_action_list, _compute_pass_num, _clear_r11_memory_for_game
 from src.v.nn.features.memory_tracker import MemoryTracker
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _reset_r11_memory():
+    """各用例间清 R11 模块级记忆，避免上家让道第二圈状态泄漏。"""
+    _clear_r11_memory_for_game()
+    yield
+    _clear_r11_memory_for_game()
 
 
 def test_r11_filters_bomb_when_jokers_remain():
@@ -44,7 +54,7 @@ def test_r11_filters_bomb_when_jokers_remain():
 def test_r11_suppressor_one_pass0():
     """仅剩 1 张抑制牌 + 还没人 PASS → 过滤炸弹，等队友。"""
     gs = {
-        "myPos": 2, "greaterPos": 1,
+        "myPos": 2, "greaterPos": 3,
         "greaterAction": ["S8"],
         "curPos": 2, "curRank": "8",
         "handCards": ["S2","S2","H2","D2"],
@@ -52,7 +62,7 @@ def test_r11_suppressor_one_pass0():
             ["PASS"],
             ["S2","S2","H2","D2"],
         ],
-        "recentPlays": [{"pos": 1, "cards": ["S8"]}],
+        "recentPlays": [{"pos": 3, "cards": ["S8"]}],
         "numofplayers": [27, 26, 25, 27],
     }
     tracker = MemoryTracker(my_pos=2)
@@ -60,9 +70,9 @@ def test_r11_suppressor_one_pass0():
     tracker.set_level_rank("8")
     # 出了 2HR + 1SB → 剩 1SB（只有1张抑制牌）
     tracker.record_play(0, ["Single", "", ["HR"]])
-    tracker.record_play(3, ["Single", "", ["HR"]])
+    tracker.record_play(1, ["Single", "", ["HR"]])
     tracker.record_play(0, ["Single", "", ["SB"]])
-    tracker.record_play(1, ["Single", "8", ["S8"]])
+    tracker.record_play(3, ["Single", "8", ["S8"]])
     gs["_memory_tracker"] = tracker
 
     filtered, _ = filter_action_list(gs)
@@ -76,7 +86,7 @@ def test_r11_suppressor_one_pass0():
 def test_r11_suppressor_one_pass1():
     """仅剩 1 张抑制牌 + 已有人 PASS → 允许炸弹。"""
     gs = {
-        "myPos": 2, "greaterPos": 1,
+        "myPos": 2, "greaterPos": 3,
         "greaterAction": ["S8"],
         "curPos": 2, "curRank": "8",
         "handCards": ["S2","S2","H2","D2"],
@@ -85,8 +95,8 @@ def test_r11_suppressor_one_pass1():
             ["S2","S2","H2","D2"],
         ],
         "recentPlays": [
-            {"pos": 1, "cards": ["S8"]},
-            {"pos": 3, "cards": []},
+            {"pos": 3, "cards": ["S8"]},
+            {"pos": 1, "cards": []},
         ],
         "numofplayers": [27, 26, 25, 27],
     }
@@ -94,9 +104,9 @@ def test_r11_suppressor_one_pass1():
     tracker.init_from_hand(gs["handCards"])
     tracker.set_level_rank("8")
     tracker.record_play(0, ["Single", "", ["HR"]])
-    tracker.record_play(3, ["Single", "", ["SB"]])
+    tracker.record_play(1, ["Single", "", ["SB"]])
     tracker.record_play(0, ["Single", "", ["HR"]])
-    tracker.record_play(1, ["Single", "8", ["S8"]])
+    tracker.record_play(3, ["Single", "8", ["S8"]])
     gs["_memory_tracker"] = tracker
 
     filtered, _ = filter_action_list(gs)
@@ -111,7 +121,7 @@ def test_r11_suppressor_one_pass1():
 def test_r11_suppressor_zero():
     """抑制牌全无 → 允许炸弹（真正无人能压）。"""
     gs = {
-        "myPos": 2, "greaterPos": 1,
+        "myPos": 2, "greaterPos": 3,
         "greaterAction": ["S8"],
         "curPos": 2, "curRank": "8",
         "handCards": ["S2","S2","H2","D2"],
@@ -119,16 +129,16 @@ def test_r11_suppressor_zero():
             ["PASS"],
             ["S2","S2","H2","D2"],
         ],
-        "recentPlays": [{"pos": 1, "cards": ["S8"]}],
+        "recentPlays": [{"pos": 3, "cards": ["S8"]}],
         "numofplayers": [27, 26, 25, 27],
     }
     tracker = MemoryTracker(my_pos=2)
     tracker.init_from_hand(gs["handCards"])
     tracker.set_level_rank("8")
     # 全出完
-    for seat, joker in [(0, "HR"), (3, "HR"), (1, "SB"), (3, "SB")]:
+    for seat, joker in [(0, "HR"), (1, "HR"), (3, "SB"), (1, "SB")]:
         tracker.record_play(seat, ["Single", "", [joker]])
-    tracker.record_play(1, ["Single", "8", ["S8"]])
+    tracker.record_play(3, ["Single", "8", ["S8"]])
     gs["_memory_tracker"] = tracker
 
     filtered, _ = filter_action_list(gs)

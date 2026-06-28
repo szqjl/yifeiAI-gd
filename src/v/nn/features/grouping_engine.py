@@ -63,6 +63,9 @@ NORM_MAX_ROUNDS = 20.0
 NORM_MAX_THREE_PAIRS = 2.0
 NORM_MAX_POWER = 10.0
 
+# GUA-084：5+ 同点炸弹至少保留 4 张为炸
+BOMB_CORE_MIN = 4
+
 # ── 数据结构 ──────────────────────────────────────────────
 
 @dataclass
@@ -295,6 +298,88 @@ def _basic_classify(groups: Dict[str, List[str]]) -> Tuple[
     return singles, pairs, trips, bombs
 
 
+def _split_bomb_for_break(
+    bomb: List[str], peel_count: int, cur_rank: str,
+) -> Tuple[List[str], List[str]]:
+    """GUA-084: 保留 ≥4 张炸核；peel_count=0 时整炸保留。"""
+    sorted_bomb = sorted(bomb, key=lambda c: (_card_rank_value(c, cur_rank), c))
+    n = len(sorted_bomb)
+    if peel_count <= 0 or n <= BOMB_CORE_MIN:
+        return sorted_bomb, []
+    max_peel = n - BOMB_CORE_MIN
+    peel_count = min(peel_count, max_peel)
+    keep_n = n - peel_count
+    return sorted_bomb[:keep_n], sorted_bomb[keep_n:]
+
+
+def _break_bombs_into_pool(
+    reserved_bombs: List[List[str]],
+    *,
+    break_bombs: bool,
+    cur_rank: str,
+    large_bomb_peel: int,
+    safe_to_break_fn,
+) -> Tuple[List[List[str]], List[str]]:
+    """GUA-084 Step2：n≥5 限量 peel；n≤4 且可拆则整炸进 singles。"""
+    if not break_bombs:
+        return [b[:] for b in reserved_bombs], []
+    remaining: List[List[str]] = []
+    peeled_singles: List[str] = []
+    for rb in reserved_bombs:
+        n = len(rb)
+        if n > BOMB_CORE_MIN:
+            kept, peeled = _split_bomb_for_break(rb, large_bomb_peel, cur_rank)
+            remaining.append(kept)
+            peeled_singles.extend(peeled)
+        elif safe_to_break_fn(rb):
+            peeled_singles.extend(rb)
+        else:
+            remaining.append(rb[:])
+    return remaining, peeled_singles
+
+
+def _bomb_core_ranks(bombs: List[List[str]]) -> Set[str]:
+    return {_parse_rank(b[0]) for b in bombs if len(b) >= BOMB_CORE_MIN}
+
+
+def _pool_rank_counts(
+    singles: List[str], pairs: List[List[str]], trips: List[List[str]],
+) -> Counter:
+    counts: Counter = Counter()
+    for c in singles:
+        counts[_parse_rank(c)] += 1
+    for pr in pairs:
+        r = _parse_rank(pr[0])
+        counts[r] += len(pr)
+    for tr in trips:
+        r = _parse_rank(tr[0])
+        counts[r] += len(tr)
+    return counts
+
+
+def _pair_reserved_for_twt(
+    pair: List[str],
+    bomb_core_ranks: Set[str],
+    rank_counts: Counter,
+) -> bool:
+    """GUA-084 R-G084-1：≥4 同点 / 炸核 rank 的对子不配三带二。"""
+    r = _parse_rank(pair[0])
+    if r in bomb_core_ranks:
+        return True
+    return rank_counts.get(r, 0) >= 4
+
+
+def _large_bomb_peel_options(bombs: List[List[str]]) -> List[int]:
+    """Phase A：大炸 peel 只枚举 0 与 max_peel 两个端点。"""
+    max_peel = 0
+    for b in bombs:
+        if len(b) > BOMB_CORE_MIN:
+            max_peel = max(max_peel, len(b) - BOMB_CORE_MIN)
+    if max_peel <= 0:
+        return [0]
+    return [0, max_peel]
+
+
 def _classify_no_bombs(groups: Dict[str, List[str]]) -> Tuple[
     List[str], List[List[str]], List[List[str]]
 ]:
@@ -385,15 +470,20 @@ def _detect_three_pairs(
 
 def _detect_three_with_two(
     trips: List[List[str]], pairs: List[List[str]], cur_rank: str,
+    singles: Optional[List[str]] = None,
+    bomb_core_ranks: Optional[Set[str]] = None,
 ) -> Tuple[List[Tuple[List[str], List[str]]], List[List[str]], List[List[str]]]:
     """
     从三张和对子中检测三带二。
     返回 (three_with_twos, remaining_trips, remaining_pairs)。
     贪心匹配：每个 trip 搭配一个 pair，消耗 5 张牌 → 1 轮（相比 trip+pair 单独出省 1 轮）。
+    GUA-084：跳过炸核 rank / pool 内 ≥4 张同点的对子。
     """
     if not trips or not pairs:
         return [], trips[:], pairs[:]
 
+    pool_s = list(singles or [])
+    reserved_ranks = bomb_core_ranks or set()
     remaining_trips = [t[:] for t in trips]
     remaining_pairs = [p[:] for p in pairs]
     three_with_twos: List[Tuple[List[str], List[str]]] = []
@@ -401,12 +491,17 @@ def _detect_three_with_two(
     # 贪心：按 rank 排序三张（从高到低优先消耗大牌 trip）
     sorted_trips = sorted(remaining_trips, key=lambda t: _card_rank_value(t[0], cur_rank), reverse=True)
     for trip in sorted_trips:
-        if remaining_pairs:
-            pair = remaining_pairs.pop(0)
-            three_with_twos.append((trip, pair))
-            remaining_trips.remove(trip)
-        else:
+        rank_counts = _pool_rank_counts(pool_s, remaining_pairs, remaining_trips)
+        pair_idx = None
+        for i, pr in enumerate(remaining_pairs):
+            if not _pair_reserved_for_twt(pr, reserved_ranks, rank_counts):
+                pair_idx = i
+                break
+        if pair_idx is None:
             break
+        pair = remaining_pairs.pop(pair_idx)
+        three_with_twos.append((trip, pair))
+        remaining_trips.remove(trip)
 
     return three_with_twos, remaining_trips, remaining_pairs
 
@@ -1210,6 +1305,7 @@ def _build_plan(
 def _run_multi_pass_loop(
     singles: List[str], pairs: List[List[str]], trips: List[List[str]],
     wilds: List[str], cur_rank: str, double_straights: bool,
+    bomb_core_ranks: Optional[Set[str]] = None,
 ) -> Tuple[
     List[str], List[List[str]], List[List[str]], List[str],
     List[List[str]], List[List[List[str]]], List[List[List[str]]],
@@ -1239,7 +1335,8 @@ def _run_multi_pass_loop(
         prev_total = len(s) + sum(len(pp) for pp in p) * 2 + sum(len(tt) for tt in t) * 3
 
         # 1. 三带二
-        new_twt, t, p = _detect_three_with_two(t, p, cur_rank)
+        new_twt, t, p = _detect_three_with_two(
+            t, p, cur_rank, singles=s, bomb_core_ranks=bomb_core_ranks)
         three_with_twos.extend(new_twt)
 
         # 2. 三张 — 保留 trip 结构（不做额外检测，trip 在步骤 7 降级前保持原样）
@@ -1420,33 +1517,34 @@ def _enumerate_plans(
         rem_s: List[str], rem_p: List[List[str]], rem_t: List[List[str]],
         rem_w: List[str], reserved_bombs: List[List[str]],
         strategy: str, break_bombs: bool, double_st: bool,
+        large_bomb_peel: int = 0,
     ) -> GroupingPlan:
         all_sf = nat_sf + wild_sf
 
-        # Step 2: 拆弹 → singles 池
+        # Step 2: 拆弹 → singles 池（GUA-084：n≥5 保核限量 peel）
         pool_s = list(rem_s)
         pool_p = [p_[:] for p_ in rem_p]
         pool_t = [t_[:] for t_ in rem_t]
         pool_w = list(rem_w)
 
-        if break_bombs:
-            for rb in reserved_bombs:
-                if _safe_to_break_bomb(rb):
-                    pool_s.extend(rb)
-                else:
-                    # 受保护炸弹不拆
-                    pass
-            remaining_bombs = [rb for rb in reserved_bombs if not _safe_to_break_bomb(rb)]
-        else:
-            remaining_bombs = list(reserved_bombs)
+        remaining_bombs, peeled = _break_bombs_into_pool(
+            reserved_bombs,
+            break_bombs=break_bombs,
+            cur_rank=cur_rank,
+            large_bomb_peel=large_bomb_peel,
+            safe_to_break_fn=_safe_to_break_bomb,
+        )
+        pool_s.extend(peeled)
+        bomb_core_ranks = _bomb_core_ranks(remaining_bombs)
 
         # Step 3: wild → 升炸（逢人配先固化，避免被顺子/三带二消耗）
         up_bombs, pool_t, pool_w = _upgrade_bombs_with_wilds(pool_t, pool_w)
         remaining_bombs = remaining_bombs + up_bombs
+        bomb_core_ranks = _bomb_core_ranks(remaining_bombs)
 
         # Step 4: {} 多 pass 循环
         pool_s, pool_p, pool_t, pool_w, straights, three_pairs, steel_plates, twt_list = _run_multi_pass_loop(
-            pool_s, pool_p, pool_t, pool_w, cur_rank, double_st)
+            pool_s, pool_p, pool_t, pool_w, cur_rank, double_st, bomb_core_ranks)
 
         # Step 5: 剩余牌重分类
         rem_all = pool_s + [x for px in pool_p for x in px] + [x for tx in pool_t for x in tx]
@@ -1465,28 +1563,42 @@ def _enumerate_plans(
     # ═══════════════════════════════════
 
     if all_sf_results:
-        # 有同花顺候选：为每个候选生成 SF_FIRST + ROUND_OPTIMAL + ALL_COMBOS
+        # 有同花顺候选：SF 三策略 + GUA-084 BOMB_FIRST 保炸候选
         for nat, wild, rem_s, rem_p, rem_t, rem_w, res_b in all_sf_results:
+            peel_opts = _large_bomb_peel_options(res_b)
+            for peel in peel_opts:
+                plans.append(_make_plan_from_sf(
+                    nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
+                    "SF_FIRST", break_bombs=True, double_st=True,
+                    large_bomb_peel=peel))
+                plans.append(_make_plan_from_sf(
+                    nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
+                    "ROUND_OPTIMAL", break_bombs=True, double_st=False,
+                    large_bomb_peel=peel))
+                plans.append(_make_plan_from_sf(
+                    nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
+                    "ALL_COMBOS", break_bombs=True, double_st=True,
+                    large_bomb_peel=peel))
             plans.append(_make_plan_from_sf(
                 nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
-                "SF_FIRST", break_bombs=True, double_st=True))
-            plans.append(_make_plan_from_sf(
-                nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
-                "ROUND_OPTIMAL", break_bombs=True, double_st=False))
-            plans.append(_make_plan_from_sf(
-                nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
-                "ALL_COMBOS", break_bombs=True, double_st=True))
+                "BOMB_FIRST", break_bombs=False, double_st=False,
+                large_bomb_peel=0))
     else:
         # 无同花顺：生成 BOMB_FIRST + ROUND_OPTIMAL + ALL_COMBOS 基准方案
+        peel_opts = _large_bomb_peel_options(all_bombs)
+        for peel in peel_opts:
+            plans.append(_make_plan_from_sf(
+                [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
+                "ROUND_OPTIMAL", break_bombs=True, double_st=False,
+                large_bomb_peel=peel))
+            plans.append(_make_plan_from_sf(
+                [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
+                "ALL_COMBOS", break_bombs=True, double_st=True,
+                large_bomb_peel=peel))
         plans.append(_make_plan_from_sf(
             [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
-            "BOMB_FIRST", break_bombs=False, double_st=False))
-        plans.append(_make_plan_from_sf(
-            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
-            "ROUND_OPTIMAL", break_bombs=True, double_st=False))
-        plans.append(_make_plan_from_sf(
-            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
-            "ALL_COMBOS", break_bombs=True, double_st=True))
+            "BOMB_FIRST", break_bombs=False, double_st=False,
+            large_bomb_peel=0))
 
     # ═══════════════════════════════════
     # 去重：相同得分相同结构的方案只保留一个
@@ -1496,6 +1608,7 @@ def _enumerate_plans(
         deduped: List[GroupingPlan] = []
         for p in plans:
             key = (
+                p.strategy,
                 len(p.singles), len(p.pairs), len(p.trips), len(p.bombs),
                 len(p.straights), len(p.straight_flushes), len(p.three_pairs),
                 len(p.three_with_twos), len(p.steel_plates),

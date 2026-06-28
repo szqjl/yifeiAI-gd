@@ -75,6 +75,12 @@
 | `train_bc_v7.py` | V7 BC 行为克隆训练入口 |
 | `analyze_decisions.py` | M3 决策分析 |
 
+### batch_executor/ — 批跑引擎
+
+| 脚本 | 用途 |
+|------|------|
+| `server_stdout_reader.py` | 服务器 stdout 读取器（解析离线平台输出，供批跑对账用） |
+
 ### scripts/v7/ — V7 训练启动（Python）
 
 | 脚本 | 用途 |
@@ -161,23 +167,78 @@
 | `pre-push` | pre-push hook shell 脚本 |
 | `install-hooks.bat` | 安装 hooks 到 `.git/hooks/` |
 
-### scripts/checks/ — 检验脚本（27个）
+### scripts/checks/ — 检验脚本（28个）
 
 覆盖组牌引擎、行动验证、规则合规等。核心检验：
 - `check_grouping_engine.py` — 组牌引擎单元测试
+- `check_endgame_agent.py` — **残局智能体独立调试**（独立/扫描/单记录三种模式）
+
+### scripts/cos/ — COS 云端存储
+
+| 脚本 | 用途 |
+|------|------|
+| `cos_client.py` | 腾讯云 COS Python SDK 封装（cos-python-sdk-v5） |
+| `verify_cos.py` | COS 连通性验证 |
+| `upload_regression.py` | 上传 replay JSON 到 COS 并输出 manifest 条目 |
+| `pull_regression.py` | 按 manifest 从 COS 拉取 regression 数据到本地 |
+| `batch_upload_regression.py` | 从 game_records 选取对局批量上传至 COS 并刷新 manifest |
+| `upload_szqjl_batch.py` | 上传含 szqjl 的 game_records JSON 到 COS |
+| `sync_pull_all.py` | 同步 COS 全量 artifact 到本地 data/artifacts/ |
+
+### scripts/lark/ — 飞书 Bot 集成
+
+| 脚本 | 用途 |
+|------|------|
+| `start-bot.bat` | Lark Bot 事件消费者启动（yife-gd-bot profile） |
+| `start-bot.ps1` | Lark Bot 事件消费者（PowerShell 版） |
+| `send-message.ps1` | 通过 lark-cli 发送消息到指定 chat |
+
+### scripts/sdk/ — Qoder Agent SDK
+
+| 脚本 | 用途 |
+|------|------|
+| `qoder_smoke.py` | Qoder Agent SDK 冒烟测试（读 V7 实施方案 + 流式验证） |
+| `qoder_review_template.py` | Qoder 派单 v2：复审 V7 实施方案（8 补丁逐项验证） |
+
+### scripts/clients/ — 标准测试客户端
+
+| 脚本 | 用途 |
+|------|------|
+| `client_std_1.py` | 标准掼蛋客户端 - 位置 1（websockets 库，自动化测试用） |
+| `client_std_3.py` | 标准掼蛋客户端 - 位置 3（websockets 库，自动化测试用） |
+
+### scripts/shell/ — Shell 脚本
+
+| 脚本 | 用途 |
+|------|------|
+| `auto_clean_large_files.sh` | 自动清理 Git 历史中的大文件 |
+| `clean_large_files.sh` | 清理大文件（完整版） |
+| `check_repo_size.sh` | 检查仓库大小 |
+| `run_new_test.sh` | 启动新游戏测试（bash 版，调用 batch_executor.py） |
+| `train_m1_optimized.sh` | M1 优化训练启动 |
 
 ### scripts/launchers/v7/ — V7 启动脚本（生产环境）
 
 | 脚本 | 用途 |
 |------|------|
 | `run_v7_vs_lalala_games.py` | **V7 vs Lalala 批跑入口**（生产端） |
-| `run_v7_vs_m3_games.py` | V7 vs M3 批跑 |
-| `run_v7_train_and_eval.py` | V7 训练+评测一体 |
-| `v7_config.json` | V7 启动配置 |
-| `v7_lalala_config.json` | V7 vs Lalala 配置 |
+| `run_12games_test.py` | V7 端到端测试 — 12 局完整对战（含详细日志） |
+| `run_e2e_simple.py` | V7 端到端测试简化版 |
+| `run_v7_e2e_debug.py` | V7 端到端测试调试版（详细日志+错误处理） |
+| `test_v7_engine_load.py` | V7 引擎模型加载验证 |
 | `START_V7_GUI.bat` | V7 GUI 一键启动 |
 | `START_V7_CLIENTS.bat` | V7 多客户端一键启动 |
+| `START_V7_COMPLETE.bat` | V7 完整系统一键启动 |
 | `RUN_V7_VS_LALALA.bat` | V7 vs Lalala 批跑 bat 入口 |
+| `run_v7_test.bat` | V7 端到端测试 bat 入口 |
+> **注**：`run_v7_vs_m3_games.py`、`run_v7_train_and_eval.py`、`v7_config.json`、`v7_lalala_config.json` 已移除（索引残留）。
+
+### scripts/launchers/m/ — M 系列启动器
+
+| 脚本 | 用途 |
+|------|------|
+| `run_m3_vs_lalala_games.py` | **M3 vs Lalala 批跑入口**（BatchExecutor，默认 3 局） |
+| `START_M3_BATCH.bat` | M3 命令行批跑 bat 入口 |
 
 ### scripts/launchers/_env.bat — 环境变量
 
@@ -192,6 +253,7 @@
 | **V7 批跑（GUI）** | `python batch_executor_gui_v7.py` |
 | **V7 批跑（命令行）** | `python scripts/launchers/v7/run_v7_vs_lalala_games.py --games 3` |
 | **分析批跑结果** | `python scripts/analysis/analyze_v7_rounds.py` |
+| **yf 单步决策链路（WF-12）** | 牌谱 `my_decisions` + `logs/yf*_v7_*.log`；流程见 [`workflows/WF-12-yf-decision-trace.md`](./workflows/WF-12-yf-decision-trace.md) |
 | **回放单局** | `YF_REPLAY.bat` |
 | **BC 训练** | `python scripts/train_bc_v7.py` |
 | **Wiki 摄入** | `python scripts/wiki.py ingest` |
@@ -199,6 +261,7 @@
 | **Wiki 状态** | `python scripts/wiki.py status` |
 | **推送前检查** | `python verify_gitignore.py` |
 | **组牌引擎测试** | `python scripts/checks/check_grouping_engine.py` |
+| **残局智能体调试** | `python scripts/checks/check_endgame_agent.py --hand ... --players ...` |
 
 ---
 
@@ -224,4 +287,4 @@ YF_REPLAY.bat
 
 ---
 
-> **维护规则**：新增 `.py` / `.bat` 脚本时同步更新本文档。删除旧脚本时同步删除对应行。
+> **维护规则**：新增 `.py` / `.bat` / `.ps1` / `.sh` 脚本时同步更新本文档（临时测试/调试脚本除外）。删除旧脚本时同步删除对应行。

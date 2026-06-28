@@ -18,6 +18,7 @@ import sys
 import os
 import re
 import json
+import traceback
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -390,26 +391,8 @@ class YiFeiReplayGUI:
     def _load_specific_game(self, file_path):
         """加载指定的游戏文件"""
         self.current_game = Path(file_path)
-        self.current_step = 0
-        self.is_playing = False
-        
-        # 加载游戏数据
-        self._load_game_data()
-        
-        # 更新UI
-        self.play_btn.config(text="播放")
-        self.step_label.config(text=f"步骤: {self.current_step}/{self.total_steps}")
-        self.progress_var.set(0)
-        
-        # 显示游戏基本信息
-        self._set_game_info_text(self._format_game_info_text())
-        
-        # 清空画布，准备渲染
-        self.card_canvas.delete("all")
-        self._draw_current_step()
-        self._update_step_copy_panel()
-        
-        self.status_bar.config(text=f"已加载游戏: {self.current_game.name}")
+        if self._reload_current_game():
+            self.status_bar.config(text=f"已加载游戏: {self.current_game.name}")
     
     def _on_game_selected(self, event):
         """当选择游戏记录时"""
@@ -417,12 +400,32 @@ class YiFeiReplayGUI:
         if selected_idx < 0 or selected_idx >= len(self.game_records):
             return
         
+        # 防御性设置：某些 Windows tkinter readonly Combobox 不会自动刷新显示文本
+        self.game_combobox.set(self.game_records[selected_idx].name)
         self.current_game = self.game_records[selected_idx]
+        self._reload_current_game()
+    
+    def _reload_current_game(self):
+        """重新加载当前游戏（共用逻辑，带错误保护）。返回 True 表示加载成功。"""
         self.current_step = 0
         self.is_playing = False
         
-        # 加载游戏数据
-        self._load_game_data()
+        try:
+            # 加载游戏数据
+            self._load_game_data()
+        except Exception as e:
+            err_msg = f"加载游戏记录失败: {e}"
+            self.status_bar.config(text=err_msg)
+            self._set_game_info_text(err_msg)
+            self.card_canvas.delete("all")
+            w = self.card_canvas.winfo_width() or 1200
+            h = self.card_canvas.winfo_height() or 700
+            self.card_canvas.create_rectangle(0, 0, w, h, fill="#1c5b8a")
+            self.card_canvas.create_text(w // 2, h // 2,
+                                         text=err_msg, fill="#FF4444",
+                                         font=("Microsoft YaHei", 14), anchor=tk.CENTER)
+            traceback.print_exc()
+            return False
         
         # 更新UI
         self.play_btn.config(text="播放")
@@ -438,6 +441,7 @@ class YiFeiReplayGUI:
         self._update_step_copy_panel()
         
         self.status_bar.config(text=f"已选择游戏: {self.current_game.name}")
+        return True
     
     def _load_game_data(self):
         """加载游戏数据，自动整合所有可用信息"""

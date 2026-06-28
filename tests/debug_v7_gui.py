@@ -1162,13 +1162,9 @@ HTML_TEMPLATE = r"""
   // ── 从原始牌码渲染卡片 ──────────────────────────────
   function renderCardFromCode(code) {
     code = String(code);
-    // 大小王
-    if (code === 'SB' || code === 'B') {
-      return `<span class="rank-cell"><img src="/assets/joker_small.png" style="width:28px;height:18px;vertical-align:middle;"></span>`;
-    }
-    if (code === 'HR' || code === 'R') {
-      return `<span class="rank-cell"><img src="/assets/joker_big.png" style="width:28px;height:18px;vertical-align:middle;"></span>`;
-    }
+    // 大小王（图片清晰，38×24px）
+    if (code === 'SB' || code === 'B') return `<span class="rank-cell"><img src="/assets/joker_small.png" style="width:38px;height:24px;vertical-align:middle;"></span>`;
+    if (code === 'HR' || code === 'R') return `<span class="rank-cell"><img src="/assets/joker_big.png" style="width:38px;height:24px;vertical-align:middle;"></span>`;
     // 配牌
     if (code === 'XX' || code === '?') {
       return `<span class="rank-cell" style="background:rgba(212,168,67,0.3);">配</span>`;
@@ -1189,12 +1185,8 @@ HTML_TEMPLATE = r"""
   function renderCardFromDisplay(display) {
     if (!display) return '';
 
-    if (display === '🃏') {
-      return `<span class="rank-cell"><img src="/assets/joker_small.png" style="width:28px;height:18px;vertical-align:middle;"></span>`;
-    }
-    if (display === '👑') {
-      return `<span class="rank-cell"><img src="/assets/joker_big.png" style="width:28px;height:18px;vertical-align:middle;"></span>`;
-    }
+    if (display === '🃏') return `<span class="rank-cell"><img src="/assets/joker_small.png" style="width:38px;height:24px;vertical-align:middle;"></span>`;
+    if (display === '👑') return `<span class="rank-cell"><img src="/assets/joker_big.png" style="width:38px;height:24px;vertical-align:middle;"></span>`;
 
     let cls = 'rank-cell';
     const firstCh = display[0];
@@ -1239,6 +1231,41 @@ HTML_TEMPLATE = r"""
       else if (oppType === 'Bomb') {
         cards = [`${suitCycle[0]}${r2}`, `${suitCycle[1]}${r2}`, `${suitCycle[2]}${r2}`, `${suitCycle[3]}${r2}`];
         opponentAction = ['Bomb', r2, cards];
+      } else if (oppType === 'Straight') {
+        // 顺子：从起始rank连续5张，各不同花色
+        const rankSeq = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
+        let startIdx = rankSeq.indexOf(r2);
+        if (startIdx < 0 || startIdx > rankSeq.length - 5) startIdx = 0;
+        cards = rankSeq.slice(startIdx, startIdx + 5).map((rk, i) => `${suitCycle[i % 4]}${rk}`);
+      } else if (oppType === 'StraightFlush') {
+        // 同花顺：同花色连续5张
+        const rankSeq = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
+        let startIdx = rankSeq.indexOf(r2);
+        if (startIdx < 0 || startIdx > rankSeq.length - 5) startIdx = 0;
+        cards = rankSeq.slice(startIdx, startIdx + 5).map(rk => `S${rk}`);
+      } else if (oppType === 'ThreePair') {
+        // 三连对：3个连续对子 = 6张
+        const rankSeq = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
+        let startIdx = rankSeq.indexOf(r2);
+        if (startIdx < 0 || startIdx > rankSeq.length - 3) startIdx = 0;
+        cards = [];
+        for (let i = 0; i < 3; i++) {
+          const rk = rankSeq[startIdx + i];
+          cards.push(`S${rk}`, `H${rk}`);
+        }
+      } else if (oppType === 'TwoTrips') {
+        // 钢板：2个连续三张 = 6张
+        const rankSeq = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
+        let startIdx = rankSeq.indexOf(r2);
+        if (startIdx < 0 || startIdx > rankSeq.length - 2) startIdx = 0;
+        cards = [];
+        for (let i = 0; i < 2; i++) {
+          const rk = rankSeq[startIdx + i];
+          cards.push(`S${rk}`, `H${rk}`, `C${rk}`);
+        }
+      } else if (oppType === 'ThreeWithTwo') {
+        // 三带二：3张X + 2张Y（把第二点数放在隐藏字段或默认可换的）
+        cards = [`S${r2}`, `H${r2}`, `C${r2}`, `S3`, `H3`];
       } else {
         cards = [`${suitCycle[0]}${r2}`];
       }
@@ -1396,10 +1423,11 @@ HTML_TEMPLATE = r"""
     if (!cardsStr) return '';
     const parts = cardsStr.split(/\s+/).filter(s => s);
     return parts.map(p => {
+      // 大小王：emoji 在 22px cell 里糊掉，用文字渲染
+      if (p === '🃏') return `<span class="card-tag" style="background:rgba(212,168,67,0.25);color:var(--gold-light);">小王</span>`;
+      if (p === '👑') return `<span class="card-tag" style="background:rgba(231,76,60,0.25);color:#e74c3c;">大王</span>`;
       let cls = 'card-tag';
       if (p.includes('♥') || p.includes('♦')) cls += ' red';
-      if (p === '🃏') cls += ' joker-small';
-      if (p === '👑') cls += ' joker-big';
       return `<span class="${cls}">${p}</span>`;
     }).join('');
   }

@@ -136,3 +136,16 @@ python scripts/analysis/compare_sf_detection_vs_multipass.py
 - 对比：同手牌 `check_grouping_engine.py` 输出 vs 对战日志 `组牌引擎: role=... bombs=...`
 
 **待定音（R-G080-4）**：生产路径 **禁止静默降级**——`grouping_engine` 导入失败应 **显式告警 + 指标计数**；关单前批跑确认零条 scanner 降级日志。**关联 open**：GUA-054（scanner 9 维基线）、GUA-061（engine 24 维主路径）。
+
+**R-G080-4 定音（2026-06-28）**：净盘 3 局 + 9 局批跑 **零 scanner/card_mask 降级** ✅（见 `v7-win-rate-history.md` 2026-06-28 两行）。
+
+## 组牌参数冻结（2026-06-28 · 建议 1 定音）
+
+| 项 | 结论 |
+|----|------|
+| **拆炸时序** | 已编码（`f91f0af`）；`check_grouping_engine.py --pre-dedup` 标杆通过 |
+| **批跑 KPI** | 9 局副胜 **3.4%（2/59）**，未回升至 GUA-063 基线（23.8%）；**队胜仍 0/9** |
+| **后续组牌** | **冻结** `grouping_engine` 评分权重 / 拆炸阈值 / 枚举策略；**禁止**为抬副胜率再调组牌参数（GUA-062 教训） |
+| **GUA-084 例外** | **2026-06-01 批准**：仅允许 **拆炸结构规则**（5+ 保核、TWT 禁吃炸对、SF 分支 +BOMB_FIRST），**禁止**改 `_score_plan_v2` 权重；见 [[GUA-084-completion]] |
+| **瓶颈转向** | **决策链**：GUA-075 推荐命中率、GUA-078 残局转化、GUA-072 信念记牌 → heuristic |
+| **关单** | GUA-080 **仍 open**（副胜率未达标）；R-G080-4 子项 **closed** |

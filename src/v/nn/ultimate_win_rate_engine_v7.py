@@ -83,6 +83,8 @@ class UltimateWinRateEngineV7:
         self.decision_count = 0
         self.model_decisions = 0
         self.fallback_decisions = 0
+        self.heuristic_decisions = 0  # GUA-071 heuristic 选择次数
+        self.heuristic_override_count = 0  # GUA-071 组局一致性强行覆盖 NN 的次数
         # GUA-045 Guard 统计（2026-06-17 接入）
         self.guard_filtered_count = 0
         self.guard_validated_count = 0
@@ -91,29 +93,59 @@ class UltimateWinRateEngineV7:
         # GUA-052: MemoryTracker 实例（跨决策状态）
         self._tracker = None
         self._tracker_initialized = False
+        self._tracker_history_replayed: int = 0
 
         # ── GUA-063: 组牌→出牌衔接（2026-06-18）────
         # 每次 decide() 前跑一次 enumerate_groupings()，缓存以下产物：
         self._card_mask: Optional[Dict[str, tuple]] = None   # card → (group_id, is_core, group_size)
+        self._group_members: Dict[int, List[str]] = {}       # group_id → 牌列表（multiset 真源）
         self._current_role: str = "主攻"                      # 角色（主攻/助攻/超强主攻/超弱）
-        self._best_plan = None                                # 最优方案 GroupingPlan
-        self._grouping_features: Optional[np.ndarray] = None  # 24 维组牌特征（进 NN）
-        self._last_hand_hash: int = -1                        # 手牌 hash，用于判断是否需要重跑引擎
+        self._best_plan = None                                 # 最优方案 GroupingPlan
+        self._grouping_features: Optional[np.ndarray] = None   # 24 维组牌特征（进 NN）
+        self._last_hand_hash: int = -1                         # 手牌 hash，用于判断是否需要重跑引擎
         # GUA-063 中局重分组触发标记
-        self._core_broken_since_regroup: bool = False         # 核心牌型被破后标记
+        self._core_broken_since_regroup: bool = False          # 核心牌型被破后标记
         # GUA-063 过滤统计
         self.group_filtered_count: int = 0
         self.group_filter_bypass_count: int = 0
+        # 残局管线统计
+        self._endgame_activated_count: int = 0
+        self._endgame_hit_count: int = 0
         # GUA-063 Phase 3: 中局重分组触发追踪
         self._prev_hand_size: int = 27
         self._regroup_triggered_count: int = 0
         # 决议 8: 接风跟线 — 记忆队友末手牌型
-        self._teammate_last_trick_type: Optional[str] = None  # "Pair"/"Bomb"/"StraightFlush" 等
+        self._teammate_last_trick_type: Optional[str] = None   # "Pair"/"Bomb"/"StraightFlush" 等
         # 决议 10: 投喂策略 — 5 张反馈路径状态
-        self._feed_five_card_tried: bool = False               # 是否已试探过 5 张类牌型
+        self._feed_five_card_tried: bool = False                # 是否已试探过 5 张类牌型
         # 决议 6: 组牌类型映射 — group_id → 牌型字符串
         self._group_type_map: Dict[int, str] = {}
-        
+
+    def on_game_start(self, my_pos: int = None):
+        """每局开始时清理跨副残留状态（R11记忆/R15相克锁/MemoryTracker等）。"""
+        if GUARD_IMPORT_OK:
+            try:
+                from src.v.nn.guards.v7_guards import _clear_r11_memory_for_game
+                _clear_r11_memory_for_game(my_pos)
+            except Exception:
+                pass
+        self._card_mask = None
+        self._group_members = {}
+        self._current_role = "主攻"
+        self._best_plan = None
+        self._grouping_features = None
+        self._last_hand_hash = -1
+        self._core_broken_since_regroup = False
+        self._prev_hand_size = 27
+        self._regroup_triggered_count = 0
+        self._teammate_last_trick_type = None
+        self._feed_five_card_tried = False
+        self._group_type_map = {}
+        self._group_members = {}
+        self._tracker = None
+        self._tracker_initialized = False
+        self._tracker_history_replayed = 0
+
     def _load_model(self):
         """加载终极胜率导向模型"""
         try:
@@ -145,12 +177,28 @@ class UltimateWinRateEngineV7:
             self.model = None
             return False
     
+    # ── GUA-075 推荐路径统计 ──
+    recommend_count: int = 0        # 推荐器尝试次数
+    recommend_hit_count: int = 0    # 推荐命中次数
+    recommend_valid_count: int = 0  # 推荐通过校验次数
+    # 匹配失败分类计数器
+    _match_fail_type_mismatch: int = 0      # 推荐 type 不在 actionList 中
+    _match_fail_rank_mismatch: int = 0      # type 匹配但 rank 不匹配
+    _match_fail_cards_mismatch: int = 0     # type+rank 匹配但 cards 不匹配
+
     def decide(self, game_state: Dict[str, Any]) -> int:
         """
         做出决策
 
-        GUA-063 流程（2026-06-18）：
-          actionList → Guard filter → 组牌引擎(一次枚举) → group_filter(角色前置过滤) → NN → validate → 返回
+        GUA-075 流程（2026-06-20，GUA-078 2026-06-21 修订）：
+          ① 组牌引擎 → ①b MemoryTracker（decide 入口）→ ② numofplayers
+          → ③ 接风记忆 → ④ MemoryTracker 注入 game_state
+          ═══════════ 【NEW】主路径 ═══════════
+          ⑤ _recommend_play() → 推荐方案
+          ⑥ _match_actionList() → 在原始 actionList 中匹配
+          ⑦ Guard 硬规则快速校验 → 通过 → return actIndex ✅
+          ═══════════ 回退路径（不变）═══════════
+          Guard filter → group_consistency → wind/feeding → NN → validate → heuristic → return
 
         Args:
             game_state: 游戏状态
@@ -164,19 +212,135 @@ class UltimateWinRateEngineV7:
         if not action_list:
             return 0
 
-        # ── GUA-063 Phase 1: 跑一次组牌引擎，缓存 mask+role+features ──
+        # ── ① 组牌引擎 ──
         self._run_grouping_engine(game_state)
 
-        # ── GUA-065: 注入 numofplayers 到 game_state（队友保护需要知道各家剩张）──
+        # ── ①b MemoryTracker（GUA-078：残局 numofplayers 须在注入前就绪）──
+        self._ensure_memory_tracker_for_decide(game_state)
+
+        # ── ② 注入 numofplayers ──
         self._inject_numofplayers(game_state)
 
-        # ── 决议 8: 接风跟线 — 记忆队友末手牌型 ──
+        # ── ②b GUA-072 规则记牌信念（供 heuristic / 推荐器）──
+        self._inject_belief_vector(game_state)
+
+        # ── ③ 接风跟线记忆 ──
         self._update_teammate_last_trick(game_state)
 
-        # ── GUA-068: 注入 MemoryTracker 到 game_state（R11 全局抑制牌检查需要）──
+        # ── ④ MemoryTracker 注入 ──
         if self._tracker is not None:
             game_state["_memory_tracker"] = self._tracker
 
+        # ══════════════ ★ 残局管线：预处理 + Q0→Q3 决策 ══════════════
+        # 注入点：_inject_numofplayers 之后，GUA-075 主路径之前
+        # 若残局命中 → 直接返回；未命中 → 继续 GUA-075 + Guard + NN + heuristic
+        try:
+            from src.v.nn.endgame.endgame_preprocessor import EndgamePreprocessor
+            from src.v.nn.endgame.endgame_decide import EndgameDecider
+            EndgamePreprocessor().preprocess(game_state)
+            ec = game_state.get("_endgame_context", {})
+            if ec.get("is_active"):
+                self._endgame_activated_count += 1
+                decider = EndgameDecider()
+                # 保存原始 action_list 用于索引映射
+                original_action_list = list(action_list)
+                # Step A: banned_types 硬排除
+                action_list, banned_empty = decider.apply_banned_filter(action_list, game_state)
+                if banned_empty:
+                    # 全被禁 → 用原始 actionList 走降级（L3 放回 banned 但保留 baoshu.never_play）
+                    endgame_idx, endgame_act = decider.decide(game_state, original_action_list)
+                else:
+                    # Step B: Q0→Q3 残局决策（在过滤后的 action_list 上）
+                    endgame_idx, endgame_act = decider.decide(game_state, action_list)
+                # 命中 → 找原始 actionList 中的下标
+                if endgame_idx is not None and endgame_act is not None:
+                    for orig_i, a in enumerate(original_action_list):
+                        if a == endgame_act:
+                            self._endgame_hit_count += 1
+                            self.logger.info(
+                                "残局管线命中: actIndex=%d cards=%s",
+                                orig_i,
+                                endgame_act[2] if len(endgame_act) >= 3 and isinstance(endgame_act[2], list) else endgame_act[:3],
+                            )
+                            return orig_i
+                    self.logger.warning("残局决策未在原始 actionList 中匹配到: %s", endgame_act[:3] if len(endgame_act) >= 3 else endgame_act)
+                # 残局未命中 → 恢复 action_list（已过滤 banned）→ 继续 GUA-075
+        except Exception as e:
+            self.logger.warning("残局管线异常: %s，回退正常管线", e)
+
+        # ══════════════ ⑤-⑦ GUA-075 主路径：推荐 + 匹配 + 校验 ══════════════
+        try:
+            recommendation = self._recommend_play(game_state, action_list)
+            if recommendation:
+                self.recommend_count += 1
+                act_index = self._match_actionList(recommendation, action_list)
+                if act_index >= 0:
+                    self.recommend_hit_count += 1
+                    # ── ⑦ Guard 硬规则快速校验 ──
+                    if self._quick_guard_validate(act_index, action_list, game_state):
+                        # GUA-075 fix: card_mask 组牌一致性保护
+                        # 原路径跳过了 _group_consistency_filter，必须在此补检
+                        # 推荐动作拆炸弹/同花顺 → 拦截回退
+                        blocked_by_mask = False
+                        if self._card_mask and self._group_type_map:
+                            broken = self._get_broken_core_type(
+                                action_list[act_index],
+                                self._card_mask,
+                                self._group_type_map,
+                                self._group_members,
+                            )
+                            if broken in ("bomb", "straight_flush"):
+                                self.logger.info(
+                                    "GUA-075 推荐被组牌保护拦截: %s/%s 拆 %s → 回退",
+                                    recommendation.get("type"), recommendation.get("rank"), broken)
+                                blocked_by_mask = True
+                        if not blocked_by_mask:
+                            self.recommend_valid_count += 1
+                            self.logger.info(
+                                "GUA-075 主路径: recommend=%s/%s → actIndex=%d ✅",
+                                recommendation.get("type"), recommendation.get("rank"), act_index)
+                            return act_index
+                        # 被拦截时继续往下走到回退路径
+                    else:
+                        self.logger.info(
+                            "GUA-075 推荐校验不通过: %s/%s → 回退",
+                            recommendation.get("type"), recommendation.get("rank"))
+                else:
+                    # GUA-075 诊断：匹配失败时采样 actionList 供根因分析
+                    al_sample = []
+                    al_types = set()
+                    r_type = recommendation.get("type", "")
+                    r_rank = recommendation.get("rank", "")
+                    has_same_type = False
+                    has_same_type_rank = False
+                    for i, a in enumerate(action_list):
+                        if not a or len(a) < 2:
+                            continue
+                        al_types.add(a[0])
+                        if a[0] == r_type:
+                            has_same_type = True
+                            if a[1] == r_rank:
+                                has_same_type_rank = True
+                        if i < 5:
+                            al_sample.append(f"{a[0]}/{a[1]}")
+                    # 分类计数
+                    if not has_same_type:
+                        self._match_fail_type_mismatch += 1
+                    elif not has_same_type_rank:
+                        self._match_fail_rank_mismatch += 1
+                    else:
+                        self._match_fail_cards_mismatch += 1
+                    self.logger.info(
+                        "GUA-075 匹配失败: rec=(%s/%s) cards=%s | actionList=[%s](len=%d types=%s) → 回退",
+                        r_type, r_rank,
+                        recommendation.get("cards", [])[:5],
+                        ",".join(al_sample) if al_sample else "?",
+                        len(action_list),
+                        sorted(al_types))
+        except Exception as e:
+            self.logger.warning("GUA-075 主路径异常: %s, 回退到现有管线", e)
+
+        # ══════════════ 回退路径：现有管线（不变）══════════════
         # ── GUA-045 Guard filter ──
         filtered_actions = action_list
         action_map = list(range(len(action_list)))
@@ -235,66 +399,216 @@ class UltimateWinRateEngineV7:
                             action_index = safe_idx
                         except Exception as e:
                             self.logger.warning(f"validate_decision 失败: {e}")
-                    # 两级映射：group_actions_idx → filtered_idx → original_idx
-                    if action_index < len(group_filter_map):
-                        filtered_idx = group_filter_map[action_index]
+                    # ── GUA-071: 组局一致性后置检查 ──
+                    # NN + Guard 返回后，如果选中动作拆了组局，
+                    # 用 _heuristic_select 覆盖（组局一致性 > 一切）
+                    nn_chosen = (group_actions[action_index]
+                                 if action_index < len(group_actions) else None)
+                    need_heuristic_override = False
+                    override_reason = ""
+                    if (nn_chosen and self._card_mask
+                            and self._action_breaks_core(
+                                nn_chosen, self._card_mask, self._group_members)):
+                        need_heuristic_override = True
+                        override_reason = "拆局"
+                    # ── GUA-071: joker 滥用后置检查 ──
+                    # NN 选了 HR 单张但有 SB 也能压对手 → 浪费大王
+                    if not need_heuristic_override and nn_chosen and GUARD_IMPORT_OK:
+                        try:
+                            from src.v.nn.guards.v7_guards import (
+                                get_action_type as _gat, get_card_rank as _gcr,
+                                get_card_value as _gcv,
+                                ACTION_TYPE_SINGLE as _as,
+                            )
+                            def _cards(a):
+                                return a[2] if len(a) >= 3 and isinstance(a[2], list) else a
+                            if _gat(nn_chosen) == _as:
+                                c_nn = _cards(nn_chosen)
+                                card_nn = c_nn[0] if c_nn else (nn_chosen[0] if len(nn_chosen) >= 1 else "")
+                                if _gcr(str(card_nn)) == "HR":
+                                    cur_r = str(game_state.get("curRank", "2"))
+                                    # 对手 greaterAction value
+                                    ga = game_state.get("greaterAction", []) or []
+                                    greater_val = 0
+                                    if ga and ga[0] != "PASS":
+                                        ga_c = _cards(ga)
+                                        ga_card = ga_c[0] if ga_c else (ga[0] if len(ga) >= 1 else "")
+                                        greater_val = _gcv(str(ga_card), cur_r)
+                                    # 找是否有 SB 能压对手但又不会浪费
+                                    for act in group_actions:
+                                        if _gat(act) == _as:
+                                            c_a = _cards(act)
+                                            card_a = c_a[0] if c_a else (act[0] if len(act) >= 1 else "")
+                                            if _gcr(str(card_a)) == "SB" and _gcv(str(card_a), cur_r) > greater_val:
+                                                need_heuristic_override = True
+                                                override_reason = "joker滥用(HR有SB可用)"
+                                                break
+                        except Exception:
+                            pass
+                    # ── GUA-071: 炸弹滥用后置检查 ──
+                    # NN 选了炸弹/同花顺，但 action_list 里有同型非炸弹可压对手 → 浪费炸
+                    if not need_heuristic_override and nn_chosen and GUARD_IMPORT_OK:
+                        try:
+                            from src.v.nn.guards.v7_guards import (
+                                get_action_type as _gat,
+                                ACTION_TYPE_BOMB as _ab, ACTION_TYPE_STRAIGHT_FLUSH as _asf,
+                            )
+                            _bomb_set = {_ab, _asf}
+                            if _gat(nn_chosen) in _bomb_set:
+                                ga = game_state.get("greaterAction", []) or []
+                                if ga and ga[0] != "PASS":
+                                    ga_type = _gat(ga)
+                                    if ga_type not in _bomb_set and ga_type != "PASS":
+                                        for act in group_actions:
+                                            if _gat(act) == ga_type and _gat(act) not in _bomb_set:
+                                                need_heuristic_override = True
+                                                override_reason = "炸弹滥用(有同型可压)"
+                                                break
+                        except Exception:
+                            pass
+                    if need_heuristic_override:
+                        self.heuristic_decisions += 1
+                        heuristic_idx = self._heuristic_select(game_state, group_actions)
+                        if heuristic_idx != action_index:
+                            self.heuristic_override_count += 1
+                            self.logger.info(
+                                "GUA-071 组局覆盖(%s): NN idx %d → heuristic idx %d",
+                                override_reason, action_index, heuristic_idx,
+                            )
+                            action_index = heuristic_idx
+                    # GUA-085: 按动作内容回查原始 actionList（勿用 flt_map[model_idx]，
+                    # group_consistency_filter 删动作后 flt_map 下标与 group_actions 不对齐）
+                    if 0 <= action_index < len(group_actions):
+                        chosen = group_actions[action_index]
                     else:
-                        filtered_idx = action_index
-                    if filtered_idx < len(action_map):
-                        original_idx = action_map[filtered_idx]
-                    else:
-                        original_idx = 0
-                    # GUA-063 Phase 3: 中局重分组触发检查
-                    chosen = (action_list[original_idx]
-                              if original_idx < len(action_list) else None)
+                        chosen = group_actions[0] if group_actions else None
+                    original_idx = self._match_chosen_to_original_action_list(
+                        chosen, action_list)
+                    if (chosen and original_idx < len(action_list)
+                            and action_list[original_idx] != chosen):
+                        self.logger.warning(
+                            "GUA-085 内容回查未命中，回退 filter_map: chosen=%s",
+                            chosen[:3] if isinstance(chosen, list) and len(chosen) >= 3 else chosen,
+                        )
+                        original_idx = self._fallback_group_action_index(
+                            action_index, group_filter_map, action_map, len(action_list))
                     self._check_midgame_triggers(game_state, chosen)
                     return original_idx
 
-            # 回退到规则引擎
-            self.fallback_decisions += 1
-            return self._rule_based_decision(game_state, action_list)
+            # 回退到启发式规则引擎（GUA-071 _heuristic_select）
+            self.heuristic_decisions += 1
+            heuristic_idx = self._heuristic_select(game_state, group_actions)
+            if 0 <= heuristic_idx < len(group_actions):
+                chosen = group_actions[heuristic_idx]
+                original_idx = self._match_chosen_to_original_action_list(
+                    chosen, action_list)
+                self._check_midgame_triggers(game_state, chosen)
+                return original_idx
+            return self._rule_based_decision(game_state, group_actions)
 
         except Exception as e:
             self.logger.error(f"✗ 决策失败: {e}")
             self.fallback_decisions += 1
             return self._rule_based_decision(game_state, action_list)
     
-    def _replay_history_to_tracker(self, game_state: Dict[str, Any]) -> None:
-        """从 game_state 回放历史到 MemoryTracker。"""
+    def _inject_belief_vector(self, game_state: Dict[str, Any]) -> None:
+        """GUA-072：从 MemoryTracker 注入规则记牌信念到 game_state['_belief']。"""
+        if self._tracker is None:
+            game_state.pop("_belief", None)
+            return
+        try:
+            from src.v.nn.features.rule_card_counter import create_counter_from_tracker
+            game_state["_belief"] = create_counter_from_tracker(self._tracker).get_belief(
+                game_state
+            )
+        except Exception as e:
+            self.logger.debug("belief inject skip: %s", e)
+            game_state.pop("_belief", None)
+
+    def _ensure_memory_tracker_for_decide(self, game_state: Dict[str, Any]) -> None:
+        """GUA-078/GUA-065：decide 入口就绪 MemoryTracker 与各席剩张数。
+
+        残局 Q1/Q3 与 ``_inject_numofplayers`` 依赖准确 ``numofplayers``。
+        wiki ``endgame-preprocessor-overview`` 张力4：记忆管线应先于残局激活，
+        不可仅于 NN ``_extract_features`` 路径 lazy init。
+
+        剩张数优先级：``publicInfo[i].rest``（v1006 平台真源，对齐 M3 GUA-028）
+        > MemoryTracker 出牌回放 > 默认 27。
+        """
         if not FEATURE_IMPORT_OK:
             return
         my_pos = game_state.get("myPos", self.player_id)
-        hand_cards = game_state.get("handCards", [])
+        hand_cards = game_state.get("handCards", []) or []
         cur_rank = str(game_state.get("curRank", "2"))
 
         if not self._tracker_initialized:
-            self._tracker = MemoryTracker(my_pos=my_pos, enable_inference=False, max_infer_depth=0,
-                                          use_grouping_engine=self.use_grouping_engine)  # GUA-061
+            self._tracker = MemoryTracker(
+                my_pos=my_pos,
+                enable_inference=False,
+                max_infer_depth=0,
+                use_grouping_engine=self.use_grouping_engine,
+            )
             if hand_cards:
                 self._tracker.init_from_hand(hand_cards)
             self._tracker.set_level_rank(cur_rank)
             self._tracker_initialized = True
+            self._tracker_history_replayed = 0
+        else:
+            try:
+                self._tracker.set_level_rank(cur_rank)
+            except Exception:
+                pass
 
-        # 回放 history
         history = game_state.get("history", [])
-        for h in history:
+        start = self._tracker_history_replayed
+        for h in history[start:]:
             seat = h.get("pos", h.get("seat", -1))
             if seat < 0:
                 continue
             action = h.get("action") or h.get("curAction") or []
-            if action:
+            if action and (not isinstance(action, list) or action[0] != "PASS"):
                 self._tracker.record_play(seat, action)
+        self._tracker_history_replayed = len(history)
 
-        # 回放 recentPlays
-        recent = game_state.get("recentPlays", [])
-        for rp in recent:
-            seat = rp.get("pos", -1)
-            if seat < 0:
+        if not history:
+            recent = game_state.get("recentPlays", [])
+            for rp in recent:
+                seat = rp.get("pos", -1)
+                if seat < 0:
+                    continue
+                cards = rp.get("cards", [])
+                if cards:
+                    action_type = rp.get("type", "Unknown")
+                    self._tracker.record_play(seat, [action_type, "", cards])
+
+        self._sync_tracker_from_public_info(game_state)
+
+        if self._tracker is not None:
+            self._tracker.hand_counts[my_pos] = len(hand_cards)
+
+    def _sync_tracker_from_public_info(self, game_state: Dict[str, Any]) -> None:
+        """act 时用 publicInfo[].rest 对齐 MemoryTracker.hand_counts（v1006 真源）。"""
+        if self._tracker is None:
+            return
+        public_info = game_state.get("publicInfo")
+        if not isinstance(public_info, list):
+            return
+        for i, info in enumerate(public_info):
+            if i > 3 or not isinstance(info, dict):
                 continue
-            cards = rp.get("cards", [])
-            if cards:
-                action_type = rp.get("type", "Unknown")
-                self._tracker.record_play(seat, [action_type, "", cards])
+            rest = info.get("rest")
+            if rest is None:
+                continue
+            try:
+                n = int(rest)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= n <= 27:
+                self._tracker.hand_counts[i] = n
+
+    def _replay_history_to_tracker(self, game_state: Dict[str, Any]) -> None:
+        """从 game_state 回放历史到 MemoryTracker（NN 特征路径与 decide 共用）。"""
+        self._ensure_memory_tracker_for_decide(game_state)
 
     def _get_tracker_state(self, game_state: Optional[Dict[str, Any]] = None) -> List[float]:
         """获取 MemoryTracker 状态向量。
@@ -325,6 +639,7 @@ class UltimateWinRateEngineV7:
         if not hand_cards:
             self._card_mask = {}
             self._group_type_map = {}
+            self._group_members = {}
             self._current_role = "助攻"
             self._grouping_features = np.zeros(24, dtype=np.float32)
             return
@@ -343,8 +658,8 @@ class UltimateWinRateEngineV7:
             best_plan, all_plans = enumerate_groupings(hand_cards, cur_rank)
             self._best_plan = best_plan
 
-            # 产出 1: card mask（进前置过滤）+ group_type_map
-            self._card_mask, self._group_type_map = best_plan.to_card_mask()
+            # 产出 1: card mask（进前置过滤）+ group_type_map + group_members
+            self._card_mask, self._group_type_map, self._group_members = best_plan.to_card_mask()
 
             # 产出 2: role（决定过滤行为）
             self._current_role = best_plan.role or "主攻"
@@ -353,16 +668,53 @@ class UltimateWinRateEngineV7:
             features_24 = _extract_features(all_plans, hand_cards, cur_rank)
             self._grouping_features = np.array(features_24, dtype=np.float32)
 
-            self.logger.debug(
-                "组牌引擎: role=%s mask_groups=%d features=%d",
+            # 诊断：完整 group 分解（GUA-075 增强，方便日志排查）
+            gid_to_cards = dict(self._group_members)
+            lines = []
+            for gid in sorted(gid_to_cards.keys()):
+                cards = gid_to_cards[gid]
+                gtype = self._group_type_map.get(gid, "scatter")
+                # 区分 core 牌
+                core_cards = [c for c in cards if self._card_mask[c][1] > 0.5]
+                non_core = [c for c in cards if self._card_mask[c][1] <= 0.5]
+                core_str = f" core={core_cards}" if core_cards else ""
+                non_str = f" loose={non_core}" if non_core else ""
+                lines.append(f"  G{gid}({gtype}):{cards}{core_str}{non_str}")
+            bomb_gids = [gid for gid, gt in self._group_type_map.items() if gt == "bomb"]
+            self.logger.info(
+                "组牌引擎: role=%s handCards=%d curRank=%s total_groups=%d bombs=%d\n%s",
                 self._current_role,
-                len(set(v[0] for v in self._card_mask.values() if v[0] >= 0)),
-                len(features_24),
+                len(hand_cards),
+                cur_rank,
+                len(gid_to_cards) - (1 if -1 in gid_to_cards else 0),
+                len(bomb_gids),
+                "\n".join(lines),
             )
         except Exception as e:
-            self.logger.warning(f"_run_grouping_engine 失败: {e}, 退化")
-            self._card_mask = {}
-            self._current_role = "助攻"
+            import traceback
+            self.logger.warning(
+                "_run_grouping_engine 失败: %s, 退化 (handCards=%d, curRank=%s)\n%s",
+                e,
+                len(hand_cards),
+                game_state.get("curRank", "?"),
+                traceback.format_exc(),
+            )
+            # ── 降级保护 (GUA-072): card_mask 为空但 handCards 非空时，
+            #     用 _basic_classify 做简单炸弹识别，防止拆炸弹 ──
+            try:
+                self._card_mask, self._group_type_map, self._group_members = self._basic_classify(
+                    hand_cards, cur_rank=game_state.get("curRank", "2"))
+                self._current_role = "主攻"  # 降级时保守主攻，不拆炸弹
+                self.logger.info(
+                    "_basic_classify 降级: 识别到 %d 个 bomb group",
+                    len(set(v[0] for v in self._card_mask.values() if v[0] >= 0)),
+                )
+            except Exception as e2:
+                self.logger.warning("_basic_classify 也失败: %s，card_mask 完全退化", e2)
+                self._card_mask = {}
+                self._group_type_map = {}
+                self._group_members = {}
+                self._current_role = "助攻"
             self._grouping_features = np.zeros(24, dtype=np.float32)
             self._core_broken_since_regroup = False
 
@@ -388,10 +740,74 @@ class UltimateWinRateEngineV7:
             except Exception:
                 pass
 
-        # 回退：仅知自己手牌数，其他估算为 27
+        # GUA-079 回退增强：从 publicInfo 读取各玩家剩张数（平台实时推送）
+        # publicInfo[i] = {"rest": N, ...}，比盲猜 27 准确，使残局管线能看见对手真实剩余
+        public_info = game_state.get("publicInfo", [])
         numofplayers = [27, 27, 27, 27]
+        if isinstance(public_info, list):
+            for i in range(min(4, len(public_info))):
+                if isinstance(public_info[i], dict):
+                    numofplayers[i] = public_info[i].get("rest", 27)
+        # 纠偏：myPos 以 handCards 为准
         numofplayers[my_pos] = len(hand_cards)
         game_state["numofplayers"] = numofplayers
+
+    # ── GUA-072: 降级保护 — 组牌引擎异常时用简单规则识别炸弹 ──
+
+    @staticmethod
+    def _basic_classify(
+        hand_cards: List[str],
+        cur_rank: str = "2",
+    ) -> tuple:
+        """GUA-072：当 enumerate_groupings 失败时的降级炸弹识别。
+
+        不依赖组牌引擎，用简单点数统计识别炸弹（4+ 同点数）和同花顺。
+        返回 (card_mask, group_type_map, group_members)，格式与 to_card_mask() 一致。
+
+        Args:
+            hand_cards: 手牌列表，如 ['S2', 'CA', 'D4', ...]
+            cur_rank: 当前级牌
+
+        Returns:
+            (card_mask, group_type_map, group_members)
+            card_mask: card → (group_id, is_core, group_size)
+            group_type_map: group_id → "bomb" | "straight_flush" | ...
+            group_members: group_id → 该组全部牌（含重复牌串）
+        """
+        import re
+
+        card_mask: Dict[str, tuple] = {}
+        group_type_map: Dict[int, str] = {}
+        group_members: Dict[int, List[str]] = {}
+
+        if not hand_cards:
+            return card_mask, group_type_map, group_members
+
+        # 按点数统计（炸弹只看点数，不看花色）
+        rank_counts: Dict[str, List[str]] = {}
+        for c in hand_cards:
+            m = re.match(r'([SHDC])(.+)', c)
+            if m:
+                rank = m.group(2)  # 点数部分（如 2, A, K, J, 10, ...）
+                rank_counts.setdefault(rank, []).append(c)
+
+        gid = 0
+
+        # 识别炸弹：4 张或更多同点数
+        for rank, cards in sorted(rank_counts.items(),
+                                   key=lambda x: (-len(x[1]), x[0])):
+            count = len(cards)
+            if count >= 4:
+                group_members[gid] = list(cards)
+                for card in cards:
+                    card_mask[card] = (gid, 1.0, count)
+                group_type_map[gid] = "bomb"
+                gid += 1
+
+        # 降级模式下不做同花顺/顺子/对子/三张识别，
+        # 因为可能引入误判；仅保护炸弹不受拆解。
+
+        return card_mask, group_type_map, group_members
 
     # ── GUA-063 Phase 2: 角色驱动前置过滤 ────────────────────
 
@@ -404,11 +820,12 @@ class UltimateWinRateEngineV7:
 
         过滤规则（设计文档 §三 第二层）：
           - 主攻/超强主攻：移除部分使用 core 组牌的动作
-          - 助攻/超弱：全部放行
+          - 助攻/超弱：走投喂规则条件放行
           - 安全阀：过滤后候选为空 → 全部放行
           - 硬例外（放行全部）：
-            · 对手剩 1-2 张
             · 自己剩 ≤5 张
+            · 对手剩 1-2 张
+            · R16：队友剩 1 张 + 下家非 1 张（送单不卡 role filter）
 
         Args:
             action_list: Guard 过滤后的候选动作列表
@@ -470,6 +887,22 @@ class UltimateWinRateEngineV7:
             self.group_filter_bypass_count += 1
             return action_list, list(range(len(action_list)))
 
+        # ── R16: 队友剩 1 张 + 下家非 1 张 → 放行全部（送单不卡 role filter）──
+        # 设计文档 (2026-06-20)：队友剩 1 张，下家也剩 1 张 → 不放行
+        #   → 我出单 → 下家跟 → 下家头游 ❌
+        # 下家剩 ≥2 张 + 队友剩 1 张 → 放行
+        #   → 我出单 → 下家跟或不跟 → 队友轮到 → 队友头游 ✅
+        xia_jia_pos = (my_pos + 1) % 4
+        if (numofplayers and len(numofplayers) >= 4
+                and numofplayers[teammate_pos] == 1
+                and numofplayers[xia_jia_pos] != 1):
+            self.group_filter_bypass_count += 1
+            self.logger.debug(
+                "R16 放行: teammate=%d剩1张, 下家=%d剩%d张(非1) → 全部放行",
+                teammate_pos, xia_jia_pos, numofplayers[xia_jia_pos],
+            )
+            return action_list, list(range(len(action_list)))
+
         # ── 过滤逻辑（角色分流） ──
         keep_indices: List[int] = []
         removed_count = 0
@@ -479,17 +912,22 @@ class UltimateWinRateEngineV7:
         hand_cards_for_r12 = game_state.get("handCards", []) or []
 
         for idx, action in enumerate(action_list):
-            # ── R12: 拆对子出单禁制（GUA-070）──
-            # 任何角色 + 任何来源（普通对子 / ThreeWithTwo对子），有自然单张就不许拆对子
+            # ── R12: 拆对子出单禁制（GUA-070，2026-06-21 修订）──
+            # 有自然单张时不许拆普通对子；**例外**：级牌/大小王可拆对压牌
             action_cards_r12 = action[2] if isinstance(action, list) and len(action) >= 3 else []
             if len(action_cards_r12) == 1:
                 card_info = self._card_mask.get(action_cards_r12[0])
                 if card_info and card_info[2] == 2:  # 该单张从 gsize=2 的组拆出
-                    if self._has_any_natural_single(hand_cards_for_r12, cur_rank):
+                    from src.v.nn.guards.v7_guards import get_card_rank
+                    card_rank = get_card_rank(str(action_cards_r12[0]))
+                    r12_exempt = card_rank in ("HR", "SB") or card_rank == cur_rank
+                    if (not r12_exempt
+                            and self._has_any_natural_single(hand_cards_for_r12, cur_rank)):
                         removed_count += 1
                         continue
 
-            broken_type = self._get_broken_core_type(action, self._card_mask, self._group_type_map)
+            broken_type = self._get_broken_core_type(
+                action, self._card_mask, self._group_type_map, self._group_members)
 
             if broken_type is None:
                 # 不拆任何 core → 保留
@@ -530,12 +968,12 @@ class UltimateWinRateEngineV7:
         # 安全阀：过滤后候选为空 → 全部放行
         if not keep_indices:
             self.group_filter_bypass_count += 1
-            self.logger.debug("安全阀：过滤后候选为空，全部放行")
+            self.logger.warning("安全阀：过滤后候选为空，全部放行 (role=%s)", role)
             return action_list, list(range(len(action_list)))
 
         if removed_count > 0:
             self.group_filtered_count += 1
-            self.logger.debug(
+            self.logger.info(
                 "前置过滤: role=%s 移除 %d/%d 个拆核心动作, 保留 %d",
                 role, removed_count, len(action_list), len(keep_indices),
             )
@@ -550,8 +988,33 @@ class UltimateWinRateEngineV7:
         return filtered, filter_map
 
     @staticmethod
-    def _get_broken_core_type(action, card_mask: Dict[str, tuple],
-                               group_type_map: Dict[int, str]) -> Optional[str]:
+    def _multiset_overlap_used(action_cards: List[str], group_cards: List[str]) -> int:
+        """动作牌与组内牌的多集合交集张数（重复牌串按枚计数）。"""
+        from collections import Counter as _Counter
+        action_c = _Counter(action_cards)
+        group_c = _Counter(group_cards)
+        return sum(min(action_c[c], group_c[c]) for c in group_c)
+
+    @staticmethod
+    def _group_total_size(
+        gid: int,
+        card_mask: Dict[str, tuple],
+        group_members: Optional[Dict[int, List[str]]] = None,
+    ) -> int:
+        if group_members and gid in group_members:
+            return len(group_members[gid])
+        for info in card_mask.values():
+            if info[0] == gid:
+                return info[2]
+        return 0
+
+    @staticmethod
+    def _get_broken_core_type(
+        action,
+        card_mask: Dict[str, tuple],
+        group_type_map: Dict[int, str],
+        group_members: Optional[Dict[int, List[str]]] = None,
+    ) -> Optional[str]:
         """检查一个动作破坏了哪种类型的 core 组牌。
 
         规则（设计文档 §八）：
@@ -559,15 +1022,8 @@ class UltimateWinRateEngineV7:
           - 如果动作使用了某个 core 组的部分牌 → 返回该组的类型字符串
           - 如果动作未使用任何 core 组牌 → 返回 None
 
-        Args:
-            action: 动作 [type, rank, [cards...]]
-            card_mask: card → (group_id, is_core, group_size)
-            group_type_map: group_id → type_string
-
-        Returns:
-            类型字符串 ("bomb"/"straight_flush"/"straight"/"trips"/"pair"/...) 或 None
+        group_members 为 multiset 真源，支持同牌串多枚及 4~8 星炸。
         """
-        # PASS 不拆任何牌
         if not action or (isinstance(action, list) and len(action) > 0
                           and str(action[0]).upper() == "PASS"):
             return None
@@ -576,81 +1032,131 @@ class UltimateWinRateEngineV7:
         if not action_cards:
             return None
 
-        # 统计每个 core 组被使用的牌数
         from collections import Counter as _Counter
-        core_usage: _Counter[int] = _Counter()  # group_id → 使用张数
-
+        touched_gids: set[int] = set()
         for card in action_cards:
             info = card_mask.get(card)
             if info is None:
                 continue
-            gid, is_core, gsize = info
+            gid, is_core, _gsize = info
             if is_core >= 1.0 and gid >= 0:
-                core_usage[gid] += 1
+                touched_gids.add(gid)
 
-        # 检查是否有 core 组被部分使用
-        for gid, used_count in core_usage.items():
-            for card in action_cards:
-                info = card_mask.get(card)
-                if info and info[0] == gid:
-                    gsize = info[2]
-                    if 0 < used_count < gsize:
-                        # 返回该组的类型
-                        return group_type_map.get(gid, "unknown")
-                    break
+        for gid in touched_gids:
+            if group_members and gid in group_members:
+                total = len(group_members[gid])
+                used = UltimateWinRateEngineV7._multiset_overlap_used(
+                    action_cards, group_members[gid]
+                )
+            else:
+                total = UltimateWinRateEngineV7._group_total_size(gid, card_mask, group_members)
+                used = sum(
+                    1 for c in action_cards
+                    if card_mask.get(c) and card_mask.get(c)[0] == gid
+                )
+            if 0 < used < total:
+                return group_type_map.get(gid, "unknown")
 
         return None
 
     @staticmethod
-    def _action_breaks_core(action, card_mask: Dict[str, tuple]) -> bool:
-        """检查一个动作是否拆核心牌型。
+    def _action_breaks_core(
+        action,
+        card_mask: Dict[str, tuple],
+        group_members: Optional[Dict[int, List[str]]] = None,
+        group_type_map: Optional[Dict[int, str]] = None,
+    ) -> bool:
+        """检查一个动作是否拆核心牌型。"""
+        if group_type_map is None:
+            group_type_map = {}
+        return UltimateWinRateEngineV7._get_broken_core_type(
+            action, card_mask, group_type_map, group_members
+        ) is not None
 
-        规则（设计文档 §三 第二层）：
-          - 如果动作使用了某个 core 组的全部牌 → 不视为拆，放行
-          - 如果动作使用了某个 core 组的部分牌（0 < count < group_size）→ 拆核心
-          - 如果动作未使用任何 core 组牌 → 不视为拆
+    def _build_group_index(self, card_mask: Dict[str, tuple]) -> Dict[int, dict]:
+        """从 group_members（优先）或 card_mask 构建 gid→组信息索引。"""
+        groups: Dict[int, dict] = {}
+        if self._group_members:
+            for gid, cards in self._group_members.items():
+                if gid < 0:
+                    continue
+                sample = card_mask.get(cards[0], (gid, 1.0, len(cards)))
+                groups[gid] = {
+                    "cards": list(cards),
+                    "is_core": sample[1],
+                    "size": len(cards),
+                    "type": self._group_type_map.get(gid, "Unknown"),
+                }
+            return groups
 
-        Args:
-            action: 动作 [type, rank, [cards...]]
-            card_mask: card → (group_id, is_core, group_size)
-
-        Returns:
-            True 表示该动作拆核心牌型，应被过滤
-        """
-        # PASS 不拆任何牌
-        if not action or (isinstance(action, list) and len(action) > 0
-                          and str(action[0]).upper() == "PASS"):
-            return False
-
-        action_cards = action[2] if isinstance(action, list) and len(action) >= 3 else []
-        if not action_cards:
-            return False
-
-        # 统计每个 core 组被使用的牌数
-        from collections import Counter as _Counter
-        core_usage: _Counter[int] = _Counter()  # group_id → 使用张数
-
-        for card in action_cards:
-            info = card_mask.get(card)
-            if info is None:
+        for card, (gid, is_core, gsize) in card_mask.items():
+            if gid < 0:
                 continue
-            gid, is_core, gsize = info
-            if is_core >= 1.0 and gid >= 0:
-                core_usage[gid] += 1
+            if gid not in groups:
+                groups[gid] = {
+                    "cards": [],
+                    "is_core": is_core,
+                    "size": gsize,
+                    "type": self._group_type_map.get(gid, "Unknown"),
+                }
+            groups[gid]["cards"].append(card)
+        return groups
 
-        # 检查是否有 core 组被部分使用
-        for gid, used_count in core_usage.items():
-            # 查找该组的 group_size
-            # 因为同一组的所有牌共享相同的 group_size，取第一次遇到的
-            for card in action_cards:
-                info = card_mask.get(card)
-                if info and info[0] == gid:
-                    gsize = info[2]
-                    if 0 < used_count < gsize:
-                        return True  # 部分使用 → 拆核心
-                    break
+    def _scatter_singles(self, card_mask: Dict[str, tuple]) -> List[str]:
+        if self._group_members and -1 in self._group_members:
+            return list(self._group_members[-1])
+        return [c for c, (gid, _, _) in card_mask.items() if gid < 0]
 
-        return False
+    def _collect_single_follow_candidates(
+        self,
+        card_mask: Dict[str, tuple],
+        groups: Dict[int, dict],
+        hand_cards: List[str],
+        cur_rank: str,
+    ) -> List[str]:
+        """跟单牌候选池。GUA-070 R12：有自然单张时不并入非 core 对子（主路径 GUA-075 同步）。"""
+        from src.v.nn.guards.v7_guards import get_card_rank
+
+        singles = list(self._scatter_singles(card_mask))
+        pair_gtypes = ("pair", "pair_in_three_with_two", "pair_in_three_pair")
+        respect_r12 = self._has_any_natural_single(hand_cards, cur_rank)
+
+        for _gid, ginfo in groups.items():
+            if ginfo["type"] not in pair_gtypes:
+                continue
+            if respect_r12:
+                for c in ginfo["cards"]:
+                    r = get_card_rank(str(c))
+                    if r in ("HR", "SB") or r == cur_rank:
+                        singles.append(c)
+                continue
+            if ginfo["is_core"] <= 0:
+                singles.extend(ginfo["cards"])
+                continue
+            for c in ginfo["cards"]:
+                r = get_card_rank(str(c))
+                if r in ("HR", "SB") or r == cur_rank:
+                    singles.append(c)
+        return singles
+
+    def _single_breaks_pair_under_r12(
+        self, action: List, hand_cards: List[str], cur_rank: str
+    ) -> bool:
+        """GUA-075 主路径：拆普通对出单且手中有自然单张 → 应回退（与 R12 一致）。"""
+        from src.v.nn.guards.v7_guards import get_card_rank
+
+        if not self._card_mask or not action or len(action) < 3:
+            return False
+        action_cards = action[2] if isinstance(action[2], list) else []
+        if len(action_cards) != 1:
+            return False
+        card_info = self._card_mask.get(action_cards[0])
+        if not card_info or card_info[2] != 2:
+            return False
+        card_rank = get_card_rank(str(action_cards[0]))
+        if card_rank in ("HR", "SB") or card_rank == cur_rank:
+            return False
+        return self._has_any_natural_single(hand_cards, cur_rank)
 
     # ── 决议 6: 投喂场景判断辅助方法 ──────────────────────
 
@@ -903,7 +1409,8 @@ class UltimateWinRateEngineV7:
 
         # 检查当前动作是否拆了核心牌型
         if (self._card_mask and chosen_action and
-                self._action_breaks_core(chosen_action, self._card_mask)):
+                self._action_breaks_core(
+                    chosen_action, self._card_mask, self._group_members)):
             self._core_broken_since_regroup = True
             self.logger.debug("核心牌型被破坏: 动作=%s", chosen_action[:2] if isinstance(chosen_action, list) else chosen_action)
 
@@ -973,7 +1480,7 @@ class UltimateWinRateEngineV7:
             if act_type == target_type:
                 # 检查是否拆 core
                 if (self._card_mask and
-                        not self._action_breaks_core(act, self._card_mask)):
+                        not self._action_breaks_core(act, self._card_mask, self._group_members)):
                     matched.append(idx)
                     continue
             others.append(idx)
@@ -1157,7 +1664,7 @@ class UltimateWinRateEngineV7:
             if act_type in target_types:
                 # 检查是否拆 core
                 if (self._card_mask and
-                        not self._action_breaks_core(act, self._card_mask)):
+                        not self._action_breaks_core(act, self._card_mask, self._group_members)):
                     # D3: 记录值用于选最小
                     val = 0
                     if act_type == ACTION_TYPE_SINGLE:
@@ -1368,9 +1875,1218 @@ class UltimateWinRateEngineV7:
             self.logger.error(f"Fallback 特征提取失败: {e}")
             return None
 
+    def _heuristic_select(self, game_state: Dict[str, Any], action_list: List) -> int:
+        """
+        GUA-071: 启发式动作选择 — Layer 2（软排序）。
+
+        ── 三层决策管道（GUA-073 整理）────
+          Layer 1: Guard (v7_guards.py)     → 硬排除错误动作
+          Layer 2: Heuristic (本方法)        → 软排序合理动作 ← 你在这里
+          Layer 3: validate_decision         → 安全网兜底
+
+        职责：在 Guard 保留的动作中，按"哪个更好"排序。
+        不要重复 Layer 1 的判断——Guard 已经删了不该有的动作，
+        heuristic 只需在剩下的里选最优。
+
+        核心原则：组局引擎已经算好了最优牌型结构，出牌必须按组局节奏走。
+        如果选了一个拆局的动作，组局就白组了。
+
+        优先级（分高者胜）：
+        ① 组局一致性：动作所有牌来自同一个 core 组（+10000，碾压一切）
+        ② 队友控牌时 PASS 优先（+200），非炸（+100）
+        ③ 对手急眼（剩牌≤4）时炸弹优先（+800），PASS 降权（-100）
+        ④ 非 PASS > PASS（+50）
+        ⑤ 同分时取起始 rank 最小的（节约牌力）
+        ⑨ GUA-082 R12：有自然单张时拆普通对出单重罚并跳过（回退路径兜底）
+
+        Args:
+            game_state: 游戏状态
+            action_list: 候选动作列表（post Guard + post _group_consistency_filter）
+
+        Returns:
+            最优动作索引
+        """
+        if not action_list:
+            return 0
+
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, get_action_rank, get_card_value, get_card_rank,
+            ACTION_TYPE_PASS, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+            ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR, ACTION_TYPE_TRIPS,
+            ACTION_TYPE_THREE_PAIR, ACTION_TYPE_TWO_TRIPS,
+            ACTION_TYPE_THREE_WITH_TWO, ACTION_TYPE_STRAIGHT,
+        )
+
+        my_pos = game_state.get("myPos", self.player_id)
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction", []) or []
+        cur_rank = str(game_state.get("curRank", "2"))
+        teammate_pos = (my_pos + 2) % 4
+        numofplayers = game_state.get("numofplayers", []) or [27, 27, 27, 27]
+        hand_cards = game_state.get("handCards", []) or []
+        my_hand_size = len(hand_cards)
+
+        # ── 场景判断 ──
+        teammate_controls = (
+            greater_pos == teammate_pos
+            and greater_action
+            and greater_action[0] != "PASS"
+        )
+        opp_left = (my_pos + 1) % 4
+        opp_right = (my_pos + 3) % 4
+        opp_in_danger = (
+            (len(numofplayers) > opp_left and 0 < numofplayers[opp_left] <= 4)
+            or (len(numofplayers) > opp_right and 0 < numofplayers[opp_right] <= 4)
+        )
+        is_early_game = (my_hand_size > 12)
+
+        belief = game_state.get("_belief") or {}
+        belief_hand_counts = belief.get("hand_counts") or numofplayers
+
+        # ── 预扫描：用于规则 ⑥⑦ ──
+        # 对手出牌的 rank value
+        greater_val = 0
+        if greater_action and greater_action[0] != "PASS":
+            ga_type = get_action_type(greater_action)
+            if ga_type == ACTION_TYPE_SINGLE:
+                ga_cards = greater_action[2] if len(greater_action) >= 3 and isinstance(greater_action[2], list) else greater_action
+                ga_card = ga_cards[0] if ga_cards else (greater_action[0] if len(greater_action) >= 1 else "")
+                greater_val = get_card_value(str(ga_card), cur_rank)
+        # 是否有 SB 单张可用（能压对手）
+        has_sb_single = False
+        for act in action_list:
+            if get_action_type(act) == ACTION_TYPE_SINGLE:
+                cards = act[2] if len(act) >= 3 and isinstance(act[2], list) else act
+                card = cards[0] if cards else (act[0] if len(act) >= 1 else "")
+                if get_card_rank(str(card)) == "SB" and get_card_value(str(card), cur_rank) > greater_val:
+                    has_sb_single = True
+                    break
+        # ── GUA-071 预扫描：同型非炸弹计数器 ──
+        # 检测 action_list 中是否有与对手同牌型的非炸弹动作
+        # 用于规则⑧（有同型可压不该炸）和后置炸弹滥用覆盖
+        _BOMB_TYPES = {ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH}
+        greater_type = ""
+        if greater_action and greater_action[0] != "PASS":
+            greater_type = get_action_type(greater_action)
+        has_same_type_nonbomb = False
+        if greater_type and greater_type not in _BOMB_TYPES and greater_type != ACTION_TYPE_PASS:
+            for act in action_list:
+                at = get_action_type(act)
+                if at == greater_type and at not in _BOMB_TYPES:
+                    has_same_type_nonbomb = True
+                    break
+
+        # ── 组局一致性检查 ──
+        mask = self._card_mask or {}
+
+        def _is_group_consistent(action) -> bool:
+            """动作所有牌是否来自同一个 core 组（group_id ≥ 0）。"""
+            if not action or action[0] == "PASS":
+                return True  # PASS 不干扰组局
+            # 兼容平台格式 [type, rank, [cards]] 和简式 ["S2"]
+            cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else action
+            if not cards:
+                return False
+            # GUA-082: 单张出自 gsize>1 的组 = 拆对/拆三张，不算组局一致
+            if len(cards) == 1:
+                entry = mask.get(str(cards[0]))
+                if entry:
+                    gid, _, gsize = entry
+                    if gid >= 0 and gsize > 1:
+                        return False
+            group_ids = set()
+            for c in cards:
+                c = str(c)
+                entry = mask.get(c)
+                if entry:
+                    gid, _, _ = entry
+                    if gid >= 0:
+                        group_ids.add(gid)
+            # 所有牌属于同一个 core 组 → 组局一致
+            return len(group_ids) == 1
+
+        # ── 拆局扣分计算 ──
+        def _group_break_penalty(action) -> int:
+            """返回负分：拆局越严重（撕散越多 core 组），扣分越多。"""
+            if not action or action[0] == "PASS":
+                return 0
+            cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else action
+            if not cards:
+                return -500
+            group_ids = set()
+            for c in cards:
+                c = str(c)
+                entry = mask.get(c)
+                if entry:
+                    gid, is_core, _ = entry
+                    if gid >= 0 and is_core > 0:
+                        group_ids.add(gid)  # 只统计 core 组
+            n_broken = len(group_ids)
+            if n_broken <= 1:
+                return 0
+            # 每多撕一个 core 组，扣 300 × 数量
+            return -(n_broken - 1) * 300
+
+        # ── 计分 ──
+        RANK_KEY: Dict[str, int] = {
+            "2": 0, "3": 1, "4": 2, "5": 3, "6": 4, "7": 5,
+            "8": 6, "9": 7, "T": 8, "J": 9, "Q": 10, "K": 11, "A": 12,
+            "SB": 13, "HR": 14,  # GUA-071: joker 也入 rank key
+        }
+        # 早期出王压牌的最大允许级差
+        JOKER_MAX_GAP = 6
+
+        def _score(i: int, action) -> float:
+            atype = get_action_type(action)
+            is_pass = (atype == ACTION_TYPE_PASS)
+            is_bomb = (atype in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH))
+            is_single = (atype == ACTION_TYPE_SINGLE)
+            grp_consistent = _is_group_consistent(action)
+
+            score = 0.0
+
+            # ① 组局一致性：最高优先级（PASS 不参与组局，不加此项）
+            if not is_pass:
+                if grp_consistent:
+                    score += 10000
+                else:
+                    score += _group_break_penalty(action)  # 拆局扣分
+
+            # ② 队友控牌：PASS 优先，非炸优先
+            if teammate_controls:
+                if is_pass:
+                    score += 200
+                elif not is_bomb:
+                    score += 100
+
+            # ③ 对手急眼（剩牌 ≤ 4）：炸弹优先
+            if opp_in_danger:
+                if is_bomb:
+                    score += 800
+                elif is_pass:
+                    score -= 100
+
+            # ③b GUA-072/GUA-079：对手剩 1 张且有人控牌 → 禁止 PASS
+            if is_pass and greater_action and greater_action[0] != "PASS":
+                for opp in (opp_left, opp_right):
+                    if (
+                        len(belief_hand_counts) > opp
+                        and belief_hand_counts[opp] == 1
+                    ):
+                        score -= 2500
+                        break
+
+            # ③c GUA-072：对手无法确信压制当前控牌 → 鼓励用最小非 PASS 压牌
+            if (
+                not is_pass
+                and not is_bomb
+                and greater_action
+                and greater_action[0] != "PASS"
+                and belief.get("can_opp_suppress_current") is False
+            ):
+                score += 120
+
+            # ④ 非 PASS 基础加分
+            if not is_pass:
+                score += 50
+
+            # ⑤ 同优先级：起始 rank 越小越好（节约牌力）
+            rank_key = 99
+            if not is_pass:
+                rank_str = get_action_rank(action)
+                if rank_str:
+                    rank_key = RANK_KEY.get(rank_str, 99)
+            score -= rank_key  # rank 越小 → 负扣越少 → 分越高
+
+            # ⑥ GUA-071: 早期不出王压小牌（级差 > 6 且手牌 > 12）
+            if is_single and greater_val > 0 and not is_pass:
+                cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else action
+                card = cards[0] if cards else (action[0] if len(action) >= 1 else "")
+                card_rank = get_card_rank(str(card))
+                card_val = get_card_value(str(card), cur_rank)
+                gap = card_val - greater_val
+                if card_rank in ("HR", "SB") and is_early_game and gap > JOKER_MAX_GAP:
+                    score -= 500  # 早期用王压小牌，严重扣分
+
+            # ⑦ GUA-071: 小王优先 — 有 SB 可用时不用 HR
+            if is_single and has_sb_single and not is_pass:
+                cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else action
+                card = cards[0] if cards else (action[0] if len(action) >= 1 else "")
+                if get_card_rank(str(card)) == "HR":
+                    score -= 300  # SB 可用却用 HR，浪费
+
+            # ⑧ GUA-071: 有同型非炸弹可压时不该炸
+            # 对手出三张/顺子/钢板等，自己有同型牌能压，却选炸弹 → 浪费炸弹
+            if is_bomb and has_same_type_nonbomb:
+                score -= 600  # 有同型可压却用炸，严重惩罚
+
+            # ⑨ GUA-082/GUA-070 R12: 有自然单张时禁止拆普通对出单（heuristic 兜底）
+            if is_single and not is_pass:
+                if self._single_breaks_pair_under_r12(action, hand_cards, cur_rank):
+                    score -= 20000
+
+            return score
+
+        scored = [(i, _score(i, act)) for i, act in enumerate(action_list)]
+        scored.sort(key=lambda x: -x[1])  # 降序
+
+        if self.logger.isEnabledFor(logging.DEBUG):
+            top3 = scored[:min(3, len(scored))]
+            self.logger.debug(
+                "heuristic top3: %s",
+                [(i, f"{s:.0f}", get_action_type(action_list[i])) for i, s in top3]
+            )
+
+        # GUA-082: 最高分仍违 R12 时顺延下一候选（回退路径硬兜底）
+        for idx, _ in scored:
+            act = action_list[idx]
+            if (
+                get_action_type(act) == ACTION_TYPE_SINGLE
+                and self._single_breaks_pair_under_r12(act, hand_cards, cur_rank)
+            ):
+                continue
+            return idx
+        return scored[0][0] if scored else 0
+
+    # ═══════════════════════════════════════════════════════════════
+    # GUA-075: 出牌推荐系统（排除法 → 推荐法）
+    # ═══════════════════════════════════════════════════════════════
+
+    # 牌力排序 key（用于推小牌优先）
+    # 包含平台 rank 名（R/HR=14 大王，B/SB=13 小王）
+    RANK_ORDER: Dict[str, int] = {
+        "2": 0, "3": 1, "4": 2, "5": 3, "6": 4, "7": 5,
+        "8": 6, "9": 7, "T": 8, "J": 9, "Q": 10, "K": 11, "A": 12,
+        "SB": 13, "B": 13,    # 小王：内部 SB，平台 B
+        "HR": 14, "R": 14,    # 大王/红心级牌：内部 HR，平台 R
+    }
+
+    # 内部 rank → 平台 actionList 中使用的 rank 名
+    INTERNAL_TO_PLATFORM_RANK: Dict[str, str] = {"HR": "R", "SB": "B"}
+    PLATFORM_TO_INTERNAL_RANK: Dict[str, str] = {"R": "HR", "B": "SB"}
+
+    # 牌型 → 行动类型映射（group_type → action_type）
+    GROUP_TO_ACTION: Dict[str, str] = {
+        "bomb": "Bomb",
+        "straight_flush": "StraightFlush",
+        "straight": "Straight",
+        "trips": "Trips",
+        "pair": "Pair",
+        "pair_in_three_pair": "Pair",
+        "pair_in_three_with_two": "Pair",
+        "trip_in_three_with_two": "Trips",   # 三张主体仍可做纯三张（Trips 跟牌用）
+        "trip_in_steel_plate": "Trips",       # 同上
+    }
+
+    def _recommend_play(
+        self, game_state: Dict[str, Any], action_list: Optional[List] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        GUA-075: 出牌推荐器 — 基于组牌方案 + 局面上下文，**主动推荐最优出牌**。
+
+        与现有管线的本质区别：
+          ① 不依赖 position-based NN（不看 actionList slot 位置）
+          ② 基于组牌引擎 card_mask 决定「该从哪个组出牌」
+          ③ 场景感知（领出/打上家/卡下家/让对家）
+          ④ 接收 actionList，推荐后立即自检：确保产出在合法候选列表中
+
+        返回 None 表示推荐失败，走回退路径。
+
+        Args:
+            game_state: 完整游戏状态
+            action_list: 平台下发的 actionList（用于验证推荐的合法性）
+
+        Returns:
+            {"type": str, "rank": str, "cards": [str, ...]} 或 None
+        """
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, get_action_rank, ACTION_TYPE_PASS,
+        )
+
+        my_pos = game_state.get("myPos", self.player_id)
+        cur_pos = game_state.get("curPos", -1)
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction", []) or []
+        hand_cards = game_state.get("handCards", []) or []
+        cur_rank = str(game_state.get("curRank", "2"))
+
+        card_mask = self._card_mask or {}
+        if not card_mask or not hand_cards:
+            return None
+
+        # ── 场景判断（跟牌看 greaterPos=本圈最大者，不是 curPos=轮谁出牌）──
+        # curPos 在 act 消息里是「当前行动席」；greaterPos 才是上家/下家/对家谁出的牌。
+        # 仍保留 R11/让道等逻辑，并非 greaterPos 命中就必压。
+        teammate_pos = (my_pos + 2) % 4
+        opp_right = (my_pos + 3) % 4   # 上家
+        xia_jia = (my_pos + 1) % 4     # 下家
+
+        is_lead = (cur_pos == -1) or (
+            greater_pos in (-1, my_pos)
+            and 0 <= my_pos <= 3
+        )
+        is_teammate = (greater_pos == teammate_pos)
+        is_upper = (greater_pos == opp_right)
+        is_lower = (greater_pos == xia_jia)
+
+        greater_type = ""
+        greater_rank = ""
+        if greater_action and greater_action[0] != "PASS":
+            greater_type = get_action_type(greater_action)
+            greater_rank = get_action_rank(greater_action) or ""
+
+        # ── 内联辅助：验证推荐是否在 actionList 中，不在则尝试宽松匹配 ──
+        def _ensure_valid(rec: Dict[str, Any], scenario_label: str) -> Optional[Dict[str, Any]]:
+            """确保推荐在 actionList 中；精确匹配失败则做 type+rank 宽松匹配。"""
+            if not rec or not action_list:
+                return rec
+            r_type = rec.get("type", "")
+            r_rank = rec.get("rank", "")
+            r_cards = sorted(rec.get("cards", []) or [])
+
+            # PASS 直接通过
+            if r_type == "PASS":
+                return rec
+
+            # 精确匹配
+            for a in action_list:
+                if not a or len(a) < 2:
+                    continue
+                a_type = a[0]
+                a_rank = a[1] if len(a) >= 2 else ""
+                a_cards = sorted(str(c) for c in (a[2] if len(a) >= 3 and isinstance(a[2], list) else a))
+                if a_type == r_type and a_rank == r_rank and a_cards == r_cards:
+                    return rec
+
+            # 精确匹配失败 → 宽松匹配：找 actionList 中同 type+rank 的第一个条目
+            for a in action_list:
+                if not a or len(a) < 2:
+                    continue
+                a_type = a[0]
+                a_rank = a[1] if len(a) >= 2 else ""
+                if a_type == r_type and a_rank == r_rank:
+                    a_cards = sorted(str(c) for c in (a[2] if len(a) >= 3 and isinstance(a[2], list) else a))
+                    self.logger.info(
+                        "GUA-075 %s: 推荐精确匹配失败(rec_cards=%s) → 宽松匹配 actionList_cards=%s",
+                        scenario_label, r_cards, a_cards)
+                    return {"type": a_type, "rank": a_rank, "cards": a_cards}
+
+            # 完全匹配失败
+            al_sample = ""
+            if action_list and len(action_list) <= 8:
+                try:
+                    from src.communication.v7_game_recorder import summarize_action_list_for_context
+                    al_sample = summarize_action_list_for_context(action_list)
+                except Exception:
+                    al_sample = f"size={len(action_list)}"
+            self.logger.warning(
+                "GUA-075 %s: 推荐无法匹配 actionList rec={type=%s rank=%s cards=%s} sample=%s",
+                scenario_label, r_type, r_rank, r_cards, al_sample)
+            return None
+
+        # ── ① 对家在出牌：PASS 让道 ──
+        if is_teammate:
+            self.logger.info(
+                "GUA-075 推荐: 让对家 → PASS (teammatePos=%d)", teammate_pos)
+            return {"type": "PASS", "rank": "", "cards": []}
+
+        # ── ② 领出场景 ──
+        if is_lead:
+            rec = self._recommend_lead_impl(game_state, card_mask, hand_cards, cur_rank)
+            rec = _ensure_valid(rec, f"领出(curPos=start)")
+            if rec:
+                self.logger.info(
+                    "GUA-075 推荐: 领出 → type=%s rank=%s cards=%s",
+                    rec.get("type"), rec.get("rank"), rec.get("cards"))
+            return rec
+
+        # ── ③ 跟上家牌：找同型最小压；无同型时 R11 预检改炸 ──
+        if is_upper and greater_action and greater_action[0] != "PASS":
+            rec_impl = self._recommend_min_press_impl(
+                game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank)
+            if rec_impl:
+                rec = _ensure_valid(rec_impl, f"跟上家(greater={greater_type}/{greater_rank})")
+                if rec:
+                    self.logger.info(
+                        "GUA-075 推荐: 跟上家(greater=%s/%s) → type=%s rank=%s cards=%s",
+                        greater_type, greater_rank, rec.get("type"), rec.get("rank"),
+                        rec.get("cards"))
+                    return rec
+                # GUA-083: 有推荐但 actionList 无匹配 → 回退，勿误当「无同型 PASS」
+                self.logger.warning(
+                    "GUA-075 跟上家: 推荐存在但 actionList 无匹配 → return None 回退")
+                return None
+            # 无同型可压 → R11 预检：是否允许改炸
+            can_bomb, reason = self._r11_bomb_throttle_check(
+                game_state, greater_action, greater_rank, cur_rank)
+            if can_bomb:
+                bomb_impl = self._recommend_bomb_from_mask(card_mask, cur_rank)
+                if bomb_impl:
+                    bomb_rec = _ensure_valid(bomb_impl, f"跟上家改炸({reason})")
+                    if bomb_rec:
+                        self.logger.info(
+                            "GUA-075 推荐: 跟上家改炸(%s) → type=%s rank=%s cards=%s",
+                            reason, bomb_rec.get("type"), bomb_rec.get("rank"),
+                            bomb_rec.get("cards"))
+                        return bomb_rec
+                    self.logger.warning(
+                        "GUA-075 跟上家改炸: 推荐存在但 actionList 无匹配 → return None 回退")
+                    return None
+            # 不让改炸 → PASS 让道
+            self.logger.info(
+                "GUA-075 推荐: 跟上家无同型 → R11决定PASS(%s)", reason)
+            return {"type": "PASS", "rank": "", "cards": []}
+
+        # ── ④ 卡下家：下家 greaterPos 出牌 → 最大同型压；无同型时 R11 预检改炸 ──
+        if is_lower and greater_action and greater_action[0] != "PASS":
+            rec_impl = self._recommend_max_press_impl(
+                game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank)
+            if rec_impl:
+                rec = _ensure_valid(rec_impl, f"卡下家(greater={greater_type}/{greater_rank})")
+                if rec:
+                    self.logger.info(
+                        "GUA-075 推荐: 卡下家(greater=%s/%s) → type=%s rank=%s cards=%s",
+                        greater_type, greater_rank, rec.get("type"), rec.get("rank"),
+                        rec.get("cards"))
+                    return rec
+                # GUA-083: 有推荐但 actionList 无匹配 → 回退，勿误当「无同型 PASS」
+                self.logger.warning(
+                    "GUA-075 卡下家: 推荐存在但 actionList 无匹配 → return None 回退")
+                return None
+            # 无同型可压 → R11 预检
+            can_bomb, reason = self._r11_bomb_throttle_check(
+                game_state, greater_action, greater_rank, cur_rank)
+            if can_bomb:
+                bomb_impl = self._recommend_bomb_from_mask(card_mask, cur_rank)
+                if bomb_impl:
+                    bomb_rec = _ensure_valid(bomb_impl, f"卡下家改炸({reason})")
+                    if bomb_rec:
+                        self.logger.info(
+                            "GUA-075 推荐: 卡下家改炸(%s) → type=%s rank=%s cards=%s",
+                            reason, bomb_rec.get("type"), bomb_rec.get("rank"),
+                            bomb_rec.get("cards"))
+                        return bomb_rec
+                    self.logger.warning(
+                        "GUA-075 卡下家改炸: 推荐存在但 actionList 无匹配 → return None 回退")
+                    return None
+            # 不让改炸 → PASS
+            self.logger.info(
+                "GUA-075 推荐: 卡下家无同型 → R11决定PASS(%s)", reason)
+            return {"type": "PASS", "rank": "", "cards": []}
+
+        return None
+
+    def _recommend_lead_impl(
+        self, game_state, card_mask, hand_cards, cur_rank
+    ) -> Optional[Dict[str, Any]]:
+        """
+        领出推荐：优先推小单张或小对子（非 core 组），遵守首出高压线。
+        """
+        from src.v.nn.guards.v7_guards import (
+            get_card_rank, ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR,
+        )
+
+        def _prank(internal_rank: str) -> str:
+            """内部 rank → 平台 actionList rank 名。"""
+            return self.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
+
+        # ── 检查：进贡后慎出单张（P-H01）──
+        # 如果有进贡背景，避免出单张给对手进贡机会
+        is_tribute_round = game_state.get("isTributeRound", False)
+        hand_size = len(hand_cards)
+
+        groups = self._build_group_index(card_mask)
+
+        # 非 core 组的牌 → 可以直接单出/对出
+        # 散牌 (gid=-1) → 不在 groups 中，单独收集
+        singles = self._scatter_singles(card_mask)
+
+        group_type_map = self._group_type_map or {}
+        group_members = self._group_members or None
+        _PROTECTED_LEAD_CORE = frozenset(("bomb", "straight_flush", "straight"))
+
+        def _single_breaks_protected_core(card: str) -> bool:
+            pr = _prank(get_card_rank(str(card)))
+            broken = self._get_broken_core_type(
+                ["Single", pr, [str(card)]],
+                card_mask,
+                group_type_map,
+                group_members,
+            )
+            return broken in _PROTECTED_LEAD_CORE
+
+        # ── 策略：优先出最小的非 core 单张或对子 ──
+        if singles and not is_tribute_round:
+            singles.sort(key=lambda c: self.RANK_ORDER.get(get_card_rank(c), 99))
+            for card in singles:
+                if _single_breaks_protected_core(card):
+                    self.logger.debug(
+                        "GUA-075 领出跳过拆 core 单张: %s (broken=%s)",
+                        card,
+                        self._get_broken_core_type(
+                            ["Single", _prank(get_card_rank(str(card))), [str(card)]],
+                            card_mask, group_type_map, group_members,
+                        ),
+                    )
+                    continue
+                return {
+                    "type": "Single",
+                    "rank": _prank(get_card_rank(str(card))),
+                    "cards": [str(card)],
+                }
+
+        # 如果没有安全单张，尝试非 core 对子
+        pair_groups = [(gid, ginfo) for gid, ginfo in groups.items()
+                       if ginfo["type"] in ("pair",) and ginfo["is_core"] <= 0
+                       and len(ginfo["cards"]) >= 2]
+        if pair_groups:
+            # 找 rank 最小的对子
+            def _pair_sort_key(item):
+                gid, ginfo = item
+                card = ginfo["cards"][0]
+                return self.RANK_ORDER.get(get_card_rank(str(card)), 99)
+            gid, ginfo = min(pair_groups, key=_pair_sort_key)
+            cards = sorted(ginfo["cards"])[:2]
+            rank = get_card_rank(str(cards[0]))
+            return {"type": "Pair", "rank": _prank(rank), "cards": cards}
+
+        # 没能从非 core 组找到 → 出最小散牌（即使进贡）
+        if singles:
+            singles.sort(key=lambda c: self.RANK_ORDER.get(get_card_rank(c), 99))
+            return {"type": "Single", "rank": _prank(get_card_rank(singles[0])), "cards": [str(singles[0])]}
+
+        return None
+
+    def _recommend_min_press_impl(
+        self, game_state, card_mask, greater_action, greater_type,
+        hand_cards, cur_rank
+    ) -> Optional[Dict[str, Any]]:
+        """
+        跟上家牌：找同型可压中最小的（节牌力）。
+        如果无同型可压 → 返回 None（不走炸弹推荐，让回退路径决定是否炸）。
+        """
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, get_action_rank, get_card_rank,
+            get_card_value, _extract_action_cards,
+            ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+            ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR, ACTION_TYPE_TRIPS,
+            ACTION_TYPE_STRAIGHT, ACTION_TYPE_THREE_WITH_TWO,
+            ACTION_TYPE_THREE_PAIR, ACTION_TYPE_TWO_TRIPS,
+        )
+        from collections import Counter
+
+        if not greater_action or greater_action[0] == "PASS":
+            return None
+        if greater_type in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+            # 对手出了炸弹，不推荐跟（走回退判断是否该炸）
+            return None
+
+        greater_rank = get_action_rank(greater_action)
+        if not greater_rank:
+            return None
+
+        # GUA-075：用 get_card_value 比较（考虑级牌 cur_rank 提升）
+        greater_cards = _extract_action_cards(greater_action)
+        if greater_cards:
+            greater_val = get_card_value(str(greater_cards[0]), cur_rank)
+        else:
+            greater_val = self.RANK_ORDER.get(greater_rank, 0)
+
+        groups = self._build_group_index(card_mask)
+
+        def _to_platform_rank(internal_rank: str) -> str:
+            """将内部 rank 转成平台 actionList 中使用的 rank 名。"""
+            return self.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
+
+        # ── 单张处理 ──
+        if greater_type == "Single":
+            singles = self._collect_single_follow_candidates(
+                card_mask, groups, hand_cards, cur_rank)
+            if singles:
+                candidates = []
+                for c in singles:
+                    c_val = get_card_value(str(c), cur_rank)
+                    if c_val > greater_val:
+                        candidates.append((c_val, c, get_card_rank(str(c))))
+                if candidates:
+                    candidates.sort(key=lambda x: x[0])
+                    _, best, best_rank = candidates[0]
+                    return {
+                        "type": "Single",
+                        "rank": _to_platform_rank(best_rank),
+                        "cards": [str(best)],
+                    }
+                return None
+
+        # ── 三带二（ThreeWithTwo）：从手牌直接建，不用组引擎子结构 ──
+        if greater_type == "ThreeWithTwo":
+            return self._build_three_with_two_press(
+                hand_cards,
+                greater_val,
+                cur_rank,
+                "min",
+                card_mask=card_mask,
+                group_type_map=self._group_type_map,
+                group_members=self._group_members,
+            )
+
+        # ── 钢板/三连对：返回 None（暂不支持推荐，让回退路径处理）──
+        if greater_type in ("ThreePair", "TwoTrips"):
+            return None
+
+        # ── 普通同型匹配（Pair / Trips / Straight）──
+        GTYPE_MAP = {
+            "Pair": ("pair", "pair_in_three_pair", "pair_in_three_with_two"),
+            "Trips": ("trips", "trip_in_three_with_two", "trip_in_steel_plate"),
+            "Straight": ("straight",),
+        }
+        target_gtypes = GTYPE_MAP.get(greater_type, ())
+        if not target_gtypes:
+            return None
+
+        candidates = []
+        for gid, ginfo in groups.items():
+            gtype = ginfo["type"]
+            if gtype not in target_gtypes:
+                continue
+            cards = ginfo["cards"]
+            if not cards:
+                continue
+            c_rank = get_card_rank(str(cards[0]))
+            c_val = get_card_value(str(cards[0]), cur_rank)
+            c_type = self.GROUP_TO_ACTION.get(gtype, "Unknown")
+
+            if c_type == greater_type and c_val > greater_val:
+                candidates.append((c_val, gid, ginfo, c_rank, c_type))
+
+        if not candidates:
+            return None
+
+        # 节牌力：选最小能压的
+        candidates.sort(key=lambda x: x[0])
+        _, gid, ginfo, c_rank, c_type = candidates[0]
+
+        return {
+            "type": c_type,
+            "rank": _to_platform_rank(c_rank),
+            "cards": sorted(ginfo["cards"]),
+        }
+
+    def _build_three_with_two_press(
+        self,
+        hand_cards: List[str],
+        greater_val: int,
+        cur_rank: str,
+        strategy: str = "min",
+        *,
+        card_mask: Optional[Dict] = None,
+        group_type_map: Optional[Dict[int, str]] = None,
+        group_members: Optional[Dict[int, List[str]]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        从手牌直接构建三带二（ThreeWithTwo）可压推荐。
+        不依赖组引擎子结构，避免 trip_in_three_with_two 只有3张的歧义。
+
+        strategy: "min"=节牌力（跟上家）, "max"=卡下家（选最大）。
+        GUA-081: 跳过会部分拆 bomb/同花顺 core 的三张，尝试下一档 rank。
+        """
+        from collections import Counter
+        from src.v.nn.guards.v7_guards import get_card_rank
+
+        rank_counts: Dict[str, List[str]] = {}
+        for c in hand_cards:
+            r = get_card_rank(str(c))
+            rank_counts.setdefault(r, []).append(c)
+
+        # 找能压的三张（rank > greater_val 且 ≥3 张）
+        from src.v.nn.guards.v7_guards import get_card_value as _gcv
+        trip_candidates = []
+        for rank_str, cards in rank_counts.items():
+            if len(cards) < 3:
+                continue
+            rank_val = _gcv(str(cards[0]), cur_rank)
+            if rank_val > greater_val:
+                trip_candidates.append((rank_val, rank_str, cards[:3]))
+
+        if not trip_candidates:
+            return None
+
+        def _find_available_pair(exclude_cards: List[str], prefer_large: bool = False
+                                ) -> Optional[Tuple[str, List[str]]]:
+            remaining: Dict[str, List[str]] = {}
+            for c in hand_cards:
+                if c in exclude_cards:
+                    continue
+                r = get_card_rank(str(c))
+                if r not in remaining:
+                    remaining[r] = []
+                remaining[r].append(c)
+            pair_opts = []
+            for r, cards in remaining.items():
+                if len(cards) >= 2:
+                    pair_opts.append((_gcv(str(cards[0]), cur_rank), r, cards[:2]))
+            if pair_opts:
+                pair_opts.sort(key=lambda x: -x[0] if prefer_large else x[0])
+                return (pair_opts[0][1], pair_opts[0][2])
+            return None
+
+        want_large = (strategy == "max")
+        trip_candidates.sort(key=lambda x: -x[0] if want_large else x[0])
+
+        for _, trip_rank, trip_cards in trip_candidates:
+            pair = _find_available_pair(trip_cards, prefer_large=want_large)
+            if not pair:
+                continue
+            pair_rank, pair_cards = pair
+            platform_rank = self.INTERNAL_TO_PLATFORM_RANK.get(trip_rank, trip_rank)
+            rec_cards = sorted(trip_cards + pair_cards)
+            if card_mask and group_type_map is not None:
+                broken = self._get_broken_core_type(
+                    ["ThreeWithTwo", platform_rank, rec_cards],
+                    card_mask,
+                    group_type_map,
+                    group_members,
+                )
+                if broken in ("bomb", "straight_flush"):
+                    continue
+            return {
+                "type": "ThreeWithTwo",
+                "rank": platform_rank,
+                "cards": rec_cards,
+            }
+
+        return None
+
+    def _recommend_max_press_impl(
+        self, game_state, card_mask, greater_action, greater_type,
+        hand_cards, cur_rank
+    ) -> Optional[Dict[str, Any]]:
+        """
+        卡下家牌：找同型可压中**最大的**（不留余地，卡死下家）。
+        如果无同型可压 → 返回 None。
+        """
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, get_action_rank, get_card_rank, get_card_value,
+            ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+        )
+
+        if not greater_action or greater_action[0] == "PASS":
+            return None
+        if greater_type in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+            return None
+
+        greater_rank = get_action_rank(greater_action)
+        if not greater_rank:
+            return None
+        greater_cards = greater_action[2] if len(greater_action) >= 3 else []
+        greater_val = get_card_value(
+            str(greater_cards[0]) if greater_cards else greater_rank, cur_rank)
+
+        # ── 收集组信息 ──
+        groups = self._build_group_index(card_mask)
+
+        def _to_platform_rank(internal_rank: str) -> str:
+            return self.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
+
+        # 单张处理
+        if greater_type == "Single":
+            singles = self._collect_single_follow_candidates(
+                card_mask, groups, hand_cards, cur_rank)
+            if singles:
+                candidates = []
+                for c in singles:
+                    c_rank = get_card_rank(str(c))
+                    c_val = get_card_value(str(c), cur_rank)
+                    if c_val > greater_val:
+                        candidates.append((c_val, c, c_rank))
+                if candidates:
+                    candidates.sort(key=lambda x: -x[0])  # 最大值优先（卡下家）
+                    _, best, best_rank = candidates[0]
+                    return {
+                        "type": "Single",
+                        "rank": _to_platform_rank(best_rank),
+                        "cards": [str(best)],
+                    }
+                return None
+
+        # ── 三带二（ThreeWithTwo）──
+        if greater_type == "ThreeWithTwo":
+            return self._build_three_with_two_press(
+                hand_cards,
+                greater_val,
+                cur_rank,
+                "max",
+                card_mask=card_mask,
+                group_type_map=self._group_type_map,
+                group_members=self._group_members,
+            )
+
+        # ── 钢板/三连对：暂不支持 ──
+        if greater_type in ("ThreePair", "TwoTrips"):
+            return None
+
+        # 同型匹配（选最大）
+        GTYPE_MAP = {
+            "Pair": ("pair", "pair_in_three_pair", "pair_in_three_with_two"),
+            "Trips": ("trips", "trip_in_three_with_two", "trip_in_steel_plate"),
+            "Straight": ("straight",),
+        }
+        target_gtypes = GTYPE_MAP.get(greater_type, ())
+        if not target_gtypes:
+            return None
+
+        candidates = []
+        for gid, ginfo in groups.items():
+            if ginfo["type"] not in target_gtypes:
+                continue
+            cards = ginfo["cards"]
+            if not cards:
+                continue
+            c_rank = get_card_rank(str(cards[0]))
+            c_val = self.RANK_ORDER.get(c_rank, 0)
+            c_type = self.GROUP_TO_ACTION.get(ginfo["type"], "Unknown")
+            if c_type == greater_type and c_val > greater_val:
+                candidates.append((c_val, gid, ginfo, c_rank, c_type))
+
+        if not candidates:
+            return None
+
+        candidates.sort(key=lambda x: -x[0])  # 最大值优先
+        _, gid, ginfo, c_rank, c_type = candidates[0]
+        return {
+            "type": c_type,
+            "rank": _to_platform_rank(c_rank),
+            "cards": sorted(ginfo["cards"]),
+        }
+
+    # ── R11 改炸预检 + 炸弹推荐（GUA-075 扩展）────────────
+
+    def _r11_bomb_throttle_check(
+        self, game_state: Dict[str, Any], greater_action: List[str],
+        greater_rank: str, cur_rank: str,
+    ) -> Tuple[bool, str]:
+        """
+        R11 预检：当推荐器无同型可压时，决定是否允许改炸。
+
+        复用 v7_guards 的全局牌记忆 + 上家让道模块级状态，
+        但作为轻量预检（不操作 actionList，只返回 can_bomb + reason）。
+
+        Returns:
+            (can_bomb: bool, reason: str)
+        """
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, ACTION_TYPE_SINGLE, ACTION_TYPE_BOMB,
+            ACTION_TYPE_STRAIGHT_FLUSH,
+            _UPPER_SKIP_MEMORY, _POST_BOMB_BLOCK_TYPE,
+            _compute_pass_num, _count_remaining_suppressors,
+        )
+
+        my_pos = game_state.get("myPos", self.player_id)
+        greater_pos = game_state.get("greaterPos", -1)
+
+        # ── 前置：对手出炸/同花顺 → 不跟（改压更高炸弹是另一回事）──
+        gt = get_action_type(greater_action)
+        if gt in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+            return (False, f"对手出{gt} → 不跟炸弹")
+
+        opponent_positions = [(my_pos + 1) % 4, (my_pos + 3) % 4]
+        if greater_pos not in opponent_positions:
+            return (False, "非对手出牌")
+
+        upper_opp = (my_pos + 3) % 4
+        is_upper = (greater_pos == upper_opp)
+
+        # ══════════════ 上家让道（第一圈 PASS，第二圈改炸）══════════════
+        if is_upper:
+            skip_key = (my_pos, upper_opp)
+            prev_skipped = _UPPER_SKIP_MEMORY.get(skip_key)
+
+            if prev_skipped == gt:
+                # 第二圈：同样牌型队友未接 → 允许改炸
+                del _UPPER_SKIP_MEMORY[skip_key]
+                _POST_BOMB_BLOCK_TYPE[skip_key] = gt
+                self.logger.debug(
+                    "R11 预检: 上家第二轮出%s → 允许改炸（炸后禁出%s）", gt, gt)
+                return (True, f"上家第二轮出{gt}改炸")
+            else:
+                # 第一圈：让道 PASS
+                _UPPER_SKIP_MEMORY[skip_key] = gt
+                _POST_BOMB_BLOCK_TYPE.pop(skip_key, None)
+                self.logger.debug("R11 预检: 上家出%s无同型 → 第一圈让道PASS", gt)
+                return (False, f"上家出{gt}第一圈让道")
+
+        # ══════════════ 下家：全局抑制牌检查 ─────────────────────
+        # 仅 Single 做全局检查（非 Single 暂走默认 PASS）
+        if gt != ACTION_TYPE_SINGLE:
+            return (False, f"下家{gt}（非Single）→ 暂不让道改炸")
+
+        tracker = game_state.get("_memory_tracker", None)
+        suppressors = _count_remaining_suppressors(tracker, greater_rank, cur_rank)
+
+        # Phase A-1: 抑制牌充足（≥2）→ 不炸
+        if suppressors >= 2:
+            self.logger.debug(
+                "R11 预检: 抑制牌充足(剩余%d张可压%s) → 不炸", suppressors, greater_rank)
+            return (False, f"抑制牌充足({suppressors}张)")
+
+        # Phase A-2: 仅剩 1 张 → pass_num==0 时等等
+        if suppressors == 1:
+            pass_num, _ = _compute_pass_num(game_state, my_pos)
+            if pass_num == 0:
+                self.logger.debug(
+                    "R11 预检: 抑制牌仅1张 pass_num=0 → 等等看")
+                return (False, "抑制牌仅1张等等看")
+
+        # Phase A-3: suppressors==0 或 suppressors==1且pass_num>=1 → 允许改炸
+        self.logger.debug(
+            "R11 预检: 抑制牌=%s pass已进 → 允许改炸", suppressors)
+        return (True, f"改炸(suppressors={suppressors})")
+
+    def _recommend_bomb_from_mask(
+        self, card_mask: Dict, cur_rank: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        从组牌引擎 card_mask 中选出最可牺牲的炸弹推荐。
+
+        优先级：非核心 > 核心；小张数 > 大张数；纯炸 > 含逢人配。
+        Returns:
+            {"type": "Bomb", "rank": str, "cards": [str, ...]} 或 None
+        """
+        from src.v.nn.guards.v7_guards import (
+            get_card_rank, is_pure_bomb, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+        )
+
+        # 收集所有炸弹组（group_members 为 multiset 真源，支持 4~8 星炸）
+        bomb_candidates = []
+        members_src = self._group_members if self._group_members else {}
+        if members_src:
+            for gid, g_cards in members_src.items():
+                if gid < 0:
+                    continue
+                gtype = self._group_type_map.get(gid, "")
+                if gtype not in ("bomb", "straight_flush"):
+                    continue
+                if len(g_cards) < 4:
+                    continue
+                rank = get_card_rank(str(g_cards[0]))
+                is_pure = is_pure_bomb(g_cards, cur_rank)
+                action_type = (
+                    ACTION_TYPE_STRAIGHT_FLUSH if gtype == "straight_flush"
+                    else ACTION_TYPE_BOMB
+                )
+                sample = card_mask.get(g_cards[0], (gid, 1.0, len(g_cards)))
+                bomb_candidates.append({
+                    "gid": gid,
+                    "type": action_type,
+                    "rank": rank,
+                    "cards": sorted(g_cards),
+                    "is_core": sample[1],
+                    "size": len(g_cards),
+                    "is_pure": is_pure,
+                })
+        else:
+            seen_gids = set()
+            for card, (gid, is_core, gsize) in card_mask.items():
+                if gid < 0 or gid in seen_gids:
+                    continue
+                gtype = self._group_type_map.get(gid, "")
+                if gtype not in ("bomb", "straight_flush"):
+                    continue
+                seen_gids.add(gid)
+                g_cards = [c for c, (g, _, _) in card_mask.items() if g == gid]
+                if len(g_cards) < 4:
+                    continue
+                rank = get_card_rank(str(g_cards[0]))
+                is_pure = is_pure_bomb(g_cards, cur_rank)
+                action_type = (
+                    ACTION_TYPE_STRAIGHT_FLUSH if gtype == "straight_flush"
+                    else ACTION_TYPE_BOMB
+                )
+                bomb_candidates.append({
+                    "gid": gid,
+                    "type": action_type,
+                    "rank": rank,
+                    "cards": sorted(g_cards),
+                    "is_core": is_core,
+                    "size": len(g_cards),
+                    "is_pure": is_pure,
+                })
+
+        if not bomb_candidates:
+            return None
+
+        # 排序：非核心优先、张数少优先、纯炸优先
+        bomb_candidates.sort(key=lambda b: (
+            1 if b["is_core"] > 0 else 0,  # 核心排在后面
+            b["size"],                       # 张数少优先
+            0 if b["is_pure"] else 1,       # 纯炸优先
+        ))
+
+        best = bomb_candidates[0]
+        return {
+            "type": best["type"],
+            "rank": best["rank"],
+            "cards": best["cards"],
+        }
+
+    def _recommend_vs_teammate(
+        self, game_state, card_mask, greater_action, greater_type
+    ) -> Optional[Dict[str, Any]]:
+        """对家出牌时：默认 PASS 让道，除非对手在压队友需要解围。"""
+        # 检查队友是否在控牌（greaterPos == 对家 → 对家在控牌）
+        greater_pos = game_state.get("greaterPos", -1)
+        my_pos = game_state.get("myPos", self.player_id)
+        teammate_pos = (my_pos + 2) % 4
+
+        if greater_pos == teammate_pos:
+            # 对家在控牌 → 直接 PASS
+            return {"type": "PASS", "rank": "", "cards": []}
+
+        # 队友被压（greaterPos 是对手）且队友剩牌多 → 可能需解围
+        # 暂不做复杂解围判断，返回 PASS 让回退路径处理
+        return {"type": "PASS", "rank": "", "cards": []}
+
+    @staticmethod
+    def _match_chosen_to_original_action_list(
+        chosen: Optional[List],
+        action_list: List,
+    ) -> int:
+        """GUA-085: group_actions 选中项 → 原始 actionList 下标（内容精确匹配）。"""
+        if not chosen or not action_list:
+            return 0
+        for orig_i, candidate in enumerate(action_list):
+            if candidate == chosen:
+                return orig_i
+        return 0
+
+    @staticmethod
+    def _fallback_group_action_index(
+        group_idx: int,
+        group_filter_map: List[int],
+        action_map: List[int],
+        action_list_len: int,
+    ) -> int:
+        """group_filter_map 旧式映射（仅内容回查失败时兜底）。"""
+        if group_idx < len(group_filter_map):
+            filtered_idx = group_filter_map[group_idx]
+        else:
+            filtered_idx = group_idx
+        if filtered_idx < len(action_map):
+            original_idx = action_map[filtered_idx]
+        else:
+            original_idx = 0
+        if original_idx < 0 or original_idx >= action_list_len:
+            return 0
+        return original_idx
+
+    def _match_actionList(
+        self, recommendation: Dict[str, Any], action_list: List
+    ) -> int:
+        """
+        GUA-075: actionList 匹配器 — 三要素精确匹配（牌型/点数/牌张）。
+
+        在原始 actionList 中查找与推荐方案匹配的候选动作。
+        支持平台格式 [type, rank, [cards]] 和简式 ["S2"]。
+
+        Args:
+            recommendation: {type, rank, cards}
+            action_list: 原始 actionList（服务端下发的完整列表）
+
+        Returns:
+            actIndex (0-based) 或 -1（未找到）
+        """
+        if not recommendation or not action_list:
+            return -1
+
+        r_type = recommendation.get("type", "")
+        r_rank = recommendation.get("rank", "")
+        r_cards = sorted(recommendation.get("cards", []) or [])
+
+        # PASS 特殊处理：找第一个 PASS 候选
+        if r_type == "PASS":
+            for i, candidate in enumerate(action_list):
+                if candidate and candidate[0] == "PASS":
+                    return i
+            return -1
+
+        for i, candidate in enumerate(action_list):
+            if not candidate:
+                continue
+            # 平台格式: [type, rank, [cards]]
+            c_type = candidate[0] if len(candidate) >= 1 else ""
+            c_rank = candidate[1] if len(candidate) >= 2 else ""
+            c_cards_raw = candidate[2] if len(candidate) >= 3 and isinstance(candidate[2], list) else candidate
+            c_cards = sorted([str(c) for c in c_cards_raw])
+
+            if c_type == r_type and c_rank == r_rank and c_cards == r_cards:
+                return i
+
+        return -1
+
+    def _quick_guard_validate(
+        self, act_index: int, action_list: List, game_state: Dict[str, Any]
+    ) -> bool:
+        """
+        GUA-075: 主路径快速校验 — 不可逾越的硬规则底线。
+
+        比 Guard filter 轻量，只检查 3 条硬规则：
+          R10: 领出不炸
+          R01: 压单不用炸（有同型单张可压时）
+          R05: 队友不炸
+
+        不检查软规则（让回退路径的 validate_decision 处理）。
+
+        Returns:
+            True = 通过校验；False = 不通过需回退
+        """
+        if act_index < 0 or act_index >= len(action_list):
+            return False
+
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, ACTION_TYPE_PASS,
+            ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+            ACTION_TYPE_SINGLE,
+        )
+
+        chosen = action_list[act_index]
+        if not chosen:
+            return False
+
+        chosen_type = get_action_type(chosen)
+        my_pos = game_state.get("myPos", self.player_id)
+        cur_pos = game_state.get("curPos", -1)
+        greater_action = game_state.get("greaterAction", []) or []
+        teammate_pos = (my_pos + 2) % 4
+
+        # R10: 领出不炸
+        if cur_pos == -1 and chosen_type in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+            return False
+
+        # R05: 队友不炸（对家在出牌时不用炸弹压队友）
+        if cur_pos == teammate_pos and chosen_type in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+            return False
+
+        # R01: 压单不用炸 — 对手出单张，我们有同型单张可压却用炸
+        if greater_action and greater_action[0] != "PASS" and chosen_type in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+            greater_type = get_action_type(greater_action)
+            if greater_type == ACTION_TYPE_SINGLE:
+                # 检查 actionList 中是否有同型单张可压
+                for act in action_list:
+                    if get_action_type(act) == ACTION_TYPE_SINGLE and act != chosen:
+                        return False  # 有单张可用却选炸弹 → 不通过
+
+        # R12: 有自然单张时禁止拆普通对子出单（GUA-075 主路径补检）
+        if chosen_type == ACTION_TYPE_SINGLE:
+            hand_cards = game_state.get("handCards", []) or []
+            cur_rank = str(game_state.get("curRank", "2"))
+            if self._single_breaks_pair_under_r12(chosen, hand_cards, cur_rank):
+                return False
+
+        return True
+
     def _rule_based_decision(self, game_state: Dict[str, Any], action_list: List) -> int:
         """
-        基于规则的回退决策
+        基于规则的回退决策（终极保底，不应频繁触发）。
 
         Args:
             game_state: 游戏状态
@@ -1417,6 +3133,23 @@ class UltimateWinRateEngineV7:
             "current_role": self._current_role,
             "has_card_mask": self._card_mask is not None and len(self._card_mask) > 0,
             "regroup_triggered_count": self._regroup_triggered_count,
+            # GUA-075 推荐路径统计（2026-06-20）
+            "recommend_count": self.recommend_count,
+            "recommend_hit_count": self.recommend_hit_count,
+            "recommend_valid_count": self.recommend_valid_count,
+            "recommend_rate": self.recommend_count / max(1, self.decision_count),
+            "recommend_hit_rate": self.recommend_hit_count / max(1, self.recommend_count) if self.recommend_count else 0,
+            "recommend_valid_rate": self.recommend_valid_count / max(1, self.decision_count),
+            # GUA-075 匹配失败分类（2026-06-20）
+            "match_fail_type_mismatch": self._match_fail_type_mismatch,
+            "match_fail_rank_mismatch": self._match_fail_rank_mismatch,
+            "match_fail_cards_mismatch": self._match_fail_cards_mismatch,
+            # GUA-078 残局管线（2026-06-21 接入 decide）
+            "endgame_activated_count": self._endgame_activated_count,
+            "endgame_hit_count": self._endgame_hit_count,
+            "endgame_hit_rate": (
+                self._endgame_hit_count / max(1, self._endgame_activated_count)
+            ),
         }
 
 

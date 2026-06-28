@@ -57,6 +57,31 @@ def normalize_action_list(action_list: List) -> List:
     return out
 
 
+# WF-12 复盘：actionList 较小时写入 my_decisions.context（Layer 2 体积可控）
+ACTION_LIST_CONTEXT_SAMPLE_MAX = 8
+ACTION_LIST_CONTEXT_ITEM_MAX = 8
+
+
+def summarize_action_list_for_context(
+    action_list: List,
+    *,
+    max_items: int = ACTION_LIST_CONTEXT_ITEM_MAX,
+) -> List[Dict[str, Any]]:
+    """将 actionList 压缩为 [{type, rank, cards}, ...] 供牌谱 / 日志诊断。"""
+    if not action_list or not isinstance(action_list, list):
+        return []
+    sample: List[Dict[str, Any]] = []
+    for action in action_list[:max_items]:
+        if not action or not isinstance(action, list) or len(action) < 2:
+            continue
+        a_type = action[0] if action[0] is not None else ""
+        a_rank = action[1] if len(action) > 1 and action[1] is not None else ""
+        cards_raw = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+        cards = normalize_cards_to_string_list(cards_raw) if cards_raw else []
+        sample.append({"type": str(a_type), "rank": str(a_rank), "cards": cards})
+    return sample
+
+
 # ---------- 队友/对手识别（掼蛋规则：0与2一队，1与3一队） ----------
 
 def get_teammate_pos(my_pos: int) -> int:
@@ -169,14 +194,22 @@ def decision_context_from_act(
     version: str = "v7",
     series: str = "V",
 ) -> Dict[str, Any]:
-    """act 阶段 record_decision 的 context（对齐 M3 _decision_context_from_act）。"""
+    """act 阶段 record_decision 的 context（对齐 M3 _decision_context_from_act）。
+
+    GUA-072: 加入 handCards 字段，使 game record 可回放诊断 card_mask 退化问题。
+    actionList_size≤8 时写入 actionList_sample（type/rank/cards），供 WF-12 复盘平台候选。
+    """
     action_list = data.get("actionList") or []
     size = len(action_list) if isinstance(action_list, list) else 0
-    return {
+    # 序列化了 handCards（已由 normalize_act_message_fields 标准化为字符串列表）
+    hand_cards = data.get("handCards") or []
+    ctx: Dict[str, Any] = {
         "myPos": data.get("myPos", player_id),
         "curPos": data.get("curPos", -1),
         "greaterPos": data.get("greaterPos", -1),
         "actionList_size": size,
+        "handCards_size": len(hand_cards),
+        "handCards": hand_cards,
         "selfRank": data.get("selfRank"),
         "oppoRank": data.get("oppoRank"),
         "curRank": data.get("curRank"),
@@ -185,6 +218,9 @@ def decision_context_from_act(
         "source": "act",
         "stage": data.get("stage", ""),
     }
+    if 0 < size <= ACTION_LIST_CONTEXT_SAMPLE_MAX:
+        ctx["actionList_sample"] = summarize_action_list_for_context(action_list)
+    return ctx
 
 
 def extract_notify_game_result(
@@ -776,14 +812,29 @@ class GameRecorder:
             return
         import logging
         logger = logging.getLogger(f"GameRecorder.{self.player_name}")
+        pos_key = str(self.player_id)
+        all_hands = self.current_game.get("all_players_hands")
+        if not isinstance(all_hands, dict):
+            all_hands = {}
+            self.current_game["all_players_hands"] = all_hands
+        player_hand = all_hands.get(pos_key)
+        if not isinstance(player_hand, list):
+            player_hand = list(initial_hand)
+            all_hands[pos_key] = player_hand
+
         if operation == "add":
             initial_hand.append(card_str)
+            player_hand.append(card_str)
             logger.info("✓ 贡牌调整: %s 加入 initial_hand (共%d张)", card_str, len(initial_hand))
         elif operation == "remove":
             # 找到并移除该牌（只移除第一张匹配的，避免误删同名牌）
             for i, c in enumerate(initial_hand):
                 if c == card_str:
                     initial_hand.pop(i)
+                    for j, pc in enumerate(player_hand):
+                        if pc == card_str:
+                            player_hand.pop(j)
+                            break
                     logger.info("✓ 贡牌调整: %s 从 initial_hand 移除 (剩余%d张)", card_str, len(initial_hand))
                     return
             logger.warning("⚠ 贡牌调整: %s 不在 initial_hand 中，无法移除 (共%d张)", card_str, len(initial_hand))
