@@ -310,6 +310,9 @@ class YF2_V7_Client:
                     elapsed,
                     self.max_decision_time,
                 )
+                self.decision_engine._last_decision_layer = "决策超时"
+                self.decision_engine._last_decision_score = None
+                self.decision_engine._last_decision_candidates = len(action_list)
                 act_index = 0
             else:
                 elapsed = time.perf_counter() - t0
@@ -330,7 +333,15 @@ class YF2_V7_Client:
                     ctx["group_type_map"] = {str(k): v for k, v in (self.decision_engine._group_type_map or {}).items()}
             except Exception:
                 pass
-            self.game_recorder.record_decision(act_index, selected_action, context=ctx)
+            # GUA-075 记录增强: 从引擎读取管线追踪信息
+            _layer = self.decision_engine._last_decision_layer
+            _score = self.decision_engine._last_decision_score
+            _candidates_cnt = self.decision_engine._last_decision_candidates
+            self.game_recorder.record_decision(
+                act_index, selected_action,
+                score=_score, layer=_layer,
+                candidates_count=_candidates_cnt,
+                context=ctx)
             
             # Validate action index
             if not self.validate_action(act_index, action_list):
@@ -343,6 +354,20 @@ class YF2_V7_Client:
             self.logger.error(f"✗ Decision error: {e}", exc_info=True)
             await self.send_action(0)
     
+    def _extract_tribute_back_card(self, selected):
+        """
+        GUA-086: 从平台 act 消息的 actionList 项 ["tribute"|"back", "tribute"|"back", [card_str,...]]
+        提取送出的单张牌字符串。参考 scripts/tools/yf_replay.py:59 _cards_from_tribute_back_action。
+        """
+        if not isinstance(selected, list) or len(selected) < 3:
+            return None
+        cards = selected[2]
+        if isinstance(cards, list) and cards:
+            first = cards[0]
+            if isinstance(first, str) and len(first) >= 2:
+                return first[0].upper() + first[1:].upper()
+        return None
+
     async def _handle_tribute_action(self, data: dict):
         """Handle tribute action - 进贡阶段需要发送动作响应"""
         self_rank = data.get("selfRank", "?")
@@ -358,8 +383,9 @@ class YF2_V7_Client:
         act_index = 0
         selected = action_list[act_index]
         print(f"[进贡] 轮到自己进贡，选择: {selected}")
-        # GUA-067: 送出进贡 → 从 initial_hand 移除
-        self.game_recorder.adjust_initial_hand_for_tribute_back(selected, "remove")
+        # GUA-086: 送出进贡 → 提取单张牌再调 adjust_initial_hand_for_tribute_back
+        tribute_card = self._extract_tribute_back_card(selected)
+        self.game_recorder.adjust_initial_hand_for_tribute_back(tribute_card, "remove")
         self.game_recorder.record_decision(
             act_index,
             selected,
@@ -382,8 +408,9 @@ class YF2_V7_Client:
         act_index = 0
         selected = action_list[act_index]
         print(f"[还贡] 轮到自己还贡，选择: {selected}")
-        # GUA-067: 送出还牌 → 从 initial_hand 移除
-        self.game_recorder.adjust_initial_hand_for_tribute_back(selected, "remove")
+        # GUA-086: 送出还牌 → 提取单张牌再调 adjust_initial_hand_for_tribute_back
+        back_card = self._extract_tribute_back_card(selected)
+        self.game_recorder.adjust_initial_hand_for_tribute_back(back_card, "remove")
         self.game_recorder.record_decision(
             act_index,
             selected,
