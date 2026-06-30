@@ -1,4 +1,4 @@
-# Handoff: GUA-036 控权压顺 + 接风配合（M3 guard）
+﻿# Handoff: GUA-036 控权压顺 + 接风配合（M3 guard）
 
 | 字段 | 内容 |
 |------|------|
@@ -82,6 +82,6 @@ b29854d feat(m3): GUA-034 solo sprint END-M01–M04
 
 ```text
 请先读 docs/governance/分析接续-handoff.md 和
-docs/analysis/handoffs/2026-06-01-gua036-control-wind-team.md，
+../guandan-brain/handoff/2026-06-01-gua036-control-wind-team.md，
 按「下一步唯一动作」提交 GUA-036 并 push；不要从零重做 pytest 已通过的逻辑。
 ```

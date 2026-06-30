@@ -1,4 +1,4 @@
-# 文档目录
+﻿# 文档目录
 
 本目录包含项目的所有详细文档。
 
@@ -42,7 +42,7 @@
 问题分析和优化建议
 - [所有分析报告](analysis/)
 - [Agent 会话归档](analysis/agent-sessions/)（原 `claude-analysis/`）
-- [任务 handoff](analysis/handoffs/)
+- [任务 handoff](guandan-brain/handoff/)
 - [M1分析报告](reports/m1/)
 
 #### 5. 项目报告 (reports/)

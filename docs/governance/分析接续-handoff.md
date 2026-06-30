@@ -1,4 +1,4 @@
-# 分析 / 训练中途换机 — 接续说明（Handoff）
+﻿# 分析 / 训练中途换机 — 接续说明（Handoff）
 
 > 换电脑或新开 Agent 时，**先读本文 + 最新 handoff 文件**，再动手。
 
@@ -11,28 +11,28 @@
 
 在离开前尽量做完；做不完也要写进 handoff「未完成项」。
 
-- [ ] **Git**：提交并 push 代码 + `docs/analysis/handoffs/最新-*.md`
+- [ ] **Git**：提交并 push 代码 + `../guandan-brain/handoff/最新-*.md`
 - [ ] **结论落盘**：不要把关键结论只留在聊天里；写入 handoff 或 `docs/training/` / `docs/analysis/`
 - [ ] **COS**（若有大文件）：上传本阶段用到的 replay / eval JSON / 当前 `.pth`；记下 `object_key`
-- [ ] **新建 handoff**：复制 [handoff 模板](#4-handoff-模板) 到 `docs/analysis/handoffs/YYYY-MM-DD-简短主题.md`
+- [ ] **新建 handoff**：复制 [handoff 模板](#4-handoff-模板) 到 `../guandan-brain/handoff/YYYY-MM-DD-简短主题.md`
 - [ ] **可选**：`git log -3 --oneline` 贴进 handoff 的「相关 commit」
 
 ## 3. 新电脑 / 新 Agent 怎么继续
 
 1. `git pull`（`m-dev`）
-2. 打开 `docs/analysis/handoffs/` 下**日期最新**的一篇
+2. 打开 `../guandan-brain/handoff/` 下**日期最新**的一篇
 3. 读 handoff 里的 **「下一步唯一动作」**（只写一条主任务，避免 Agent 发散）
 4. 若 handoff 写了 COS 路径：`python scripts/cos/sync_pull_all.py` 或按路径单独拉
 5. 对新 Agent 的第一条消息可写：
 
    ```text
    请先读 docs/governance/分析接续-handoff.md 和
-   docs/analysis/handoffs/<文件名>，按其中「下一步」继续，不要从零重做已完成步骤。
+   ../guandan-brain/handoff/<文件名>，按其中「下一步」继续，不要从零重做已完成步骤。
    ```
 
 ## 4. Handoff 模板
 
-新建文件：`docs/analysis/handoffs/YYYY-MM-DD-主题.md`
+新建文件：`../guandan-brain/handoff/YYYY-MM-DD-主题.md`
 
 ```markdown
 # Handoff: <主题>

@@ -1,4 +1,4 @@
-# 给执行 AI 的说明（修复 batch_executor 计数口径）
+﻿﻿# 给执行 AI 的说明（修复 batch_executor 计数口径）
 
 把下面**整段**复制到新对话里。执行前必须先读评审报告，**不要**凭聊天摘要改代码。
 
@@ -75,4 +75,4 @@ python -m batch_executor --target-games 10 `
 ## 可选附言
 
 - 历史 M3「10/10 批跑」行见 `ITERATIONS.md` 2026-05-30 M3 条目 —— **完成度结论无效**，修复后需净盘重跑再评 GUA-029。  
-- Handoff：[`docs/analysis/handoffs/2026-05-31-M3-skills映射与组牌总纲.md`](../analysis/handoffs/2026-05-31-M3-skills映射与组牌总纲.md)
+- Handoff：[`handoff/2026-05-31-M3-skills映射与组牌总纲.md`](../guandan-brain/handoff/2026-05-31-M3-skills映射与组牌总纲.md)

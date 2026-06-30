@@ -1,4 +1,4 @@
-# 掼蛋智能体 M/V 系列仓库治理方案
+﻿﻿# 掼蛋智能体 M/V 系列仓库治理方案
 
 | 项目 | 内容 |
 |------|------|
@@ -159,7 +159,7 @@ src/
 |------|------|
 | `docs/governance/` | 治理总纲、COS、handoff、**文档审查台账** |
 | `docs/guandan-brain/` | M 系列迭代真源：ISSUES / ITERATIONS / **M1/M2/M3 代际文档** |
-| `docs/analysis/handoffs/` | 具体任务 handoff（换机 / 新 Agent 接续） |
+| `../guandan-brain/handoff/` | 具体任务 handoff（换机 / 新 Agent 接续） |
 | `docs/versions/MATRIX.md` | 分支与冒烟状态矩阵 |
 
 M 代际文档索引见 [docs/guandan-brain/README.md](../guandan-brain/README.md)（含 `M2_OPTIMIZATION.md`、`M3_DIAGNOSIS.md`）。
@@ -491,7 +491,7 @@ __pycache__/
 | [data/manifests/regression-lalala-v1.json](../../data/manifests/regression-lalala-v1.json) | 30 局回归清单模板 |
 | [docs/governance/COS-接入指南.md](./COS-接入指南.md) | COS 配置与上传/拉取命令 |
 | [docs/governance/分析接续-handoff.md](./分析接续-handoff.md) | 换机 / 新 Agent 如何接续分析 |
-| [docs/analysis/handoffs/](../analysis/handoffs/) | 任务级 handoff（取日期最新一篇） |
+| [../guandan-brain/handoff/](../guandan-brain/handoff/) | 任务级 handoff（取日期最新一篇） |
 | [docs/guandan-brain/README.md](../guandan-brain/README.md) | M 系列迭代台账与 M1/M2/M3 代际文档 |
 | [docs/掼蛋AI客户端架构方案.md](../architecture/掼蛋AI客户端架构方案.md) | 模块级架构（需与本文 M/V 分层对齐） |
 | [main-branch-policy.md](./main-branch-policy.md) | **`main` / `origin/main` 拍板策略（2026-05-29）** |
@@ -507,7 +507,7 @@ __pycache__/
 |------|------|------|
 | v1.0 | 2026-05-28 | 首版：M/V 分层、分支、OSS、回归 30 局、V 冒烟双条件、现阶段 M-only 门禁 |
 | v1.1 | 2026-05-28 | 默认开发分支 **`m1-dev` → `m-dev`**（M 系列总线，与 m1/m2 代际区分） |
-| v1.2 | 2026-05-28 | Phase 4 脚本收敛结案；`doc/` → `docs/guandan-brain/`；README 基础知识摘要；相关 handoff 见 `docs/analysis/handoffs/2026-05-28-仓库整理方案执行中.md` |
+| v1.2 | 2026-05-28 | Phase 4 脚本收敛结案；`doc/` → `docs/guandan-brain/`；README 基础知识摘要；相关 handoff 见 `../guandan-brain/handoff/2026-05-28-仓库整理方案执行中.md` |
 | v1.3 | 2026-05-29 | `main` / `origin/main` 策略拍板；新增 [main-branch-policy.md](./main-branch-policy.md) |
 | v1.7 | 2026-05-29 | §9 标「仓库整理已结案」；ITERATIONS Phase 5 治理结案行 |
 | v1.8 | 2026-06-02 | 新增 `docs/reasearch/` 调研文档目录说明（Git 同步） |
