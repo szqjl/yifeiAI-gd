@@ -100,6 +100,7 @@ class UltimateWinRateEngineV7:
         self._card_mask: Optional[Dict[str, tuple]] = None   # card → (group_id, is_core, group_size)
         self._group_members: Dict[int, List[str]] = {}       # group_id → 牌列表（multiset 真源）
         self._current_role: str = "主攻"                      # 角色（主攻/助攻/超强主攻/超弱）
+        self._anchor_role: Optional[str] = None               # GUA-079: 初始 role 锚（主攻以上锁定，不随重算退化）
         self._best_plan = None                                 # 最优方案 GroupingPlan
         self._grouping_features: Optional[np.ndarray] = None   # 24 维组牌特征（进 NN）
         self._last_hand_hash: int = -1                         # 手牌 hash，用于判断是否需要重跑引擎
@@ -111,6 +112,12 @@ class UltimateWinRateEngineV7:
         # 残局管线统计
         self._endgame_activated_count: int = 0
         self._endgame_hit_count: int = 0
+        # GUA-075 记录增强: 每步决策的管线层 / 模型置信度 / 候选数
+        self._last_decision_layer: Optional[str] = None
+        self._last_decision_score: Optional[float] = None
+        self._last_decision_candidates: int = 0
+        self._dispatch_stage_count: int = 0  # GUA-089 阶段调度次数计数
+        self._last_nn_confidence: Optional[float] = None  # _model_decision 内部写入
         # GUA-063 Phase 3: 中局重分组触发追踪
         self._prev_hand_size: int = 27
         self._regroup_triggered_count: int = 0
@@ -132,6 +139,7 @@ class UltimateWinRateEngineV7:
         self._card_mask = None
         self._group_members = {}
         self._current_role = "主攻"
+        self._anchor_role = None
         self._best_plan = None
         self._grouping_features = None
         self._last_hand_hash = -1
@@ -224,6 +232,26 @@ class UltimateWinRateEngineV7:
         # ── ②b GUA-072 规则记牌信念（供 heuristic / 推荐器）──
         self._inject_belief_vector(game_state)
 
+        # ── ②c GUA-089 阶段调度（§7.4 伪代码落地）──
+        # 按当前手牌张数切 3 阶段，存入 game_state[‘_current_stage’]
+        # 与 STAGE_RULE_MAP / STAGE_ENGINE_MAP 一道，供后续 _recommend_play / 下游 GUA-090/091/092 消费
+        try:
+            from src.v.nn.dispatcher import _dispatch_by_stage, stage_description
+            _hand_cards = game_state.get("handCards", []) or []
+            _hand_size = len(_hand_cards) if _hand_cards else 27
+            _cur_rank = game_state.get("curRank", "2")
+            _stage = _dispatch_by_stage(_hand_size, _cur_rank)
+            game_state["_current_stage"] = _stage
+            self._last_decision_layer = (
+                "GUA-089_" + _stage + "(" + stage_description(_stage) + ")"
+            ) if not self._last_decision_layer else (
+                self._last_decision_layer + "|GUA-089_" + _stage
+            )
+            self._dispatch_stage_count += 1
+        except Exception as e:
+            self.logger.warning("GUA-089 阶段调度异常: %s, 默认 stage_0_1", e)
+            game_state["_current_stage"] = "stage_0_1"
+
         # ── ③ 接风跟线记忆 ──
         self._update_teammate_last_trick(game_state)
 
@@ -233,6 +261,17 @@ class UltimateWinRateEngineV7:
 
         # ══════════════ ★ 残局管线：预处理 + Q0→Q3 决策 ══════════════
         # 注入点：_inject_numofplayers 之后，GUA-075 主路径之前
+        # GUA-080: 注入组牌数据到 game_state，预处理器需要 _group_type_map 做冲刺判定
+        if self._card_mask and self._group_type_map:
+            # 转换 gid→type 为 type→count（预处理器格式）
+            type_counts: Dict[str, int] = {}
+            for gid, gtype in self._group_type_map.items():
+                type_counts[gtype] = type_counts.get(gtype, 0) + 1
+            # 散牌（gid=-1）也算一组
+            scatter_count = sum(1 for v in self._card_mask.values() if v[0] == -1)
+            if scatter_count > 0:
+                type_counts["scatter"] = scatter_count
+            game_state["_group_type_map"] = type_counts
         # 若残局命中 → 直接返回；未命中 → 继续 GUA-075 + Guard + NN + heuristic
         try:
             from src.v.nn.endgame.endgame_preprocessor import EndgamePreprocessor
@@ -256,14 +295,32 @@ class UltimateWinRateEngineV7:
                 if endgame_idx is not None and endgame_act is not None:
                     for orig_i, a in enumerate(original_action_list):
                         if a == endgame_act:
+                            # GUA-078: 残局管线命中后过 _group_consistency_filter
+                            # 残局管线不感知 card_mask，可能拆炸弹/钢板 core
+                            # 若 filter 拦截 → 不 return，继续走 GUA-075 主路径
+                            _, filter_map = self._group_consistency_filter(
+                                original_action_list, game_state,
+                            )
+                            if orig_i < len(filter_map) and filter_map[orig_i] == -1:
+                                self.logger.warning(
+                                    "残局管线命中但被_group_consistency_filter拦截: actIndex=%d cards=%s → 回退GUA-075",
+                                    orig_i,
+                                    endgame_act[2] if len(endgame_act) >= 3 and isinstance(endgame_act[2], list) else endgame_act[:3],
+                                )
+                                break  # 跳出 for（不触发 else），不 return，继续走到 GUA-075
+
                             self._endgame_hit_count += 1
                             self.logger.info(
                                 "残局管线命中: actIndex=%d cards=%s",
                                 orig_i,
                                 endgame_act[2] if len(endgame_act) >= 3 and isinstance(endgame_act[2], list) else endgame_act[:3],
                             )
+                            self._last_decision_layer = "残局管线"
+                            self._last_decision_score = None
+                            self._last_decision_candidates = len(original_action_list)
                             return orig_i
-                    self.logger.warning("残局决策未在原始 actionList 中匹配到: %s", endgame_act[:3] if len(endgame_act) >= 3 else endgame_act)
+                    else:
+                        self.logger.warning("残局决策未在原始 actionList 中匹配到: %s", endgame_act[:3] if len(endgame_act) >= 3 else endgame_act)
                 # 残局未命中 → 恢复 action_list（已过滤 banned）→ 继续 GUA-075
         except Exception as e:
             self.logger.warning("残局管线异常: %s，回退正常管线", e)
@@ -299,6 +356,9 @@ class UltimateWinRateEngineV7:
                             self.logger.info(
                                 "GUA-075 主路径: recommend=%s/%s → actIndex=%d ✅",
                                 recommendation.get("type"), recommendation.get("rank"), act_index)
+                            self._last_decision_layer = "GUA-075推荐"
+                            self._last_decision_score = None
+                            self._last_decision_candidates = len(action_list)
                             return act_index
                         # 被拦截时继续往下走到回退路径
                     else:
@@ -493,6 +553,9 @@ class UltimateWinRateEngineV7:
                         original_idx = self._fallback_group_action_index(
                             action_index, group_filter_map, action_map, len(action_list))
                     self._check_midgame_triggers(game_state, chosen)
+                    self._last_decision_layer = "NN+heuristic覆盖" if need_heuristic_override else "NN"
+                    self._last_decision_score = self._last_nn_confidence
+                    self._last_decision_candidates = len(group_actions)
                     return original_idx
 
             # 回退到启发式规则引擎（GUA-071 _heuristic_select）
@@ -503,12 +566,21 @@ class UltimateWinRateEngineV7:
                 original_idx = self._match_chosen_to_original_action_list(
                     chosen, action_list)
                 self._check_midgame_triggers(game_state, chosen)
+                self._last_decision_layer = "启发式"
+                self._last_decision_score = None
+                self._last_decision_candidates = len(group_actions)
                 return original_idx
+            self._last_decision_layer = "规则回退"
+            self._last_decision_score = None
+            self._last_decision_candidates = len(group_actions)
             return self._rule_based_decision(game_state, group_actions)
 
         except Exception as e:
             self.logger.error(f"✗ 决策失败: {e}")
             self.fallback_decisions += 1
+            self._last_decision_layer = "规则回退"
+            self._last_decision_score = None
+            self._last_decision_candidates = len(action_list) if action_list else 0
             return self._rule_based_decision(game_state, action_list)
     
     def _inject_belief_vector(self, game_state: Dict[str, Any]) -> None:
@@ -662,7 +734,17 @@ class UltimateWinRateEngineV7:
             self._card_mask, self._group_type_map, self._group_members = best_plan.to_card_mask()
 
             # 产出 2: role（决定过滤行为）
-            self._current_role = best_plan.role or "主攻"
+            raw_role = best_plan.role or "主攻"
+            # GUA-079: 初始 role 锚锁定 — 首算若为主攻以上，锁定 role；
+            # 后续重算仍跑 enumerate_groupings 更新 card_mask/features，
+            # 但 role 不退化，避免强牌打着打着变畏缩
+            if self._anchor_role is None and raw_role in ("超强主攻", "主攻"):
+                self._anchor_role = raw_role
+                self.logger.info("GUA-079 锚定初始 role: %s", raw_role)
+            if self._anchor_role is not None:
+                self._current_role = self._anchor_role
+            else:
+                self._current_role = raw_role
 
             # 产出 3: 24 维组牌特征（进 NN）
             features_24 = _extract_features(all_plans, hand_cards, cur_rank)
@@ -1770,6 +1852,7 @@ class UltimateWinRateEngineV7:
             # 验证动作索引
             if 0 <= best_action_idx < len(action_list):
                 confidence = action_probs[best_action_idx].item()
+                self._last_nn_confidence = confidence
                 self.logger.debug(f"模型决策: 动作{best_action_idx}, 置信度: {confidence:.3f}")
                 return best_action_idx
             else:
