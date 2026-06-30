@@ -6,3 +6,5 @@
 
 | date | mode | ip_id | description | win_rate | delta_vs_baseline | 备注 |
 |------|------|-------|-------------|----------|-------------------|------|
+| 2026-06-30 | baseline | GUA-091 | stage_2 中局入口 _stage_mid_dispatch | 0/3 (0.0%) | - | GUA-097 baseline (GUA-091 off: stage_2 中局入口 _stage_mid_dispatch) |
+| 2026-06-30 | enable | GUA-091 | stage_2 中局入口 _stage_mid_dispatch | 0/3 (0.0%) | TBD | GUA-097 enable GUA-091 (stage_2 中局入口 _stage_mid_dispatch) |

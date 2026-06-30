@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-ROOT = Path(__file__).resolve().parents[3]  # D:\\guandanscore\\YiFeiAI-GD
+ROOT = Path(__file__).resolve().parents[4]  # D:\\guandanscore\\YiFeiAI-GD
 TRACE_DIR = ROOT / "game_decision_traces"
 
 
@@ -50,6 +50,7 @@ class DecisionTracer:
             "layer1_hits": [],
             "layer2_ips": [],
             "layer3_guards": [],
+            "decision_intent": None,
             "actIndex_chosen": None,
             "decision_ms": None,
         }
@@ -77,6 +78,14 @@ class DecisionTracer:
             "filtered_count": filtered_count,
             "reason": reason,
         })
+
+    def record_decision_intent(self, intent: str, payload: Any = ""):
+        if not self.enable or self._current_step is None:
+            return
+        self._current_step["decision_intent"] = {
+            "intent": intent,
+            "payload": str(payload)[:200],
+        }
 
     def end_step(self, actIndex: int, chosen_action: Any):
         if not self.enable or self._current_step is None:

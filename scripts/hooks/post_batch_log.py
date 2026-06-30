@@ -52,8 +52,8 @@ def calc_team_win_rate(vn):
     """0+2 vs 1+3 队胜率 (按 AGENTS.md 三句数据口径)"""
     if not vn or len(vn) < 4:
         return None, None
-    team_a = vn[0] + vn[2]
-    team_b = vn[1] + vn[3]
+    team_a = vn[0]
+    team_b = vn[1]
     total = team_a + team_b
     if total == 0:
         return "0/0 (0%)", total
@@ -92,6 +92,11 @@ def main():
         sys.exit(1)
 
     vn = vn_data.get("victoryNum", [])
+    if len(vn) >= 4 and (vn[0] != vn[2] or vn[1] != vn[3]):
+        print(
+            f"[WARN] victoryNum 队内镜像位不一致: {vn}，按工作流口径仅采用 [0] vs [1]",
+            file=sys.stderr,
+        )
     win_rate_str, total_games = calc_team_win_rate(vn)
     records = count_records()
     date = datetime.date.today().isoformat()

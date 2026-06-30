@@ -94,3 +94,5 @@
 - ❌ **禁止**只填"准确率 60% / loss X"而不填队胜率
 - ✅ **必须**每条 GUA 完工时有一条对应记录
 - ✅ **必须**记录批跑日志路径（`logs/v7_vs_lalala_*.log`）
+| 2026-06-30 | GUA-097-GUA-091-BASELINE | [BASELINE] GUA-091 关闭 | `C:\Users\Jennifer\AppData\Local\Programs\Python\Python313\python.exe D:\guandanscore\YiFeiAI-GD\scripts\launchers\v7\run_v7_vs_lalala_games.py --games 3` | 3 | 0/3 (0.0%) | 60 | GUA-097 baseline (GUA-091 off: stage_2 中局入口 _stage_mid_dispatch) |
+| 2026-06-30 | GUA-097-GUA-091 | [ENABLE] 启用 GUA-091 | `C:\Users\Jennifer\AppData\Local\Programs\Python\Python313\python.exe D:\guandanscore\YiFeiAI-GD\scripts\launchers\v7\run_v7_vs_lalala_games.py --games 3` | 3 | 0/3 (0.0%) | 32 | GUA-097 enable GUA-091 (stage_2 中局入口 _stage_mid_dispatch) |
