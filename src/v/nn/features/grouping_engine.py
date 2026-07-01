@@ -380,6 +380,73 @@ def _large_bomb_peel_options(bombs: List[List[str]]) -> List[int]:
     return [0, max_peel]
 
 
+def _classify_dissolved_bomb_cards(
+    bomb_cards: List[str],
+    cur_rank: str,
+) -> Tuple[List[str], List[List[str]], List[List[str]], List[str]]:
+    """将被定向拆解的炸弹牌回收到 singles/pairs/trips/wilds 池。
+
+    GUA-108: 这里不把 4 张同点牌重新识别回炸弹，而是以「非炸牌池」形式回注，
+    允许顺子检测先消费其中一部分，再由后续剩余牌重分类决定是否回收为 trips/pairs。
+    """
+    rank_groups = _rank_groups(list(bomb_cards), cur_rank)
+    wilds = rank_groups.get("__wild__", [])
+    if "__wild__" in rank_groups:
+        del rank_groups["__wild__"]
+    singles, pairs, trips = _classify_no_bombs(rank_groups)
+    return singles, pairs, trips, list(wilds)
+
+
+def _count_detectable_straights(
+    singles: List[str],
+    pairs: List[List[str]],
+    trips: List[List[str]],
+    wilds: List[str],
+    cur_rank: str,
+) -> int:
+    """轻量预估当前牌池可直接检测出的顺子数量。"""
+    straights, _, _, _, _ = _detect_straights(
+        list(singles),
+        [p[:] for p in pairs],
+        [t[:] for t in trips],
+        cur_rank,
+        list(wilds),
+    )
+    return len(straights)
+
+
+def _eligible_straight_bridge_bombs(
+    rem_s: List[str],
+    rem_p: List[List[str]],
+    rem_t: List[List[str]],
+    rem_w: List[str],
+    reserved_bombs: List[List[str]],
+    cur_rank: str,
+) -> List[int]:
+    """GUA-108: 找出“拆 4 炸后能新增顺子候选”的炸弹下标。
+
+    约束：
+      - 仅考虑 4 张炸弹，避免把 5 炸及以上直接拉入“为成顺而拆炸”分支
+      - 必须确实让可检测顺子数增加，避免无收益地枚举噪声候选
+    """
+    base_straight_count = _count_detectable_straights(rem_s, rem_p, rem_t, rem_w, cur_rank)
+    eligible: List[int] = []
+    for idx, bomb in enumerate(reserved_bombs):
+        if len(bomb) != BOMB_CORE_MIN:
+            continue
+        add_s, add_p, add_t, add_w = _classify_dissolved_bomb_cards(bomb, cur_rank)
+        trial_count = _count_detectable_straights(
+            rem_s + add_s,
+            rem_p + add_p,
+            rem_t + add_t,
+            rem_w + add_w,
+            cur_rank,
+        )
+        if trial_count > base_straight_count:
+            eligible.append(idx)
+    return eligible
+
+
 def _classify_no_bombs(groups: Dict[str, List[str]]) -> Tuple[
     List[str], List[List[str]], List[List[str]]
 ]:
@@ -1518,6 +1585,7 @@ def _enumerate_plans(
         rem_w: List[str], reserved_bombs: List[List[str]],
         strategy: str, break_bombs: bool, double_st: bool,
         large_bomb_peel: int = 0,
+        bridge_bomb_idx: Optional[int] = None,
     ) -> GroupingPlan:
         all_sf = nat_sf + wild_sf
 
@@ -1535,6 +1603,18 @@ def _enumerate_plans(
             safe_to_break_fn=_safe_to_break_bomb,
         )
         pool_s.extend(peeled)
+
+        # GUA-108: 为成顺而定向拆 4 炸，候选只进枚举层，由评分决定是否值得。
+        if bridge_bomb_idx is not None and 0 <= bridge_bomb_idx < len(remaining_bombs):
+            bridge_bomb = remaining_bombs.pop(bridge_bomb_idx)
+            add_s, add_p, add_t, add_w = _classify_dissolved_bomb_cards(
+                bridge_bomb, cur_rank
+            )
+            pool_s.extend(add_s)
+            pool_p.extend(add_p)
+            pool_t.extend(add_t)
+            pool_w.extend(add_w)
+
         bomb_core_ranks = _bomb_core_ranks(remaining_bombs)
 
         # Step 3: wild → 升炸（逢人配先固化，避免被顺子/三带二消耗）
@@ -1583,6 +1663,13 @@ def _enumerate_plans(
                 nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
                 "BOMB_FIRST", break_bombs=False, double_st=False,
                 large_bomb_peel=0))
+            for bridge_idx in _eligible_straight_bridge_bombs(
+                rem_s, rem_p, rem_t, rem_w, res_b, cur_rank
+            ):
+                plans.append(_make_plan_from_sf(
+                    nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
+                    "STRAIGHT_BRIDGE", break_bombs=False, double_st=False,
+                    large_bomb_peel=0, bridge_bomb_idx=bridge_idx))
     else:
         # 无同花顺：生成 BOMB_FIRST + ROUND_OPTIMAL + ALL_COMBOS 基准方案
         peel_opts = _large_bomb_peel_options(all_bombs)
@@ -1599,6 +1686,13 @@ def _enumerate_plans(
             [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
             "BOMB_FIRST", break_bombs=False, double_st=False,
             large_bomb_peel=0))
+        for bridge_idx in _eligible_straight_bridge_bombs(
+            sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs, cur_rank
+        ):
+            plans.append(_make_plan_from_sf(
+                [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
+                "STRAIGHT_BRIDGE", break_bombs=False, double_st=False,
+                large_bomb_peel=0, bridge_bomb_idx=bridge_idx))
 
     # ═══════════════════════════════════
     # 去重：相同得分相同结构的方案只保留一个
@@ -1678,8 +1772,9 @@ def _extract_features(
     f[6] = max(0.0, 1.0 - len(best.singles) / max(n, 1))
 
     strategy_ids = {"SF_FIRST": 0, "BOMB_FIRST": 1, "BALANCED": 2,
-                    "ROUND_OPTIMAL": 3, "NO_STRAIGHTS": 4, "ALL_COMBOS": 5}
-    f[7] = strategy_ids.get(best.strategy, 0) / 6.0
+                    "ROUND_OPTIMAL": 3, "NO_STRAIGHTS": 4, "ALL_COMBOS": 5,
+                    "STRAIGHT_BRIDGE": 6}
+    f[7] = strategy_ids.get(best.strategy, 0) / 7.0
 
     # 方案多样性
     scores = [p.score for p in plans_sorted]

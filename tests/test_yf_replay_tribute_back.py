@@ -11,7 +11,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts" / "tools"))
 
-from yf_replay import apply_tribute_back_to_hand  # noqa: E402
+from yf_replay import apply_tribute_back_to_hand, resolve_effective_initial_hand  # noqa: E402
 
 
 def _simulate_my_hand_at_step(initial, my_decisions, player_id, actions, step):
@@ -153,6 +153,43 @@ def test_sample_game_20260601_yf1_tribute_sb_back_s3():
     adj = apply_tribute_back_to_hand(raw, data["my_decisions"], 0)
     assert "SB" not in adj and "S3" in adj
     assert len(adj) == 27
+
+
+@pytest.mark.unit
+def test_resolve_effective_initial_hand_skips_double_apply_when_json_already_adjusted():
+    """
+    新 JSON 里 initial_hand 已是贡后真实手牌时，回放器不得再把 back 牌重复加一遍。
+    """
+    initial = ["H2", "D2", "C4", "C4", "D4", "H4"]
+    my_decisions = [
+        {
+            "action": ["tribute", "tribute", ["HR"]],
+            "context": {"source": "act", "stage": "tribute"},
+        },
+        {
+            "action": ["back", "back", ["H4"]],
+            "context": {
+                "source": "notify",
+                "back_pos": 3,
+                "receive_back_pos": 0,
+                "stage": "back",
+            },
+        },
+        {
+            "action": ["Single", "T", ["HT"]],
+            "context": {
+                "source": "act",
+                "stage": "play",
+                "handCards": list(initial),
+            },
+        },
+    ]
+
+    resolved = resolve_effective_initial_hand(initial, my_decisions, 0)
+
+    assert resolved == initial
+    assert resolved.count("H4") == 1
+    assert sum(1 for c in resolved if "4" in c) == 4
 
 
 @pytest.mark.unit

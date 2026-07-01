@@ -12,6 +12,7 @@ EndgameDecider — 残局 Q0→Q3 决策引擎
 任一 Q 命中 → 返回 action；全未命中 → 返回 None，交由上游管线处理。
 """
 
+from collections import Counter
 from typing import List, Dict, Any, Tuple, Optional
 import logging
 
@@ -63,6 +64,8 @@ except ImportError:
 
 def _get_cards(action: List) -> List[str]:
     """从 action 中提取实际牌列表。"""
+    if isinstance(action, list) and action and action[0] == "PASS":
+        return []
     if isinstance(action, list) and len(action) >= 3 and isinstance(action[2], list):
         return action[2]
     return action
@@ -120,6 +123,136 @@ def _sort_by_recapture_first(
     return sorted(actions, key=_sort_key)
 
 
+def _is_bomb_like_action(action: List) -> bool:
+    """是否为炸弹类动作（含同花顺）。"""
+    if isinstance(action, list) and action:
+        declared = action[0]
+        if declared in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH, "Bomb", "StraightFlush"):
+            return True
+    if not GUARD_TOOLS_OK:
+        return False
+    try:
+        atype = get_action_type(action)
+    except Exception:
+        return False
+    return atype in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH)
+
+
+def _get_declared_action_type(action: List) -> str:
+    """优先取平台声明牌型；无声明时退回空串。"""
+    if isinstance(action, list) and action and isinstance(action[0], str):
+        return action[0]
+    return ""
+
+
+def _is_control_action(action: List) -> bool:
+    """是否为真实控牌动作；平台声明优先，PASS/FREE 视为非控牌。"""
+    declared = _get_declared_action_type(action)
+    if declared and declared not in (ACTION_TYPE_PASS, ACTION_TYPE_FREE, "PASS", "Free"):
+        return True
+
+    if not GUARD_TOOLS_OK:
+        return False
+    try:
+        atype = get_action_type(action)
+    except Exception:
+        return False
+    return atype not in (ACTION_TYPE_PASS, ACTION_TYPE_FREE)
+
+
+def _q1_structure_priority(action_type: str) -> int:
+    """Q1 整牌候选优先级。数值越小优先级越高。"""
+    type_priority = {
+        ACTION_TYPE_STRAIGHT: 0,
+        ACTION_TYPE_THREE_WITH_TWO: 1,
+        ACTION_TYPE_TWO_TRIPS: 2,
+        ACTION_TYPE_THREE_PAIR: 3,
+        ACTION_TYPE_TRIPS: 4,
+        ACTION_TYPE_PAIR: 5,
+        ACTION_TYPE_BOMB: 6,
+        ACTION_TYPE_STRAIGHT_FLUSH: 7,
+    }
+    return type_priority.get(action_type, 99)
+
+
+def _sort_q1_block_candidates(
+    actions: List, hand_cards: List[str], game_state: Dict[str, Any],
+) -> List:
+    """Q1 候选排序：默认沿用回收优先；若当前控牌非炸，仅把炸弹内部改成最小足够炸优先。"""
+    ordered = _sort_by_recapture_first(actions, hand_cards)
+    if not ordered or not GUARD_TOOLS_OK:
+        return ordered
+
+    greater_action = game_state.get("greaterAction")
+    if not greater_action:
+        return ordered
+
+    try:
+        greater_type = get_action_type(greater_action)
+    except Exception:
+        return ordered
+
+    if greater_type in (
+        ACTION_TYPE_BOMB,
+        ACTION_TYPE_STRAIGHT_FLUSH,
+        ACTION_TYPE_PASS,
+        ACTION_TYPE_FREE,
+    ):
+        return ordered
+
+    cur_rank = str(game_state.get("curRank", "2"))
+    bomb_items = [
+        item for item in ordered
+        if _is_bomb_like_action(item[1] if isinstance(item, tuple) and len(item) == 2 else item)
+    ]
+    if len(bomb_items) <= 1:
+        return ordered
+
+    def _bomb_min_sufficient_key(item):
+        act = item[1] if isinstance(item, tuple) and len(item) == 2 else item
+        return (
+            len(_get_cards(act)),
+            _max_card_value(act, cur_rank),
+        )
+
+    bomb_items = sorted(bomb_items, key=_bomb_min_sufficient_key)
+    bomb_iter = iter(bomb_items)
+    result = []
+    for item in ordered:
+        act = item[1] if isinstance(item, tuple) and len(item) == 2 else item
+        if _is_bomb_like_action(act):
+            result.append(next(bomb_iter))
+        else:
+            result.append(item)
+    return result
+
+
+def _seat_holding_states(seat: int, my_pos: int, partner_pos: int) -> Tuple[int, ...]:
+    """返回某席在 MemoryTracker.card_state 中的“可能持有”状态集合。"""
+    if seat == my_pos:
+        return (1,)  # MY_HAND
+    if seat == partner_pos:
+        return (-1, 2)  # UNKNOWN / PARTNER_HAND
+    return (-1, 3)  # UNKNOWN / OPPONENT_HAND
+
+
+def _rank_beats_same_type(played_rank: str, suppressor_rank: str, cur_rank: str) -> bool:
+    """同型比较：suppressor_rank 是否能压制 played_rank。"""
+    if not played_rank or not suppressor_rank:
+        return False
+    if suppressor_rank == "HR":
+        return played_rank != "HR"
+    if suppressor_rank == "SB":
+        return played_rank not in ("HR", "SB")
+    if suppressor_rank == cur_rank:
+        return played_rank not in ("HR", "SB", cur_rank)
+    if played_rank == cur_rank:
+        return False
+    if played_rank in ("HR", "SB"):
+        return False
+    return CARD_RANK_ORDER.get(suppressor_rank, -1) > CARD_RANK_ORDER.get(played_rank, -1)
+
+
 # ═══════════════════════════════════════════════════════
 #  EndgameDecider
 # ═══════════════════════════════════════════════════════
@@ -151,22 +284,17 @@ class EndgameDecider:
         if not ec.get("is_active"):
             return action_list, False
 
-        # 收集所有敌人的 banned_types + baoshu.never_play
-        banned_set: set = set()
         enemies = ec.get("enemies", {})
-        for opp_pos, ectx in enemies.items():
-            remaining = ectx.get("remaining", 27)
-            banned_set.update(ectx.get("banned_types", []))
-            baoshu = ectx.get("baoshu", {})
-            if baoshu:
-                # never_play 需验证 ≤ remaining（预处理器已过滤但再做一次防御）
-                for t in baoshu.get("never_play", []):
-                    try:
-                        from .endgame_preprocessor import _ACTION_TYPE_CARD_COUNT as _card_count
-                    except ImportError:
-                        from src.v.nn.endgame.endgame_preprocessor import _ACTION_TYPE_CARD_COUNT as _card_count
-                    if _card_count.get(t, 99) <= remaining:
-                        banned_set.add(t)
+        if not enemies:
+            return action_list, False
+
+        main_pos, main_enemy = self._select_main_enemy(enemies, ec.get("my_pos", game_state.get("myPos", 0)))
+        banned_set = self._collect_q1_banned_set(game_state, ec, enemies, main_pos, main_enemy, action_list)
+
+        # 敌方剩 5 张且当前控牌是 Single 时，Q1 需要先判断“4+1 vs 整牌型”。
+        # 若此时把 Single 全硬删，会丢掉“最大合法单张先压”的机会。
+        if self._should_relax_single_ban_for_enemy_five(game_state, ec, action_list):
+            banned_set.discard(ACTION_TYPE_SINGLE)
 
         if not banned_set:
             return action_list, False
@@ -189,6 +317,111 @@ class EndgameDecider:
             logger.debug("banned 硬排后 actionList 为空，banned_set=%s", banned_set)
 
         return filtered, is_empty
+
+    def _select_main_enemy(
+        self, enemies: Dict[int, Dict[str, Any]], my_pos: int,
+    ) -> Tuple[int, Dict[str, Any]]:
+        """按危险度挑主目标敌人。"""
+        sorted_enemies = sorted(
+            enemies.items(),
+            key=lambda kv: self._enemy_danger_score(kv[0], kv[1], my_pos),
+        )
+        return sorted_enemies[0]
+
+    def _get_q1_protected_types(
+        self,
+        game_state: Dict[str, Any],
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> set:
+        """
+        Q1 中不应被 secondary ban 删掉的“保护型”。
+
+        规则：
+          1. 主目标 enemy 的 recommended / block_with 对应类型受保护
+          2. 当前 greaterPos 若是敌人且已进残局，则 greaterAction 同型受保护
+        """
+        protected: set = set()
+        try:
+            from .endgame_preprocessor import EndgamePreprocessor as EP
+        except ImportError:
+            from src.v.nn.endgame.endgame_preprocessor import EndgamePreprocessor as EP
+
+        protected.update(EP()._map_types(main_enemy.get("recommended_types", [])))
+        baoshu = main_enemy.get("baoshu", {}) or {}
+        protected.update(EP()._map_types(baoshu.get("block_with", [])))
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction")
+        enemy_positions = {(my_pos + 1) % 4, (my_pos + 3) % 4}
+        if greater_pos in enemy_positions and greater_action and GUARD_TOOLS_OK:
+            try:
+                greater_type = get_action_type(greater_action)
+                if greater_type not in (ACTION_TYPE_PASS, ACTION_TYPE_FREE):
+                    protected.add(greater_type)
+            except Exception:
+                pass
+
+        return protected
+
+    def _collect_q1_banned_set(
+        self,
+        game_state: Dict[str, Any],
+        ec: Dict[str, Any],
+        enemies: Dict[int, Dict[str, Any]],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+        action_list: List,
+    ) -> set:
+        """
+        收集 Q1 banned 集合。
+
+        旧逻辑对所有敌人直接取并集，容易出现：
+          - 次要敌人的 ban 删掉主目标 recommended 类型
+          - 当前敌人已用 Pair/Trips 控牌，但同型被规则表 ban 掉
+        """
+        protected_types = self._get_q1_protected_types(game_state, ec, main_pos, main_enemy)
+        banned_set: set = set()
+        try:
+            from .endgame_preprocessor import _ACTION_TYPE_CARD_COUNT as _card_count
+        except ImportError:
+            from src.v.nn.endgame.endgame_preprocessor import _ACTION_TYPE_CARD_COUNT as _card_count
+
+        for opp_pos, ectx in enemies.items():
+            remaining = ectx.get("remaining", 27)
+            for banned_type in ectx.get("banned_types", []):
+                if banned_type not in protected_types:
+                    banned_set.add(banned_type)
+
+            baoshu = ectx.get("baoshu", {})
+            if not baoshu:
+                continue
+            for banned_type in baoshu.get("never_play", []):
+                if _card_count.get(banned_type, 99) > remaining:
+                    continue
+                if banned_type not in protected_types:
+                    banned_set.add(banned_type)
+        return banned_set
+
+    def _should_relax_single_ban_for_enemy_five(
+        self, game_state: Dict[str, Any], ec: Dict[str, Any], action_list: List,
+    ) -> bool:
+        """剩 5 张残局特例：保留 Single 候选给 Q1 做细分判断。"""
+        if not GUARD_TOOLS_OK:
+            return False
+        greater_action = game_state.get("greaterAction")
+        greater_pos = game_state.get("greaterPos", -1)
+        if not greater_action or get_action_type(greater_action) != ACTION_TYPE_SINGLE:
+            return False
+        enemy_ctx = ec.get("enemies", {}).get(greater_pos, {})
+        if enemy_ctx.get("remaining") != 5:
+            return False
+        special = self._q1_enemy_five_single_special(
+            game_state, action_list, ec, greater_pos, enemy_ctx
+        )
+        return special is not None and get_action_type(special[1]) == ACTION_TYPE_SINGLE
 
     # ── 主决策入口 ──
 
@@ -351,20 +584,22 @@ class EndgameDecider:
         if not enemies:
             return None
 
+        teammate_hold = self._q1_hold_teammate_max_control(game_state, action_list, ec)
+        if teammate_hold is not None:
+            return teammate_hold
+
         # ① 找最危险敌人（主目标）
-        sorted_enemies = sorted(
-            enemies.items(),
-            key=lambda kv: self._enemy_danger_score(kv[0], kv[1], my_pos),
-        )
-        main_pos, main_enemy = sorted_enemies[0]
+        main_pos, main_enemy = self._select_main_enemy(enemies, my_pos)
+
+        # 敌方剩 5 张 + 当前控牌为 Single 的残局特判：
+        # 先判断上/下家、4+1/整牌型、队友牌力和“敌方是否仍可能有更大单张”，
+        # 再决定是直接用我方最大合法单张压，还是保留炸弹。
+        special = self._q1_enemy_five_single_special(game_state, action_list, ec, main_pos, main_enemy)
+        if special is not None:
+            return special
 
         # ② 收集 banned_set（所有敌人 banned + baoshu.never_play 并集）
-        banned_set: set = set()
-        for opp_pos, ectx in enemies.items():
-            banned_set.update(ectx.get("banned_types", []))
-            baoshu = ectx.get("baoshu", {})
-            if baoshu:
-                banned_set.update(baoshu.get("never_play", []))
+        banned_set = self._collect_q1_banned_set(game_state, ec, enemies, main_pos, main_enemy, action_list)
 
         # ③ 构建 banned 过滤后的候选列表
         hand_cards = game_state.get("handCards", [])
@@ -383,6 +618,22 @@ class EndgameDecider:
         else:
             non_banned_candidates = [(i, a) for i, a in enumerate(action_list)]
 
+        teammate_single_cover = self._q1_teammate_single_cover_special(
+            game_state, non_banned_candidates, ec, main_pos, main_enemy,
+        )
+        if teammate_single_cover is not None:
+            return teammate_single_cover
+
+        enemy_one_lead = self._q1_enemy_critical_lead_special(
+            game_state, non_banned_candidates, ec, main_pos, main_enemy,
+        )
+        if enemy_one_lead is not None:
+            return enemy_one_lead
+
+        non_banned_candidates = self._prune_q1_risky_same_type_lane_candidates(
+            game_state, non_banned_candidates, ec, main_pos, main_enemy,
+        )
+
         # ④ 走 recommended 优先（主目标）
         rec_types = main_enemy.get("recommended_types", [])
         if rec_types:
@@ -391,7 +642,7 @@ class EndgameDecider:
             )
             if recom_actions:
                 # recommended 排序（回收优先）
-                recom_actions = _sort_by_recapture_first(recom_actions, hand_cards)
+                recom_actions = _sort_q1_block_candidates(recom_actions, hand_cards, game_state)
                 return self._select_best_index(recom_actions, action_list, game_state)
 
         # ⑤ recommended 走不通 → 看 baoshu.block_with
@@ -402,12 +653,14 @@ class EndgameDecider:
                 non_banned_candidates, block_with, game_state,
             )
             if block_actions:
-                block_actions = _sort_by_recapture_first(block_actions, hand_cards)
+                block_actions = _sort_q1_block_candidates(block_actions, hand_cards, game_state)
                 return self._select_best_index(block_actions, action_list, game_state)
 
         # ⑥ 仍无 → 任意 non_banned
         if non_banned_candidates:
-            non_banned_candidates = _sort_by_recapture_first(non_banned_candidates, hand_cards)
+            non_banned_candidates = _sort_q1_block_candidates(
+                non_banned_candidates, hand_cards, game_state,
+            )
             return self._select_best_index(non_banned_candidates, action_list, game_state)
 
         # ⑦ 全被 banned → 走降级路径
@@ -426,6 +679,795 @@ class EndgameDecider:
             action_list, baoshu_never, str(game_state.get("curRank", "2")),
             is_passive,
         )
+
+    def _q1_hold_teammate_max_control(
+        self, game_state: Dict[str, Any], action_list: List, ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """队友已用当前牌型的最大控牌时，Q1 不应再反压队友。"""
+        if not GUARD_TOOLS_OK:
+            return None
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        teammate_pos = (my_pos + 2) % 4
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction")
+        if greater_pos != teammate_pos or not greater_action:
+            return None
+
+        if not _is_control_action(greater_action):
+            return None
+
+        pass_candidates = []
+        for i, act in enumerate(action_list):
+            try:
+                if get_action_type(act) == ACTION_TYPE_PASS:
+                    pass_candidates.append((i, act))
+            except Exception:
+                continue
+        if not pass_candidates:
+            return None
+
+        # 队友已经控牌时，Q1 不得再用同花顺/更大炸反压队友。
+        if self._should_hold_teammate_bomb_lane(action_list, greater_action):
+            return pass_candidates[0]
+
+        if self._is_teammate_control_effectively_max(game_state, greater_action, ec):
+            return pass_candidates[0]
+        return None
+
+    def _should_hold_teammate_bomb_lane(self, action_list: List, greater_action: List) -> bool:
+        """队友已控牌时，禁止我方再用 bomb-like 动作反压队友。"""
+        if not _is_control_action(greater_action):
+            return False
+
+        return any(
+            _is_bomb_like_action(act)
+            for act in action_list
+            if isinstance(act, list) and _get_declared_action_type(act) != ACTION_TYPE_PASS
+        )
+
+    def _is_teammate_control_effectively_max(
+        self, game_state: Dict[str, Any], greater_action: List, ec: Dict[str, Any],
+    ) -> bool:
+        """队友当前控牌是否已足够稳，Q1 应让道。"""
+        if _is_bomb_like_action(greater_action):
+            return True
+
+        ga_type = get_action_type(greater_action)
+
+        tracker = game_state.get("_memory_tracker")
+        if tracker is None:
+            return self._is_high_teammate_control_static(greater_action, str(game_state.get("curRank", "2")))
+
+        enemies = ec.get("enemies", {})
+        enemy_positions = list(enemies.keys())
+        if not enemy_positions:
+            my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+            enemy_positions = [(my_pos + 1) % 4, (my_pos + 3) % 4]
+
+        for seat in enemy_positions:
+            if self._seat_may_suppress_teammate_control(game_state, seat, greater_action):
+                return False
+        return True
+
+    def _is_high_teammate_control_static(self, greater_action: List, cur_rank: str) -> bool:
+        """无 tracker 时，退回到静态高牌阈值。"""
+        ga_type = get_action_type(greater_action)
+        if ga_type in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+            return True
+
+        cur_val = 0
+        if ga_type == ACTION_TYPE_SINGLE:
+            cur_val = _max_card_value(greater_action, cur_rank)
+        elif ga_type in (ACTION_TYPE_PAIR, ACTION_TYPE_TRIPS, ACTION_TYPE_THREE_WITH_TWO):
+            cur_val = CARD_RANK_ORDER.get(get_action_rank(greater_action), 99)
+        elif ga_type == ACTION_TYPE_STRAIGHT:
+            top_rank = self._get_straight_top_rank(greater_action, cur_rank)
+            cur_val = CARD_RANK_ORDER.get(top_rank, 99)
+        else:
+            return False
+
+        thresholds = {
+            ACTION_TYPE_SINGLE: 15,
+            ACTION_TYPE_PAIR: 12,
+            ACTION_TYPE_TRIPS: 11,
+            ACTION_TYPE_THREE_WITH_TWO: 12,
+            ACTION_TYPE_STRAIGHT: 10,
+        }
+        return cur_val >= thresholds.get(ga_type, 99)
+
+    def _seat_may_suppress_teammate_control(
+        self, game_state: Dict[str, Any], seat: int, greater_action: List,
+    ) -> bool:
+        """某敌席是否仍可能用同型更大牌压住队友当前控牌。"""
+        cur_rank = str(game_state.get("curRank", "2"))
+        ga_type = get_action_type(greater_action)
+        target_rank = get_action_rank(greater_action)
+
+        if ga_type == ACTION_TYPE_SINGLE:
+            return self._seat_may_hold_single_above(game_state, seat, target_rank, cur_rank)
+        if ga_type == ACTION_TYPE_PAIR:
+            return self._seat_may_hold_same_rank_combo_above(game_state, seat, target_rank, cur_rank, 2)
+        if ga_type == ACTION_TYPE_TRIPS:
+            return self._seat_may_hold_same_rank_combo_above(game_state, seat, target_rank, cur_rank, 3)
+        if ga_type == ACTION_TYPE_THREE_WITH_TWO:
+            return self._seat_may_hold_three_with_two_above(game_state, seat, target_rank, cur_rank)
+        if ga_type == ACTION_TYPE_STRAIGHT:
+            return self._seat_may_hold_straight_above(game_state, seat, greater_action, cur_rank)
+        return True
+
+    def _q1_enemy_five_single_special(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """敌方剩 5 张且当前是单张控牌时的细化判定。"""
+        if not GUARD_TOOLS_OK:
+            return None
+
+        greater_action = game_state.get("greaterAction")
+        if not greater_action or get_action_type(greater_action) != ACTION_TYPE_SINGLE:
+            return None
+        if main_enemy.get("remaining") != 5:
+            return None
+
+        my_pos = ec.get("my_pos", 0)
+        cur_rank = str(game_state.get("curRank", "2"))
+        best_single = self._find_highest_single_beater(action_list, greater_action, cur_rank)
+        if best_single is None:
+            return None
+
+        teammate_pos = (my_pos + 2) % 4
+        up_pos = (my_pos - 1) % 4
+        down_pos = (my_pos + 1) % 4
+        side = "upper" if main_pos == up_pos else "lower" if main_pos == down_pos else "other"
+
+        shape = self._infer_enemy_five_shape(game_state, ec, main_pos)
+        teammate_strong = self._is_teammate_strong(game_state, teammate_pos)
+        teammate_can_cover = self._seat_may_hold_single_above(
+            game_state, teammate_pos, get_action_rank(greater_action), cur_rank
+        )
+        enemy_has_bigger_than_my_single = self._seat_may_hold_single_above(
+            game_state, main_pos, get_action_rank(best_single[1]), cur_rank
+        )
+        bombs = []
+        for idx, act in enumerate(action_list):
+            try:
+                if is_bomb(act):
+                    bombs.append((idx, act))
+            except Exception:
+                continue
+        best_bomb = self._select_best_bomb(bombs, action_list) if bombs else None
+
+        # 上家：若是整牌型，直接用我方最大合法单张压；
+        # 若像 4+1，则只有在队友兜不住且敌方剩余单张不可能大过我方最大单时才单压。
+        if side == "upper":
+            if shape == "structured":
+                return best_single
+            if shape == "bomb_plus_single":
+                if (not teammate_can_cover) and (not enemy_has_bigger_than_my_single):
+                    return best_single
+                if best_bomb is not None and teammate_strong:
+                    return best_bomb
+                return None
+            if not teammate_strong:
+                return best_single
+            if best_bomb is not None:
+                return best_bomb
+            return None
+
+        # 下家：整牌型直接单压；4+1 仅在剩余单张不可能大过我方最大单时单压。
+        if side == "lower":
+            if shape == "structured":
+                return best_single
+            if shape == "bomb_plus_single":
+                if not enemy_has_bigger_than_my_single:
+                    return best_single
+                if best_bomb is not None:
+                    return best_bomb
+                return None
+            if not teammate_strong:
+                return best_single
+            if best_bomb is not None:
+                return best_bomb
+            return None
+
+        return None
+
+    def _find_highest_single_beater(
+        self, action_list: List, greater_action: List, cur_rank: str,
+    ) -> Optional[Tuple[int, List]]:
+        """返回能压当前 single 的最大合法单张。"""
+        if not GUARD_TOOLS_OK:
+            return None
+        greater_cards = _get_cards(greater_action)
+        if not greater_cards:
+            return None
+        greater_value = get_card_value(greater_cards[0], cur_rank)
+        best: Optional[Tuple[int, List]] = None
+        best_value = -1
+        for idx, act in enumerate(action_list):
+            if get_action_type(act) != ACTION_TYPE_SINGLE:
+                continue
+            cards = _get_cards(act)
+            if not cards:
+                continue
+            value = get_card_value(cards[0], cur_rank)
+            if value > greater_value and value > best_value:
+                best = (idx, act)
+                best_value = value
+        return best
+
+    def _q1_teammate_single_cover_special(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """队友领单且关键敌方在后手时，只有安全单才允许反超队友；否则 PASS。"""
+        if not GUARD_TOOLS_OK:
+            return None
+        if main_enemy.get("remaining") not in (1, 2):
+            return None
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        teammate_pos = (my_pos + 2) % 4
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction")
+        if greater_pos != teammate_pos or not greater_action:
+            return None
+        if get_action_type(greater_action) != ACTION_TYPE_SINGLE:
+            return None
+
+        singles = []
+        pass_candidate: Optional[Tuple[int, List]] = None
+        has_bomb_like = False
+        for idx, act in candidates:
+            try:
+                atype = get_action_type(act)
+            except Exception:
+                continue
+            if atype == ACTION_TYPE_PASS and pass_candidate is None:
+                pass_candidate = (idx, act)
+                continue
+            if atype == ACTION_TYPE_SINGLE:
+                singles.append((idx, act))
+                continue
+            if _is_bomb_like_action(act):
+                has_bomb_like = True
+
+        if not singles:
+            return None
+
+        safe_single = self._select_enemy_one_safe_single(singles, game_state, ec)
+        if safe_single is not None:
+            return safe_single
+
+        if pass_candidate is not None and not has_bomb_like:
+            return pass_candidate
+        return None
+
+    def _q1_enemy_critical_lead_special(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """敌方剩 1/2 张且我方领牌时：先整牌锁敌，再看安全单。"""
+        if not GUARD_TOOLS_OK:
+            return None
+        remaining = int(main_enemy.get("remaining", 27) or 27)
+        if remaining not in (1, 2):
+            return None
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if not self._is_my_q1_lead_turn(game_state, my_pos):
+            return None
+
+        structured = []
+        singles = []
+        for idx, act in candidates:
+            try:
+                atype = get_action_type(act)
+            except Exception:
+                continue
+            if atype == ACTION_TYPE_PASS:
+                continue
+            if atype == ACTION_TYPE_SINGLE:
+                singles.append((idx, act))
+            else:
+                structured.append((idx, act))
+
+        if structured:
+            sprint_structure = self._select_two_turn_sprint_structure(
+                structured, candidates, game_state, ec,
+            )
+            if sprint_structure is not None:
+                return sprint_structure
+            return self._select_enemy_one_locking_structure(structured, game_state)
+
+        safe_single = self._select_enemy_one_safe_single(singles, game_state, ec)
+        if safe_single is not None:
+            return safe_single
+
+        if remaining == 1:
+            return self._select_enemy_one_strongest_single(singles, game_state)
+        return None
+
+    def _select_enemy_one_locking_structure(
+        self, candidates: List[Tuple[int, List]], game_state: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """敌方报单时，优先选能直接锁死其 1 张跟牌窗口的整牌型。"""
+        if not candidates:
+            return None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+
+        def _key(item: Tuple[int, List]):
+            _, act = item
+            atype = get_action_type(act)
+            return (
+                _q1_structure_priority(atype),
+                -len(_get_cards(act)),
+                _max_card_value(act, cur_rank),
+            )
+
+        return min(candidates, key=_key)
+
+    def _is_my_q1_lead_turn(self, game_state: Dict[str, Any], my_pos: int) -> bool:
+        """Q1 自由领出兼容两种平台表示：curPos=myPos 或 curPos/greaterPos 都为 -1。"""
+        cur_pos = game_state.get("curPos", my_pos)
+        greater_pos = game_state.get("greaterPos", -1)
+        if cur_pos == my_pos:
+            return True
+        return cur_pos in (-1, None) and greater_pos in (-1, my_pos)
+
+    def _find_exact_residue_candidate(
+        self,
+        residue_counter: Counter,
+        candidates: List[Tuple[int, List]],
+        *,
+        exclude_idx: Optional[int] = None,
+    ) -> Optional[Tuple[int, List]]:
+        """在候选里找能恰好覆盖剩余手牌的那一手。"""
+        residue_count = sum(residue_counter.values())
+        if residue_count <= 0:
+            return None
+
+        for idx, act in candidates:
+            if exclude_idx is not None and idx == exclude_idx:
+                continue
+            cards = _get_cards(act)
+            if not cards or len(cards) != residue_count:
+                continue
+            if Counter(cards) != residue_counter:
+                continue
+            try:
+                atype = get_action_type(act)
+            except Exception:
+                continue
+            if atype == ACTION_TYPE_PASS:
+                continue
+            return idx, act
+        return None
+
+    def _select_two_turn_sprint_structure(
+        self,
+        structured: List[Tuple[int, List]],
+        candidates: List[Tuple[int, List]],
+        game_state: Dict[str, Any],
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """仅剩两手时，优先选择能先手冲刺的整牌型。"""
+        hand_cards = list(game_state.get("handCards", []) or [])
+        hand_counter = Counter(hand_cards)
+        if sum(hand_counter.values()) <= 1:
+            return None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+        sprint_candidates: List[Tuple[Tuple[int, int, int, int], Tuple[int, List]]] = []
+        for item in structured:
+            idx, act = item
+            cards = _get_cards(act)
+            if not cards:
+                continue
+            played_counter = Counter(cards)
+            if any(played_counter[card] > hand_counter[card] for card in played_counter):
+                continue
+
+            residue_counter = hand_counter - played_counter
+            residue_item = self._find_exact_residue_candidate(
+                residue_counter, candidates, exclude_idx=idx,
+            )
+            if residue_item is None:
+                continue
+
+            residue_type = get_action_type(residue_item[1])
+            residue_bucket = 0
+            if residue_type == ACTION_TYPE_SINGLE:
+                safe_residue = self._select_enemy_one_safe_single([residue_item], game_state, ec)
+                residue_bucket = 1 if safe_residue is not None else 2
+
+            act_type = get_action_type(act)
+            sprint_candidates.append((
+                (
+                    residue_bucket,
+                    _q1_structure_priority(act_type),
+                    -len(cards),
+                    _max_card_value(act, cur_rank),
+                ),
+                item,
+            ))
+
+        if not sprint_candidates:
+            return None
+        sprint_candidates.sort(key=lambda entry: entry[0])
+        return sprint_candidates[0][1]
+
+    def _prune_q1_risky_same_type_lane_candidates(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> List[Tuple[int, List]]:
+        """Q1 自由领出时，若同型通道最终更可能归敌方，则先剪掉风险同型候选。"""
+        if not candidates or not GUARD_TOOLS_OK:
+            return candidates
+        if game_state.get("_memory_tracker") is None:
+            return candidates
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if not self._is_my_q1_lead_turn(game_state, my_pos):
+            return candidates
+
+        remaining = int(main_enemy.get("remaining", 27) or 27)
+        if remaining > 10:
+            return candidates
+
+        safe_candidates: List[Tuple[int, List]] = []
+        risky_candidates: List[Tuple[int, List]] = []
+        has_non_risky_non_pass = False
+        for item in candidates:
+            _, act = item
+            try:
+                atype = get_action_type(act)
+            except Exception:
+                safe_candidates.append(item)
+                has_non_risky_non_pass = True
+                continue
+
+            if atype == ACTION_TYPE_PASS:
+                safe_candidates.append(item)
+                continue
+
+            if self._is_risky_same_type_lane_action(game_state, ec, act):
+                risky_candidates.append(item)
+                continue
+
+            safe_candidates.append(item)
+            has_non_risky_non_pass = True
+
+        if not risky_candidates or not has_non_risky_non_pass:
+            return candidates
+        return safe_candidates
+
+    def _is_risky_same_type_lane_action(
+        self, game_state: Dict[str, Any], ec: Dict[str, Any], action: List,
+    ) -> bool:
+        """同型通道风险：我方无接力、敌方外部仍可能有更大同型。"""
+        atype = get_action_type(action)
+        if atype not in (ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR, ACTION_TYPE_TRIPS):
+            return False
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        teammate_pos = (my_pos + 2) % 4
+        enemies = list((ec.get("enemies") or {}).keys())
+        if not enemies:
+            enemies = [(my_pos + 1) % 4, (my_pos + 3) % 4]
+
+        if not any(self._seat_may_hold_action_type_above(game_state, seat, action) for seat in enemies):
+            return False
+        if self._seat_may_relay_same_type_after_my_lead(game_state, teammate_pos, action):
+            return False
+        return True
+
+    def _seat_may_hold_action_type_above(
+        self, game_state: Dict[str, Any], seat: int, action: List,
+    ) -> bool:
+        """某席是否仍可能持有能压过该动作的同型。"""
+        cur_rank = str(game_state.get("curRank", "2"))
+        atype = get_action_type(action)
+        target_rank = get_action_rank(action)
+        if not target_rank:
+            return False
+
+        if atype == ACTION_TYPE_SINGLE:
+            return self._seat_may_hold_single_above(game_state, seat, target_rank, cur_rank)
+        if atype == ACTION_TYPE_PAIR:
+            return self._seat_may_hold_same_rank_combo_above(game_state, seat, target_rank, cur_rank, 2)
+        if atype == ACTION_TYPE_TRIPS:
+            return self._seat_may_hold_same_rank_combo_above(game_state, seat, target_rank, cur_rank, 3)
+        return False
+
+    def _seat_may_relay_same_type_after_my_lead(
+        self, game_state: Dict[str, Any], seat: int, action: List,
+    ) -> bool:
+        """队友是否大概率还有同型接力窗口。"""
+        atype = get_action_type(action)
+        required_cards = {
+            ACTION_TYPE_SINGLE: 1,
+            ACTION_TYPE_PAIR: 2,
+            ACTION_TYPE_TRIPS: 3,
+        }.get(atype, 0)
+        if required_cards <= 0:
+            return False
+
+        belief = game_state.get("_belief") or {}
+        hand_counts = belief.get("hand_counts") or game_state.get("numofplayers") or [27, 27, 27, 27]
+        teammate_rest = hand_counts[seat] if len(hand_counts) > seat else 27
+        if teammate_rest < required_cards:
+            return False
+        return self._seat_may_hold_action_type_above(game_state, seat, action)
+
+    def _select_enemy_one_safe_single(
+        self,
+        singles: List[Tuple[int, List]],
+        game_state: Dict[str, Any],
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """从单张中挑当前外部无压制的安全单；有多个时取最省的一张。"""
+        if not singles:
+            return None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+        enemy_positions = list((ec.get("enemies") or {}).keys())
+        if not enemy_positions:
+            my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+            enemy_positions = [(my_pos + 1) % 4, (my_pos + 3) % 4]
+
+        safe = []
+        for item in singles:
+            _, act = item
+            rank = get_action_rank(act)
+            if not rank:
+                continue
+            if any(
+                self._seat_may_hold_single_above(game_state, seat, rank, cur_rank)
+                for seat in enemy_positions
+            ):
+                continue
+            safe.append(item)
+
+        if not safe:
+            return None
+
+        def _key(item: Tuple[int, List]):
+            _, act = item
+            cards = _get_cards(act)
+            value = get_card_value(cards[0], cur_rank) if cards else 99
+            return value
+
+        return min(safe, key=_key)
+
+    def _select_enemy_one_strongest_single(
+        self, singles: List[Tuple[int, List]], game_state: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """无安全单时，至少不要退回去领 K 这类伪控牌单；改领当前最强单张。"""
+        if not singles:
+            return None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+
+        def _key(item: Tuple[int, List]):
+            _, act = item
+            cards = _get_cards(act)
+            value = get_card_value(cards[0], cur_rank) if cards else -1
+            return value
+
+        return max(singles, key=_key)
+
+    def _infer_enemy_five_shape(
+        self, game_state: Dict[str, Any], ec: Dict[str, Any], seat: int,
+    ) -> str:
+        """粗推 5 张残局更像 4+1 还是整牌型。返回 bomb_plus_single/structured/unknown。"""
+        tracker = game_state.get("_memory_tracker")
+        belief = game_state.get("_belief") or {}
+        if tracker is None:
+            return "unknown"
+
+        possible_bomb = self._seat_may_hold_four_of_kind(game_state, seat)
+        possible_structured = self._seat_may_hold_structured_five(game_state, seat)
+        bomb_risk = (belief.get("opp_bomb_risks") or {}).get(seat, 0.0)
+
+        if possible_bomb and not possible_structured and bomb_risk >= 0.5:
+            return "bomb_plus_single"
+        if possible_structured and not possible_bomb:
+            return "structured"
+        if possible_bomb and possible_structured:
+            return "unknown"
+        return "unknown"
+
+    def _seat_may_hold_four_of_kind(self, game_state: Dict[str, Any], seat: int) -> bool:
+        """某席是否仍可能持有四炸（4 头炸）。"""
+        tracker = game_state.get("_memory_tracker")
+        if tracker is None:
+            return False
+        my_pos = game_state.get("myPos", 0)
+        partner_pos = (my_pos + 2) % 4
+        holding_states = _seat_holding_states(seat, my_pos, partner_pos)
+        for rank in CARD_RANK_ORDER.keys():
+            if rank in ("SB", "HR"):
+                continue
+            possible = 0
+            for suit in ("S", "H", "D", "C"):
+                ct = f"{suit}{rank}"
+                for state in tracker.card_state.get(ct, [-1, -1]):
+                    if state in holding_states:
+                        possible += 1
+            if possible >= 4:
+                return True
+        return False
+
+    def _seat_may_hold_structured_five(self, game_state: Dict[str, Any], seat: int) -> bool:
+        """某席是否仍可能持有 5 张整牌型（三带二/顺子/同花顺）。"""
+        tracker = game_state.get("_memory_tracker")
+        if tracker is None:
+            return False
+        my_pos = game_state.get("myPos", 0)
+        partner_pos = (my_pos + 2) % 4
+        holding_states = _seat_holding_states(seat, my_pos, partner_pos)
+
+        rank_possible: Dict[str, int] = {}
+        for rank in CARD_RANK_ORDER.keys():
+            if rank in ("SB", "HR"):
+                continue
+            cnt = 0
+            for suit in ("S", "H", "D", "C"):
+                ct = f"{suit}{rank}"
+                for state in tracker.card_state.get(ct, [-1, -1]):
+                    if state in holding_states:
+                        cnt += 1
+            rank_possible[rank] = cnt
+
+        # 三带二
+        has_trip = any(cnt >= 3 for cnt in rank_possible.values())
+        has_pair = any(cnt >= 2 for cnt in rank_possible.values())
+        if has_trip and has_pair:
+            return True
+
+        # 顺子
+        ordered = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
+        for i in range(len(ordered) - 4):
+            window = ordered[i:i + 5]
+            if all(rank_possible.get(r, 0) >= 1 for r in window):
+                return True
+
+        # 同花顺（粗判：同花色五连张都可能）
+        for suit in ("S", "H", "D", "C"):
+            suit_ranks = set()
+            for rank in ordered:
+                ct = f"{suit}{rank}"
+                if any(state in holding_states for state in tracker.card_state.get(ct, [-1, -1])):
+                    suit_ranks.add(rank)
+            for i in range(len(ordered) - 4):
+                window = ordered[i:i + 5]
+                if all(r in suit_ranks for r in window):
+                    return True
+        return False
+
+    def _seat_possible_rank_counts(self, game_state: Dict[str, Any], seat: int) -> Dict[str, int]:
+        """某席仍可能持有的各 rank 张数上界。"""
+        tracker = game_state.get("_memory_tracker")
+        if tracker is None:
+            return {}
+        my_pos = game_state.get("myPos", 0)
+        partner_pos = (my_pos + 2) % 4
+        holding_states = _seat_holding_states(seat, my_pos, partner_pos)
+        rank_counts: Dict[str, int] = {}
+        for ct, copies in tracker.card_state.items():
+            rank = ct if ct in ("HR", "SB") else (ct[1:] if len(ct) >= 2 else ct)
+            cnt = sum(1 for state in copies if state in holding_states)
+            if cnt > 0:
+                rank_counts[rank] = rank_counts.get(rank, 0) + cnt
+        return rank_counts
+
+    def _seat_may_hold_same_rank_combo_above(
+        self, game_state: Dict[str, Any], seat: int, target_rank: str, cur_rank: str, need: int,
+    ) -> bool:
+        """某席是否仍可能持有更大的对子/三张。"""
+        rank_counts = self._seat_possible_rank_counts(game_state, seat)
+        for rank, cnt in rank_counts.items():
+            if cnt >= need and _rank_beats_same_type(target_rank, rank, cur_rank):
+                return True
+        return False
+
+    def _seat_may_hold_three_with_two_above(
+        self, game_state: Dict[str, Any], seat: int, target_rank: str, cur_rank: str,
+    ) -> bool:
+        """某席是否仍可能持有更大的三带二。"""
+        rank_counts = self._seat_possible_rank_counts(game_state, seat)
+        for trip_rank, trip_cnt in rank_counts.items():
+            if trip_cnt < 3 or not _rank_beats_same_type(target_rank, trip_rank, cur_rank):
+                continue
+            for pair_rank, pair_cnt in rank_counts.items():
+                if pair_rank != trip_rank and pair_cnt >= 2:
+                    return True
+        return False
+
+    def _get_straight_top_rank(self, action: List, cur_rank: str) -> Optional[str]:
+        """顺子的比较锚点：取当前可见牌中的最大 rank。"""
+        cards = _get_cards(action)
+        if not cards:
+            return get_action_rank(action)
+        best = max(cards, key=lambda c: get_card_value(c, cur_rank))
+        return get_card_rank(best)
+
+    def _seat_may_hold_straight_above(
+        self, game_state: Dict[str, Any], seat: int, greater_action: List, cur_rank: str,
+    ) -> bool:
+        """某席是否仍可能持有更大的顺子。"""
+        top_rank = self._get_straight_top_rank(greater_action, cur_rank)
+        if not top_rank:
+            return True
+
+        ordered = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
+        if top_rank not in ordered:
+            return True
+
+        rank_counts = self._seat_possible_rank_counts(game_state, seat)
+        top_index = ordered.index(top_rank)
+        for start in range(len(ordered) - 4):
+            window = ordered[start:start + 5]
+            if ordered.index(window[-1]) <= top_index:
+                continue
+            if all(rank_counts.get(rank, 0) >= 1 for rank in window):
+                return True
+        return False
+
+    def _seat_may_hold_single_above(
+        self, game_state: Dict[str, Any], seat: int, target_rank: str, cur_rank: str,
+    ) -> bool:
+        """某席是否仍可能持有高于 target_rank 的单张。"""
+        tracker = game_state.get("_memory_tracker")
+        if tracker is None or not target_rank:
+            return True
+        my_pos = game_state.get("myPos", 0)
+        partner_pos = (my_pos + 2) % 4
+        holding_states = _seat_holding_states(seat, my_pos, partner_pos)
+        threshold = CARD_RANK_ORDER.get(target_rank, -1)
+        # 级牌、大王、小王始终视为高牌
+        for ct, copies in tracker.card_state.items():
+            if ct == "HR":
+                if any(state in holding_states for state in copies):
+                    return True
+                continue
+            if ct == "SB":
+                if any(state in holding_states for state in copies):
+                    return True
+                continue
+            rank = ct[1:] if len(ct) >= 2 else ct
+            if _rank_beats_same_type(target_rank, rank, cur_rank):
+                if any(state in holding_states for state in copies):
+                    return True
+        return False
+
+    def _is_teammate_strong(self, game_state: Dict[str, Any], teammate_pos: int) -> bool:
+        """粗判队友牌力是否偏强：剩张不多或手里可能仍有炸。"""
+        belief = game_state.get("_belief") or {}
+        hand_counts = belief.get("hand_counts") or game_state.get("numofplayers") or [27, 27, 27, 27]
+        teammate_rest = hand_counts[teammate_pos] if len(hand_counts) > teammate_pos else 27
+        opp_bomb_risks = belief.get("opp_bomb_risks") or {}
+        teammate_bomb_risk = opp_bomb_risks.get(teammate_pos, 0.0)
+        return teammate_rest <= 8 or teammate_bomb_risk >= 0.5
 
     def _enemy_danger_score(self, enemy_pos: int, ectx: Dict[str, Any], my_pos: int) -> tuple:
         """危险度越低越危险。"""

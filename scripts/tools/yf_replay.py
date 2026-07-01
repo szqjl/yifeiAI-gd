@@ -19,6 +19,7 @@ import os
 import re
 import json
 import traceback
+from collections import Counter
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -105,6 +106,49 @@ def apply_tribute_back_to_hand(hand, my_decisions, player_id):
                     if card in result:
                         result.remove(card)
     return result
+
+
+def _normalize_hand_for_compare(hand):
+    normalized = []
+    for card in hand or []:
+        canonical = _canonical_replay_card(card)
+        if canonical:
+            normalized.append(canonical)
+    return normalized
+
+
+def _extract_first_play_hand(my_decisions):
+    for md in my_decisions or []:
+        ctx = md.get("context") or {}
+        if str(ctx.get("stage") or "").lower() != "play":
+            continue
+        hand_cards = ctx.get("handCards") or []
+        normalized = _normalize_hand_for_compare(hand_cards)
+        if normalized:
+            return normalized
+    return []
+
+
+def resolve_effective_initial_hand(hand, my_decisions, player_id):
+    """
+    兼容两种录牌口径：
+    1. 旧牌谱：initial_hand = gameStart.handCards（贡前）→ 需 apply 一次
+    2. 新牌谱：initial_hand 已被 recorder 调整为贡后真实手牌 → 不可再 apply
+
+    若存在首条 act·play.handCards，则以它为真值比对。
+    """
+    raw = _normalize_hand_for_compare(hand)
+    adjusted = apply_tribute_back_to_hand(raw, my_decisions, player_id)
+    first_play_hand = _extract_first_play_hand(my_decisions)
+    if first_play_hand:
+        raw_counter = Counter(raw)
+        adjusted_counter = Counter(adjusted)
+        play_counter = Counter(first_play_hand)
+        if raw_counter == play_counter:
+            return raw
+        if adjusted_counter == play_counter:
+            return adjusted
+    return adjusted
 
 
 def _context_has_rank_fields(ctx):
@@ -676,7 +720,7 @@ class YiFeiReplayGUI:
     def _apply_tribute_back_for_player(self, pos_str, my_decisions, player_id):
         if pos_str not in self.initial_hands or not self.initial_hands[pos_str]:
             return
-        self.initial_hands[pos_str] = apply_tribute_back_to_hand(
+        self.initial_hands[pos_str] = resolve_effective_initial_hand(
             self.initial_hands[pos_str],
             my_decisions,
             player_id,
