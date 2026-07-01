@@ -642,7 +642,9 @@ def cmd_lint(args):
             all_wikilinks.add(m.group(1))
 
     for link in sorted(all_wikilinks):
-        if wikilink_to_path(link) is None:
+        # 剥去 |label 与 #anchor（wikilink_to_path 不处理这两者）
+        stripped = link.split("|", 1)[0].split("#", 1)[0]
+        if wikilink_to_path(stripped) is None:
             issues.append(("断链", f"[[{link}]] 无对应页面"))
 
     # 2. 孤立页面

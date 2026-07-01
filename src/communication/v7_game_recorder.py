@@ -198,6 +198,7 @@ def decision_context_from_act(
 
     GUA-072: 加入 handCards 字段，使 game record 可回放诊断 card_mask 退化问题。
     actionList_size≤8 时写入 actionList_sample（type/rank/cards），供 WF-12 复盘平台候选。
+    GUA-078 取证：YF_DEBUG_WS=1 时始终存 greaterAction + 完整 actionList_sample。
     """
     action_list = data.get("actionList") or []
     size = len(action_list) if isinstance(action_list, list) else 0
@@ -218,7 +219,12 @@ def decision_context_from_act(
         "source": "act",
         "stage": data.get("stage", ""),
     }
-    if 0 < size <= ACTION_LIST_CONTEXT_SAMPLE_MAX:
+    # GUA-078: YF_DEBUG_WS=1 时始终保存 greaterAction 和完整 actionList_sample
+    _debug_ws = is_ws_debug_enabled()
+    if _debug_ws:
+        ctx["greaterAction"] = data.get("greaterAction")  # 平台原始 greaterAction
+        ctx["actionList_sample"] = summarize_action_list_for_context(action_list)
+    elif 0 < size <= ACTION_LIST_CONTEXT_SAMPLE_MAX:
         ctx["actionList_sample"] = summarize_action_list_for_context(action_list)
     return ctx
 
@@ -1134,7 +1140,8 @@ class GameRecorder:
     
     def record_decision(self, action_index: int, action: List, 
                        score: float = None, layer: str = None,
-                       candidates: List = None, context: Dict = None):
+                       candidates: List = None, context: Dict = None,
+                       *, candidates_count: int = None):
         """
         记录我方的决策
         
@@ -1143,11 +1150,16 @@ class GameRecorder:
             action: 选择的动作
             score: 动作评分
             layer: 使用的决策层
-            candidates: 候选动作列表
+            candidates: 候选动作列表（可能很大，优先用 candidates_count）
             context: 决策上下文
+            candidates_count: GUA-075 记录增强：候选动作数量（优先于 candidates 推导）
         """
         if not self.current_game:
             return
+
+        _cnt = candidates_count
+        if _cnt is None:
+            _cnt = len(candidates) if candidates else 0
         
         decision_record = {
             "timestamp": datetime.now().isoformat(),
@@ -1155,7 +1167,7 @@ class GameRecorder:
             "action": action,
             "score": score,
             "layer": layer,
-            "candidates_count": len(candidates) if candidates else 0,
+            "candidates_count": _cnt,
             "context": context or {}
         }
         

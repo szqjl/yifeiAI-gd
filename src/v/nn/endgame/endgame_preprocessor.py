@@ -99,11 +99,11 @@ _ACTION_TYPE_CARD_COUNT: Dict[str, int] = {
 
 # ── endgame_rule：剩 N 张 → (danger_level, recommended_types, banned_types) ──
 endgame_rule: Dict[int, tuple] = {
-    1:  ("极高", ["最大单张"],           ["Single"]),
+    1:  ("极高", ["最大单张"],           []),
     2:  ("高",   ["单张"],               ["Pair"]),
-    3:  ("高",   ["单张", "对子"],        ["Single", "Trips"]),
+    3:  ("高",   ["单张", "对子"],        ["Trips"]),
     4:  ("中高", ["大单张", "Straight"],  ["Pair"]),
-    5:  ("中",   ["Pair", "Trips", "大单张"], ["Single"]),
+    5:  ("中",   ["Pair", "Trips", "大单张"], []),
     6:  ("中",   ["Trips"],             ["Single", "Pair"]),
     7:  ("低",   ["Straight", "TwoTrips", "ThreePair"], []),
     8:  ("低",   ["Straight", "TwoTrips", "ThreePair"], []),
@@ -116,14 +116,16 @@ max_end_card: int = 10
 # ── BAOSHU_RULE：报单/报双封锁（≤4 张触发） ──
 # remaining: (可能牌型描述, block_with, never_play)
 BAOSHU_RULE: Dict[int, tuple] = {
-    1: ("单张(听牌)", ["ThreeWithTwo", "TwoTrips", "ThreePair", "Straight", "Bomb"],  ["Single"]),
+    1: ("单张(听牌)", ["ThreeWithTwo", "TwoTrips", "ThreePair", "Straight", "Bomb"],  []),
     2: ("对子",       ["ThreeWithTwo", "TwoTrips", "ThreePair", "Straight", "Bomb", "Trips"], ["Pair"]),
     3: ("三同张",     ["Pair", "Single", "TwoTrips", "ThreePair", "Straight", "Bomb"], ["Trips"]),
-    4: ("炸弹/四张",   ["Pair", "ThreeWithTwo", "TwoTrips", "ThreePair", "Straight", "Bomb"], ["Pair"]),
+    4: ("炸弹/四张",   ["ThreeWithTwo", "TwoTrips", "ThreePair", "Straight", "Bomb"], ["Pair"]),
 }
 
 # 危险等级序数映射
 _DANGER_ORDER: Dict[str, int] = {"极高": 0, "高": 1, "中高": 2, "中": 3, "低": 4}
+
+_VALID_ACTION_TYPES = set(_ACTION_TYPE_CARD_COUNT.keys())
 
 
 # ═══════════════════════════════════════════════════════
@@ -133,6 +135,214 @@ _DANGER_ORDER: Dict[str, int] = {"极高": 0, "高": 1, "中高": 2, "中": 3, "
 def endgame_preprocess(game_state: Dict[str, Any]) -> Dict[str, Any]:
     """模块级快捷调用，等同 EndgamePreprocessor().preprocess(game_state)。"""
     return EndgamePreprocessor().preprocess(game_state)
+
+
+def _dedupe_keep_order(values: List[str]) -> List[str]:
+    """去重但保留首次出现顺序。"""
+    seen = set()
+    result: List[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def _map_shape_names_to_action_types(shape_names: List[str]) -> Tuple[List[str], List[str]]:
+    """中文牌型描述映射到 ACTION_TYPE，同时返回未知牌型名。"""
+    action_types: List[str] = []
+    unknown_names: List[str] = []
+    for shape_name in shape_names:
+        if shape_name in _VALID_ACTION_TYPES:
+            action_types.append(shape_name)
+            continue
+        mapped = _SHAPE_NAME_TO_ACTION_TYPES.get(shape_name)
+        if mapped is None:
+            unknown_names.append(shape_name)
+            continue
+        action_types.extend(mapped)
+    return _dedupe_keep_order(action_types), _dedupe_keep_order(unknown_names)
+
+
+def _append_validation_error(
+    errors: List[Dict[str, Any]],
+    *,
+    table: str,
+    remaining: int,
+    code: str,
+    message: str,
+    **extra: Any,
+) -> None:
+    """统一构造规则表校验错误对象。"""
+    error = {
+        "table": table,
+        "remaining": remaining,
+        "code": code,
+        "message": message,
+    }
+    error.update(extra)
+    errors.append(error)
+
+
+def validate_q1_rule_table_consistency(
+    endgame_rules: Optional[Dict[int, tuple]] = None,
+    baoshu_rules: Optional[Dict[int, tuple]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    静态校验残局 Q1 规则表是否自洽。
+
+    返回结构化错误列表；空列表表示通过。
+    """
+    endgame_rules = endgame_rule if endgame_rules is None else endgame_rules
+    baoshu_rules = BAOSHU_RULE if baoshu_rules is None else baoshu_rules
+    errors: List[Dict[str, Any]] = []
+
+    for remaining, rule in sorted(endgame_rules.items()):
+        if not isinstance(rule, (list, tuple)) or len(rule) != 3:
+            _append_validation_error(
+                errors,
+                table="endgame_rule",
+                remaining=remaining,
+                code="invalid_rule_shape",
+                message="endgame_rule 表项必须是 (danger_level, recommended_types, banned_types) 三元组。",
+                actual_rule=rule,
+            )
+            continue
+
+        _, recommended_shapes, banned_types = rule
+        recommended_shapes = list(recommended_shapes or [])
+        banned_types = list(banned_types or [])
+
+        mapped_types, unknown_shapes = _map_shape_names_to_action_types(recommended_shapes)
+        if unknown_shapes:
+            _append_validation_error(
+                errors,
+                table="endgame_rule",
+                remaining=remaining,
+                code="unknown_recommended_shape",
+                message="recommended_types 含未登记中文牌型名。",
+                recommended_shapes=recommended_shapes,
+                unknown_shapes=unknown_shapes,
+            )
+
+        unknown_banned = sorted(set(banned_types) - _VALID_ACTION_TYPES)
+        if unknown_banned:
+            _append_validation_error(
+                errors,
+                table="endgame_rule",
+                remaining=remaining,
+                code="unknown_banned_type",
+                message="banned_types 含未知 ACTION_TYPE。",
+                banned_types=banned_types,
+                unknown_action_types=unknown_banned,
+            )
+
+        overlap = sorted(set(mapped_types) & set(banned_types))
+        if overlap:
+            _append_validation_error(
+                errors,
+                table="endgame_rule",
+                remaining=remaining,
+                code="recommended_banned_overlap",
+                message="recommended_types 映射后的 ACTION_TYPE 与 banned_types 冲突。",
+                recommended_shapes=recommended_shapes,
+                recommended_action_types=mapped_types,
+                banned_types=banned_types,
+                overlap=overlap,
+            )
+
+    for remaining, rule in sorted(baoshu_rules.items()):
+        if not isinstance(rule, (list, tuple)) or len(rule) != 3:
+            _append_validation_error(
+                errors,
+                table="BAOSHU_RULE",
+                remaining=remaining,
+                code="invalid_rule_shape",
+                message="BAOSHU_RULE 表项必须是 (likely_hand, block_with, never_play) 三元组。",
+                actual_rule=rule,
+            )
+            continue
+
+        _, block_with, never_play = rule
+        block_with = list(block_with or [])
+        never_play = list(never_play or [])
+
+        unknown_block_with = sorted(set(block_with) - _VALID_ACTION_TYPES)
+        if unknown_block_with:
+            _append_validation_error(
+                errors,
+                table="BAOSHU_RULE",
+                remaining=remaining,
+                code="unknown_block_with_type",
+                message="block_with 含未知 ACTION_TYPE。",
+                block_with=block_with,
+                unknown_action_types=unknown_block_with,
+            )
+
+        unknown_never_play = sorted(set(never_play) - _VALID_ACTION_TYPES)
+        if unknown_never_play:
+            _append_validation_error(
+                errors,
+                table="BAOSHU_RULE",
+                remaining=remaining,
+                code="unknown_never_play_type",
+                message="never_play 含未知 ACTION_TYPE。",
+                never_play=never_play,
+                unknown_action_types=unknown_never_play,
+            )
+
+        overlap = sorted(set(block_with) & set(never_play))
+        if overlap:
+            _append_validation_error(
+                errors,
+                table="BAOSHU_RULE",
+                remaining=remaining,
+                code="block_with_never_play_overlap",
+                message="block_with 与 never_play 同时包含同一 ACTION_TYPE。",
+                block_with=block_with,
+                never_play=never_play,
+                overlap=overlap,
+            )
+
+    return errors
+
+
+def format_q1_rule_table_validation_errors(errors: List[Dict[str, Any]]) -> str:
+    """将结构化校验错误渲染为 CLI 友好的文本。"""
+    if not errors:
+        return "Q1 rule table validation PASS"
+
+    lines: List[str] = []
+    for error in errors:
+        lines.append(
+            f"[{error['table']}][remaining={error['remaining']}][{error['code']}] {error['message']}"
+        )
+        overlap = error.get("overlap")
+        if overlap:
+            lines.append(f"  overlap: {', '.join(overlap)}")
+        recommended_shapes = error.get("recommended_shapes")
+        if recommended_shapes:
+            lines.append(f"  recommended_shapes: {recommended_shapes}")
+        recommended_action_types = error.get("recommended_action_types")
+        if recommended_action_types:
+            lines.append(f"  recommended_action_types: {recommended_action_types}")
+        banned_types = error.get("banned_types")
+        if banned_types:
+            lines.append(f"  banned_types: {banned_types}")
+        block_with = error.get("block_with")
+        if block_with:
+            lines.append(f"  block_with: {block_with}")
+        never_play = error.get("never_play")
+        if never_play:
+            lines.append(f"  never_play: {never_play}")
+        unknown_shapes = error.get("unknown_shapes")
+        if unknown_shapes:
+            lines.append(f"  unknown_shapes: {unknown_shapes}")
+        unknown_action_types = error.get("unknown_action_types")
+        if unknown_action_types:
+            lines.append(f"  unknown_action_types: {unknown_action_types}")
+    return "\n".join(lines)
 
 
 # ═══════════════════════════════════════════════════════
@@ -152,10 +362,8 @@ class EndgamePreprocessor:
 
     def _map_types(self, chinese_names: List[str]) -> List[str]:
         """中文牌型名 → V7 ACTION_TYPE 枚举名列表（去重）"""
-        result: List[str] = []
-        for name in chinese_names:
-            result.extend(self.SHAPE_MAP.get(name, []))
-        return list(set(result))
+        mapped_types, _ = _map_shape_names_to_action_types(chinese_names)
+        return mapped_types
 
     def _assist_prefer_for(self, remaining: int) -> List[str]:
         """队友剩 N 张时，精确投喂牌型（按优先序）"""

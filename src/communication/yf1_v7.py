@@ -191,7 +191,12 @@ class YF1_V7_Client:
 
             self.game_recorder.record_game_start(data)
             # 清理引擎跨局残留状态（R11记忆/R15相克锁/MemoryTracker等）
-            self.decision_engine.on_game_start(self.player_id)
+            trace_game_id = None
+            try:
+                trace_game_id = (self.game_recorder.current_game or {}).get("game_id")
+            except Exception:
+                trace_game_id = None
+            self.decision_engine.on_game_start(self.player_id, game_id=trace_game_id)
             self.logger.info(f"🎮 游戏开始 #{self.game_count}: 手牌数={len(self.hand_cards)}, 座位={self.player_id}")
             
         except Exception as e:
@@ -247,6 +252,9 @@ class YF1_V7_Client:
                 f" rank不匹配={stats.get('match_fail_rank_mismatch',0)}"
                 f" cards不匹配={stats.get('match_fail_cards_mismatch',0)}"
             )
+            trace_fp = self.decision_engine.flush_decision_trace()
+            if trace_fp:
+                self.logger.info("  - GUA-098 trace落盘: %s", trace_fp)
 
         except Exception as e:
             self.logger.error(f"✗ Game end handling error: {e}", exc_info=True)

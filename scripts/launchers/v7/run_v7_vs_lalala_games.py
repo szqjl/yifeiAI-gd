@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -50,6 +51,7 @@ logger = logging.getLogger("v7_vs_lalala")
 
 DEFAULT_GAMES = 3
 RECOMMENDED_GAMES = (3, 9, 12)
+ENDGAME_ANOMALY_SCAN = project_root / "scripts" / "checks" / "check_endgame_anomalies.py"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -78,6 +80,53 @@ def validate_games(games: int) -> int:
             f"错误: --games 须为 3 的倍数（exe 每会话 3 局），得到 {games}"
         )
     return games
+
+
+def _run_endgame_anomaly_scan(
+    *,
+    logger: logging.Logger,
+    scan_dir: Path,
+    limit: int = 20,
+) -> bool:
+    """批跑完成后自动执行残局异常扫描；失败仅告警，不阻断主流程。"""
+    if not ENDGAME_ANOMALY_SCAN.exists():
+        logger.warning("残局异常扫描脚本不存在，跳过: %s", ENDGAME_ANOMALY_SCAN)
+        return False
+
+    cmd = [
+        sys.executable,
+        str(ENDGAME_ANOMALY_SCAN),
+        "--scan-dir",
+        str(scan_dir),
+        "--limit",
+        str(limit),
+    ]
+    logger.info("开始批后残局异常扫描: %s", " ".join(cmd))
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        logger.warning("残局异常扫描执行失败: %s", exc)
+        return False
+
+    stdout = (result.stdout or "").strip()
+    stderr = (result.stderr or "").strip()
+    if stdout:
+        for line in stdout.splitlines():
+            logger.info("[残局扫描] %s", line)
+    if stderr:
+        for line in stderr.splitlines():
+            logger.warning("[残局扫描] %s", line)
+
+    if result.returncode != 0:
+        logger.warning("残局异常扫描返回非 0: %d", result.returncode)
+        return False
+    return True
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -114,6 +163,18 @@ def main(argv: list[str] | None = None) -> None:
 
     try:
         executor.run()
+        state = executor.get_state()
+        if state and state.completed_games >= state.target_games:
+            _run_endgame_anomaly_scan(
+                logger=logger,
+                scan_dir=project_root / "game_records_v7",
+            )
+        else:
+            logger.info(
+                "批跑未完整结束（completed_games=%s/%s），跳过残局异常扫描",
+                getattr(state, "completed_games", None),
+                getattr(state, "target_games", None),
+            )
     except KeyboardInterrupt:
         logger.info("用户中断执行")
     except Exception as e:

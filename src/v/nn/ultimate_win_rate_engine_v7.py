@@ -9,6 +9,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import logging
+import os
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 import sys
@@ -127,8 +129,12 @@ class UltimateWinRateEngineV7:
         self._feed_five_card_tried: bool = False                # 是否已试探过 5 张类牌型
         # 决议 6: 组牌类型映射 — group_id → 牌型字符串
         self._group_type_map: Dict[int, str] = {}
+        self._decision_tracer = None
+        self._trace_game_id: Optional[str] = None
+        self._last_trace_path: Optional[str] = None
+        self._last_stage_intent: Optional[str] = None
 
-    def on_game_start(self, my_pos: int = None):
+    def on_game_start(self, my_pos: int = None, game_id: Optional[str] = None):
         """每局开始时清理跨副残留状态（R11记忆/R15相克锁/MemoryTracker等）。"""
         if GUARD_IMPORT_OK:
             try:
@@ -153,6 +159,137 @@ class UltimateWinRateEngineV7:
         self._tracker = None
         self._tracker_initialized = False
         self._tracker_history_replayed = 0
+        self._last_stage_intent = None
+        self._trace_game_id = game_id
+        self._last_trace_path = None
+        self._decision_tracer = None
+        if self._is_decision_trace_enabled():
+            try:
+                from src.v.nn.tracing.decision_trace import DecisionTracer
+
+                trace_game_id = game_id or f"trace_{int(time.time() * 1000)}_{self.player_id}"
+                self._decision_tracer = DecisionTracer(
+                    my_pos=self.player_id,
+                    game_id=trace_game_id,
+                    enable=True,
+                )
+                self._trace_game_id = trace_game_id
+            except Exception as e:
+                self.logger.debug("decision tracer init skip: %s", e)
+                self._decision_tracer = None
+
+    def flush_decision_trace(self) -> Optional[str]:
+        """GUA-098：局末落盘 DecisionTracer。"""
+        tracer = self._decision_tracer
+        if tracer is None:
+            return None
+        try:
+            fp = tracer.flush_to_jsonl()
+        except Exception as e:
+            self.logger.debug("decision tracer flush skip: %s", e)
+            return None
+        if fp is None:
+            return None
+        self._last_trace_path = str(fp)
+        return self._last_trace_path
+
+    @staticmethod
+    def _is_decision_trace_enabled() -> bool:
+        return os.environ.get("V7_ENABLE_DECISION_TRACE", "1").strip().lower() not in (
+            "0",
+            "false",
+            "no",
+            "off",
+        )
+
+    @staticmethod
+    def _is_stage2_dispatch_enabled() -> bool:
+        return os.environ.get("V7_ENABLE_STAGE2_DISPATCH", "1").strip().lower() not in (
+            "0",
+            "false",
+            "no",
+            "off",
+        )
+
+    def _trace_begin_step(self, game_state: Dict[str, Any], action_list: List) -> None:
+        tracer = self._decision_tracer
+        if tracer is None:
+            return
+        try:
+            hand_cards = game_state.get("handCards", []) or []
+            tracer.begin_step(
+                hand_size=len(hand_cards) if hand_cards else 27,
+                cur_rank=str(game_state.get("curRank", "2")),
+                stage=str(game_state.get("_current_stage", "")),
+                cur_pos=int(game_state.get("curPos", -1) or -1),
+                greater_pos=int(game_state.get("greaterPos", -1) or -1),
+            )
+            tracer.record_layer1(
+                source="MemoryTracker",
+                payload={
+                    "tracker_ready": self._tracker is not None,
+                    "history_replayed": self._tracker_history_replayed,
+                },
+            )
+            belief = game_state.get("_belief") or {}
+            tracer.record_layer1(
+                source="belief",
+                payload={
+                    "opp_bomb_risks": belief.get("opp_bomb_risks", {}),
+                    "hand_counts": belief.get("hand_counts", {}),
+                    "can_opp_suppress_current": belief.get("can_opp_suppress_current"),
+                },
+            )
+            phase_relation = game_state.get("_phase_relation") or {}
+            if phase_relation:
+                tracer.record_layer2(
+                    ip_id="GUA-094.phase_relation",
+                    delta=float(phase_relation.get("enemy_bomb_risk_max", 0.0) or 0.0),
+                    oppo=f"p{phase_relation.get('critical_enemy_seat', '?')}",
+                    comment=str(
+                        {
+                            "enemy_shape_hint": phase_relation.get("enemy_shape_hint"),
+                            "teammate_cover_confidence": phase_relation.get(
+                                "teammate_cover_confidence"
+                            ),
+                            "same_type_suppressor_outside": phase_relation.get(
+                                "same_type_suppressor_outside"
+                            ),
+                            "sprint_fire_ready": phase_relation.get("sprint_fire_ready"),
+                            "natural_turn_count": phase_relation.get("natural_turn_count"),
+                            "single_residue": phase_relation.get("single_residue"),
+                        }
+                    ),
+                )
+            tracer.record_guard(
+                rule_id="action_list_size",
+                filtered_count=max(0, len(action_list) - 1),
+                reason=f"candidates={len(action_list)}",
+            )
+        except Exception as e:
+            self.logger.debug("decision trace begin skip: %s", e)
+
+    def _trace_finalize(self, act_index: int, action_list: List) -> int:
+        tracer = self._decision_tracer
+        if tracer is not None:
+            try:
+                if self._last_stage_intent:
+                    tracer.record_decision_intent(
+                        self._last_stage_intent,
+                        payload={
+                            "layer": self._last_decision_layer,
+                            "trace_game_id": self._trace_game_id,
+                        },
+                    )
+                chosen_action = (
+                    action_list[act_index]
+                    if 0 <= act_index < len(action_list)
+                    else []
+                )
+                tracer.end_step(actIndex=act_index, chosen_action=chosen_action)
+            except Exception as e:
+                self.logger.debug("decision trace finalize skip: %s", e)
+        return act_index
 
     def _load_model(self):
         """加载终极胜率导向模型"""
@@ -215,10 +352,11 @@ class UltimateWinRateEngineV7:
             选择的动作索引（原始 actionList 下标）
         """
         self.decision_count += 1
+        self._last_stage_intent = None
 
         action_list = game_state.get("actionList", [])
         if not action_list:
-            return 0
+            return self._trace_finalize(0, action_list)
 
         # ── ① 组牌引擎 ──
         self._run_grouping_engine(game_state)
@@ -232,7 +370,10 @@ class UltimateWinRateEngineV7:
         # ── ②b GUA-072 规则记牌信念（供 heuristic / 推荐器）──
         self._inject_belief_vector(game_state)
 
-        # ── ②c GUA-089 阶段调度（§7.4 伪代码落地）──
+        # ── ②c GUA-094 规则版推断层（供 stage_2 / trace 后续消费）──
+        self._inject_phase_relation(game_state)
+
+        # ── ②d GUA-089 阶段调度（§7.4 伪代码落地）──
         # 按当前手牌张数切 3 阶段，存入 game_state[‘_current_stage’]
         # 与 STAGE_RULE_MAP / STAGE_ENGINE_MAP 一道，供后续 _recommend_play / 下游 GUA-090/091/092 消费
         try:
@@ -251,6 +392,7 @@ class UltimateWinRateEngineV7:
         except Exception as e:
             self.logger.warning("GUA-089 阶段调度异常: %s, 默认 stage_0_1", e)
             game_state["_current_stage"] = "stage_0_1"
+        self._trace_begin_step(game_state, action_list)
 
         # ── ③ 接风跟线记忆 ──
         self._update_teammate_last_trick(game_state)
@@ -318,7 +460,8 @@ class UltimateWinRateEngineV7:
                             self._last_decision_layer = "残局管线"
                             self._last_decision_score = None
                             self._last_decision_candidates = len(original_action_list)
-                            return orig_i
+                            self._last_stage_intent = "endgame_pipeline"
+                            return self._trace_finalize(orig_i, original_action_list)
                     else:
                         self.logger.warning("残局决策未在原始 actionList 中匹配到: %s", endgame_act[:3] if len(endgame_act) >= 3 else endgame_act)
                 # 残局未命中 → 恢复 action_list（已过滤 banned）→ 继续 GUA-075
@@ -359,7 +502,7 @@ class UltimateWinRateEngineV7:
                             self._last_decision_layer = "GUA-075推荐"
                             self._last_decision_score = None
                             self._last_decision_candidates = len(action_list)
-                            return act_index
+                            return self._trace_finalize(act_index, action_list)
                         # 被拦截时继续往下走到回退路径
                     else:
                         self.logger.info(
@@ -556,7 +699,7 @@ class UltimateWinRateEngineV7:
                     self._last_decision_layer = "NN+heuristic覆盖" if need_heuristic_override else "NN"
                     self._last_decision_score = self._last_nn_confidence
                     self._last_decision_candidates = len(group_actions)
-                    return original_idx
+                    return self._trace_finalize(original_idx, action_list)
 
             # 回退到启发式规则引擎（GUA-071 _heuristic_select）
             self.heuristic_decisions += 1
@@ -569,11 +712,14 @@ class UltimateWinRateEngineV7:
                 self._last_decision_layer = "启发式"
                 self._last_decision_score = None
                 self._last_decision_candidates = len(group_actions)
-                return original_idx
+                return self._trace_finalize(original_idx, action_list)
             self._last_decision_layer = "规则回退"
             self._last_decision_score = None
             self._last_decision_candidates = len(group_actions)
-            return self._rule_based_decision(game_state, group_actions)
+            return self._trace_finalize(
+                self._rule_based_decision(game_state, group_actions),
+                action_list,
+            )
 
         except Exception as e:
             self.logger.error(f"✗ 决策失败: {e}")
@@ -581,7 +727,10 @@ class UltimateWinRateEngineV7:
             self._last_decision_layer = "规则回退"
             self._last_decision_score = None
             self._last_decision_candidates = len(action_list) if action_list else 0
-            return self._rule_based_decision(game_state, action_list)
+            return self._trace_finalize(
+                self._rule_based_decision(game_state, action_list),
+                action_list,
+            )
     
     def _inject_belief_vector(self, game_state: Dict[str, Any]) -> None:
         """GUA-072：从 MemoryTracker 注入规则记牌信念到 game_state['_belief']。"""
@@ -596,6 +745,134 @@ class UltimateWinRateEngineV7:
         except Exception as e:
             self.logger.debug("belief inject skip: %s", e)
             game_state.pop("_belief", None)
+
+    def _inject_phase_relation(self, game_state: Dict[str, Any]) -> None:
+        """GUA-094：从 MemoryTracker 注入中局可消费的规则版推断标签。"""
+        if self._tracker is None:
+            game_state.pop("_phase_relation", None)
+            return
+        try:
+            from src.v.nn.features.rule_card_counter import create_counter_from_tracker
+
+            phase_relation = create_counter_from_tracker(
+                self._tracker
+            ).infer_phase_relation(game_state)
+            phase_relation.update(self._estimate_sprint_fire_signal(game_state))
+            game_state["_phase_relation"] = phase_relation
+        except Exception as e:
+            self.logger.debug("phase relation inject skip: %s", e)
+            game_state.pop("_phase_relation", None)
+
+    def _estimate_sprint_fire_signal(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
+        """GUA-102：基于组牌完备度估算“整牌冲刺点火”信号。"""
+        from collections import Counter
+
+        card_mask = self._card_mask or {}
+        if not card_mask:
+            return {
+                "sprint_fire_ready": False,
+                "bomb_count": 0,
+                "natural_turn_count": 99,
+                "single_residue": 99,
+                "structured_ratio": 0.0,
+            }
+
+        hand_cards = game_state.get("handCards") or list(card_mask.keys())
+        total_cards = len(hand_cards)
+        if total_cards <= 0:
+            return {
+                "sprint_fire_ready": False,
+                "bomb_count": 0,
+                "natural_turn_count": 99,
+                "single_residue": 99,
+                "structured_ratio": 0.0,
+            }
+
+        type_counter = Counter(self._group_type_map.values())
+        single_residue = len(self._scatter_singles(card_mask))
+        bomb_count = int(type_counter.get("bomb", 0) + type_counter.get("straight_flush", 0))
+        pair_count = int(type_counter.get("pair", 0))
+        trips_count = int(type_counter.get("trips", 0))
+        straight_count = int(type_counter.get("straight", 0))
+        three_pair_count = (int(type_counter.get("pair_in_three_pair", 0)) + 2) // 3
+        three_with_two_count = max(
+            int(type_counter.get("trip_in_three_with_two", 0)),
+            int(type_counter.get("pair_in_three_with_two", 0)),
+        )
+        two_trips_count = (int(type_counter.get("trip_in_steel_plate", 0)) + 1) // 2
+
+        structured_turn_count = (
+            bomb_count
+            + pair_count
+            + trips_count
+            + straight_count
+            + three_pair_count
+            + three_with_two_count
+            + two_trips_count
+        )
+        natural_turn_count = structured_turn_count + single_residue
+        structured_ratio = max(0.0, min(1.0, (total_cards - single_residue) / float(total_cards)))
+        role = self._current_role or "主攻"
+
+        sprint_fire_ready = bool(
+            role in ("主攻", "超强主攻")
+            and bomb_count >= 2
+            and single_residue <= 2
+            and structured_turn_count >= 3
+            and structured_ratio >= 0.75
+            and natural_turn_count <= max(6, bomb_count + 3)
+        )
+
+        return {
+            "sprint_fire_ready": sprint_fire_ready,
+            "bomb_count": bomb_count,
+            "natural_turn_count": natural_turn_count,
+            "single_residue": single_residue,
+            "structured_ratio": round(structured_ratio, 4),
+        }
+
+    def _maybe_recommend_sprint_fire_bomb(
+        self,
+        game_state: Dict[str, Any],
+        card_mask: Dict[str, tuple],
+        cur_rank: str,
+        *,
+        teammate_pos: int,
+        intent: str,
+    ) -> Optional[Dict[str, Any]]:
+        """GUA-102：在整牌冲刺态下允许主动点火开炸。"""
+        from src.v.nn.guards.v7_guards import get_action_type
+
+        phase_relation = game_state.get("_phase_relation") or {}
+        if not phase_relation.get("sprint_fire_ready", False):
+            return None
+        role = self._current_role or "主攻"
+        if role not in ("主攻", "超强主攻"):
+            return None
+
+        greater_pos = int(game_state.get("greaterPos", -1) or -1)
+        if greater_pos in (-1, self.player_id, teammate_pos):
+            return None
+
+        greater_action = game_state.get("greaterAction", []) or []
+        if not greater_action or greater_action[0] == "PASS":
+            return None
+        if get_action_type(greater_action) != "Single":
+            return None
+
+        teammate_cover_confidence = float(
+            phase_relation.get("teammate_cover_confidence", 0.0) or 0.0
+        )
+        if teammate_cover_confidence >= 0.75:
+            return None
+
+        bomb = self._recommend_bomb_from_mask(card_mask, cur_rank)
+        if not bomb:
+            return None
+
+        tagged = dict(bomb)
+        tagged["intent"] = intent
+        return tagged
 
     def _ensure_memory_tracker_for_decide(self, game_state: Dict[str, Any]) -> None:
         """GUA-078/GUA-065：decide 入口就绪 MemoryTracker 与各席剩张数。
@@ -2292,6 +2569,7 @@ class UltimateWinRateEngineV7:
         greater_action = game_state.get("greaterAction", []) or []
         hand_cards = game_state.get("handCards", []) or []
         cur_rank = str(game_state.get("curRank", "2"))
+        current_stage = str(game_state.get("_current_stage", ""))
 
         card_mask = self._card_mask or {}
         if not card_mask or not hand_cards:
@@ -2366,6 +2644,61 @@ class UltimateWinRateEngineV7:
                 "GUA-075 %s: 推荐无法匹配 actionList rec={type=%s rank=%s cards=%s} sample=%s",
                 scenario_label, r_type, r_rank, r_cards, al_sample)
             return None
+
+        # ── GUA-090：stage_0_1 开局入口 ──
+        # 先让开局阶段拥有自己的意图驱动推荐器；
+        # 若命不中或当前并非其负责场景，再回落到 GUA-075 通用四场景逻辑。
+        if current_stage == "stage_0_1":
+            stage_rec = self._stage_open_plan(
+                game_state=game_state,
+                card_mask=card_mask,
+                hand_cards=hand_cards,
+                cur_rank=cur_rank,
+                is_lead=is_lead,
+                is_teammate=is_teammate,
+                teammate_pos=teammate_pos,
+            )
+            stage_rec = _ensure_valid(stage_rec, "GUA-090 开局阶段") if stage_rec else None
+            if stage_rec:
+                self.logger.info(
+                    "GUA-090 开局阶段: intent=%s → type=%s rank=%s cards=%s",
+                    stage_rec.get("intent"),
+                    stage_rec.get("type"),
+                    stage_rec.get("rank"),
+                    stage_rec.get("cards"),
+                )
+                self._last_stage_intent = stage_rec.get("intent")
+                return stage_rec
+
+        # ── GUA-091：stage_2 中局入口 ──
+        # 中局不再直接落入通用四场景逻辑，而是先统一消费
+        # `_belief + _phase_relation + role + greaterAction` 形成攻守意图。
+        if current_stage == "stage_2" and self._is_stage2_dispatch_enabled():
+            stage_rec = self._stage_mid_dispatch(
+                game_state=game_state,
+                card_mask=card_mask,
+                hand_cards=hand_cards,
+                cur_rank=cur_rank,
+                greater_action=greater_action,
+                greater_type=greater_type,
+                greater_rank=greater_rank,
+                is_lead=is_lead,
+                is_teammate=is_teammate,
+                is_upper=is_upper,
+                is_lower=is_lower,
+                teammate_pos=teammate_pos,
+            )
+            stage_rec = _ensure_valid(stage_rec, "GUA-091 中局阶段") if stage_rec else None
+            if stage_rec:
+                self.logger.info(
+                    "GUA-091 中局阶段: intent=%s → type=%s rank=%s cards=%s",
+                    stage_rec.get("intent"),
+                    stage_rec.get("type"),
+                    stage_rec.get("rank"),
+                    stage_rec.get("cards"),
+                )
+                self._last_stage_intent = stage_rec.get("intent")
+                return stage_rec
 
         # ── ① 对家在出牌：PASS 让道 ──
         if is_teammate:
@@ -2456,6 +2789,343 @@ class UltimateWinRateEngineV7:
             self.logger.info(
                 "GUA-075 推荐: 卡下家无同型 → R11决定PASS(%s)", reason)
             return {"type": "PASS", "rank": "", "cards": []}
+
+        return None
+
+    def _stage_open_plan(
+        self,
+        game_state: Dict[str, Any],
+        card_mask: Dict[str, tuple],
+        hand_cards: List[str],
+        cur_rank: str,
+        *,
+        is_lead: bool,
+        is_teammate: bool,
+        teammate_pos: int,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        GUA-090：开局阶段（stage_0_1）专用入口。
+
+        目标不是“随手挑一个最小合法动作”，而是先产出开局意图：
+          1. 队友控牌时优先让道
+          2. 领出时优先低耗损试探单张
+          3. 若只剩高耗损单张（K/A/级牌/王），优先安全小对开路
+
+        本阶段暂不接管非领出且非队友控牌场景，交由 GUA-075 通用逻辑。
+        """
+        from src.v.nn.guards.v7_guards import get_card_rank, get_card_value
+
+        def _prank(internal_rank: str) -> str:
+            return self.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
+
+        role = self._current_role or "主攻"
+        groups = self._build_group_index(card_mask)
+        group_type_map = self._group_type_map or {}
+        group_members = self._group_members or None
+        protected_core = frozenset(("bomb", "straight_flush", "straight"))
+
+        if is_teammate:
+            return {
+                "type": "PASS",
+                "rank": "",
+                "cards": [],
+                "intent": "yield_to_teammate",
+            }
+
+        sprint_fire_bomb = self._maybe_recommend_sprint_fire_bomb(
+            game_state,
+            card_mask,
+            cur_rank,
+            teammate_pos=teammate_pos,
+            intent="open_sprint_fire_bomb",
+        )
+        if sprint_fire_bomb:
+            return sprint_fire_bomb
+
+        if not is_lead:
+            return None
+
+        def _single_breaks_protected_core(card: str) -> bool:
+            rank = _prank(get_card_rank(str(card)))
+            broken = self._get_broken_core_type(
+                ["Single", rank, [str(card)]],
+                card_mask,
+                group_type_map,
+                group_members,
+            )
+            return broken in protected_core
+
+        def _opening_value(card: str) -> int:
+            return get_card_value(str(card), cur_rank)
+
+        def _is_high_cost_single(card: str) -> bool:
+            # 不写死 K/A/王 名字，直接按当前单张强度阈值判。
+            return _opening_value(card) >= self.RANK_ORDER["K"]
+
+        scatter_singles = [
+            str(card) for card in self._scatter_singles(card_mask)
+            if not _single_breaks_protected_core(str(card))
+        ]
+        scatter_singles.sort(key=lambda c: (_opening_value(c), str(c)))
+
+        low_cost_singles = [c for c in scatter_singles if not _is_high_cost_single(c)]
+
+        pair_groups = []
+        pair_like_types = ("pair", "pair_in_three_pair", "pair_in_three_with_two")
+        for gid, ginfo in groups.items():
+            if ginfo["type"] not in pair_like_types:
+                continue
+            if ginfo["is_core"] > 0:
+                continue
+            if len(ginfo["cards"]) < 2:
+                continue
+            cards = sorted(str(c) for c in ginfo["cards"])[:2]
+            if _opening_value(cards[0]) >= self.RANK_ORDER["K"]:
+                continue
+            pair_groups.append((cards, get_card_rank(cards[0])))
+        pair_groups.sort(key=lambda item: (_opening_value(item[0][0]), item[0]))
+
+        if low_cost_singles:
+            card = low_cost_singles[0]
+            return {
+                "type": "Single",
+                "rank": _prank(get_card_rank(card)),
+                "cards": [card],
+                "intent": "assist_probe_single" if role in ("助攻", "超弱") else "main_probe_single",
+            }
+
+        if pair_groups:
+            cards, rank = pair_groups[0]
+            return {
+                "type": "Pair",
+                "rank": _prank(rank),
+                "cards": cards,
+                "intent": "assist_safe_pair" if role in ("助攻", "超弱") else "main_safe_pair",
+            }
+
+        if scatter_singles:
+            card = scatter_singles[0]
+            return {
+                "type": "Single",
+                "rank": _prank(get_card_rank(card)),
+                "cards": [card],
+                "intent": "fallback_high_cost_single",
+            }
+
+        return None
+
+    def _stage_mid_dispatch(
+        self,
+        game_state: Dict[str, Any],
+        card_mask: Dict[str, tuple],
+        hand_cards: List[str],
+        cur_rank: str,
+        *,
+        greater_action: List[Any],
+        greater_type: str,
+        greater_rank: str,
+        is_lead: bool,
+        is_teammate: bool,
+        is_upper: bool,
+        is_lower: bool,
+        teammate_pos: int,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        GUA-091：stage_2 中局统一入口。
+
+        只消费统一信号：
+          - `_belief`：剩张 / 炸弹风险 / 当前控牌可否被压
+          - `_phase_relation`：关键敌方、牌型粗分类、队友承接、同型压制外部性
+          - `role`：主攻 / 助攻 / 超弱
+
+        输出中局意图，再复用既有 `lead / min_press / max_press / bomb`
+        基元去落具体动作，避免继续在 `_recommend_play()` 里堆牌例特判。
+        """
+        belief = game_state.get("_belief") or {}
+        phase_relation = game_state.get("_phase_relation") or {}
+        role = self._current_role or "主攻"
+        hand_counts = belief.get("hand_counts") or game_state.get("numofplayers") or {}
+
+        def _remaining(seat: int, default: int = 27) -> int:
+            if seat < 0:
+                return default
+            if isinstance(hand_counts, dict):
+                try:
+                    return int(hand_counts.get(seat, default))
+                except (TypeError, ValueError):
+                    return default
+            if isinstance(hand_counts, list) and seat < len(hand_counts):
+                try:
+                    return int(hand_counts[seat])
+                except (TypeError, ValueError):
+                    return default
+            return default
+
+        def _with_intent(rec: Optional[Dict[str, Any]], intent: str) -> Optional[Dict[str, Any]]:
+            if not rec:
+                return None
+            tagged = dict(rec)
+            tagged["intent"] = intent
+            return tagged
+
+        critical_enemy_seat = int(phase_relation.get("critical_enemy_seat", -1))
+        critical_enemy_remaining = _remaining(critical_enemy_seat)
+        teammate_cover_confidence = float(
+            phase_relation.get("teammate_cover_confidence", 0.0) or 0.0
+        )
+        teammate_rear_single_cover_confidence = float(
+            phase_relation.get("teammate_rear_single_cover_confidence", 0.0) or 0.0
+        )
+        same_type_suppressor_outside = bool(
+            phase_relation.get("same_type_suppressor_outside", False)
+        )
+        enemy_bomb_risk_max = float(
+            phase_relation.get("enemy_bomb_risk_max", 0.0) or 0.0
+        )
+        enemy_shape_hint = str(phase_relation.get("enemy_shape_hint", "unknown") or "unknown")
+        greater_remaining = _remaining(game_state.get("greaterPos", -1))
+        sprint_fire_ready = bool(phase_relation.get("sprint_fire_ready", False))
+        hold_rear_teammate_single_cover = (
+            is_upper
+            and greater_type == "Single"
+            and game_state.get("greaterPos", -1) == critical_enemy_seat
+            and critical_enemy_remaining <= 0
+            and teammate_rear_single_cover_confidence >= 0.65
+        )
+
+        if is_teammate:
+            intent = (
+                "mid_yield_teammate_control"
+                if teammate_cover_confidence >= 0.65
+                else "mid_preserve_teammate_lane"
+            )
+            return {
+                "type": "PASS",
+                "rank": "",
+                "cards": [],
+                "intent": intent,
+            }
+
+        if is_lead:
+            rec = self._recommend_lead_impl(game_state, card_mask, hand_cards, cur_rank)
+            if not rec:
+                return None
+            if role in ("助攻", "超弱") and _remaining(teammate_pos) <= 4:
+                return _with_intent(rec, "mid_feed_teammate_lead")
+            if critical_enemy_remaining <= 4:
+                return _with_intent(rec, "mid_probe_critical_enemy")
+            if enemy_shape_hint == "structured" and enemy_bomb_risk_max >= 0.5:
+                return _with_intent(rec, "mid_safe_structure_probe")
+            return _with_intent(rec, "mid_balance_lead")
+
+        if not greater_action or greater_action[0] == "PASS":
+            return None
+
+        if sprint_fire_ready and not hold_rear_teammate_single_cover:
+            sprint_fire_bomb = self._maybe_recommend_sprint_fire_bomb(
+                game_state,
+                card_mask,
+                cur_rank,
+                teammate_pos=teammate_pos,
+                intent="mid_sprint_fire_bomb",
+            )
+            if sprint_fire_bomb:
+                return sprint_fire_bomb
+
+        if is_upper:
+            if game_state.get("greaterPos", -1) == critical_enemy_seat and critical_enemy_remaining <= 4:
+                rec = self._recommend_max_press_impl(
+                    game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank
+                )
+                if rec:
+                    return _with_intent(rec, "mid_cut_critical_upper")
+
+            rec = self._recommend_min_press_impl(
+                game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank
+            )
+            if rec:
+                intent = (
+                    "mid_trade_min_press"
+                    if same_type_suppressor_outside
+                    else "mid_take_control_min_press"
+                )
+                return _with_intent(rec, intent)
+
+            if hold_rear_teammate_single_cover:
+                return {
+                    "type": "PASS",
+                    "rank": "",
+                    "cards": [],
+                    "intent": "mid_hold_rear_teammate_single_cover",
+                }
+
+            can_bomb, reason = self._r11_bomb_throttle_check(
+                game_state, greater_action, greater_rank, cur_rank
+            )
+            if (
+                can_bomb
+                and game_state.get("greaterPos", -1) == critical_enemy_seat
+                and critical_enemy_remaining <= 3
+                and teammate_cover_confidence < 0.5
+                and teammate_rear_single_cover_confidence < 0.65
+            ):
+                bomb = self._recommend_bomb_from_mask(card_mask, cur_rank)
+                if bomb:
+                    return _with_intent(bomb, f"mid_bomb_cutoff:{reason}")
+
+            if teammate_cover_confidence >= 0.75 and _remaining(teammate_pos) <= 4:
+                return {
+                    "type": "PASS",
+                    "rank": "",
+                    "cards": [],
+                    "intent": "mid_hold_for_teammate",
+                }
+            return {
+                "type": "PASS",
+                "rank": "",
+                "cards": [],
+                "intent": "mid_no_same_type_pass",
+            }
+
+        if is_lower:
+            if game_state.get("greaterPos", -1) == critical_enemy_seat or greater_remaining <= 4:
+                rec = self._recommend_max_press_impl(
+                    game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank
+                )
+                if rec:
+                    return _with_intent(rec, "mid_block_critical_enemy")
+            elif same_type_suppressor_outside:
+                rec = self._recommend_min_press_impl(
+                    game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank
+                )
+                if rec:
+                    return _with_intent(rec, "mid_keep_overcall_in_reserve")
+            else:
+                rec = self._recommend_max_press_impl(
+                    game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank
+                )
+                if rec:
+                    return _with_intent(rec, "mid_block_lower_enemy")
+
+            can_bomb, reason = self._r11_bomb_throttle_check(
+                game_state, greater_action, greater_rank, cur_rank
+            )
+            if (
+                can_bomb
+                and game_state.get("greaterPos", -1) == critical_enemy_seat
+                and critical_enemy_remaining <= 3
+                and teammate_cover_confidence < 0.5
+            ):
+                bomb = self._recommend_bomb_from_mask(card_mask, cur_rank)
+                if bomb:
+                    return _with_intent(bomb, f"mid_bomb_cutoff:{reason}")
+
+            return {
+                "type": "PASS",
+                "rank": "",
+                "cards": [],
+                "intent": "mid_no_same_type_pass",
+            }
 
         return None
 
@@ -2603,7 +3273,7 @@ class UltimateWinRateEngineV7:
 
         # ── 三带二（ThreeWithTwo）：从手牌直接建，不用组引擎子结构 ──
         if greater_type == "ThreeWithTwo":
-            return self._build_three_with_two_press(
+            rec = self._build_three_with_two_press(
                 hand_cards,
                 greater_val,
                 cur_rank,
@@ -2612,6 +3282,20 @@ class UltimateWinRateEngineV7:
                 group_type_map=self._group_type_map,
                 group_members=self._group_members,
             )
+            if rec:
+                return rec
+            if self._should_force_three_with_two_counter_press(game_state, greater_action):
+                return self._build_three_with_two_press(
+                    hand_cards,
+                    greater_val,
+                    cur_rank,
+                    "min",
+                    card_mask=card_mask,
+                    group_type_map=self._group_type_map,
+                    group_members=self._group_members,
+                    allow_break_protected_core=True,
+                )
+            return None
 
         # ── 钢板/三连对：返回 None（暂不支持推荐，让回退路径处理）──
         if greater_type in ("ThreePair", "TwoTrips"):
@@ -2665,6 +3349,7 @@ class UltimateWinRateEngineV7:
         card_mask: Optional[Dict] = None,
         group_type_map: Optional[Dict[int, str]] = None,
         group_members: Optional[Dict[int, List[str]]] = None,
+        allow_break_protected_core: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """
         从手牌直接构建三带二（ThreeWithTwo）可压推荐。
@@ -2730,7 +3415,7 @@ class UltimateWinRateEngineV7:
                     group_type_map,
                     group_members,
                 )
-                if broken in ("bomb", "straight_flush"):
+                if broken in ("bomb", "straight_flush") and not allow_break_protected_core:
                     continue
             return {
                 "type": "ThreeWithTwo",
@@ -2739,6 +3424,57 @@ class UltimateWinRateEngineV7:
             }
 
         return None
+
+    def _should_force_three_with_two_counter_press(
+        self,
+        game_state: Dict[str, Any],
+        greater_action: Optional[List[Any]],
+    ) -> bool:
+        """高压三带二对抗下，允许受控拆炸续压，避免直接双 PASS。"""
+        from src.v.nn.guards.v7_guards import get_action_type
+
+        if not greater_action or get_action_type(greater_action) != "ThreeWithTwo":
+            return False
+
+        role = self._current_role or "主攻"
+        if role != "主攻":
+            return False
+
+        phase_relation = game_state.get("_phase_relation") or {}
+        belief = game_state.get("_belief") or {}
+        hand_counts = belief.get("hand_counts") or game_state.get("numofplayers") or {}
+
+        def _remaining(seat: int, default: int = 27) -> int:
+            if seat < 0:
+                return default
+            if isinstance(hand_counts, dict):
+                try:
+                    return int(hand_counts.get(seat, default))
+                except (TypeError, ValueError):
+                    return default
+            if isinstance(hand_counts, list) and seat < len(hand_counts):
+                try:
+                    return int(hand_counts[seat])
+                except (TypeError, ValueError):
+                    return default
+            return default
+
+        greater_pos = int(game_state.get("greaterPos", -1))
+        critical_enemy_seat = int(phase_relation.get("critical_enemy_seat", -1))
+        enemy_shape_hint = str(phase_relation.get("enemy_shape_hint", "unknown") or "unknown")
+        teammate_cover_confidence = float(
+            phase_relation.get("teammate_cover_confidence", 0.0) or 0.0
+        )
+
+        target_remaining = _remaining(greater_pos)
+        if greater_pos == critical_enemy_seat:
+            target_remaining = min(target_remaining, _remaining(critical_enemy_seat))
+
+        return (
+            enemy_shape_hint == "structured"
+            and 1 <= target_remaining <= 9
+            and teammate_cover_confidence < 0.5
+        )
 
     def _recommend_max_press_impl(
         self, game_state, card_mask, greater_action, greater_type,
@@ -2794,7 +3530,7 @@ class UltimateWinRateEngineV7:
 
         # ── 三带二（ThreeWithTwo）──
         if greater_type == "ThreeWithTwo":
-            return self._build_three_with_two_press(
+            rec = self._build_three_with_two_press(
                 hand_cards,
                 greater_val,
                 cur_rank,
@@ -2803,6 +3539,20 @@ class UltimateWinRateEngineV7:
                 group_type_map=self._group_type_map,
                 group_members=self._group_members,
             )
+            if rec:
+                return rec
+            if self._should_force_three_with_two_counter_press(game_state, greater_action):
+                return self._build_three_with_two_press(
+                    hand_cards,
+                    greater_val,
+                    cur_rank,
+                    "max",
+                    card_mask=card_mask,
+                    group_type_map=self._group_type_map,
+                    group_members=self._group_members,
+                    allow_break_protected_core=True,
+                )
+            return None
 
         # ── 钢板/三连对：暂不支持 ──
         if greater_type in ("ThreePair", "TwoTrips"):

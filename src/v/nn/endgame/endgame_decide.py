@@ -178,7 +178,7 @@ def _q1_structure_priority(action_type: str) -> int:
 def _sort_q1_block_candidates(
     actions: List, hand_cards: List[str], game_state: Dict[str, Any],
 ) -> List:
-    """Q1 候选排序：默认沿用回收优先；若当前控牌非炸，仅把炸弹内部改成最小足够炸优先。"""
+    """Q1 候选排序：默认沿用回收优先；bomb-like 内部按最小足够成本优先。"""
     ordered = _sort_by_recapture_first(actions, hand_cards)
     if not ordered or not GUARD_TOOLS_OK:
         return ordered
@@ -187,18 +187,16 @@ def _sort_q1_block_candidates(
     if not greater_action:
         return ordered
 
-    try:
-        greater_type = get_action_type(greater_action)
-    except Exception:
+    declared_greater_type = _get_declared_action_type(greater_action)
+    if declared_greater_type in (ACTION_TYPE_PASS, ACTION_TYPE_FREE, "PASS", "Free"):
         return ordered
-
-    if greater_type in (
-        ACTION_TYPE_BOMB,
-        ACTION_TYPE_STRAIGHT_FLUSH,
-        ACTION_TYPE_PASS,
-        ACTION_TYPE_FREE,
-    ):
-        return ordered
+    if not declared_greater_type:
+        try:
+            greater_type = get_action_type(greater_action)
+        except Exception:
+            return ordered
+        if greater_type in (ACTION_TYPE_PASS, ACTION_TYPE_FREE):
+            return ordered
 
     cur_rank = str(game_state.get("curRank", "2"))
     bomb_items = [
@@ -210,8 +208,11 @@ def _sort_q1_block_candidates(
 
     def _bomb_min_sufficient_key(item):
         act = item[1] if isinstance(item, tuple) and len(item) == 2 else item
+        cards = _get_cards(act)
+        wild_count = sum(1 for c in cards if isinstance(c, str) and c.startswith("H") and c[1:] == cur_rank)
         return (
-            len(_get_cards(act)),
+            len(cards),
+            wild_count,
             _max_card_value(act, cur_rank),
         )
 
@@ -588,6 +589,10 @@ class EndgameDecider:
         if teammate_hold is not None:
             return teammate_hold
 
+        finish_now = self._q1_finish_now_candidate(game_state, action_list)
+        if finish_now is not None:
+            return finish_now
+
         # ① 找最危险敌人（主目标）
         main_pos, main_enemy = self._select_main_enemy(enemies, my_pos)
 
@@ -679,6 +684,24 @@ class EndgameDecider:
             action_list, baoshu_never, str(game_state.get("curRank", "2")),
             is_passive,
         )
+
+    def _q1_finish_now_candidate(
+        self, game_state: Dict[str, Any], action_list: List,
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-112：若平台给出一手清牌候选，Q1 不得拆完整手牌。"""
+        hand_counter = Counter(game_state.get("handCards", []) or [])
+        if not hand_counter:
+            return None
+
+        for i, act in enumerate(action_list):
+            if not isinstance(act, list):
+                continue
+            if _get_declared_action_type(act) in (ACTION_TYPE_PASS, "PASS"):
+                continue
+            cards = _get_cards(act)
+            if cards and Counter(cards) == hand_counter:
+                return i, act
+        return None
 
     def _q1_hold_teammate_max_control(
         self, game_state: Dict[str, Any], action_list: List, ec: Dict[str, Any],

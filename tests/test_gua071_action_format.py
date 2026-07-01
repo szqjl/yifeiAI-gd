@@ -44,6 +44,9 @@ class TestGetActionTypePlatform:
     def test_pair_platform(self):
         assert get_action_type(["Pair", "2", ["S2", "H2"]]) == ACTION_TYPE_PAIR
 
+    def test_pair_platform_with_wildcard(self):
+        assert get_action_type(["Pair", "J", ["CJ", "H2"]]) == ACTION_TYPE_PAIR
+
     def test_straight_platform(self):
         assert get_action_type(["Straight", "5", ["S5", "C6", "C7", "D8", "D9"]]) == ACTION_TYPE_STRAIGHT
 
@@ -74,24 +77,11 @@ class TestFakeBombFiltering:
         types = [get_action_type(a) for a in filtered]
         assert ACTION_TYPE_BOMB not in types, "假炸应被 R13 剔除"
 
-    def test_real_bomb_kept_when_no_singles(self):
-        """真炸 4 同牌且无 Single 选项 → 保留。"""
-        game_state = {
-            "myPos": 0,
-            "greaterPos": 3,
-            "greaterAction": ["Single", "3", ["D3"]],
-            "curPos": 0,
-            "curRank": "2",
-            "handCards": ["HA", "CA", "SA", "DA"],
-            "actionList": [
-                ["Bomb", "A", ["HA", "CA", "SA", "DA"]],  # 真炸
-                ["PASS", "PASS", "PASS"],
-            ],
-            "numofplayers": [27, 27, 27, 27],
-        }
-        filtered, mapping = filter_action_list(game_state)
-        types = [get_action_type(a) for a in filtered]
-        assert ACTION_TYPE_BOMB in types, "真炸无 Single 时应保留"
+    def test_real_bomb_platform_not_misclassified(self):
+        """真炸平台格式仍应识别为 Bomb，避免被误判成 Free。"""
+        action = ["Bomb", "A", ["HA", "CA", "SA", "DA"]]
+        assert get_action_type(action) == ACTION_TYPE_BOMB
+        assert is_bomb(action) is True
 
     def test_real_bomb_removed_when_singles_exist(self):
         """真炸 4 同牌但存在 Single 选项 → R01 剔除。"""

@@ -485,6 +485,55 @@ class TestGua078TrackerAtDecideEntry:
         assert act[0] == "Bomb"
         assert sorted(act[2]) == sorted(BOMB_6)
 
+    def test_q1_prefers_pure_five_bomb_over_six_bomb_with_wild_when_beating_four_bomb(self):
+        """对方也是炸弹时，Q1 仍应最小足够炸，禁止把纯 5 星炸无收益升成 6 星炸。"""
+        tracker = MemoryTracker(my_pos=0, enable_inference=False, max_infer_depth=0)
+        hand_cards = [
+            "D2", "S5", "H5", "H5", "C5", "C5", "S7", "C7", "D7", "D7",
+            "D8", "C9", "D9", "D9", "HT", "DJ", "SQ", "DQ", "DA", "HK",
+        ]
+        tracker.init_from_hand(hand_cards)
+        tracker.set_level_rank("K")
+        tracker.hand_counts = {0: 20, 1: 3, 2: 13, 3: 2}
+
+        pure_five_bomb = ["S5", "H5", "H5", "C5", "C5"]
+        six_bomb_with_wild = ["S5", "H5", "H5", "C5", "C5", "HK"]
+        gs = {
+            "myPos": 0,
+            "curPos": 3,
+            "greaterPos": 3,
+            "greaterAction": ["Bomb", "Q", ["HQ", "HQ", "CQ", "DQ"]],
+            "handCards": list(hand_cards),
+            "actionList": [
+                ["PASS", "PASS", "PASS"],
+                ["Bomb", "5", ["S5", "H5", "H5", "C5", "HK"]],
+                ["Bomb", "5", pure_five_bomb],
+                ["Bomb", "5", ["S5", "H5", "C5", "C5", "HK"]],
+                ["Bomb", "5", ["H5", "H5", "C5", "C5", "HK"]],
+                ["Bomb", "7", ["S7", "C7", "D7", "D7", "HK"]],
+                ["Bomb", "5", six_bomb_with_wild],
+            ],
+            "curRank": "K",
+            "selfRank": "K",
+            "oppoRank": "K",
+            "numofplayers": [20, 3, 13, 2],
+            "_memory_tracker": tracker,
+            "_belief": {
+                "hand_counts": {0: 20, 1: 3, 2: 13, 3: 2},
+                "opp_bomb_risks": {1: 1.0, 3: 1.0},
+            },
+        }
+
+        EndgamePreprocessor().preprocess(gs)
+        decider = EndgameDecider()
+        filtered, banned_empty = decider.apply_banned_filter(gs["actionList"], gs)
+        idx, act = decider.decide(gs, gs["actionList"] if banned_empty else filtered)
+
+        assert idx == 2
+        assert act[0] == "Bomb"
+        assert sorted(act[2]) == sorted(pure_five_bomb)
+        assert "HK" not in act[2]
+
     @pytest.mark.parametrize(
         ("hand_cards", "action_list", "cur_rank", "prepare_tracker", "expected_type", "expected_rank"),
         [
@@ -650,6 +699,62 @@ class TestGua078TrackerAtDecideEntry:
         assert act[0] == "Single"
         assert act[1] == "Q"
         assert ["Pair", "7", ["S7", "C7"]] in gs["actionList"]
+
+    def test_q1_finish_now_prefers_trips_over_breaking_complete_hand(self):
+        """GUA-112：手牌可被一个 Trips 候选完整覆盖时，不得先拆成单张。"""
+        hand_cards = ["HJ", "DJ", "HA"]
+        gs = {
+            "myPos": 0,
+            "curPos": -1,
+            "greaterPos": -1,
+            "greaterAction": ["PASS", "PASS", "PASS"],
+            "handCards": list(hand_cards),
+            "actionList": [
+                ["PASS", "PASS", "PASS"],
+                ["Single", "A", ["HA"]],
+                ["Pair", "J", ["HJ", "DJ"]],
+                ["Trips", "J", ["HJ", "DJ", "HA"]],
+            ],
+            "curRank": "A",
+            "selfRank": "A",
+            "oppoRank": "A",
+            "numofplayers": [3, 1, 9, 8],
+        }
+
+        EndgamePreprocessor().preprocess(gs)
+        idx, act = EndgameDecider().decide(gs, gs["actionList"])
+
+        assert idx == 3
+        assert act[0] == "Trips"
+        assert sorted(act[2]) == sorted(hand_cards)
+
+    def test_q1_finish_now_prefers_trips_over_pair_plus_single_split(self):
+        """GUA-112：三张同点牌可一手清牌时，不得拆成 Pair + Single。"""
+        hand_cards = ["S6", "C6", "D6"]
+        gs = {
+            "myPos": 0,
+            "curPos": -1,
+            "greaterPos": -1,
+            "greaterAction": ["PASS", "PASS", "PASS"],
+            "handCards": list(hand_cards),
+            "actionList": [
+                ["PASS", "PASS", "PASS"],
+                ["Single", "6", ["S6"]],
+                ["Pair", "6", ["S6", "C6"]],
+                ["Trips", "6", ["S6", "C6", "D6"]],
+            ],
+            "curRank": "K",
+            "selfRank": "K",
+            "oppoRank": "K",
+            "numofplayers": [3, 1, 9, 8],
+        }
+
+        EndgamePreprocessor().preprocess(gs)
+        idx, act = EndgameDecider().decide(gs, gs["actionList"])
+
+        assert idx == 3
+        assert act[0] == "Trips"
+        assert sorted(act[2]) == sorted(hand_cards)
 
     @pytest.mark.parametrize("remaining", [1, 2, 3, 4, 5, 6])
     def test_q1_endgame_rule_recommended_types_do_not_conflict_with_banned_types(self, remaining):

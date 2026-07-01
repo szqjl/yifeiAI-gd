@@ -122,8 +122,21 @@ def get_action_type(action: List[str]) -> str:
     if action[0] == "PASS":
         return ACTION_TYPE_PASS
 
-    # GUA-071：检测平台格式 [type, rank, [cards]]，提取实际牌列表后递归
+    # 平台格式 [type, rank, [cards]] 保留了逢人配后的语义牌型。
+    # 例如 ["Pair","J",["CJ","H2"]] 是合法对子，若只按实牌 ranks 会被误判成 Free。
+    # 但 Bomb/StraightFlush 仍需按实牌校验，供 R13 剔除平台假炸弹。
     if isinstance(action, list) and len(action) >= 3 and isinstance(action[2], list):
+        declared = action[0]
+        if declared in (
+            ACTION_TYPE_SINGLE,
+            ACTION_TYPE_PAIR,
+            ACTION_TYPE_TRIPS,
+            ACTION_TYPE_THREE_WITH_TWO,
+            ACTION_TYPE_STRAIGHT,
+            ACTION_TYPE_THREE_PAIR,
+            ACTION_TYPE_TWO_TRIPS,
+        ):
+            return declared
         return get_action_type(action[2])
 
     n = len(action)

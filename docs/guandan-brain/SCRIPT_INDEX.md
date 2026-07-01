@@ -167,11 +167,13 @@
 | `pre-push` | pre-push hook shell 脚本 |
 | `install-hooks.bat` | 安装 hooks 到 `.git/hooks/` |
 
-### scripts/checks/ — 检验脚本（28个）
+### scripts/checks/ — 检验脚本（30个）
 
 覆盖组牌引擎、行动验证、规则合规等。核心检验：
 - `check_grouping_engine.py` — 组牌引擎单元测试
 - `check_endgame_agent.py` — **残局智能体独立调试**（独立/扫描/单记录三种模式）
+- `check_q1_rule_table_consistency.py` — **Q1 规则表静态校验**（`endgame_rule` / `BAOSHU_RULE` 自洽性）
+- `check_endgame_anomalies.py` — **残局异常扫描器**（优先抓“临门 PASS”与“推荐被过滤到只剩 PASS”）
 
 ### scripts/cos/ — COS 云端存储
 

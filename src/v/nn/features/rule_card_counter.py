@@ -17,6 +17,7 @@ GUA-072: 规则记牌引擎 — 从 MemoryTracker 推断剩余牌分布，给 he
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from math import comb
 from typing import Any, Dict, List, Set
 
 from src.v.nn.features.memory_tracker import MemoryTracker
@@ -27,6 +28,20 @@ RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
 RANK_VALUE: Dict[str, int] = {
     "2": 0, "3": 1, "4": 2, "5": 3, "6": 4, "7": 5,
     "8": 6, "9": 7, "T": 8, "J": 9, "Q": 10, "K": 11, "A": 12,
+}
+RANK_VALUE_WITH_JOKERS: Dict[str, int] = {
+    **RANK_VALUE,
+    "SB": 13,
+    "HR": 14,
+}
+
+STRUCTURED_ACTION_TYPES = {
+    "ThreeWithTwo",
+    "Straight",
+    "ThreePair",
+    "TwoTrips",
+    "Bomb",
+    "StraightFlush",
 }
 
 
@@ -199,6 +214,345 @@ class RuleCardCounter:
     def get_unknown_rank_stats(self) -> Dict[str, int]:
         """所有 rank 的 UNKNOWN 计数。"""
         return {r: self.get_rank_unknown_count(r) for r in RANKS + ["SB", "HR"]}
+
+    def _get_recent_action_type(self, seat: int, game_state=None) -> str:
+        """返回 seat 最近一次显式动作类型；优先信当前 greaterAction。"""
+        if game_state:
+            greater_pos = game_state.get("greaterPos", -1)
+            greater_action = game_state.get("greaterAction")
+            if (
+                greater_pos == seat
+                and isinstance(greater_action, list)
+                and len(greater_action) >= 1
+            ):
+                return str(greater_action[0] or "")
+        for play in reversed(self._t.play_history):
+            if play.get("seat", -1) == seat:
+                return str(play.get("action_type") or "")
+        return ""
+
+    def _iter_higher_ranks(self, target_rank: str) -> List[str]:
+        target_value = RANK_VALUE_WITH_JOKERS.get(target_rank)
+        if target_value is None:
+            return []
+        return [
+            rank
+            for rank, value in RANK_VALUE_WITH_JOKERS.items()
+            if value > target_value
+        ]
+
+    def _count_possible_enemy_copies(self, rank: str) -> int:
+        if rank in ("SB", "HR"):
+            copies = self._t.card_state.get(rank, [-1, -1])
+            return sum(1 for c in copies if self._may_opp_hold(c))
+
+        total = 0
+        for suit in SUITS:
+            ct = f"{suit}{rank}"
+            copies = self._t.card_state.get(ct, [-1, -1])
+            total += sum(1 for c in copies if self._may_opp_hold(c))
+        return total
+
+    def _can_any_enemy_form_same_type(self, action_type: str, target_rank: str) -> bool:
+        """基于记牌估算：任一对手是否仍可能形成更大的同型压制。"""
+        if action_type == "Single":
+            return any(
+                self._count_possible_enemy_copies(rank) >= 1
+                for rank in self._iter_higher_ranks(target_rank)
+            )
+        if action_type == "Pair":
+            return any(
+                self._count_possible_enemy_copies(rank) >= 2
+                for rank in self._iter_higher_ranks(target_rank)
+            )
+        if action_type == "Trips":
+            return any(
+                self._count_possible_enemy_copies(rank) >= 3
+                for rank in self._iter_higher_ranks(target_rank)
+            )
+        if action_type == "ThreeWithTwo":
+            for trip_rank in self._iter_higher_ranks(target_rank):
+                if self._count_possible_enemy_copies(trip_rank) < 3:
+                    continue
+                for pair_rank in RANKS + ["SB", "HR"]:
+                    if pair_rank == trip_rank:
+                        continue
+                    if self._count_possible_enemy_copies(pair_rank) >= 2:
+                        return True
+            return False
+        if action_type in ("Straight", "ThreePair", "TwoTrips"):
+            return True
+        if action_type in ("Bomb", "StraightFlush"):
+            return max(
+                self._t.get_opponent_bomb_risk(opp) for opp in self._t.opponents
+            ) >= 0.6
+        return False
+
+    @staticmethod
+    def _clip01(value: float) -> float:
+        return max(0.0, min(1.0, value))
+
+    def _infer_enemy_shape_hint(
+        self,
+        remaining: int,
+        recent_action_type: str,
+        bomb_risk: float,
+    ) -> str:
+        """敌方剩牌粗分类：只给中局调度吃标签，不直接驱动 actIndex。"""
+        if recent_action_type in STRUCTURED_ACTION_TYPES:
+            return "structured"
+        if remaining <= 1:
+            return "single_heavy"
+        if remaining == 2:
+            if recent_action_type == "Pair":
+                return "pair_heavy"
+            return "unknown"
+        if remaining == 3:
+            if recent_action_type == "Trips":
+                return "structured"
+            if recent_action_type == "Single":
+                return "single_heavy"
+            return "unknown"
+        if remaining == 4:
+            if bomb_risk >= 0.6:
+                return "structured"
+            if recent_action_type == "Pair":
+                return "pair_heavy"
+            if recent_action_type == "Single":
+                return "single_heavy"
+            return "unknown"
+        if remaining in (5, 6):
+            if recent_action_type in ("Straight", "ThreeWithTwo", "Bomb", "StraightFlush"):
+                return "structured"
+            if bomb_risk >= 0.5:
+                return "structured"
+            if recent_action_type == "Pair":
+                return "pair_heavy"
+            if recent_action_type == "Single":
+                return "single_heavy"
+            return "unknown"
+        return "unknown"
+
+    def _estimate_bomb_plus_single_risk(
+        self,
+        remaining: int,
+        recent_action_type: str,
+        bomb_risk: float,
+    ) -> float:
+        if remaining != 5:
+            return 0.0
+        risk = bomb_risk
+        if recent_action_type == "Single":
+            risk = max(risk, 0.55)
+        if recent_action_type in ("Straight", "ThreeWithTwo"):
+            risk *= 0.5
+        return self._clip01(risk)
+
+    def _infer_same_type_suppressor_outside(self, game_state=None) -> bool:
+        if not game_state:
+            return False
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction")
+        if not isinstance(greater_action, list) or len(greater_action) < 2:
+            return False
+
+        action_type = str(greater_action[0] or "")
+        target_rank = str(greater_action[1] or "")
+        if not action_type or action_type == "PASS":
+            return False
+
+        if greater_pos in self._t.opponents:
+            action_list = game_state.get("actionList") or []
+            return any(
+                isinstance(action, list)
+                and len(action) >= 1
+                and action[0] == action_type
+                and action[0] != "PASS"
+                for action in action_list
+            )
+
+        if greater_pos in (self._t.my_pos, self._t.partner_pos):
+            return self._can_any_enemy_form_same_type(action_type, target_rank)
+
+        return False
+
+    def _estimate_teammate_cover_confidence(self, game_state=None) -> float:
+        partner_pos = self._t.partner_pos
+        remaining = self._t.hand_counts.get(partner_pos, 27)
+        if remaining <= 0:
+            base = 1.0
+        elif remaining <= 2:
+            base = 0.85
+        elif remaining <= 4:
+            base = 0.70
+        elif remaining <= 6:
+            base = 0.55
+        elif remaining <= 10:
+            base = 0.35
+        else:
+            base = 0.20
+
+        safe_rank_count = sum(1 for rank in RANKS if self.is_rank_safe(rank))
+        if safe_rank_count >= 4:
+            base += 0.10
+        elif safe_rank_count >= 2:
+            base += 0.05
+
+        if game_state:
+            greater_pos = game_state.get("greaterPos", -1)
+            greater_action = game_state.get("greaterAction")
+            same_type_suppressor_outside = self._infer_same_type_suppressor_outside(game_state)
+            if greater_pos == partner_pos:
+                if (
+                    isinstance(greater_action, list)
+                    and len(greater_action) >= 1
+                    and greater_action[0] in ("Bomb", "StraightFlush")
+                ):
+                    return 1.0
+                if not same_type_suppressor_outside:
+                    base = max(base, 0.90)
+
+        enemy_bomb_risk_max = max(
+            (self._t.get_opponent_bomb_risk(opp) for opp in self._t.opponents),
+            default=0.0,
+        )
+        if enemy_bomb_risk_max >= 0.8 and remaining >= 6:
+            base -= 0.10
+
+        return self._clip01(base)
+
+    def _estimate_teammate_rear_single_cover_confidence(self, game_state=None) -> float:
+        """估算：上家敌方报尽单张时，尾位队友是否大概率仍有可接单张。"""
+        if not game_state:
+            return 0.0
+
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction")
+        if greater_pos not in self._t.opponents:
+            return 0.0
+        if greater_pos != (self._t.my_pos + 3) % 4:
+            return 0.0
+        if not isinstance(greater_action, list) or len(greater_action) < 3:
+            return 0.0
+        if str(greater_action[0] or "") != "Single":
+            return 0.0
+
+        partner_pos = self._t.partner_pos
+        try:
+            partner_remaining = int(self._t.hand_counts.get(partner_pos, 0))
+        except (TypeError, ValueError):
+            partner_remaining = 0
+        if partner_remaining <= 0:
+            return 0.0
+
+        try:
+            leader_remaining = int(self._t.hand_counts.get(greater_pos, 27))
+        except (TypeError, ValueError):
+            leader_remaining = 27
+        if leader_remaining > 0:
+            return 0.0
+
+        trailing_enemy = next(
+            (seat for seat in self._t.opponents if seat != greater_pos),
+            -1,
+        )
+        try:
+            trailing_enemy_remaining = int(self._t.hand_counts.get(trailing_enemy, 0))
+        except (TypeError, ValueError):
+            trailing_enemy_remaining = 0
+        total_slots = partner_remaining + trailing_enemy_remaining
+        if total_slots <= 0:
+            return 0.0
+
+        cards = greater_action[2] if isinstance(greater_action[2], list) else []
+        if cards:
+            target_rank = _parse_card_rank_fast(str(cards[0]))
+        else:
+            raw_rank = str(greater_action[1] or "")
+            target_rank = {"R": "HR", "B": "SB", "10": "T"}.get(raw_rank, raw_rank)
+
+        target_value = RANK_VALUE_WITH_JOKERS.get(target_rank)
+        if target_value is None:
+            return 0.0
+
+        higher_candidates = 0
+        exact_partner_cover = False
+        for card_type, value in RANK_VALUE_WITH_JOKERS.items():
+            if value <= target_value:
+                continue
+            if card_type in ("SB", "HR"):
+                copies = self._t.card_state.get(card_type, [-1, -1])
+            else:
+                copies = []
+                for suit in SUITS:
+                    copies.extend(self._t.card_state.get(f"{suit}{card_type}", [-1, -1]))
+            for owner in copies:
+                if owner == MemoryTracker.PARTNER_HAND:
+                    exact_partner_cover = True
+                if owner not in (MemoryTracker.MY_HAND, MemoryTracker.PLAYED):
+                    higher_candidates += 1
+
+        if exact_partner_cover:
+            return 1.0
+        if higher_candidates <= 0:
+            return 0.0
+
+        higher_candidates = min(higher_candidates, total_slots)
+        if higher_candidates >= total_slots:
+            return 1.0
+
+        safe_without_cover = total_slots - higher_candidates
+        if safe_without_cover < partner_remaining:
+            return 1.0
+
+        no_cover = comb(safe_without_cover, partner_remaining) / comb(
+            total_slots, partner_remaining
+        )
+        return self._clip01(1.0 - no_cover)
+
+    def infer_phase_relation(self, game_state=None) -> Dict[str, Any]:
+        """GUA-094：规则版推断层最小闭环。
+
+        只输出标签/概率，不直接改 actIndex，供后续 stage_2 专用决策器消费。
+        """
+        hand_counts = dict(self._t.hand_counts)
+        opp_bomb_risks = {
+            opp: self._t.get_opponent_bomb_risk(opp) for opp in self._t.opponents
+        }
+
+        enemy_shape_hints: Dict[int, str] = {}
+        enemy_bomb_plus_single_risks: Dict[int, float] = {}
+        for opp in sorted(self._t.opponents):
+            remaining = hand_counts.get(opp, 27)
+            recent_action_type = self._get_recent_action_type(opp, game_state)
+            bomb_risk = opp_bomb_risks.get(opp, 0.0)
+            enemy_shape_hints[opp] = self._infer_enemy_shape_hint(
+                remaining, recent_action_type, bomb_risk
+            )
+            enemy_bomb_plus_single_risks[opp] = self._estimate_bomb_plus_single_risk(
+                remaining, recent_action_type, bomb_risk
+            )
+
+        critical_enemy_seat = min(
+            self._t.opponents,
+            key=lambda seat: (hand_counts.get(seat, 27), seat),
+        )
+        same_type_suppressor_outside = self._infer_same_type_suppressor_outside(game_state)
+
+        return {
+            "critical_enemy_seat": critical_enemy_seat,
+            "enemy_shape_hint": enemy_shape_hints.get(critical_enemy_seat, "unknown"),
+            "enemy_shape_hints": enemy_shape_hints,
+            "enemy_bomb_plus_single_risks": enemy_bomb_plus_single_risks,
+            "teammate_cover_confidence": self._estimate_teammate_cover_confidence(
+                game_state
+            ),
+            "teammate_rear_single_cover_confidence": (
+                self._estimate_teammate_rear_single_cover_confidence(game_state)
+            ),
+            "same_type_suppressor_outside": same_type_suppressor_outside,
+            "enemy_bomb_risk_max": max(opp_bomb_risks.values(), default=0.0),
+        }
 
     # ── 全局信号 ──────────────────────────────────────
 

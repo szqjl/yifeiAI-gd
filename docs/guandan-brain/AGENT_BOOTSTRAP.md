@@ -134,6 +134,21 @@ python scripts/wiki.py lint         # 健康检查（断链/孤立/格式）
 | 改 **V7** 引擎/策略 | `ISSUES` V7 段落（GUA-050+）、`V7-实施方案.md`、引擎入口 `ultimate_win_rate_engine_v7.py::decide()` |
 | 改 **V7 NN 模型** | `ISSUES` + `ITERATIONS` V7 训练相关行 + 模型目录 `models/` |
 
+### V7 执行卡片（默认闭环）
+
+```text
+replay / 异常扫描 / 批跑结果
+→ WF-12：先判断是单副现象还是一类局面
+→ 过《V7-架构演进与新增规则准入治理》5问准入审查
+→ 定落点：_phase_relation / _belief / intent / scorer / hard safety constraint / 驳回
+→ 修复 + 构造态回归 + trace
+→ 净盘批跑（WF-04）
+→ replay 复核
+→ 再把新发现送回同一闭环
+```
+
+**禁止**：`发现 bug → 直接加规则 → 批跑` 的原始补丁循环。
+
 ---
 
 ## 5. 提交/推送检查清单
