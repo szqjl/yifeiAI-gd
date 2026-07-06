@@ -108,22 +108,22 @@ class TestR08FeedTeammateSingle:
 
 
 # ════════════════════════════════════════════
-#  R09: 队友剩 5 张送 Pair/ThreeWithTwo
+#  R09: 队友剩 5 张 → assist_prefer_for(5) 过滤
 # ════════════════════════════════════════════
 
 class TestR09FeedTeammate5:
     def test_teammate_5_cards_active(self):
-        """主动 + 队友剩 5 张 → 优先 Pair/ThreeWithTwo + PASS"""
+        """主动 + 队友剩 5 张 → Straight/ThreeWithTwo/Single + PASS"""
         actions = [
-            ["PASS"], ["SA"],  # 0:PASS, 1:Single
-            ["S2","H2"], ["S3","H3","D3"],  # 2:Pair, 3:Trips
-            ["S4","H4","D4","C4","S5"],  # 4:? (bomb+single, not ThreeWithTwo)
+            ["PASS"], ["Single", "A", ["SA"]],
+            ["Pair", "2", ["S2", "H2"]],
+            ["Trips", "3", ["S3", "H3", "D3"]],
         ]
         result = _rule_r09_feed_teammate_5(
             actions, cur_pos=0, my_pos=0, numofplayers=[27, 20, 5, 20])
-        # 只有 index 2 是 Pair，无 ThreeWithTwo → kept=[2,0]
-        assert 2 in result, f"应保留 Pair(index 2)，实际 {result}"
-        assert 0 in result, f"应保留 PASS(index 0)，实际 {result}"
+        assert 1 in result, f"应保留 Single，实际 {result}"
+        assert 0 in result, f"应保留 PASS，实际 {result}"
+        assert 2 not in result, f"不应保留 Pair，实际 {result}"
 
     def test_teammate_not_5_cards(self):
         """队友剩 8 张 → 不触发"""
@@ -141,11 +141,11 @@ class TestR09FeedTeammate5:
         assert result == [0, 1], f"被动不应触发，实际 {result}"
 
     def test_teammate_5_no_pair_sthree(self):
-        """队友剩 5 张但无 Pair/ThreeWithTwo → 全部保留"""
-        actions = [["PASS"], ["SA"], ["S3","H3","D3"]]
+        """队友剩 5 张有 Single 无 TWT → 保留 Single + PASS"""
+        actions = [["PASS"], ["Single", "A", ["SA"]], ["Trips", "3", ["S3", "H3", "D3"]]]
         result = _rule_r09_feed_teammate_5(
             actions, cur_pos=0, my_pos=0, numofplayers=[27, 20, 5, 20])
-        assert result == [0, 1, 2], f"无目标牌型应保留全部，实际 {result}"
+        assert result == [1, 0], f"应保留 Single+PASS，实际 {result}"
 
 
 # ════════════════════════════════════════════

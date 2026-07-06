@@ -97,3 +97,5 @@
 - ✅ **必须**记录批跑日志路径（`logs/v7_vs_lalala_*.log`）
 | 2026-06-30 | GUA-097-GUA-091-BASELINE | [BASELINE] GUA-091 关闭 | `C:\Users\Jennifer\AppData\Local\Programs\Python\Python313\python.exe D:\guandanscore\YiFeiAI-GD\scripts\launchers\v7\run_v7_vs_lalala_games.py --games 3` | 3 | 0/3 (0.0%) | 60 | GUA-097 baseline (GUA-091 off: stage_2 中局入口 _stage_mid_dispatch) |
 | 2026-06-30 | GUA-097-GUA-091 | [ENABLE] 启用 GUA-091 | `C:\Users\Jennifer\AppData\Local\Programs\Python\Python313\python.exe D:\guandanscore\YiFeiAI-GD\scripts\launchers\v7\run_v7_vs_lalala_games.py --games 3` | 3 | 0/3 (0.0%) | 32 | GUA-097 enable GUA-091 (stage_2 中局入口 _stage_mid_dispatch) |
+| 2026-07-03 | GUA-114 | 三带二 min 压带牌 orphan 规避（natural pair 优先） | `python scripts/launchers/v7/run_v7_vs_lalala_games.py --games 3` | 3 | 0/3 (0.0%) | 56 | 净盘批跑 WF-04；队胜 0/3；副胜 4/28=14.3%；vn=[0,3,0,3] |
+| 2026-07-04 | GUA-103 | 收窄 min 炸：拆五星留同点孤张→完整五星炸 | `python scripts/launchers/v7/run_v7_vs_lalala_games.py --games 3` | 3 | 0/3 (0.0%) | 68 | 净盘 WF-04；队胜 0/3；副胜 4/34=11.8%；vn=[0,3,0,3]；R-G080-4 零退化；残局扫描 1 条；L2: `logs/v7_vs_lalala_20260704_115401.log` |

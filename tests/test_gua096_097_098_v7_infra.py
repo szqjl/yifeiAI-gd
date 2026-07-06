@@ -16,14 +16,14 @@ def test_gua098_decision_tracer_basic():
     """GUA-098: DecisionTracer 基本流程"""
     from src.v.nn.tracing.decision_trace import DecisionTracer
     t = DecisionTracer(my_pos=2, game_id="test_basic_001", enable=True)
-    t.begin_step(hand_size=27, cur_rank="2", stage="stage_0_1", cur_pos=2, greater_pos=2)
+    t.begin_step(hand_size=27, cur_rank="2", stage="stage_0", cur_pos=2, greater_pos=2)
     t.record_layer1(source="MemoryTracker", payload="4 王已出 2")
     t.record_layer2(ip_id="IP-07", delta=0.3, oppo="p3", comment="对手无单推断")
     t.record_guard(rule_id="R05", filtered_count=2, reason="teammate is greater")
     t.end_step(actIndex=12, chosen_action=["Single", "A", ["DA"]])
     summary = t.get_summary()
     assert summary["steps"] == 1
-    assert summary["stages"]["stage_0_1"] == 1
+    assert summary["stages"]["stage_0"] == 1
     assert summary["ip_counter"]["IP-07"] == 1
     assert summary["guard_counter"]["R05"] == 1
     assert summary["avg_ms"] >= 0
@@ -33,13 +33,14 @@ def test_gua098_decision_tracer_multi_step():
     """GUA-098: 多步阶段分布"""
     from src.v.nn.tracing.decision_trace import DecisionTracer
     t = DecisionTracer(my_pos=0, game_id="test_multi_001", enable=True)
-    stages = ["stage_0_1", "stage_0_1", "stage_2", "stage_2", "stage_3"]
+    stages = ["stage_0", "stage_1", "stage_2", "stage_2", "stage_3"]
     for i, stg in enumerate(stages):
         t.begin_step(hand_size=27 - i * 5, cur_rank="2", stage=stg)
         t.end_step(actIndex=i, chosen_action=["Pass"])
     summary = t.get_summary()
     assert summary["steps"] == 5
-    assert summary["stages"]["stage_0_1"] == 2
+    assert summary["stages"]["stage_0"] == 1
+    assert summary["stages"]["stage_1"] == 1
     assert summary["stages"]["stage_2"] == 2
     assert summary["stages"]["stage_3"] == 1
 
@@ -60,7 +61,7 @@ def test_gua098_decision_tracer_disabled():
     """GUA-098: enable=False 时不记录"""
     from src.v.nn.tracing.decision_trace import DecisionTracer
     t = DecisionTracer(my_pos=2, game_id="test_dis_001", enable=False)
-    t.begin_step(hand_size=27, cur_rank="2", stage="stage_0_1")
+    t.begin_step(hand_size=27, cur_rank="2", stage="stage_0")
     t.end_step(actIndex=0, chosen_action=["Pass"])
     assert t.get_summary()["steps"] == 0
 
@@ -73,7 +74,7 @@ def test_gua098_decision_tracer_flush(tmp_path):
     decision_trace.TRACE_DIR = tmp_path
     try:
         t = decision_trace.DecisionTracer(my_pos=2, game_id="flush_test", enable=True)
-        t.begin_step(hand_size=27, cur_rank="2", stage="stage_0_1")
+        t.begin_step(hand_size=27, cur_rank="2", stage="stage_0")
         t.end_step(actIndex=5, chosen_action=["Single", "3", ["D3"]])
         fp = t.flush_to_jsonl()
         assert fp is not None
@@ -83,6 +84,47 @@ def test_gua098_decision_tracer_flush(tmp_path):
         data = json.loads(content)
         assert data["hand_size"] == 27
         assert data["actIndex_chosen"] == 5
+    finally:
+        decision_trace.TRACE_DIR = orig
+
+
+def test_gua098_decision_tracer_records_joker_signal(tmp_path):
+    """GUA-098: joker_signal 写入 trace 且 log 行可 grep。"""
+    from src.v.nn.tracing import decision_trace
+    from src.v.nn.tracing.decision_trace import DecisionTracer, format_joker_signal_line
+
+    joker = {
+        "HR": {"played": 1, "remain": 1, "in_my_hand": 0, "with_teammate": 1, "with_opponents": 0, "unknown": 0},
+        "SB": {"played": 0, "remain": 2, "in_my_hand": 1, "with_teammate": 0, "with_opponents": 0, "unknown": 1},
+        "hr_played": 1,
+        "hr_remain": 1,
+        "hr_in_my_hand": 0,
+        "hr_with_teammate": 1,
+        "hr_with_opponents": 0,
+        "hr_unknown": 0,
+        "sb_played": 0,
+        "sb_remain": 2,
+        "sb_in_my_hand": 1,
+        "sb_with_teammate": 0,
+        "sb_with_opponents": 0,
+        "sb_unknown": 1,
+    }
+    line = format_joker_signal_line(joker)
+    assert line.startswith("joker_signal ")
+    assert "hr p=1 r=1" in line
+    assert "sb p=0 r=2" in line
+
+    orig = decision_trace.TRACE_DIR
+    decision_trace.TRACE_DIR = tmp_path
+    try:
+        t = DecisionTracer(my_pos=0, game_id="joker_trace_test", enable=True)
+        t.begin_step(hand_size=10, cur_rank="A", stage="stage_2")
+        t.record_joker_signal(joker)
+        t.end_step(actIndex=0, chosen_action=["PASS", "PASS", "PASS"])
+        fp = t.flush_to_jsonl()
+        data = json.loads(fp.read_text(encoding="utf-8").strip())
+        assert data["joker_signal"]["hr_played"] == 1
+        assert data["joker_signal"]["sb_in_my_hand"] == 1
     finally:
         decision_trace.TRACE_DIR = orig
 

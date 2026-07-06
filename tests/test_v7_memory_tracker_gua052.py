@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.v.nn.features.memory_tracker import MemoryTracker, ALL_CARD_TYPES
+from src.v.nn.features.memory_tracker import MemoryTracker, ALL_CARD_TYPES, MEMORY_TRACKER_DIM
 
 
 def test_01_init():
@@ -20,7 +20,7 @@ def test_02_init_from_hand():
     mt.init_from_hand(["S3", "H3", "S5", "D5", "BJ"])
     my_types = mt.get_my_hand_types()
     assert "S3" in my_types
-    assert "BJ" in my_types
+    assert "SB" in my_types
     assert "S5" in my_types
 
 
@@ -66,7 +66,7 @@ def test_08_state_vector_dim():
     mt.init_from_hand(["S3", "H3"])
     mt.record_play(seat=1, action=["Single", "5", ["S5"]])
     vec = mt.get_state_vector()
-    assert len(vec) == 24, f"got {len(vec)}"
+    assert len(vec) == MEMORY_TRACKER_DIM, f"got {len(vec)}"
 
 
 def test_09_reset():

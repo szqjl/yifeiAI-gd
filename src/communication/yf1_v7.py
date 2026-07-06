@@ -80,6 +80,11 @@ class YF1_V7_Client:
         # Initialize game recorder
         self.game_recorder = GameRecorder(player_id, "yf1_v7")
 
+        # 本副贡牌/抗贡 notify（供 MemoryTracker 算王）
+        self._episode_tribute_result = None
+        self._episode_anti_pos = None
+        self._episode_back_result = None
+
         self.max_decision_time = float(
             get_config().get("decision.max_decision_time", 0.8)
         )
@@ -87,6 +92,11 @@ class YF1_V7_Client:
         
         self.logger.info(f"✓ yf1_v7 initialized (Player {player_id})")
         self.logger.info(f"  - Ultimate Win Rate Engine V7: Loaded")
+
+    def _reset_episode_tribute_state(self) -> None:
+        self._episode_tribute_result = None
+        self._episode_anti_pos = None
+        self._episode_back_result = None
     
     async def connect(self):
         """Connect to game server"""
@@ -141,14 +151,20 @@ class YF1_V7_Client:
             key = notify_type or stage
 
             if key in ("gameStart", "beginning"):
+                self._reset_episode_tribute_state()
                 self.handle_game_start(notification_data)
             elif key in ("gameEnd", "gameOver", "gameResult", "episodeOver"):
+                if key == "episodeOver":
+                    self._reset_episode_tribute_state()
                 self.handle_game_end(notification_data)
             elif key == "tribute":
+                self._episode_tribute_result = notification_data.get("result")
                 self.game_recorder.record_tribute_notify(notification_data)
             elif key == "back":
+                self._episode_back_result = notification_data.get("result")
                 self.game_recorder.record_back_notify(notification_data)
             elif key == "anti-tribute":
+                self._episode_anti_pos = notification_data.get("antiPos")
                 self.logger.info(
                     "抗贡: antiNums=%s antiPos=%s",
                     notification_data.get("antiNums"),
@@ -300,6 +316,9 @@ class YF1_V7_Client:
                 self.logger.info(f"Position updated: {self.player_id} -> {my_pos} (from act myPos)")
                 self.player_id = my_pos
             action_data["myPos"] = self.player_id
+            action_data["tributeResult"] = self._episode_tribute_result
+            action_data["antiPos"] = self._episode_anti_pos
+            action_data["backResult"] = self._episode_back_result
             self.logger.info(
                 "[座位排查] 来源=yf1_v7.handle_action_request, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
                 action_data.get("myPos"), action_data.get("playerPosition"), self.player_id

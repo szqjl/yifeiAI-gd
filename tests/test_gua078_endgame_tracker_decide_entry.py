@@ -485,6 +485,65 @@ class TestGua078TrackerAtDecideEntry:
         assert act[0] == "Bomb"
         assert sorted(act[2]) == sorted(BOMB_6)
 
+    def test_q1_prefers_full_five_bomb_over_four_bomb_leaving_orphan_when_beating_pair(
+        self,
+    ):
+        """WF-12 48445203 步58：压 Pair/9 时不得拆五星炸留单 5。"""
+        from src.v.nn.endgame.endgame_decide import _sort_q1_block_candidates
+
+        hand_cards = [
+            "H2", "D2", "C4", "C4", "S5", "H5", "H5", "C5", "D5",
+            "S7", "C7", "D7", "S9", "H9", "C9", "ST", "CJ", "DQ", "SK", "DA",
+        ]
+        action_list = [
+            ["PASS", "PASS", "PASS"],
+            ["Bomb", "5", ["S5", "H5", "H5", "D5"]],
+            ["Bomb", "5", ["S5", "H5", "H5", "C5"]],
+            ["Bomb", "5", ["S5", "H5", "C5", "D5"]],
+            ["Bomb", "5", ["H5", "H5", "C5", "D5"]],
+            ["Bomb", "5", ["S5", "H5", "H5", "C5", "D5"]],
+        ]
+        cands = [(i, a) for i, a in enumerate(action_list) if a[0] != "PASS"]
+        gs = {
+            "curRank": "A",
+            "greaterAction": ["Pair", "9", ["C9", "D9"]],
+        }
+        ordered = _sort_q1_block_candidates(cands, hand_cards, gs)
+        assert ordered[0][0] == 5
+        assert len(ordered[0][1][2]) == 5
+
+        tracker = MemoryTracker(my_pos=2, enable_inference=False, max_infer_depth=0)
+        tracker.init_from_hand(hand_cards)
+        tracker.set_level_rank("A")
+        tracker.hand_counts = {0: 10, 1: 11, 2: 20, 3: 8}
+
+        gs_full = {
+            "myPos": 2,
+            "curPos": 2,
+            "greaterPos": 1,
+            "greaterAction": ["Pair", "9", ["C9", "D9"]],
+            "handCards": list(hand_cards),
+            "actionList": action_list,
+            "curRank": "A",
+            "selfRank": "A",
+            "oppoRank": "A",
+            "numofplayers": [10, 11, 20, 8],
+            "_memory_tracker": tracker,
+            "_belief": {
+                "hand_counts": {0: 10, 1: 11, 2: 20, 3: 8},
+                "opp_bomb_risks": {1: 0.3, 3: 0.2},
+            },
+        }
+        EndgamePreprocessor().preprocess(gs_full)
+        decider = EndgameDecider()
+        filtered, banned_empty = decider.apply_banned_filter(gs_full["actionList"], gs_full)
+        idx, act = decider.decide(
+            gs_full, gs_full["actionList"] if banned_empty else filtered
+        )
+        assert idx == 5
+        assert act[0] == "Bomb"
+        assert sorted(act[2]) == sorted(["S5", "H5", "H5", "C5", "D5"])
+
     def test_q1_prefers_pure_five_bomb_over_six_bomb_with_wild_when_beating_four_bomb(self):
         """对方也是炸弹时，Q1 仍应最小足够炸，禁止把纯 5 星炸无收益升成 6 星炸。"""
         tracker = MemoryTracker(my_pos=0, enable_inference=False, max_infer_depth=0)
@@ -879,3 +938,82 @@ class TestGua078TrackerAtDecideEntry:
         assert any(candidate[0] == expected_type for candidate in filtered)
         assert idx is not None
         assert act[0] == expected_type
+
+
+class TestGua113AssistYieldToTeammateControl:
+    """GUA-113：超弱/助攻在队友控牌时 Q1 必须 PASS，不得用结构牌反压队友。"""
+
+    def test_q1_assist_role_passes_when_teammate_controls_three_with_two(self):
+        """锚点：20260702195833037993 66/84 — 超弱不得用 KKK+66 压队友 T 三带二。"""
+        hand_cards = ["C6", "D6", "H8", "D9", "ST", "DQ", "CK", "DK", "DK"]
+        tracker = MemoryTracker(my_pos=0, enable_inference=False, max_infer_depth=0)
+        tracker.init_from_hand(hand_cards)
+        tracker.set_level_rank("3")
+        tracker.hand_counts = {0: 9, 1: 12, 2: 8, 3: 10}
+
+        gs = {
+            "myPos": 0,
+            "curPos": 0,
+            "greaterPos": 2,
+            "greaterAction": ["ThreeWithTwo", "T", ["HT", "HT", "DT", "HJ", "HJ"]],
+            "handCards": list(hand_cards),
+            "actionList": [
+                ["PASS", "PASS", "PASS"],
+                ["ThreeWithTwo", "K", ["CK", "DK", "DK", "C6", "D6"]],
+            ],
+            "curRank": "3",
+            "selfRank": "2",
+            "oppoRank": "3",
+            "numofplayers": [9, 12, 8, 10],
+            "_memory_tracker": tracker,
+            "_role": "超弱",
+            "_belief": {
+                "hand_counts": {0: 9, 1: 12, 2: 8, 3: 10},
+                "opp_bomb_risks": {1: 0.5, 3: 0.5},
+            },
+        }
+
+        EndgamePreprocessor().preprocess(gs)
+        decider = EndgameDecider()
+        idx, act = decider.decide(gs, gs["actionList"])
+
+        assert idx == 0
+        assert act[0] == "PASS"
+
+    def test_q1_main_attack_may_still_press_when_enemy_can_suppress_teammate(self):
+        """主攻在同圈况下仍可帮挡（记牌推断敌或可压队友 T 三带二）。"""
+        hand_cards = ["C6", "D6", "H8", "D9", "ST", "DQ", "CK", "DK", "DK"]
+        tracker = MemoryTracker(my_pos=0, enable_inference=False, max_infer_depth=0)
+        tracker.init_from_hand(hand_cards)
+        tracker.set_level_rank("3")
+        tracker.hand_counts = {0: 9, 1: 12, 2: 8, 3: 10}
+
+        gs = {
+            "myPos": 0,
+            "curPos": 0,
+            "greaterPos": 2,
+            "greaterAction": ["ThreeWithTwo", "T", ["HT", "HT", "DT", "HJ", "HJ"]],
+            "handCards": list(hand_cards),
+            "actionList": [
+                ["PASS", "PASS", "PASS"],
+                ["ThreeWithTwo", "K", ["CK", "DK", "DK", "C6", "D6"]],
+            ],
+            "curRank": "3",
+            "selfRank": "2",
+            "oppoRank": "3",
+            "numofplayers": [9, 12, 8, 10],
+            "_memory_tracker": tracker,
+            "_role": "主攻",
+            "_belief": {
+                "hand_counts": {0: 9, 1: 12, 2: 8, 3: 10},
+                "opp_bomb_risks": {1: 0.5, 3: 0.5},
+            },
+        }
+
+        EndgamePreprocessor().preprocess(gs)
+        decider = EndgameDecider()
+        idx, act = decider.decide(gs, gs["actionList"])
+
+        assert idx == 1
+        assert act[0] == "ThreeWithTwo"
+        assert act[1] == "K"

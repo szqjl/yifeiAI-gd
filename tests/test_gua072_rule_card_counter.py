@@ -208,6 +208,65 @@ class TestGetBeliefIntegration:
         assert b["can_opp_suppress_current"] is True  # 队友不在 opponents 集合
 
 
+class TestJokerTrackingAndOwnership:
+    """大小王：已出/剩余/在我手/队友/对手归属。"""
+
+    def test_joker_signal_remain_and_played(self):
+        t = _make_tracker()
+        t.init_from_hand(["HR"])
+        t.sync_my_jokers(["HR"])
+        _play(t, 1, ["SB"])
+        c = RuleCardCounter(t)
+        j = c.get_joker_signal()
+        assert j["hr_played"] == 0
+        assert j["hr_remain"] == 2
+        assert j["hr_in_my_hand"] == 1
+        assert j["sb_played"] == 1
+        assert j["sb_remain"] == 1
+
+    def test_joker_unknown_count_includes_sb_hr(self):
+        t = _make_tracker()
+        c = RuleCardCounter(t)
+        assert c.get_rank_unknown_count("HR") == 2
+        assert c.get_rank_unknown_count("SB") == 2
+        _play(t, 0, ["HR"])
+        assert c.get_rank_unknown_count("HR") == 1
+
+    def test_infer_remaining_hr_outside_me_when_opp_plays_one(self):
+        """敌家出 1 张 HR 且剩牌很少 → 另一张 HR 推断在队友（不在我手）。"""
+        t = MemoryTracker(my_pos=0, enable_inference=False, max_infer_depth=0)
+        t.init_from_hand([])
+        t.hand_counts[3] = 4
+        _play(t, 3, ["HR"])
+        tracking = t.get_joker_tracking()["HR"]
+        assert tracking["played"] == 1
+        assert tracking["in_my_hand"] == 0
+        assert tracking["outside_my_hand"] == 1
+        assert tracking["with_teammate"] == 1
+        assert tracking["unknown"] == 0
+
+    def test_infer_remaining_sb_with_teammate_when_opp_shows_low_hand(self):
+        """仅敌家出过 SB 且该敌剩牌很少 → 另一张 SB 推断在队友。"""
+        t = MemoryTracker(my_pos=0, enable_inference=False, max_infer_depth=0)
+        t.init_from_hand([])
+        t.hand_counts[3] = 3
+        _play(t, 3, ["SB"])
+        tracking = t.get_joker_tracking()["SB"]
+        assert tracking["played"] == 1
+        assert tracking["with_teammate"] == 1
+        assert tracking["in_my_hand"] == 0
+
+    def test_belief_includes_joker_signal(self):
+        t = _make_tracker()
+        _play(t, 0, ["HR"])
+        _play(t, 2, ["HR"])
+        b = RuleCardCounter(t).get_belief()
+        assert b["hr_played"] == 2
+        assert b["hr_remain"] == 0
+        assert b["joker_signal"]["HR"]["played"] == 2
+        assert "sb_with_opponents" in b["joker_signal"]
+
+
 class TestFactoryFunction:
     """create_counter_from_tracker 工厂函数。"""
 

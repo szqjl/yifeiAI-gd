@@ -216,6 +216,8 @@ class UltimateWinRateEngineV7:
         if tracer is None:
             return
         try:
+            from src.v.nn.tracing.decision_trace import format_joker_signal_line
+
             hand_cards = game_state.get("handCards", []) or []
             tracer.begin_step(
                 hand_size=len(hand_cards) if hand_cards else 27,
@@ -232,12 +234,26 @@ class UltimateWinRateEngineV7:
                 },
             )
             belief = game_state.get("_belief") or {}
+            joker_signal = belief.get("joker_signal")
+            if joker_signal:
+                tracer.record_joker_signal(joker_signal)
+                self.logger.info(
+                    "%s stage=%s curPos=%s greaterPos=%s",
+                    format_joker_signal_line(joker_signal),
+                    game_state.get("_current_stage", ""),
+                    game_state.get("curPos", -1),
+                    game_state.get("greaterPos", -1),
+                )
             tracer.record_layer1(
                 source="belief",
                 payload={
                     "opp_bomb_risks": belief.get("opp_bomb_risks", {}),
                     "hand_counts": belief.get("hand_counts", {}),
                     "can_opp_suppress_current": belief.get("can_opp_suppress_current"),
+                    "hr_played": belief.get("hr_played"),
+                    "hr_remain": belief.get("hr_remain"),
+                    "sb_played": belief.get("sb_played"),
+                    "sb_remain": belief.get("sb_remain"),
                 },
             )
             phase_relation = game_state.get("_phase_relation") or {}
@@ -374,7 +390,7 @@ class UltimateWinRateEngineV7:
         self._inject_phase_relation(game_state)
 
         # ── ②d GUA-089 阶段调度（§7.4 伪代码落地）──
-        # 按当前手牌张数切 3 阶段，存入 game_state[‘_current_stage’]
+        # 按当前手牌张数切 4 阶段，存入 game_state['_current_stage']
         # 与 STAGE_RULE_MAP / STAGE_ENGINE_MAP 一道，供后续 _recommend_play / 下游 GUA-090/091/092 消费
         try:
             from src.v.nn.dispatcher import _dispatch_by_stage, stage_description
@@ -390,8 +406,8 @@ class UltimateWinRateEngineV7:
             )
             self._dispatch_stage_count += 1
         except Exception as e:
-            self.logger.warning("GUA-089 阶段调度异常: %s, 默认 stage_0_1", e)
-            game_state["_current_stage"] = "stage_0_1"
+            self.logger.warning("GUA-089 阶段调度异常: %s, 默认 stage_1", e)
+            game_state["_current_stage"] = "stage_1"
         self._trace_begin_step(game_state, action_list)
 
         # ── ③ 接风跟线记忆 ──
@@ -403,6 +419,9 @@ class UltimateWinRateEngineV7:
 
         # ══════════════ ★ 残局管线：预处理 + Q0→Q3 决策 ══════════════
         # 注入点：_inject_numofplayers 之后，GUA-075 主路径之前
+        # GUA-113: 残局 Q1 消费组牌 role（超弱/助攻让道队友控牌）
+        game_state["_role"] = self._current_role or "主攻"
+
         # GUA-080: 注入组牌数据到 game_state，预处理器需要 _group_type_map 做冲刺判定
         if self._card_mask and self._group_type_map:
             # 转换 gid→type 为 type→count（预处理器格式）
@@ -414,6 +433,12 @@ class UltimateWinRateEngineV7:
             if scatter_count > 0:
                 type_counts["scatter"] = scatter_count
             game_state["_group_type_map"] = type_counts
+        if self._card_mask:
+            game_state["_card_mask"] = self._card_mask
+        if self._group_type_map:
+            game_state["_group_gid_type_map"] = dict(self._group_type_map)
+        if self._group_members:
+            game_state["_group_members"] = self._group_members
         # 若残局命中 → 直接返回；未命中 → 继续 GUA-075 + Guard + NN + heuristic
         try:
             from src.v.nn.endgame.endgame_preprocessor import EndgamePreprocessor
@@ -763,6 +788,69 @@ class UltimateWinRateEngineV7:
             self.logger.debug("phase relation inject skip: %s", e)
             game_state.pop("_phase_relation", None)
 
+    def _joker_belief_from_state(self, game_state: Dict[str, Any]) -> Dict[str, int]:
+        """GUA-072：从 _belief['joker_signal'] 读取大小王归属推断。"""
+        joker = (game_state.get("_belief") or {}).get("joker_signal") or {}
+
+        def _int(key: str) -> int:
+            try:
+                return int(joker.get(key, 0) or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        return {
+            "hr_with_opponents": _int("hr_with_opponents"),
+            "sb_with_opponents": _int("sb_with_opponents"),
+            "hr_in_my_hand": _int("hr_in_my_hand"),
+            "sb_in_my_hand": _int("sb_in_my_hand"),
+        }
+
+    def _recommendation_uses_joker(self, rec: Optional[Dict[str, Any]]) -> bool:
+        """推荐是否为单张大小王。"""
+        if not rec or rec.get("type") != "Single":
+            return False
+        cards = rec.get("cards") or []
+        if not cards:
+            return False
+        from src.v.nn.guards.v7_guards import get_card_rank
+
+        return get_card_rank(str(cards[0])) in ("HR", "SB")
+
+    def _filter_joker_lead_singles(
+        self, singles: List[str], game_state: Dict[str, Any]
+    ) -> List[str]:
+        """对手侧推断双 HR 时不领出王；单 HR 时不领大王。"""
+        from src.v.nn.guards.v7_guards import get_card_rank
+
+        jb = self._joker_belief_from_state(game_state)
+        hr_opp = jb["hr_with_opponents"]
+        if hr_opp >= 2:
+            filtered = [c for c in singles if get_card_rank(str(c)) not in ("HR", "SB")]
+            return filtered if filtered else singles
+        if hr_opp >= 1:
+            filtered = [c for c in singles if get_card_rank(str(c)) != "HR"]
+            return filtered if filtered else singles
+        return singles
+
+    def _filter_joker_press_single_candidates(
+        self,
+        candidates: List[Tuple[Any, str, str]],
+        game_state: Dict[str, Any],
+    ) -> List[Tuple[Any, str, str]]:
+        """跟单候选：有非 HR 可压时不用 HR；推断双 HR 时优先 SB。"""
+        jb = self._joker_belief_from_state(game_state)
+        hr_opp = jb["hr_with_opponents"]
+        if hr_opp < 1 or not candidates:
+            return candidates
+        non_hr = [t for t in candidates if t[2] != "HR"]
+        if non_hr:
+            return non_hr
+        if hr_opp >= 2:
+            sb_only = [t for t in candidates if t[2] == "SB"]
+            if sb_only:
+                return sb_only
+        return candidates
+
     def _estimate_sprint_fire_signal(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
         """GUA-102：基于组牌完备度估算“整牌冲刺点火”信号。"""
         from collections import Counter
@@ -915,9 +1003,21 @@ class UltimateWinRateEngineV7:
             if seat < 0:
                 continue
             action = h.get("action") or h.get("curAction") or []
-            if action and (not isinstance(action, list) or action[0] != "PASS"):
-                self._tracker.record_play(seat, action)
+            ctx = h.get("context") or {}
+            if action and (not isinstance(action, list) or str(action[0]).upper() != "PASS"):
+                self._tracker.record_play(seat, action, context=ctx)
         self._tracker_history_replayed = len(history)
+
+        cur_rank = str(game_state.get("curRank", "2"))
+        self._tracker.sync_tribute_phase_from_state(
+            tribute_result=game_state.get("tributeResult"),
+            back_result=game_state.get("backResult"),
+            anti_pos=game_state.get("antiPos"),
+            cur_rank=cur_rank,
+        )
+
+        if hand_cards:
+            self._tracker.sync_my_jokers(hand_cards)
 
         if not history:
             recent = game_state.get("recentPlays", [])
@@ -2302,6 +2402,8 @@ class UltimateWinRateEngineV7:
 
         belief = game_state.get("_belief") or {}
         belief_hand_counts = belief.get("hand_counts") or numofplayers
+        joker_belief = self._joker_belief_from_state(game_state)
+        hr_with_opponents = joker_belief["hr_with_opponents"]
 
         # ── 预扫描：用于规则 ⑥⑦ ──
         # 对手出牌的 rank value
@@ -2465,8 +2567,11 @@ class UltimateWinRateEngineV7:
                 card_rank = get_card_rank(str(card))
                 card_val = get_card_value(str(card), cur_rank)
                 gap = card_val - greater_val
+                joker_gap_penalty = 500
+                if hr_with_opponents >= 1:
+                    joker_gap_penalty = 800
                 if card_rank in ("HR", "SB") and is_early_game and gap > JOKER_MAX_GAP:
-                    score -= 500  # 早期用王压小牌，严重扣分
+                    score -= joker_gap_penalty
 
             # ⑦ GUA-071: 小王优先 — 有 SB 可用时不用 HR
             if is_single and has_sb_single and not is_pass:
@@ -2474,6 +2579,26 @@ class UltimateWinRateEngineV7:
                 card = cards[0] if cards else (action[0] if len(action) >= 1 else "")
                 if get_card_rank(str(card)) == "HR":
                     score -= 300  # SB 可用却用 HR，浪费
+
+            # ⑩ GUA-072: 推断对手侧双 HR → 避免领出/跟压王、避免早期小单试探
+            if is_single and not is_pass and hr_with_opponents >= 2:
+                cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else action
+                card = cards[0] if cards else (action[0] if len(action) >= 1 else "")
+                card_rank = get_card_rank(str(card))
+                if card_rank in ("HR", "SB"):
+                    score -= 900
+                elif greater_val <= 0 and is_early_game:
+                    score -= 200
+
+            # ⑪ GUA-072: 推断对手侧 ≥1 HR → 跟压时优先 PASS，勿浪费王
+            if (
+                is_pass
+                and hr_with_opponents >= 2
+                and greater_action
+                and greater_action[0] != "PASS"
+                and get_action_type(greater_action) == ACTION_TYPE_SINGLE
+            ):
+                score += 350
 
             # ⑧ GUA-071: 有同型非炸弹可压时不该炸
             # 对手出三张/顺子/钢板等，自己有同型牌能压，却选炸弹 → 浪费炸弹
@@ -2596,6 +2721,8 @@ class UltimateWinRateEngineV7:
             greater_type = get_action_type(greater_action)
             greater_rank = get_action_rank(greater_action) or ""
 
+        role = self._current_role or "主攻"
+
         # ── 内联辅助：验证推荐是否在 actionList 中，不在则尝试宽松匹配 ──
         def _ensure_valid(rec: Dict[str, Any], scenario_label: str) -> Optional[Dict[str, Any]]:
             """确保推荐在 actionList 中；精确匹配失败则做 type+rank 宽松匹配。"""
@@ -2645,10 +2772,45 @@ class UltimateWinRateEngineV7:
                 scenario_label, r_type, r_rank, r_cards, al_sample)
             return None
 
-        # ── GUA-090：stage_0_1 开局入口 ──
-        # 先让开局阶段拥有自己的意图驱动推荐器；
-        # 若命不中或当前并非其负责场景，再回落到 GUA-075 通用四场景逻辑。
-        if current_stage == "stage_0_1":
+        # ── GUA-117：助攻/超弱 领出（先于 090/091，避免 fake feed / 主攻逻辑）──
+        if role in ("助攻", "超弱"):
+            if is_teammate:
+                self.logger.info(
+                    "GUA-117 推荐: 让队友 → PASS (teammatePos=%d)", teammate_pos)
+                return {
+                    "type": "PASS",
+                    "rank": "",
+                    "cards": [],
+                    "intent": "assist_yield_teammate",
+                }
+            if is_lead:
+                from src.v.nn.stage_assist_feed import recommend_assist_lead
+                assist_rec = recommend_assist_lead(
+                    self,
+                    game_state,
+                    card_mask,
+                    hand_cards,
+                    cur_rank,
+                    current_stage,
+                    teammate_pos,
+                    action_list,
+                )
+                assist_rec = _ensure_valid(assist_rec, "GUA-117 助攻领出") if assist_rec else None
+                if assist_rec:
+                    self.logger.info(
+                        "GUA-117 助攻领出: intent=%s → type=%s rank=%s cards=%s",
+                        assist_rec.get("intent"),
+                        assist_rec.get("type"),
+                        assist_rec.get("rank"),
+                        assist_rec.get("cards"),
+                    )
+                    self._last_stage_intent = assist_rec.get("intent")
+                    return assist_rec
+
+        # ── GUA-090：stage_0 / stage_1 开局与初期入口 ──
+        # stage_0（27 张）= 组牌+角色；stage_1（21-26）= 初期动态；暂共用 _stage_open_plan。
+        # 若命不中，再回落到 GUA-075 通用四场景逻辑。
+        if current_stage in ("stage_0", "stage_1"):
             stage_rec = self._stage_open_plan(
                 game_state=game_state,
                 card_mask=card_mask,
@@ -2708,7 +2870,19 @@ class UltimateWinRateEngineV7:
 
         # ── ② 领出场景 ──
         if is_lead:
-            rec = self._recommend_lead_impl(game_state, card_mask, hand_cards, cur_rank)
+            if role in ("助攻", "超弱"):
+                return None
+            from src.v.nn.stage_main_attack_lead import recommend_main_attack_lead
+            rec = recommend_main_attack_lead(
+                self,
+                game_state,
+                card_mask,
+                hand_cards,
+                cur_rank,
+                game_state.get("_current_stage", "stage_1"),
+            )
+            if not rec:
+                rec = self._recommend_lead_impl(game_state, card_mask, hand_cards, cur_rank)
             rec = _ensure_valid(rec, f"领出(curPos=start)")
             if rec:
                 self.logger.info(
@@ -2804,7 +2978,7 @@ class UltimateWinRateEngineV7:
         teammate_pos: int,
     ) -> Optional[Dict[str, Any]]:
         """
-        GUA-090：开局阶段（stage_0_1）专用入口。
+        GUA-090：开局/初期阶段（stage_0 / stage_1）专用入口。
 
         目标不是“随手挑一个最小合法动作”，而是先产出开局意图：
           1. 队友控牌时优先让道
@@ -2819,6 +2993,22 @@ class UltimateWinRateEngineV7:
             return self.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
 
         role = self._current_role or "主攻"
+        if role in ("助攻", "超弱") and is_lead:
+            return None
+
+        if role in ("主攻", "超强主攻") and is_lead:
+            from src.v.nn.stage_main_attack_lead import recommend_main_attack_lead
+            main_rec = recommend_main_attack_lead(
+                self,
+                game_state,
+                card_mask,
+                hand_cards,
+                cur_rank,
+                game_state.get("_current_stage", "stage_1"),
+            )
+            if main_rec:
+                return main_rec
+
         groups = self._build_group_index(card_mask)
         group_type_map = self._group_type_map or {}
         group_members = self._group_members or None
@@ -2992,6 +3182,8 @@ class UltimateWinRateEngineV7:
             and critical_enemy_remaining <= 0
             and teammate_rear_single_cover_confidence >= 0.65
         )
+        joker_belief = self._joker_belief_from_state(game_state)
+        hr_with_opponents = joker_belief["hr_with_opponents"]
 
         if is_teammate:
             intent = (
@@ -3007,16 +3199,26 @@ class UltimateWinRateEngineV7:
             }
 
         if is_lead:
-            rec = self._recommend_lead_impl(game_state, card_mask, hand_cards, cur_rank)
+            if role in ("助攻", "超弱"):
+                return None
+            from src.v.nn.stage_main_attack_lead import recommend_main_attack_lead
+            rec = recommend_main_attack_lead(
+                self,
+                game_state,
+                card_mask,
+                hand_cards,
+                cur_rank,
+                game_state.get("_current_stage", "stage_2"),
+            )
             if not rec:
                 return None
-            if role in ("助攻", "超弱") and _remaining(teammate_pos) <= 4:
-                return _with_intent(rec, "mid_feed_teammate_lead")
             if critical_enemy_remaining <= 4:
                 return _with_intent(rec, "mid_probe_critical_enemy")
+            if hr_with_opponents >= 2:
+                return _with_intent(rec, "mid_safe_structure_probe")
             if enemy_shape_hint == "structured" and enemy_bomb_risk_max >= 0.5:
                 return _with_intent(rec, "mid_safe_structure_probe")
-            return _with_intent(rec, "mid_balance_lead")
+            return _with_intent(rec, rec.get("intent") or "mid_balance_lead")
 
         if not greater_action or greater_action[0] == "PASS":
             return None
@@ -3044,6 +3246,18 @@ class UltimateWinRateEngineV7:
                 game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank
             )
             if rec:
+                if (
+                    hr_with_opponents >= 2
+                    and greater_type == "Single"
+                    and self._recommendation_uses_joker(rec)
+                    and critical_enemy_remaining > 4
+                ):
+                    return {
+                        "type": "PASS",
+                        "rank": "",
+                        "cards": [],
+                        "intent": "mid_hold_joker_vs_double_hr",
+                    }
                 intent = (
                     "mid_trade_min_press"
                     if same_type_suppressor_outside
@@ -3099,6 +3313,17 @@ class UltimateWinRateEngineV7:
                     game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank
                 )
                 if rec:
+                    if (
+                        hr_with_opponents >= 2
+                        and greater_type == "Single"
+                        and self._recommendation_uses_joker(rec)
+                    ):
+                        return {
+                            "type": "PASS",
+                            "rank": "",
+                            "cards": [],
+                            "intent": "mid_hold_joker_vs_double_hr",
+                        }
                     return _with_intent(rec, "mid_keep_overcall_in_reserve")
             else:
                 rec = self._recommend_max_press_impl(
@@ -3170,6 +3395,7 @@ class UltimateWinRateEngineV7:
 
         # ── 策略：优先出最小的非 core 单张或对子 ──
         if singles and not is_tribute_round:
+            singles = self._filter_joker_lead_singles(singles, game_state)
             singles.sort(key=lambda c: self.RANK_ORDER.get(get_card_rank(c), 99))
             for card in singles:
                 if _single_breaks_protected_core(card):
@@ -3262,6 +3488,9 @@ class UltimateWinRateEngineV7:
                     if c_val > greater_val:
                         candidates.append((c_val, c, get_card_rank(str(c))))
                 if candidates:
+                    candidates = self._filter_joker_press_single_candidates(
+                        candidates, game_state
+                    )
                     candidates.sort(key=lambda x: x[0])
                     _, best, best_rank = candidates[0]
                     return {
@@ -3357,6 +3586,7 @@ class UltimateWinRateEngineV7:
 
         strategy: "min"=节牌力（跟上家）, "max"=卡下家（选最大）。
         GUA-081: 跳过会部分拆 bomb/同花顺 core 的三张，尝试下一档 rank。
+        GUA-114: min 策略带牌优先独立对子（gsize=2 / 剩余恰 2 张），避免从 ≥3 张同点抠对留孤张。
         """
         from collections import Counter
         from src.v.nn.guards.v7_guards import get_card_rank
@@ -3379,8 +3609,24 @@ class UltimateWinRateEngineV7:
         if not trip_candidates:
             return None
 
-        def _find_available_pair(exclude_cards: List[str], prefer_large: bool = False
-                                ) -> Optional[Tuple[str, List[str]]]:
+        def _pair_is_natural(rank_str: str, pair_cards: List[str], remaining: Dict[str, List[str]]) -> bool:
+            """独立对子：该 rank 剩余恰 2 张，或 card_mask 中两张均为 gsize=2。"""
+            cards_left = remaining.get(rank_str) or []
+            if len(cards_left) == 2:
+                return True
+            if card_mask and len(cards_left) < 3:
+                gsizes = []
+                for c in pair_cards:
+                    info = card_mask.get(c)
+                    if info and len(info) >= 3:
+                        gsizes.append(info[2])
+                if len(gsizes) == len(pair_cards) and all(g == 2 for g in gsizes):
+                    return True
+            return False
+
+        def _find_available_pair(
+            exclude_cards: List[str], prefer_large: bool = False
+        ) -> Optional[Tuple[str, List[str]]]:
             remaining: Dict[str, List[str]] = {}
             for c in hand_cards:
                 if c in exclude_cards:
@@ -3393,10 +3639,19 @@ class UltimateWinRateEngineV7:
             for r, cards in remaining.items():
                 if len(cards) >= 2:
                     pair_opts.append((_gcv(str(cards[0]), cur_rank), r, cards[:2]))
-            if pair_opts:
-                pair_opts.sort(key=lambda x: -x[0] if prefer_large else x[0])
-                return (pair_opts[0][1], pair_opts[0][2])
-            return None
+            if not pair_opts:
+                return None
+            if strategy == "min":
+                natural_opts = [
+                    o
+                    for o in pair_opts
+                    if _pair_is_natural(o[1], o[2], remaining)
+                ]
+                pool = natural_opts if natural_opts else pair_opts
+            else:
+                pool = pair_opts
+            pool.sort(key=lambda x: -x[0] if prefer_large else x[0])
+            return (pool[0][1], pool[0][2])
 
         want_large = (strategy == "max")
         trip_candidates.sort(key=lambda x: -x[0] if want_large else x[0])

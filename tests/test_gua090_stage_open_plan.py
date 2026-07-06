@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""GUA-090：stage_0_1 开局入口构造态回归。"""
+"""GUA-090：stage_0 / stage_1 开局与初期入口构造态回归。"""
 
 import logging
 
@@ -44,7 +44,7 @@ def test_stage_open_plan_avoids_leading_level_single_when_safe_pair_exists():
         ("Pair", "7", ["H7", "S7"]),
     )
     gs = {
-        "_current_stage": "stage_0_1",
+        "_current_stage": "stage_1",
         "myPos": 0,
         "curPos": -1,
         "greaterPos": -1,
@@ -58,7 +58,7 @@ def test_stage_open_plan_avoids_leading_level_single_when_safe_pair_exists():
     assert rec is not None
     assert rec["type"] == "Pair"
     assert rec["rank"] == "7"
-    assert rec["intent"] == "assist_safe_pair"
+    assert rec["intent"] == "assist_feed_s1_small_pair"
 
 
 def test_stage_open_plan_prefers_low_scatter_single_over_high_ace():
@@ -81,7 +81,7 @@ def test_stage_open_plan_prefers_low_scatter_single_over_high_ace():
         ("Pair", "7", ["H7", "S7"]),
     )
     gs = {
-        "_current_stage": "stage_0_1",
+        "_current_stage": "stage_1",
         "myPos": 0,
         "curPos": -1,
         "greaterPos": -1,
@@ -93,10 +93,11 @@ def test_stage_open_plan_prefers_low_scatter_single_over_high_ace():
     rec = engine._recommend_play(gs, action_list)
 
     assert rec is not None
-    assert rec["type"] == "Single"
-    assert rec["rank"] == "5"
-    assert rec["cards"] == ["C5"]
-    assert rec["intent"] == "main_probe_single"
+    # GUA-116：仅 1 张 <10 散单时不走 P1，命中 P4 小对 77
+    assert rec["type"] == "Pair"
+    assert rec["rank"] == "7"
+    assert rec["cards"] == ["H7", "S7"]
+    assert rec["intent"] == "main_p4_small_pair"
 
 
 def test_stage_open_plan_yields_to_teammate_control():
@@ -117,7 +118,7 @@ def test_stage_open_plan_yields_to_teammate_control():
         ("Pair", "7", ["H7", "S7"]),
     )
     gs = {
-        "_current_stage": "stage_0_1",
+        "_current_stage": "stage_1",
         "myPos": 0,
         "curPos": 0,
         "greaterPos": 2,
@@ -130,7 +131,7 @@ def test_stage_open_plan_yields_to_teammate_control():
 
     assert rec is not None
     assert rec["type"] == "PASS"
-    assert rec["intent"] == "yield_to_teammate"
+    assert rec["intent"] == "assist_yield_teammate"
 
 
 def test_stage_open_plan_ignites_bomb_when_sprint_fire_ready():
@@ -158,7 +159,7 @@ def test_stage_open_plan_ignites_bomb_when_sprint_fire_ready():
         ("Bomb", "5", ["S5", "H5", "D5", "C5"]),
     )
     gs = {
-        "_current_stage": "stage_0_1",
+        "_current_stage": "stage_1",
         "_phase_relation": {
             "sprint_fire_ready": True,
             "teammate_cover_confidence": 0.2,
@@ -204,7 +205,7 @@ def test_stage_open_plan_keeps_min_press_when_not_sprint_fire_ready():
         ("Bomb", "5", ["S5", "H5", "D5", "C5"]),
     )
     gs = {
-        "_current_stage": "stage_0_1",
+        "_current_stage": "stage_1",
         "_phase_relation": {
             "sprint_fire_ready": False,
             "teammate_cover_confidence": 0.2,
@@ -272,7 +273,7 @@ def test_stage_open_plan_three_with_two_pressure_counter_avoids_first_round_pass
         ("ThreeWithTwo", "A", ["HA", "HA", "DA", "S5", "H5"]),
     )
     gs = {
-        "_current_stage": "stage_0_1",
+        "_current_stage": "stage_1",
         "_belief": {"hand_counts": {0: 18, 1: 9, 2: 22, 3: 12}},
         "_phase_relation": {
             "critical_enemy_seat": 1,

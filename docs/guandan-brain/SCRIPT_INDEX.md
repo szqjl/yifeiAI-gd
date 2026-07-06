@@ -109,7 +109,7 @@
 
 | 脚本 | 用途 |
 |------|------|
-| `analyze_v7_rounds.py` | **V7 副级批跑分析**（主要分析工具） |
+| `analyze_v7_rounds.py` | **V7 批跑 KPI 主工具（WF-04 Step 2）**；`--all` 会话/局胜/副胜 |
 | `analyze_game_rounds.py` | 对局副级分析 |
 | `analyze_game_record_format.py` | 游戏记录格式分析 |
 | `analyze_loss_calculation.py` | Loss 计算分析 |
@@ -125,7 +125,7 @@
 | `replay.py` | 通用回放 |
 | `gen_replay_word.py` | 生成 replay_word.md 文字记录 |
 | `_gen_replay_word.py` | 内部辅助生成 replay_word |
-| `analyze_v7_round_levels.py` | V7 副级水平分析 |
+| `analyze_v7_round_levels.py` | **V7 副级 curRank 逐局分析（WF-04 可选 Step 2）**；完整路径 `scripts/tools/`（**非** `scripts/analysis/`） |
 | `export_batch_warnings_comparison.py` | 批跑 WARNING 对比导出 |
 | `convert_rep_to_xml.py` | 回放文件转 XML |
 | `_extract_replay_steps.py` | 提取回放步骤 |
@@ -254,8 +254,12 @@
 |------|------|
 | **V7 批跑（GUI）** | `python batch_executor_gui_v7.py` |
 | **V7 批跑（命令行）** | `python scripts/launchers/v7/run_v7_vs_lalala_games.py --games 3` |
-| **分析批跑结果** | `python scripts/analysis/analyze_v7_rounds.py` |
-| **yf 单步决策链路（WF-12）** | 牌谱 `my_decisions` + `logs/yf*_v7_*.log`；流程见 [`workflows/WF-12-yf-decision-trace.md`](./workflows/WF-12-yf-decision-trace.md) |
+| **WF-04 批跑解读（主）** | `python scripts/analysis/analyze_v7_rounds.py --all` |
+| **WF-04 批跑解读（副级 curRank，可选）** | `python scripts/tools/analyze_v7_round_levels.py` |
+| **WF-04 L1/L3 对账文件** | `<repo_root>/batch_executor/latest_victory_num.json` · `<repo_root>/v7_vs_lalala_scores.json` · `<repo_root>/v7_vs_lalala_state.json`（**均在仓库根**，勿找 `batch_executor/v7_vs_lalala_scores.json`） |
+| **WF-04 L2 日志** | `<repo_root>/logs/v7_vs_lalala_*.log` + `yf1_v7_*.log` + `yf2_v7_*.log`（**Shell 列目录**；`.cursorignore` 屏蔽 IDE 读） |
+| **分析批跑结果** | 见上行「WF-04 批跑解读」；详规 [`工作流.md`](./工作流.md) §2.3 |
+| **yf 单步决策链路（WF-12）** | **yf1**：直开 `*yf1_*` JSON；**yf2**：`[副序]-[后缀]` 配对 → §2.2 **`find_decision_at_step`** 对齐 `handCards` + `logs/yf*_*.log`；回归 `python scripts/tools/wf12_find_decision_at_step.py`；见 [`WF-12`](./workflows/WF-12-yf-decision-trace.md) §2.0–§2.2 |
 | **回放单局** | `YF_REPLAY.bat` |
 | **BC 训练** | `python scripts/train_bc_v7.py` |
 | **Wiki 摄入** | `python scripts/wiki.py ingest` |

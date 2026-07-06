@@ -204,12 +204,37 @@ class RuleCardCounter:
 
     def get_rank_unknown_count(self, rank: str) -> int:
         """该 rank 还有多少张 UNKNOWN（尚未确定去向）。"""
+        if rank in ("SB", "HR"):
+            copies = self._t.card_state.get(rank, [-1, -1])
+            return sum(1 for c in copies if c == -1)
         count = 0
         for suit in SUITS:
             ct = f"{suit}{rank}"
             copies = self._t.card_state.get(ct, [-1, -1])
             count += sum(1 for c in copies if c == -1)
         return count
+
+    def get_joker_signal(self) -> Dict[str, Any]:
+        """大小王信念：已出/剩余/在我手/队友/对手/未知。"""
+        tracking = self._t.get_joker_tracking()
+        hr = tracking["HR"]
+        sb = tracking["SB"]
+        return {
+            "HR": hr,
+            "SB": sb,
+            "hr_played": hr["played"],
+            "hr_remain": hr["remain"],
+            "hr_in_my_hand": hr["in_my_hand"],
+            "hr_with_teammate": hr["with_teammate"],
+            "hr_with_opponents": hr["with_opponents"],
+            "hr_unknown": hr["unknown"],
+            "sb_played": sb["played"],
+            "sb_remain": sb["remain"],
+            "sb_in_my_hand": sb["in_my_hand"],
+            "sb_with_teammate": sb["with_teammate"],
+            "sb_with_opponents": sb["with_opponents"],
+            "sb_unknown": sb["unknown"],
+        }
 
     def get_unknown_rank_stats(self) -> Dict[str, int]:
         """所有 rank 的 UNKNOWN 计数。"""
@@ -617,6 +642,8 @@ class RuleCardCounter:
 
         信念信号（全部零成本、纯计数）：
           - hr_played/sb_played: 大小王已出张数 (0-2)
+          - hr_remain/sb_remain: 大小王未打出张数 (0-2)
+          - joker_signal: 大小王完整记牌（含队友/对手归属推断）
           - level_remain: 级牌剩余张数 (0-8)
           - opp_bomb_risks: {opp_seat: float} 对手炸弹风险 0~1
           - hand_counts: {seat: int} 各家剩余张数
@@ -628,12 +655,7 @@ class RuleCardCounter:
           - unknown_rank_stats: get_unknown_rank_stats() 返回值
         """
         tracker = self._t
-
-        # 大小王已出
-        hr = tracker.card_state.get("HR", [-1, -1])
-        sb = tracker.card_state.get("SB", [-1, -1])
-        hr_played = sum(1 for c in hr if c == 4)
-        sb_played = sum(1 for c in sb if c == 4)
+        joker = self.get_joker_signal()
 
         # 级牌剩余
         level_left = 0
@@ -682,8 +704,11 @@ class RuleCardCounter:
         hand_counts = dict(tracker.hand_counts)
 
         return {
-            "hr_played": hr_played,
-            "sb_played": sb_played,
+            "hr_played": joker["hr_played"],
+            "sb_played": joker["sb_played"],
+            "hr_remain": joker["hr_remain"],
+            "sb_remain": joker["sb_remain"],
+            "joker_signal": joker,
             "level_remain": level_left,
             "opp_bomb_risks": opp_risks,
             "hand_counts": hand_counts,

@@ -50,7 +50,7 @@ def test_stage_mid_dispatch_yields_to_teammate_control():
 
     assert rec is not None
     assert rec["type"] == "PASS"
-    assert rec["intent"] == "mid_yield_teammate_control"
+    assert rec["intent"] == "assist_yield_teammate"
 
 
 def test_stage_mid_dispatch_blocks_critical_lower_enemy_with_max_press():

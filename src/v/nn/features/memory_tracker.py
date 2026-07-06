@@ -130,6 +130,13 @@ class MemoryTracker:
         # 推理耗时累计（ms）
         self.inference_time_ms = 0.0
 
+        # 贡牌/抗贡（04_calculation_skills §二.1 + 06_game_flow）
+        self.tribute_history: List[Dict[str, Any]] = []
+        self._processed_tribute_keys: Set[str] = set()
+        self._processed_anti_keys: Set[str] = set()
+        self._anti_tribute_pos: List[int] = []
+        self._tribute_sync_fingerprint: Optional[str] = None
+
     # ── 初始化 ──────────────────────────────────────────
 
     def init_from_hand(self, my_hand: List[str]) -> None:
@@ -151,15 +158,58 @@ class MemoryTracker:
 
     # ── 状态更新 ────────────────────────────────────────
 
-    def record_play(self, seat: int, action: List[Any]) -> None:
+    def record_play(
+        self,
+        seat: int,
+        action: List[Any],
+        *,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """记录某席出牌动作。
 
-        action 格式: ["Bomb", "8", [...]]
+        action 格式: ["Bomb", "8", [...]] 或 tribute/back 单张转移。
         """
         if not action or len(action) < 3:
             return
+        action_type = str(action[0]).lower()
         cards = action[2] if isinstance(action[2], list) else []
         if not cards:
+            return
+
+        ctx = context or {}
+        if action_type == "tribute":
+            tribute_pos = ctx.get("tribute_pos", seat)
+            receive_pos = ctx.get("receive_tribute_pos")
+            try:
+                tribute_pos = int(tribute_pos)
+            except (TypeError, ValueError):
+                tribute_pos = seat
+            if receive_pos is not None:
+                try:
+                    receive_pos = int(receive_pos)
+                except (TypeError, ValueError):
+                    receive_pos = None
+            if receive_pos is not None:
+                self.record_tribute_transfer(tribute_pos, receive_pos, cards[0])
+            else:
+                self.record_tribute_outgoing(tribute_pos, cards[0])
+            return
+        if action_type == "back":
+            back_pos = ctx.get("back_pos", seat)
+            receive_pos = ctx.get("receive_back_pos")
+            try:
+                back_pos = int(back_pos)
+            except (TypeError, ValueError):
+                back_pos = seat
+            if receive_pos is not None:
+                try:
+                    receive_pos = int(receive_pos)
+                except (TypeError, ValueError):
+                    receive_pos = None
+            if receive_pos is not None:
+                self.record_back_transfer(back_pos, receive_pos, cards[0])
+            else:
+                self.record_tribute_outgoing(back_pos, cards[0])
             return
 
         # 标记这些牌为已打出
@@ -179,7 +229,10 @@ class MemoryTracker:
             "hand_count_after": self.hand_counts[seat],
         })
 
-        # 排除法推断（如果启用）
+        # GUA-072：大小王 always-on 归属推断（不依赖 enable_inference）
+        self._infer_joker_ownership(seat, cards, str(action[0]))
+
+        # 排除法推断（如果启用；大小王已在 _infer_joker_ownership 单独处理）
         if self.enable_inference and self.max_infer_depth > 0:
             import time
             t0 = time.time()
@@ -204,6 +257,125 @@ class MemoryTracker:
         """外部更新手牌计数（如贡还后）。"""
         self.hand_counts[seat] = hand_count
 
+    # ── 贡牌 / 抗贡（04_calculation_skills §二.1 + 06_game_flow）────────
+
+    def record_anti_tribute(self, anti_pos: List[Any]) -> None:
+        """抗贡：antiPos 各席持双 HR（06_game_flow 双大王免进贡）。"""
+        if not anti_pos:
+            return
+        try:
+            positions = sorted(int(p) for p in anti_pos)
+        except (TypeError, ValueError):
+            return
+        key = tuple(positions)
+        if key in self._processed_anti_keys:
+            return
+        self._processed_anti_keys.add(key)
+        self._anti_tribute_pos = list(positions)
+
+        if len(positions) == 1:
+            self._assign_joker_copies_to_seat("HR", positions[0], 2)
+        else:
+            for i, pos in enumerate(positions[:2]):
+                self._assign_joker_copies_to_seat("HR", pos, 1, copy_index=i)
+
+        self._infer_joker_from_tribute_rules()
+        logger.debug("抗贡推断 antiPos=%s joker=%s", positions, self.get_joker_tracking())
+
+    def record_tribute_transfer(
+        self, tribute_pos: int, receive_pos: int, card: str
+    ) -> None:
+        """进贡 notify：末游→头游等单张转移（非打出）。"""
+        key = f"tribute:{tribute_pos}:{receive_pos}:{self._canonical_type(card)}"
+        if key in self._processed_tribute_keys:
+            return
+        self._processed_tribute_keys.add(key)
+        self._transfer_card(int(tribute_pos), int(receive_pos), card, event="tribute")
+        self.tribute_history.append(
+            {
+                "event": "tribute",
+                "from": int(tribute_pos),
+                "to": int(receive_pos),
+                "card": self._canonical_type(card),
+            }
+        )
+        self._infer_joker_from_tribute_rules()
+
+    def record_back_transfer(self, back_pos: int, receive_pos: int, card: str) -> None:
+        """还贡 notify：单张转移。"""
+        key = f"back:{back_pos}:{receive_pos}:{self._canonical_type(card)}"
+        if key in self._processed_tribute_keys:
+            return
+        self._processed_tribute_keys.add(key)
+        self._transfer_card(int(back_pos), int(receive_pos), card, event="back")
+        self.tribute_history.append(
+            {
+                "event": "back",
+                "from": int(back_pos),
+                "to": int(receive_pos),
+                "card": self._canonical_type(card),
+            }
+        )
+
+    def record_tribute_outgoing(self, from_seat: int, card: str) -> None:
+        """进贡/还贡 act（仅知送出方）：从该席移除标记，不记为已打出。"""
+        key = f"out:{from_seat}:{self._canonical_type(card)}"
+        if key in self._processed_tribute_keys:
+            return
+        self._processed_tribute_keys.add(key)
+        self._release_card_from_seat(int(from_seat), card)
+        self.hand_counts[from_seat] = max(0, self.hand_counts.get(from_seat, HAND_SIZE) - 1)
+        self.tribute_history.append(
+            {
+                "event": "outgoing",
+                "from": int(from_seat),
+                "card": self._canonical_type(card),
+            }
+        )
+
+    def sync_tribute_phase_from_state(
+        self,
+        *,
+        tribute_result: Optional[List[Any]] = None,
+        back_result: Optional[List[Any]] = None,
+        anti_pos: Optional[List[Any]] = None,
+        cur_rank: str = "2",
+    ) -> None:
+        """从 game_state 批量消费贡牌/抗贡 notify（去重）。"""
+        fp = repr((tribute_result, back_result, anti_pos))
+        if fp != self._tribute_sync_fingerprint:
+            self.clear_tribute_phase_state()
+            self._tribute_sync_fingerprint = fp
+
+        if anti_pos:
+            self.record_anti_tribute(anti_pos)
+        for item in tribute_result or []:
+            if not isinstance(item, (list, tuple)) or len(item) < 3:
+                continue
+            try:
+                tp, rp = int(item[0]), int(item[1])
+            except (TypeError, ValueError):
+                continue
+            self.record_tribute_transfer(tp, rp, str(item[2]))
+        for item in back_result or []:
+            if not isinstance(item, (list, tuple)) or len(item) < 3:
+                continue
+            try:
+                bp, rp = int(item[0]), int(item[1])
+            except (TypeError, ValueError):
+                continue
+            self.record_back_transfer(bp, rp, str(item[2]))
+        if tribute_result:
+            self._infer_joker_from_tribute_rules(cur_rank=str(cur_rank))
+
+    def clear_tribute_phase_state(self) -> None:
+        """新一副开始时清理贡牌阶段去重键（保留 card_state 推断结果）。"""
+        self._processed_tribute_keys.clear()
+        self._processed_anti_keys.clear()
+        self._anti_tribute_pos.clear()
+        self.tribute_history.clear()
+        self._tribute_sync_fingerprint = None
+
     # ── 查询 ────────────────────────────────────────────
 
     def get_played_cards(self) -> Dict[str, int]:
@@ -226,6 +398,195 @@ class MemoryTracker:
     def get_hand_count(self, seat: int) -> int:
         """获取某席手牌计数。"""
         return self.hand_counts.get(seat, 0)
+
+    def sync_my_jokers(self, hand_cards: List[str]) -> None:
+        """用当前手牌校准大小王 MY_HAND 标记（每步 decide 调用）。"""
+        want = Counter(
+            self._canonical_type(c) for c in hand_cards
+            if self._canonical_type(c) in JOKERS
+        )
+        for jt in JOKERS:
+            copies = self.card_state[jt]
+            target = want.get(jt, 0)
+            my_indices = [i for i, c in enumerate(copies) if c == self.MY_HAND]
+            if len(my_indices) > target:
+                for i in my_indices[target:]:
+                    copies[i] = -1
+            elif len(my_indices) < target:
+                need = target - len(my_indices)
+                for i in range(2):
+                    if need <= 0:
+                        break
+                    if copies[i] == -1:
+                        copies[i] = self.MY_HAND
+                        need -= 1
+
+    def _count_joker_plays_by_seat(self, joker_type: str) -> Dict[int, int]:
+        """统计各席已打出某王张数（来自 play_history）。"""
+        counts: Dict[int, int] = defaultdict(int)
+        for entry in self.play_history:
+            seat = entry.get("seat", -1)
+            if seat < 0:
+                continue
+            for card in entry.get("cards", []):
+                if self._canonical_type(card) == joker_type:
+                    counts[seat] += 1
+        return dict(counts)
+
+    def _joker_copy_stats(self, joker_type: str) -> Dict[str, int]:
+        """单种王的副本状态计数。"""
+        copies = self.card_state.get(joker_type, [-1, -1])
+        played = sum(1 for c in copies if c == self.PLAYED)
+        my_c = sum(1 for c in copies if c == self.MY_HAND)
+        partner_c = sum(1 for c in copies if c == self.PARTNER_HAND)
+        opp_c = sum(1 for c in copies if c == self.OPPONENT_HAND)
+        unknown = sum(1 for c in copies if c == -1)
+        return {
+            "played": played,
+            "remain": max(0, 2 - played),
+            "in_my_hand": my_c,
+            "with_teammate": partner_c,
+            "with_opponents": opp_c,
+            "unknown": unknown,
+            "outside_my_hand": max(0, 2 - played - my_c),
+        }
+
+    def get_joker_tracking(self) -> Dict[str, Dict[str, int]]:
+        """大小王记牌摘要：已出/剩余/在我手/队友/对手/未知。"""
+        return {jt: self._joker_copy_stats(jt) for jt in JOKERS}
+
+    def _infer_joker_ownership(
+        self,
+        acting_seat: int,
+        cards: List[str],
+        action_type: str = "",
+    ) -> None:
+        """Always-on：根据出牌与手牌校准大小王副本归属（PARTNER/OPPONENT/PLAYED）。"""
+        action_type_l = (action_type or "").lower()
+        jokers_in_action = [
+            self._canonical_type(c) for c in cards if self._canonical_type(c) in JOKERS
+        ]
+        if len(jokers_in_action) >= 2 and jokers_in_action.count("HR") >= 2:
+            self._assign_joker_copies_to_seat("SB", acting_seat, 1)
+        elif (
+            action_type_l in ("pair", "pairpair")
+            and jokers_in_action.count("HR") >= 2
+        ):
+            self._assign_joker_copies_to_seat("SB", acting_seat, 1)
+
+        hr_before = self._seat_played_joker_before("HR", acting_seat)
+        sb_in_action = "SB" in jokers_in_action
+        if hr_before and sb_in_action:
+            self._assign_joker_copies_to_seat("SB", acting_seat, 1)
+
+        for jt in JOKERS:
+            copies = self.card_state[jt]
+            played = sum(1 for c in copies if c == self.PLAYED)
+            my_c = sum(1 for c in copies if c == self.MY_HAND)
+
+            # 已出 + 在我手 = 两副本穷尽 → 剩余 unknown 归对家或敌家
+            if played + my_c >= 2:
+                for i in range(2):
+                    if copies[i] != -1:
+                        continue
+                    if acting_seat in self.opponents:
+                        copies[i] = self.OPPONENT_HAND
+                    elif acting_seat == self.partner_pos:
+                        copies[i] = self.PARTNER_HAND
+                    else:
+                        copies[i] = self.OPPONENT_HAND
+                continue
+
+            if played >= 2:
+                continue
+
+            plays_by_seat = self._count_joker_plays_by_seat(jt)
+            partner_plays = plays_by_seat.get(self.partner_pos, 0)
+            opp_plays = sum(plays_by_seat.get(s, 0) for s in self.opponents)
+            unk_indices = [i for i, c in enumerate(copies) if c == -1]
+
+            if played == 1 and my_c == 0 and len(unk_indices) == 1:
+                idx = unk_indices[0]
+                if opp_plays >= 2:
+                    copies[idx] = self.PLAYED
+                elif partner_plays >= 1 and opp_plays == 0:
+                    if self.hand_counts.get(self.partner_pos, HAND_SIZE) <= 5:
+                        copies[idx] = self.OPPONENT_HAND
+                elif opp_plays >= 1 and partner_plays == 0:
+                    if (
+                        acting_seat in self.opponents
+                        and self.hand_counts.get(acting_seat, HAND_SIZE) <= 5
+                    ):
+                        copies[idx] = self.PARTNER_HAND
+
+            partner_held = sum(1 for c in copies if c == self.PARTNER_HAND)
+            opp_held = sum(1 for c in copies if c == self.OPPONENT_HAND)
+            if played + my_c + partner_held + opp_held >= 2:
+                for i in range(2):
+                    if copies[i] != -1:
+                        continue
+                    if partner_held > 0 and opp_held == 0:
+                        copies[i] = self.OPPONENT_HAND
+                    elif opp_held > 0 and partner_held == 0:
+                        copies[i] = self.PARTNER_HAND
+
+    def _infer_joker_from_tribute_rules(self, cur_rank: str = "2") -> None:
+        """贡牌阶段算王：04_calculation_skills §二.1 + 06_game_flow 抗贡。"""
+        if self._anti_tribute_pos:
+            return
+
+        tribute_events = [
+            e for e in self.tribute_history if e.get("event") == "tribute"
+        ]
+        if not tribute_events:
+            return
+
+        cur_rank = str(cur_rank or "2").upper()
+        if len(tribute_events) >= 2:
+            cards = [e["card"] for e in tribute_events]
+            if all(self._is_level_card(c, cur_rank) for c in cards):
+                receive_seats = {e["to"] for e in tribute_events}
+                self._assign_all_jokers_to_seats(receive_seats)
+                return
+
+        if len(tribute_events) == 1:
+            ev = tribute_events[0]
+            card = ev["card"]
+            tribute_pos = ev["from"]
+            receive_pos = ev["to"]
+            if card != "HR":
+                return
+
+            winning_seats = {receive_pos, (receive_pos + 2) % 4}
+            losing_seats = {tribute_pos, (tribute_pos + 2) % 4}
+            my_jokers = self.get_joker_tracking()
+            i_have_jokers = (
+                my_jokers["HR"]["in_my_hand"] + my_jokers["SB"]["in_my_hand"]
+            ) > 0
+
+            for seat in winning_seats:
+                self._assign_joker_copies_to_seat("HR", seat, 1)
+            for seat in losing_seats:
+                if seat == tribute_pos:
+                    continue
+                if (
+                    seat == self.my_pos
+                    and not i_have_jokers
+                    and seat != tribute_pos
+                    and seat != receive_pos
+                ):
+                    self._clear_jokers_from_seat(seat)
+            for seat in winning_seats | {tribute_pos}:
+                self._assign_joker_copies_to_seat("SB", seat, 1)
+
+    def _seat_played_joker_before(self, joker_type: str, seat: int) -> bool:
+        for entry in self.play_history:
+            if entry.get("seat") != seat:
+                continue
+            for card in entry.get("cards", []):
+                if self._canonical_type(card) == joker_type:
+                    return True
+        return False
 
     def get_card_owners(self, card_type: str) -> List[int]:
         """获取某类牌的所有者 [-1=unknown, 0-3=seat, 4=played]。"""
@@ -345,6 +706,144 @@ class MemoryTracker:
 
     # ── 内部方法 ──────────────────────────────────────
 
+    def _seat_bucket(self, seat: int) -> int:
+        if seat == self.my_pos:
+            return self.MY_HAND
+        if seat == self.partner_pos:
+            return self.PARTNER_HAND
+        return self.OPPONENT_HAND
+
+    def _is_level_card(self, card: str, cur_rank: str) -> bool:
+        ct = self._canonical_type(card)
+        if ct in JOKERS:
+            return False
+        rank = _parse_card_rank(ct)
+        return rank == str(cur_rank or "2").upper()
+
+    def _assign_joker_copies_to_seat(
+        self,
+        joker_type: str,
+        seat: int,
+        count: int,
+        *,
+        copy_index: Optional[int] = None,
+    ) -> None:
+        if joker_type not in JOKERS or count <= 0:
+            return
+        bucket = self._seat_bucket(seat)
+        copies = self.card_state[joker_type]
+        assigned = 0
+        indices = [copy_index] if copy_index is not None else range(2)
+        for i in indices:
+            if i < 0 or i > 1:
+                continue
+            if copies[i] == self.PLAYED:
+                continue
+            if seat == self.my_pos and copies[i] == self.MY_HAND:
+                assigned += 1
+                continue
+            copies[i] = bucket
+            assigned += 1
+            if assigned >= count:
+                return
+        for i in range(2):
+            if assigned >= count:
+                break
+            if copies[i] == self.PLAYED:
+                continue
+            if seat == self.my_pos and copies[i] == self.MY_HAND:
+                assigned += 1
+                continue
+            if copies[i] == bucket:
+                assigned += 1
+                continue
+            if copies[i] in (-1, self.MY_HAND, self.PARTNER_HAND, self.OPPONENT_HAND):
+                copies[i] = bucket
+                assigned += 1
+
+    def _assign_all_jokers_to_seats(self, seats: Set[int]) -> None:
+        if not seats:
+            return
+        seat_list = sorted(seats)
+        for jt in JOKERS:
+            copies = self.card_state[jt]
+            si = 0
+            for i in range(2):
+                if copies[i] == self.PLAYED:
+                    continue
+                if copies[i] == self.MY_HAND:
+                    continue
+                copies[i] = self._seat_bucket(seat_list[si % len(seat_list)])
+                si += 1
+
+    def _clear_jokers_from_seat(self, seat: int) -> None:
+        bucket = self._seat_bucket(seat)
+        for jt in JOKERS:
+            copies = self.card_state[jt]
+            for i in range(2):
+                if copies[i] == bucket:
+                    copies[i] = -1
+
+    def _transfer_card(
+        self,
+        from_seat: int,
+        to_seat: int,
+        card: str,
+        *,
+        event: str = "tribute",
+    ) -> None:
+        ct = self._canonical_type(card)
+        from_bucket = self._seat_bucket(from_seat)
+        to_bucket = self._seat_bucket(to_seat)
+        copies = self.card_state.get(ct, [-1, -1])
+
+        moved = False
+        for i in range(2):
+            if copies[i] == from_bucket:
+                copies[i] = to_bucket
+                moved = True
+                break
+        if not moved and from_seat == self.my_pos:
+            for i in range(2):
+                if copies[i] == self.MY_HAND:
+                    copies[i] = to_bucket
+                    moved = True
+                    break
+        if not moved:
+            for i in range(2):
+                if copies[i] == -1:
+                    copies[i] = to_bucket
+                    moved = True
+                    break
+        if not moved:
+            for i in range(2):
+                if copies[i] != self.PLAYED and copies[i] != to_bucket:
+                    copies[i] = to_bucket
+                    break
+
+        self.hand_counts[from_seat] = max(0, self.hand_counts.get(from_seat, HAND_SIZE) - 1)
+        self.hand_counts[to_seat] = min(HAND_SIZE, self.hand_counts.get(to_seat, 0) + 1)
+
+        if ct in JOKERS:
+            logger.debug(
+                "%s transfer %s %s→%s bucket %s→%s",
+                event,
+                ct,
+                from_seat,
+                to_seat,
+                from_bucket,
+                to_bucket,
+            )
+
+    def _release_card_from_seat(self, seat: int, card: str) -> None:
+        ct = self._canonical_type(card)
+        bucket = self._seat_bucket(seat)
+        copies = self.card_state.get(ct, [-1, -1])
+        for i in range(2):
+            if copies[i] == bucket or (seat == self.my_pos and copies[i] == self.MY_HAND):
+                copies[i] = -1
+                return
+
     def _mark_played(self, seat: int, card: str) -> None:
         ct = self._canonical_type(card)
         copies = self.card_state[ct]
@@ -371,6 +870,9 @@ class MemoryTracker:
     @staticmethod
     def _canonical_type(card: str) -> str:
         """标准化牌面类型（平台原生 SB=小王, HR=大王）。"""
+        legacy = {"BJ": "SB", "RJ": "HR"}
+        if card in legacy:
+            return legacy[card]
         if card in ("SB", "HR"):
             return card
         if len(card) == 2 and card[0] in SUITS and (card[1].isdigit() or card[1] in RANK_LETTERS):
@@ -397,3 +899,7 @@ class MemoryTracker:
         self.bombs_played.clear()
         self.level_cards_remaining.clear()
         self.inference_time_ms = 0.0
+        self.tribute_history.clear()
+        self._processed_tribute_keys.clear()
+        self._processed_anti_keys.clear()
+        self._anti_tribute_pos.clear()

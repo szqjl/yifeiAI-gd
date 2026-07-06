@@ -9,7 +9,7 @@ GUA-098: 决策溯源日志模块 (DecisionTracer)
 
 使用方式 (V7 决策入口接入):
     tracer = DecisionTracer(my_pos=2, game_id="...")
-    tracer.begin_step(hand_size=27, cur_rank='2', stage='stage_0_1')
+    tracer.begin_step(hand_size=27, cur_rank='2', stage='stage_0')
     # ... 跑 Layer 1 记忆 + Layer 2 推断 ...
     tracer.record_layer2(ip_id='IP-07', delta=0.3, oppo='p3')
     # ... 跑 Layer 3 决策 (Guard 过滤) ...
@@ -27,6 +27,24 @@ from typing import Optional, List, Dict, Any
 
 ROOT = Path(__file__).resolve().parents[4]  # D:\\guandanscore\\YiFeiAI-GD
 TRACE_DIR = ROOT / "game_decision_traces"
+
+
+def format_joker_signal_line(joker_signal: Optional[Dict[str, Any]]) -> str:
+    """批跑 log 可 grep 的单行摘要：固定前缀 ``joker_signal``。"""
+    if not joker_signal:
+        return "joker_signal (empty)"
+
+    def _side(prefix: str) -> str:
+        return (
+            f"{prefix} p={joker_signal.get(f'{prefix.lower()}_played', 0)}"
+            f" r={joker_signal.get(f'{prefix.lower()}_remain', 0)}"
+            f" my={joker_signal.get(f'{prefix.lower()}_in_my_hand', 0)}"
+            f" tm={joker_signal.get(f'{prefix.lower()}_with_teammate', 0)}"
+            f" op={joker_signal.get(f'{prefix.lower()}_with_opponents', 0)}"
+            f" unk={joker_signal.get(f'{prefix.lower()}_unknown', 0)}"
+        )
+
+    return f"joker_signal {_side('hr')} | {_side('sb')}"
 
 
 class DecisionTracer:
@@ -50,6 +68,7 @@ class DecisionTracer:
             "layer1_hits": [],
             "layer2_ips": [],
             "layer3_guards": [],
+            "joker_signal": None,
             "decision_intent": None,
             "actIndex_chosen": None,
             "decision_ms": None,
@@ -78,6 +97,12 @@ class DecisionTracer:
             "filtered_count": filtered_count,
             "reason": reason,
         })
+
+    def record_joker_signal(self, joker_signal: Optional[Dict[str, Any]]):
+        """Layer1 大小王记牌（GUA-072）：已出/剩余/队友/对手归属。"""
+        if not self.enable or self._current_step is None:
+            return
+        self._current_step["joker_signal"] = joker_signal
 
     def record_decision_intent(self, intent: str, payload: Any = ""):
         if not self.enable or self._current_step is None:

@@ -107,8 +107,16 @@ def _build_memory_tracker_state(game_state: Dict[str, Any],
             if seat < 0:
                 continue
             action = h.get("action") or h.get("curAction") or []
+            ctx = h.get("context") or {}
             if action:
-                tracker.record_play(seat, action)
+                tracker.record_play(seat, action, context=ctx)
+
+        tracker.sync_tribute_phase_from_state(
+            tribute_result=game_state.get("tributeResult"),
+            back_result=game_state.get("backResult"),
+            anti_pos=game_state.get("antiPos"),
+            cur_rank=cur_rank,
+        )
 
         # 回放 recentPlays
         recent = game_state.get("recentPlays", [])

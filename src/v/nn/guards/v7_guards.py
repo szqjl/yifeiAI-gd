@@ -11,7 +11,7 @@ V7-native P0 Guard 壳 — V7-R01~R14（GUA-045 + 064 + 065 + 068）
   R06: 不拆结构对子
   R07: 队友控牌 → 按牌型阈值让道（决议 9 细化）
   R08: 队友剩 1 张 → 主动出最小 Single 送队友
-  R09: 队友剩 5 张 → 主动出 Pair/ThreeWithTwo 帮助冲刺
+  R09: 队友剩 5 张 → assist_prefer_for(5) 过滤（Straight/ThreeWithTwo/Single）
   R10: 自己领出不炸
   R11: 对手出不可压牌 → 全局抑制牌检查 + 节流
   R12: 三带二最小带对（同一三张 rank 多个变体 → 保留最小对子）
@@ -1143,9 +1143,9 @@ def _rule_r09_feed_teammate_5(
     numofplayers: List[int],
 ) -> List[int]:
     """
-    V7-R09（GUA-065）：主动 + 队友剩 5 张 → 优先 Pair / ThreeWithTwo。
-    队友剩 5 张大概率是对子+三张或三带二组合，送对应牌型帮助队友冲刺。
-    等价 M3 `_gua031_active_feed_five`。
+    V7-R09（GUA-065 / Q1）：主动 + 队友剩 5 张 → 按 assist_prefer_for(5) 过滤。
+
+    与 EndgameDecider Q2 / stage_assist_feed 共用 assist_prefer_table 单一真源。
     """
     if cur_pos != my_pos and cur_pos != -1:
         return list(range(len(action_list)))
@@ -1156,27 +1156,30 @@ def _rule_r09_feed_teammate_5(
     teammate = (my_pos + 2) % 4
     numoffri = numofplayers[teammate]
 
-    # 仅当队友确实只剩 5 张时才触发（5 张很可能是对子+三张组合）
     if numoffri != 5:
         return list(range(len(action_list)))
 
-    # 收集目标牌型
-    pair_indices = [i for i, act in enumerate(action_list)
-                    if get_action_type(act) == ACTION_TYPE_PAIR]
-    threetwo_indices = [i for i, act in enumerate(action_list)
-                        if get_action_type(act) == ACTION_TYPE_THREE_WITH_TWO]
+    from src.v.nn.assist_prefer_table import assist_prefer_for
 
-    feed_indices = pair_indices + threetwo_indices
+    prefer = assist_prefer_for(5)
+    feed_indices: List[int] = []
+    seen = set()
+    for pref_type in prefer:
+        for i, act in enumerate(action_list):
+            if i in seen:
+                continue
+            if get_action_type(act) == pref_type:
+                feed_indices.append(i)
+                seen.add(i)
+
     if not feed_indices:
         return list(range(len(action_list)))
 
-    # 保留目标牌型 + PASS
     pass_indices = [i for i, act in enumerate(action_list)
                     if get_action_type(act) == ACTION_TYPE_PASS]
     kept = feed_indices + pass_indices
-    # 去重保序
-    seen = set()
-    ordered = []
+    ordered: List[int] = []
+    seen.clear()
     for i in kept:
         if i not in seen:
             seen.add(i)
@@ -1313,6 +1316,13 @@ def _filter_action_list_impl(
         r07_kept = _rule_r07_teammate_yield(
             action_list, greater_pos, my_pos, numofplayers, greater_action, cur_rank)
         excluded |= {i for i in range(len(action_list)) if i not in set(r07_kept)}
+
+    # 6) GUA-117 Layer0：助攻/超弱 B1–B6 + 让权（117-2a … 117-2g）
+    try:
+        from src.v.nn.guards.assist_layer0_guard import apply_assist_layer0_exclusions
+        apply_assist_layer0_exclusions(action_list, game_state, excluded)
+    except Exception as e:
+        logger.warning("GUA-117 assist Layer0 异常: %s", e)
 
     # 5.5) GUA-071 R13: 平台炸弹合法性校验
     # 平台可能将非炸弹（如 3 Aces+单张）标为 Bomb，但 V7 get_action_type 正确识别为非炸弹。

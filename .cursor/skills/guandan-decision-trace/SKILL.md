@@ -17,12 +17,12 @@ description: >-
 
 ## 动手顺序（不可跳）
 
-1. 定位牌谱：`game_records_v7/`（V7）或 `game_records/`（M3）
-2. `actions[]` 还原圈况（步 N 前后）
-3. `my_decisions[]` 找 act 快照（`action_index`、`card_mask`、`role`）
-4. `logs/yf*_v7_*.log` 搜同时刻：`GUA-075`、`组牌保护拦截`、`残局管线命中`、`actIndex=`
-5. 按 V7 管线表写「命中层 / 被挡层 / 回退层」
-6. 打标签 **R-D01～R-D08** + 建议 GUA/pytest
+0. 读 [`SCRIPT_INDEX.md`](../../docs/guandan-brain/SCRIPT_INDEX.md) §三 WF-12 行
+1. **yf1**：开人类给的 `*yf1_*` JSON；**yf2**：§2.1 配对 `*yf2_*` JSON（禁止用 yf1 game_id）
+2. §2.2 用 **`find_decision_at_step`**（ordinal + `action_key` 双校验）→ `my_decisions.context.handCards` / `curRank`；勿全表搜 action
+3. `actions[]` 还原圈况
+4. `logs/yf{1|2}_*.log` 搜 ±1s 补管线证据
+5. 写命中层 / R-Dxx
 
 ## V7 管线速记
 
@@ -33,6 +33,7 @@ description: >-
 ## 禁止
 
 - 不读日志就下结论
+- **分析 yf2 未配对 yf2 JSON，或把 `cur_action` 当整手**
 - 用单局 replay 逐步一致作关单标准
 - 改牌谱
 

@@ -6,7 +6,7 @@ EndgameDecider — 残局 Q0→Q3 决策引擎
 
   Q0: 自己冲刺（self.should_sprint）→ 出最大整炸抢头游
   Q1: 封锁敌方（有敌人 ≤10）→ banned 硬排 + recommended 优先
-  Q2: 助攻队友（teammate.is_close）→ assist_prefer 喂牌
+  Q2: 助攻队友（teammate.is_close ≤5）→ assist_prefer 喂牌
   Q3: 炸弹兜底（非冲刺/封锁/助攻）→ should_bomb 判决
 
 任一 Q 命中 → 返回 action；全未命中 → 返回 None，交由上游管线处理。
@@ -107,6 +107,58 @@ def _has_recapture(action: List, hand_cards: List[str]) -> bool:
     return False
 
 
+def _uniform_bomb_rank(cards: List[str]) -> Optional[str]:
+    """炸弹候选的统一点数 rank；含王或混点则返回 None。"""
+    if not cards or not GUARD_TOOLS_OK:
+        return None
+    ranks = {get_card_rank(str(c)) for c in cards}
+    if any(r in ("HR", "SB") for r in ranks):
+        return None
+    if len(ranks) != 1:
+        return None
+    return next(iter(ranks))
+
+
+def _bomb_splits_pure_rank_leaving_orphan(
+    item: Any,
+    bomb_items: List,
+    hand_cards: List[str],
+) -> bool:
+    """
+    GUA-103 收窄：更小纯点数炸若会留下同点孤张，则不应优先于整炸。
+
+    例：五星 5 压 Pair/9 时，四炸留 C5 孤张 → 应出完整五星炸。
+    不含「四炸 + 逢人配升五炸」场景（额外牌非同点）。
+    """
+    act = item[1] if isinstance(item, tuple) and len(item) == 2 else item
+    cards = [str(c) for c in _get_cards(act)]
+    bomb_rank = _uniform_bomb_rank(cards)
+    if not bomb_rank or len(cards) < 4:
+        return False
+
+    hand_ct = Counter(str(c) for c in hand_cards)
+    used_ct = Counter(cards)
+
+    for other in bomb_items:
+        other_act = other[1] if isinstance(other, tuple) and len(other) == 2 else other
+        other_cards = [str(c) for c in _get_cards(other_act)]
+        if len(other_cards) <= len(cards):
+            continue
+        if _uniform_bomb_rank(other_cards) != bomb_rank:
+            continue
+        other_ct = Counter(other_cards)
+        if any(used_ct[r] > other_ct[r] for r in used_ct):
+            continue
+        extra_ct = other_ct - used_ct
+        leftover = hand_ct - used_ct
+        for orphan, need in extra_ct.items():
+            if get_card_rank(orphan) != bomb_rank:
+                continue
+            if leftover.get(orphan, 0) == need:
+                return True
+    return False
+
+
 def _sort_by_recapture_first(
     actions: List, hand_cards: List[str],
 ) -> List:
@@ -121,6 +173,67 @@ def _sort_by_recapture_first(
             -len(_get_cards(act)),                  # 张数多优先
         )
     return sorted(actions, key=_sort_key)
+
+
+def pick_assist_feed_by_prefer(
+    game_state: Dict[str, Any],
+    action_list: List,
+    assist_prefer: List[str],
+    hand_cards: Optional[List[str]] = None,
+) -> Optional[Tuple[int, List]]:
+    """
+    GUA-117 / Q2 共用：按 assist_prefer 过滤合法动作 → 回收排序 → 取最优。
+
+    Returns:
+        (action_list 下标, action) 或 None
+    """
+    if not assist_prefer or not action_list or not GUARD_TOOLS_OK:
+        return None
+
+    if hand_cards is None:
+        hand_cards = game_state.get("handCards", []) or []
+
+    prefer_set = set(assist_prefer)
+    assist_actions: List[Tuple[int, List]] = []
+    for i, action in enumerate(action_list):
+        try:
+            atype = get_action_type(action)
+            if atype in prefer_set:
+                assist_actions.append((i, action))
+        except Exception:
+            continue
+
+    if not assist_actions:
+        return None
+
+    assist_actions = _sort_by_recapture_first(assist_actions, hand_cards)
+    return assist_actions[0]
+
+
+def action_list_item_to_feed_recommendation(
+    action: List,
+    intent: str,
+    *,
+    rank_map: Optional[Dict[str, str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """将 actionList 条目转为 _recommend_play 推荐 dict。"""
+    if not action or not GUARD_TOOLS_OK:
+        return None
+    atype = get_action_type(action)
+    if atype in (ACTION_TYPE_PASS, ACTION_TYPE_FREE, "PASS", "Free"):
+        return {"type": "PASS", "rank": "", "cards": [], "intent": intent}
+    cards = _get_cards(action)
+    rank = get_action_rank(action) or ""
+    if rank_map and rank in rank_map:
+        rank = rank_map[rank]
+    elif rank_map:
+        rank = rank_map.get(rank, rank)
+    return {
+        "type": atype,
+        "rank": rank,
+        "cards": [str(c) for c in cards],
+        "intent": intent,
+    }
 
 
 def _is_bomb_like_action(action: List) -> bool:
@@ -210,7 +323,9 @@ def _sort_q1_block_candidates(
         act = item[1] if isinstance(item, tuple) and len(item) == 2 else item
         cards = _get_cards(act)
         wild_count = sum(1 for c in cards if isinstance(c, str) and c.startswith("H") and c[1:] == cur_rank)
+        split_orphan = _bomb_splits_pure_rank_leaving_orphan(item, bomb_items, hand_cards)
         return (
+            1 if split_orphan else 0,
             len(cards),
             wild_count,
             _max_card_value(act, cur_rank),
@@ -596,6 +711,12 @@ class EndgameDecider:
         # ① 找最危险敌人（主目标）
         main_pos, main_enemy = self._select_main_enemy(enemies, my_pos)
 
+        gua115_pass = self._q1_gua115_fire_no_bomb_four_pass(
+            game_state, action_list, ec, main_pos, main_enemy,
+        )
+        if gua115_pass is not None:
+            return gua115_pass
+
         # 敌方剩 5 张 + 当前控牌为 Single 的残局特判：
         # 先判断上/下家、4+1/整牌型、队友牌力和“敌方是否仍可能有更大单张”，
         # 再决定是直接用我方最大合法单张压，还是保留炸弹。
@@ -685,6 +806,64 @@ class EndgameDecider:
             is_passive,
         )
 
+    def _is_q1_following_enemy_control(
+        self, game_state: Dict[str, Any], ec: Dict[str, Any],
+    ) -> bool:
+        """当前是否在跟压敌方控牌（非自由领出）。"""
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction")
+        enemy_positions = {(my_pos + 1) % 4, (my_pos + 3) % 4}
+        if greater_pos not in enemy_positions:
+            return False
+        return _is_control_action(greater_action)
+
+    def _q1_allow_bomb_vs_four_card_enemy_exception(
+        self, game_state: Dict[str, Any], ec: Dict[str, Any],
+    ) -> bool:
+        """GUA-115 例外：不炸必输且自方两手整牌冲刺时仍允许用炸。"""
+        try:
+            from .endgame_preprocessor import EndgamePreprocessor as EP
+        except ImportError:
+            from src.v.nn.endgame.endgame_preprocessor import EndgamePreprocessor as EP
+
+        if not EP._will_lose(game_state):
+            return False
+        return bool(ec.get("self", {}).get("has_two_clean_hands"))
+
+    def _q1_gua115_fire_no_bomb_four_pass(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-115：主敌剩 4 张且跟压时火不打四；仅 bomb-like 可压则 PASS。"""
+        if main_enemy.get("remaining") != 4:
+            return None
+        if not self._is_q1_following_enemy_control(game_state, ec):
+            return None
+        if self._q1_allow_bomb_vs_four_card_enemy_exception(game_state, ec):
+            return None
+
+        pass_candidate: Optional[Tuple[int, List]] = None
+        has_non_bomb_candidate = False
+        for i, act in enumerate(action_list):
+            if not isinstance(act, list):
+                continue
+            declared = _get_declared_action_type(act)
+            if declared in (ACTION_TYPE_PASS, "PASS"):
+                pass_candidate = (i, act)
+                continue
+            if _is_bomb_like_action(act):
+                continue
+            has_non_bomb_candidate = True
+
+        if has_non_bomb_candidate:
+            return None
+        return pass_candidate
+
     def _q1_finish_now_candidate(
         self, game_state: Dict[str, Any], action_list: List,
     ) -> Optional[Tuple[int, List]]:
@@ -734,9 +913,18 @@ class EndgameDecider:
         if self._should_hold_teammate_bomb_lane(action_list, greater_action):
             return pass_candidates[0]
 
+        # GUA-113：超弱/助攻不得抢队友控牌（含三带二等非 bomb-like 结构反压）。
+        if self._is_assist_role_no_win_path(game_state):
+            return pass_candidates[0]
+
         if self._is_teammate_control_effectively_max(game_state, greater_action, ec):
             return pass_candidates[0]
         return None
+
+    def _is_assist_role_no_win_path(self, game_state: Dict[str, Any]) -> bool:
+        """GUA-113：组牌 role 为超弱/助攻时，Q1 队友控牌场景一律让道。"""
+        role = str(game_state.get("_role") or game_state.get("role") or "")
+        return role in ("超弱", "助攻")
 
     def _should_hold_teammate_bomb_lane(self, action_list: List, greater_action: List) -> bool:
         """队友已控牌时，禁止我方再用 bomb-like 动作反压队友。"""
@@ -1509,7 +1697,7 @@ class EndgameDecider:
         self, game_state: Dict[str, Any], action_list: List, ec: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
         """
-        队友 ≤4 张 → 按 assist_prefer 喂牌送队友走。
+        队友 ≤5 张 → 按 assist_prefer 喂牌送队友走（Q1 单一真源）。
         """
         teammate = ec.get("teammate", {})
         if not teammate or not teammate.get("is_close"):
@@ -1519,27 +1707,9 @@ class EndgameDecider:
         if not assist_prefer:
             return None
 
-        hand_cards = game_state.get("handCards", [])
-
-        # 过滤出助攻牌型
-        if not GUARD_TOOLS_OK:
-            return None
-
-        assist_actions = []
-        for i, a in enumerate(action_list):
-            try:
-                atype = get_action_type(a)
-                if atype in assist_prefer:
-                    assist_actions.append((i, a))
-            except Exception:
-                pass
-
-        if not assist_actions:
-            return None
-
-        # 排序：回收优先
-        assist_actions = _sort_by_recapture_first(assist_actions, hand_cards)
-        return self._select_best_index(assist_actions, action_list, game_state)
+        return pick_assist_feed_by_prefer(
+            game_state, action_list, assist_prefer,
+        )
 
     # ═══════════════════════════════════════════════════
     #  Q3: 炸弹兜底

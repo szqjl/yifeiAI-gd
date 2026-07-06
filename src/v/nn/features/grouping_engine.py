@@ -380,6 +380,243 @@ def _large_bomb_peel_options(bombs: List[List[str]]) -> List[int]:
     return [0, max_peel]
 
 
+# ── GUA-084/108：手牌级同花顺候选（花色 multiset，支持 n≥5 炸定向 peel）──
+
+SfPlanEntry = Tuple[
+    List[List[str]], List[List[str]], List[str], List[List[str]],
+    List[List[str]], List[str], List[List[str]],
+]
+
+
+def _sf_rank_windows() -> List[List[str]]:
+    windows: List[List[str]] = []
+    for start in range(len(RANKS)):
+        if start + 5 > len(RANKS):
+            break
+        windows.append([RANKS[start + k] for k in range(5)])
+    windows.append(["A", "2", "3", "4", "5"])
+    return windows
+
+
+def _bombs_after_peel_one(bombs: List[List[str]], card: str) -> Optional[List[List[str]]]:
+    """从 len>n≥5 的炸中剥下 card 一张；炸弹个数不变，张数 n→n-1。"""
+    for idx, bomb in enumerate(bombs):
+        if len(bomb) <= BOMB_CORE_MIN or card not in bomb:
+            continue
+        new_bombs = [b[:] for b in bombs]
+        peeled_bomb = new_bombs[idx][:]
+        peeled_bomb.remove(card)
+        new_bombs[idx] = peeled_bomb
+        return new_bombs
+    return None
+
+
+def _sf_card_sources(
+    suit: str,
+    rank: str,
+    hand_ct: Counter,
+    bombs: List[List[str]],
+    used: Counter,
+) -> List[Tuple[str, Optional[int]]]:
+    """可填入同花顺某一 rank 的来源：(card, peel_bomb_idx|None)；四炸内牌不可用。"""
+    options: List[Tuple[str, Optional[int]]] = []
+    bomb_ct: Counter = Counter()
+    peel_bomb_idx: Optional[int] = None
+    for bi, bomb in enumerate(bombs):
+        for card in bomb:
+            if _parse_suit(card) == suit and _parse_rank(card) == rank:
+                bomb_ct[card] += 1
+                if len(bomb) > BOMB_CORE_MIN:
+                    peel_bomb_idx = bi
+    for card, total in hand_ct.items():
+        if total <= 0 or card in JOKERS:
+            continue
+        if _parse_suit(card) != suit or _parse_rank(card) != rank:
+            continue
+        bound = bomb_ct.get(card, 0)
+        free = total - bound - used.get(card, 0)
+        if free > 0:
+            options.append((card, None))
+        if peel_bomb_idx is not None and card in bombs[peel_bomb_idx]:
+            if used.get(card, 0) < total:
+                options.append((card, peel_bomb_idx))
+    return list(dict.fromkeys(options))
+
+
+def _assign_sf_in_suit_window(
+    suit: str,
+    target_ranks: List[str],
+    hand_ct: Counter,
+    wilds: List[str],
+    bombs: List[List[str]],
+) -> List[Tuple[List[str], List[str], List[List[str]]]]:
+    """DFS：枚举该花色窗口下所有可行 StraightFlush（含 wild / 大炸 peel）。"""
+    results: List[Tuple[List[str], List[str], List[List[str]]]] = []
+    seen_sf: Set[Tuple[str, ...]] = set()
+    used_cards: Counter = Counter()
+
+    def dfs(
+        idx: int,
+        chosen: List[str],
+        wilds_used: List[str],
+        bombs_state: List[List[str]],
+        peeled_bomb_idxs: Set[int],
+    ) -> None:
+        if idx == len(target_ranks):
+            key = tuple(sorted(chosen))
+            if key not in seen_sf:
+                seen_sf.add(key)
+                results.append((chosen[:], wilds_used[:], [b[:] for b in bombs_state]))
+            return
+
+        rank = target_ranks[idx]
+        for card, peel_idx in _sf_card_sources(
+            suit, rank, hand_ct, bombs_state, used_cards,
+        ):
+            if peel_idx is not None:
+                if peel_idx in peeled_bomb_idxs:
+                    continue
+                next_bombs = _bombs_after_peel_one(bombs_state, card)
+                if next_bombs is None:
+                    continue
+                peeled_bomb_idxs.add(peel_idx)
+                chosen.append(card)
+                used_cards[card] += 1
+                dfs(idx + 1, chosen, wilds_used, next_bombs, peeled_bomb_idxs)
+                used_cards[card] -= 1
+                chosen.pop()
+                peeled_bomb_idxs.discard(peel_idx)
+            else:
+                chosen.append(card)
+                used_cards[card] += 1
+                dfs(idx + 1, chosen, wilds_used, bombs_state, peeled_bomb_idxs)
+                used_cards[card] -= 1
+                chosen.pop()
+
+        if wilds:
+            for wi, wild in enumerate(wilds):
+                if wild in wilds_used:
+                    continue
+                chosen.append(wild)
+                wilds_used.append(wild)
+                used_cards[wild] += 1
+                dfs(idx + 1, chosen, wilds_used, bombs_state, peeled_bomb_idxs)
+                used_cards[wild] -= 1
+                wilds_used.pop()
+                chosen.pop()
+
+    dfs(0, [], [], [b[:] for b in bombs], set())
+    return results
+
+
+def _remainder_pools_after_sf(
+    hand_cards: List[str],
+    sf_cards: List[str],
+    wilds_used: List[str],
+    bombs: List[List[str]],
+    cur_rank: str,
+) -> Tuple[List[str], List[List[str]], List[List[str]], List[str]]:
+    """SF 与保留炸弹之外的剩余牌 → singles/pairs/trips + 未用 wild。"""
+    rem_ct: Counter = Counter(hand_cards)
+    wild_ct = Counter(wilds_used)
+    for card in sf_cards:
+        if wild_ct.get(card, 0) > 0:
+            wild_ct[card] -= 1
+        else:
+            rem_ct[card] -= 1
+
+    bomb_ct: Counter = Counter()
+    for bomb in bombs:
+        for card in bomb:
+            bomb_ct[card] += 1
+
+    leftover: List[str] = []
+    for card, count in rem_ct.items():
+        bound = bomb_ct.get(card, 0)
+        free = count - bound
+        if free > 0:
+            leftover.extend([card] * free)
+
+    rg = _rank_groups(leftover, cur_rank)
+    rem_wilds = list(rg.pop("__wild__", []))
+    rem_s, rem_p, rem_t, extra_bombs = _basic_classify(rg)
+    if extra_bombs:
+        rem_s.extend(c for b in extra_bombs for c in b)
+    return rem_s, rem_p, rem_t, rem_wilds
+
+
+def _sf_plan_entry_key(entry: SfPlanEntry) -> Tuple:
+    nat, wild, _, _, _, _, bombs = entry
+    sf_key = tuple(sorted(tuple(sorted(sf)) for sf in (nat + wild)))
+    bomb_key = tuple(tuple(sorted(b)) for b in bombs)
+    return (sf_key, bomb_key)
+
+
+def _enumerate_sf_hand_candidates(
+    hand_cards: List[str],
+    cur_rank: str,
+    wilds_all: List[str],
+    bombs: List[List[str]],
+) -> List[SfPlanEntry]:
+    """
+    从整手牌按花色 multiset 枚举 StraightFlush 候选（GUA-084 peel + GUA-108 竞争方案）。
+
+    不依赖 _basic_classify 的混花对/四炸划分，避免 Step1 误检 []。
+    """
+    hand_ct: Counter = Counter(
+        c for c in hand_cards if not _is_wild(c, cur_rank)
+    )
+    wilds_for_sf = wilds_all[:] if wilds_all else [
+        c for c in hand_cards if _is_wild(c, cur_rank)
+    ]
+    entries: List[SfPlanEntry] = []
+    seen: Set[Tuple] = set()
+
+    for suit in SUITS:
+        for window in _sf_rank_windows():
+            for sf_cards, wilds_used, bombs_after in _assign_sf_in_suit_window(
+                suit, window, hand_ct, wilds_for_sf[:], bombs
+            ):
+                rem_s, rem_p, rem_t, rem_w = _remainder_pools_after_sf(
+                    hand_cards, sf_cards, wilds_used, bombs_after, cur_rank
+                )
+                if wilds_used:
+                    nat_sf: List[List[str]] = []
+                    wild_sf = [sf_cards]
+                else:
+                    nat_sf = [sf_cards]
+                    wild_sf = []
+                rem_w_full = rem_w + [w for w in wilds_all if w not in wilds_used]
+                entry: SfPlanEntry = (
+                    nat_sf, wild_sf, rem_s, rem_p, rem_t, rem_w_full, bombs_after
+                )
+                key = _sf_plan_entry_key(entry)
+                if key not in seen:
+                    seen.add(key)
+                    entries.append(entry)
+    return entries
+
+
+def _merge_sf_plan_entries(*entry_lists: List[SfPlanEntry]) -> List[SfPlanEntry]:
+    merged: List[SfPlanEntry] = []
+    seen: Set[Tuple] = set()
+    for entries in entry_lists:
+        for entry in entries:
+            key = _sf_plan_entry_key(entry)
+            if key not in seen:
+                seen.add(key)
+                merged.append(entry)
+    return merged
+
+
+def _append_unique_sf(all_sf: List[List[str]], candidate: List[str]) -> None:
+    norm = sorted(candidate)
+    for existing in all_sf:
+        if sorted(existing) == norm:
+            return
+    all_sf.append(list(candidate))
+
+
 def _classify_dissolved_bomb_cards(
     bomb_cards: List[str],
     cur_rank: str,
@@ -1578,6 +1815,12 @@ def _enumerate_plans(
             break
         all_sf_results.append((sf_nat, sf_w, sf_n, sf_p, sf_t, sf_rw, all_bombs))
 
+    # 1c: 手牌 multiset 枚举（GUA-084 peel / GUA-108），补 Step1a/1b 漏检
+    hand_sf_entries = _enumerate_sf_hand_candidates(
+        hand_cards, cur_rank, wilds_all[:], all_bombs,
+    )
+    all_sf_results = _merge_sf_plan_entries(all_sf_results, hand_sf_entries)
+
     # ── SF candidate → 完整方案生成器 ──
     def _make_plan_from_sf(
         nat_sf: List[List[str]], wild_sf: List[List[str]],
@@ -1603,6 +1846,21 @@ def _enumerate_plans(
             safe_to_break_fn=_safe_to_break_bomb,
         )
         pool_s.extend(peeled)
+
+        # Step 2b: 大炸 peel / 拆弹入池后重检同花顺（GUA-084/108）
+        if peeled or large_bomb_peel > 0:
+            redetect_nat, pool_s, pool_p, pool_t, pool_w = _detect_straight_flushes(
+                pool_s, pool_p, pool_t, cur_rank, pool_w,
+            )
+            for sf in redetect_nat:
+                _append_unique_sf(all_sf, sf)
+            for sf_idx in range(10):
+                sf_w, pool_s, pool_p, pool_t, pool_w = _detect_straight_flushes(
+                    pool_s, pool_p, pool_t, cur_rank, pool_w, return_idx=sf_idx,
+                )
+                if not sf_w:
+                    break
+                _append_unique_sf(all_sf, sf_w[0])
 
         # GUA-108: 为成顺而定向拆 4 炸，候选只进枚举层，由评分决定是否值得。
         if bridge_bomb_idx is not None and 0 <= bridge_bomb_idx < len(remaining_bombs):

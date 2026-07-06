@@ -119,8 +119,11 @@ BAOSHU_RULE: Dict[int, tuple] = {
     1: ("单张(听牌)", ["ThreeWithTwo", "TwoTrips", "ThreePair", "Straight", "Bomb"],  []),
     2: ("对子",       ["ThreeWithTwo", "TwoTrips", "ThreePair", "Straight", "Bomb", "Trips"], ["Pair"]),
     3: ("三同张",     ["Pair", "Single", "TwoTrips", "ThreePair", "Straight", "Bomb"], ["Trips"]),
-    4: ("炸弹/四张",   ["ThreeWithTwo", "TwoTrips", "ThreePair", "Straight", "Bomb"], ["Pair"]),
+    4: ("炸弹/四张",   ["ThreeWithTwo", "TwoTrips", "ThreePair", "Straight"], ["Pair", "Bomb", "StraightFlush"]),
 }
+
+# GUA-115：报四时 never_play 中的 bomb-like 不受「张数 ≤ remaining」过滤（SF 平台张数=5）
+_BAOSHU_BOMB_LIKE_NEVER_AT_FOUR = frozenset({"Bomb", "StraightFlush"})
 
 # 危险等级序数映射
 _DANGER_ORDER: Dict[str, int] = {"极高": 0, "高": 1, "中高": 2, "中": 3, "低": 4}
@@ -366,20 +369,9 @@ class EndgamePreprocessor:
         return mapped_types
 
     def _assist_prefer_for(self, remaining: int) -> List[str]:
-        """队友剩 N 张时，精确投喂牌型（按优先序）"""
-        if remaining == 1:
-            return ["Single"]
-        elif remaining == 2:
-            return ["Pair"]
-        elif remaining == 3:
-            return ["Trips", "Pair", "Single"]
-        elif remaining == 4:
-            return ["Pair"]
-        elif remaining == 5:
-            return ["Straight", "ThreeWithTwo"]
-        elif remaining <= 10:
-            return ["Pair"]
-        return []
+        """队友剩 N 张时，精确投喂牌型（按优先序）→ 见 assist_prefer_table。"""
+        from src.v.nn.assist_prefer_table import assist_prefer_for
+        return assist_prefer_for(remaining)
 
     # ── 大单张动态阈值 ── IGNORE_STUB_RESOLVE_BIG_SINGLE_THRESHOLD ──
 
@@ -654,11 +646,13 @@ class EndgamePreprocessor:
                     raw_block_with = list(bs[1])
                     raw_never_play = list(bs[2])
 
-                    # never_play 张数过滤（≤ remaining 的才写入）
-                    never_play = [
-                        t for t in raw_never_play
-                        if self.ACTION_CARD_COUNT.get(t, 99) <= remaining
-                    ]
+                    # never_play 张数过滤（≤ remaining 的才写入；报四 bomb-like 例外见 GUA-115）
+                    never_play = []
+                    for t in raw_never_play:
+                        if remaining == 4 and t in _BAOSHU_BOMB_LIKE_NEVER_AT_FOUR:
+                            never_play.append(t)
+                        elif self.ACTION_CARD_COUNT.get(t, 99) <= remaining:
+                            never_play.append(t)
 
                     block_with = [
                         t for t in raw_block_with
@@ -676,10 +670,11 @@ class EndgamePreprocessor:
         # ── ② 队友助攻 ──
         mate_remaining = numofplayers[teammate_pos]
         if 1 <= mate_remaining <= max_end_card:
+            from src.v.nn.assist_prefer_table import assist_is_close, assist_prefer_for
             context["teammate"] = {
                 "remaining": mate_remaining,
-                "is_close": mate_remaining <= 4,
-                "assist_prefer": self._assist_prefer_for(mate_remaining),
+                "is_close": assist_is_close(mate_remaining),
+                "assist_prefer": assist_prefer_for(mate_remaining),
             }
 
         # ── ③ 自己冲刺 ──
