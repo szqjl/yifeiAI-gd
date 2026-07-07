@@ -34,6 +34,40 @@
 
 ---
 
+## 术语与平台一致（强制）
+
+**文档与代码中的术语，必须与平台使用说明一致。** 真源（按优先级）：
+
+1. [`offline_platform/掼蛋平台使用说明书v1006.pdf`](offline_platform/掼蛋平台使用说明书v1006.pdf)
+2. [`docs/guandan-brain/掼蛋AI算法对抗平台使用说明.md`](docs/guandan-brain/掼蛋AI算法对抗平台使用说明.md)
+3. [`.cursor/rules/guandan-platform-v1006.mdc`](.cursor/rules/guandan-platform-v1006.mdc)（协议速查）
+4. [`docs/knowledge/platform-data-interpretation.md`](docs/knowledge/platform-data-interpretation.md)（局/副/批跑口径）
+
+### 必须对齐的平台术语（示例）
+
+| 类别 | 平台标准写法 | 禁止混用（除非下方例外） |
+|------|-------------|-------------------------|
+| 牌型 / `action[0]` | `Single` `Pair` `Trips` `ThreeWithTwo` `ThreePair` `TwoTrips` `Straight` `StraightFlush` `Bomb` | `single` `pair` `bomb` `straight_flush` `three_with_two` … |
+| 特殊动作 | `PASS` `tribute` `back` | 自造 snake_case 动作类型名 |
+| 阶段 `stage` | `beginning` `tribute` `anti-tribute` `back` `play` `episodeOver` `gameOver` `gameResult` | 把 `episodeOver` 叫「局」、把 `gameOver` 叫「副」 |
+| 等级字段 | `curRank` `selfRank` `oppoRank` | 与协议不同名的别称 |
+| 计数单位 | **局**（`completed_games` / `victoryNum`）、**副**（`game_records` 条 / `episodeOver`） | 用牌谱条数当局数 |
+
+### 无法与平台完全一致的例外
+
+组牌引擎等**内部子结构**键（非 `actionList` 声明）可保留，但须在**定义处**用注释标明与平台名的对应关系，例如：
+
+- `group_type`：`trip_in_three_with_two` / `pair_in_three_with_two` → 平台 `ThreeWithTwo`（GUA-070 拆分子组）
+- `group_type`：`pair_in_three_pair` → 平台 `ThreePair`
+- `group_type`：`trip_in_steel_plate` → 平台 `TwoTrips`（钢板）
+- `GroupingPlan` 字段名（如 `straight_flushes`、`three_with_twos`）→ 数据结构名，**不是**平台 `action[0]`；导出/对接时用 `StraightFlush` / `ThreeWithTwo` 等
+
+**禁止**：再引入 `three_with_two`、`three_pair`、`two_trips` 等**从未由组牌产出、却假装是 group_type** 的幽灵键（见 ITERATIONS `v7-group-type-platform-unify`）。
+
+新增类型名、文档章节名或 JSON 字段前：先查上表真源；若用内部名，**代码写行内注释，文档写「平台名 ↔ 内部名」对照一句**。
+
+---
+
 ## 净盘（批跑前标准动作）
 
 **何时**：关单验收、KPI 环比、多样本观测前——须清空本轮 Layer 2 产物，避免旧牌谱/旧 vn 混入统计。对应工作流 **WF-04** 跑批前一步。

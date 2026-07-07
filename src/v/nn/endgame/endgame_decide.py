@@ -159,6 +159,107 @@ def _bomb_splits_pure_rank_leaving_orphan(
     return False
 
 
+def _is_wild_level_card(card: str, cur_rank: str) -> bool:
+    """红桃级牌 H{curRank} 为逢人配。"""
+    if not card or not cur_rank:
+        return False
+    if len(card) >= 2 and card[0] == "H":
+        return card[1:] == cur_rank
+    return False
+
+
+def _single_action_uses_wild_level_card(action: List, cur_rank: str) -> bool:
+    if not GUARD_TOOLS_OK or not cur_rank:
+        return False
+    if get_action_type(action) != ACTION_TYPE_SINGLE:
+        return False
+    rank = get_action_rank(action) or ""
+    if rank != cur_rank:
+        return False
+    cards = _get_cards(action)
+    if len(cards) != 1:
+        return False
+    return _is_wild_level_card(str(cards[0]), cur_rank)
+
+
+def _has_non_wild_level_single_option(items: List, cur_rank: str) -> bool:
+    for item in items:
+        act = item[1] if isinstance(item, tuple) and len(item) == 2 else item
+        if not GUARD_TOOLS_OK:
+            continue
+        if get_action_type(act) != ACTION_TYPE_SINGLE:
+            continue
+        if (get_action_rank(act) or "") != cur_rank:
+            continue
+        cards = _get_cards(act)
+        if len(cards) != 1:
+            continue
+        if not _is_wild_level_card(str(cards[0]), cur_rank):
+            return True
+    return False
+
+
+def _sort_q1_prefer_non_wild_level_singles(items: List, cur_rank: str) -> List:
+    """
+    GUA-122：压单时若同级存在非逢人配级牌，不得裸出 H{curRank}。
+    """
+    if not items or not cur_rank or not _has_non_wild_level_single_option(items, cur_rank):
+        return items
+
+    def _wild_penalty(item):
+        act = item[1] if isinstance(item, tuple) and len(item) == 2 else item
+        return 1 if _single_action_uses_wild_level_card(act, cur_rank) else 0
+
+    return sorted(items, key=_wild_penalty)
+
+
+def _hand_counter_from_state(game_state: Dict[str, Any]) -> Counter:
+    return Counter(game_state.get("handCards", []) or [])
+
+
+def _is_finish_now_action(act: List, hand_counter: Counter) -> bool:
+    """GUA-112：候选牌张 multiset 与当前手牌一致 → 一手清牌。"""
+    if not isinstance(act, list) or not hand_counter:
+        return False
+    if _get_declared_action_type(act) in (ACTION_TYPE_PASS, "PASS"):
+        return False
+    cards = _get_cards(act)
+    return bool(cards) and Counter(cards) == hand_counter
+
+
+def find_finish_now_candidate(
+    game_state: Dict[str, Any], action_list: List,
+) -> Optional[Tuple[int, List]]:
+    """在 action_list 中查找一手清牌候选（首个匹配）。"""
+    hand_counter = _hand_counter_from_state(game_state)
+    if not hand_counter:
+        return None
+    for i, act in enumerate(action_list):
+        if _is_finish_now_action(act, hand_counter):
+            return i, act
+    return None
+
+
+def finish_now_protected_action_types(
+    game_state: Dict[str, Any], action_list: List,
+) -> set:
+    """GUA-112：所有一手清候选的 ACTION_TYPE，供 Q1 banned 保护集使用。"""
+    hand_counter = _hand_counter_from_state(game_state)
+    if not hand_counter or not GUARD_TOOLS_OK:
+        return set()
+    protected: set = set()
+    for act in action_list:
+        if not _is_finish_now_action(act, hand_counter):
+            continue
+        try:
+            atype = get_action_type(act)
+            if atype not in (ACTION_TYPE_PASS, ACTION_TYPE_FREE):
+                protected.add(atype)
+        except Exception:
+            continue
+    return protected
+
+
 def _sort_by_recapture_first(
     actions: List, hand_cards: List[str],
 ) -> List:
@@ -217,7 +318,25 @@ def action_list_item_to_feed_recommendation(
     rank_map: Optional[Dict[str, str]] = None,
 ) -> Optional[Dict[str, Any]]:
     """将 actionList 条目转为 _recommend_play 推荐 dict。"""
-    if not action or not GUARD_TOOLS_OK:
+    if not action:
+        return None
+    declared = _get_declared_action_type(action)
+    if declared in (ACTION_TYPE_PASS, "PASS"):
+        return {"type": "PASS", "rank": "", "cards": [], "intent": intent}
+    if declared in ("Bomb", "StraightFlush"):
+        cards = _get_cards(action)
+        rank = action[1] if len(action) > 1 else ""
+        if rank_map and rank in rank_map:
+            rank = rank_map[rank]
+        elif rank_map:
+            rank = rank_map.get(rank, rank)
+        return {
+            "type": declared,
+            "rank": rank,
+            "cards": [str(c) for c in cards],
+            "intent": intent,
+        }
+    if not GUARD_TOOLS_OK:
         return None
     atype = get_action_type(action)
     if atype in (ACTION_TYPE_PASS, ACTION_TYPE_FREE, "PASS", "Free"):
@@ -258,6 +377,210 @@ def _get_declared_action_type(action: List) -> str:
     return ""
 
 
+def _effective_structure_type(action: List) -> str:
+    """结构类型：平台 StraightFlush / Bomb 声明优先于实牌推断。"""
+    declared = _get_declared_action_type(action)
+    if declared == "StraightFlush":
+        return ACTION_TYPE_STRAIGHT_FLUSH
+    if declared == "Bomb":
+        return ACTION_TYPE_BOMB
+    if not GUARD_TOOLS_OK:
+        return declared
+    try:
+        return get_action_type(action)
+    except Exception:
+        return declared
+
+
+def _action_beats_greater(
+    challenger: List, defender: List, cur_rank: str,
+) -> bool:
+    """challenger 是否压过 greaterAction（平台 StraightFlush / Bomb 声明优先）。"""
+    if not challenger or not defender:
+        return False
+    if _get_declared_action_type(challenger) in (ACTION_TYPE_PASS, "PASS"):
+        return False
+    if _get_declared_action_type(defender) in (ACTION_TYPE_PASS, "PASS"):
+        return False
+
+    ch_bomb = _is_bomb_like_action(challenger)
+    df_bomb = _is_bomb_like_action(defender)
+    if ch_bomb and not df_bomb:
+        return True
+    if df_bomb and not ch_bomb:
+        return False
+    if not ch_bomb:
+        try:
+            from src.game_logic.trick_state import action_beats
+            return action_beats(challenger, defender, cur_rank) is True
+        except Exception:
+            return False
+
+    ch_decl = _get_declared_action_type(challenger)
+    df_decl = _get_declared_action_type(defender)
+    ch_cards = _get_cards(challenger)
+    df_cards = _get_cards(defender)
+    ch_sf = ch_decl == "StraightFlush"
+    df_sf = df_decl == "StraightFlush"
+
+    # 同花顺 > 5星及以下炸；6星炸+ > 同花顺
+    if ch_sf and not df_sf:
+        return len(df_cards) <= 5
+    if df_sf and not ch_sf:
+        return len(ch_cards) >= 6
+    if ch_sf and df_sf:
+        ch_rank = challenger[1] if len(challenger) > 1 else ""
+        df_rank = defender[1] if len(defender) > 1 else ""
+        try:
+            from src.game_logic.trick_state import rank_value
+            return rank_value(ch_rank, cur_rank) > rank_value(df_rank, cur_rank)
+        except Exception:
+            return False
+
+    ch_n, df_n = len(ch_cards), len(df_cards)
+    if ch_n != df_n:
+        return ch_n > df_n
+    ch_rank = challenger[1] if len(challenger) > 1 else ""
+    df_rank = defender[1] if len(defender) > 1 else ""
+    try:
+        from src.game_logic.trick_state import rank_value
+        return rank_value(ch_rank, cur_rank) > rank_value(df_rank, cur_rank)
+    except Exception:
+        return False
+
+
+def _is_following_enemy_bomb_control(
+    game_state: Dict[str, Any], my_pos: Optional[int] = None,
+) -> bool:
+    """跟压敌方 bomb-like 控牌（非队友、非 PASS）。"""
+    my_pos = my_pos if my_pos is not None else game_state.get("myPos", 0)
+    greater_pos = game_state.get("greaterPos", -1)
+    greater_action = game_state.get("greaterAction")
+    enemy_positions = {(my_pos + 1) % 4, (my_pos + 3) % 4}
+    if greater_pos not in enemy_positions:
+        return False
+    if not greater_action or _get_declared_action_type(greater_action) in (
+        ACTION_TYPE_PASS, "PASS",
+    ):
+        return False
+    return _is_bomb_like_action(greater_action)
+
+
+def _enemy_bomb_sprint_remaining(game_state: Dict[str, Any]) -> Optional[int]:
+    """控牌敌席剩张（用于反炸 sprint 阈值）。"""
+    greater_pos = game_state.get("greaterPos", -1)
+    nums = game_state.get("numofplayers") or []
+    if greater_pos < 0 or greater_pos >= len(nums):
+        return None
+    try:
+        return int(nums[greater_pos])
+    except (TypeError, ValueError):
+        return None
+
+
+def collect_counter_bomb_like_candidates(
+    action_list: List,
+    greater_action: List,
+    cur_rank: str,
+) -> List[Tuple[int, List]]:
+    """从 actionList 收集可压过 greater 的 bomb-like 候选。"""
+    result: List[Tuple[int, List]] = []
+    for i, act in enumerate(action_list):
+        if not _is_bomb_like_action(act):
+            continue
+        if _action_beats_greater(act, greater_action, cur_rank):
+            result.append((i, act))
+    return result
+
+
+def select_counter_bomb_like(
+    action_list: List,
+    greater_action: List,
+    game_state: Dict[str, Any],
+) -> Optional[Tuple[int, List]]:
+    """GUA-103 最小足够成本选反炸候选。"""
+    cur_rank = str(game_state.get("curRank", "2"))
+    hand_cards = game_state.get("handCards", []) or []
+    candidates = collect_counter_bomb_like_candidates(
+        action_list, greater_action, cur_rank,
+    )
+    if not candidates:
+        return None
+    sorted_cands = _sort_q1_block_candidates(candidates, hand_cards, game_state)
+    return sorted_cands[0] if sorted_cands else None
+
+
+def should_allow_counter_bomb_core_exempt(
+    action: List,
+    game_state: Dict[str, Any],
+    cur_rank: Optional[str] = None,
+) -> bool:
+    """GUA-123：跟压敌炸 sprint 时允许拆 Bomb/SF core 反炸。"""
+    if not _is_following_enemy_bomb_control(game_state):
+        return False
+    if not _is_bomb_like_action(action):
+        return False
+    greater_action = game_state.get("greaterAction")
+    if not greater_action:
+        return False
+    cur_rank = cur_rank or str(game_state.get("curRank", "2"))
+    if not _action_beats_greater(action, greater_action, cur_rank):
+        return False
+    enemy_rem = _enemy_bomb_sprint_remaining(game_state)
+    if enemy_rem is None or enemy_rem > 5 or enemy_rem < 1:
+        return False
+    return True
+
+
+def find_latent_bomb_like_beaters_not_in_action_list(
+    hand_cards: List[str],
+    cur_rank: str,
+    greater_action: List,
+    action_list: List,
+) -> List[List[str]]:
+    """组牌可见、可压敌炸，但平台 actionList 未枚举的 bomb-like 牌组（诊断用）。"""
+    if not hand_cards or not greater_action:
+        return []
+    try:
+        from src.v.nn.features.grouping_engine import enumerate_groupings
+    except ImportError:
+        return []
+
+    def _cards_key(cards: List[str]) -> Tuple[str, ...]:
+        return tuple(sorted(str(c) for c in cards))
+
+    listed_keys = set()
+    for act in action_list or []:
+        if not _is_bomb_like_action(act):
+            continue
+        listed_keys.add(_cards_key(_get_cards(act)))
+
+    latent: List[List[str]] = []
+    try:
+        best_plan, _ = enumerate_groupings(hand_cards, cur_rank)
+    except Exception:
+        return []
+
+    for sf in getattr(best_plan, "straight_flushes", []) or []:
+        sf_cards = [str(c) for c in sf]
+        if _cards_key(sf_cards) in listed_keys:
+            continue
+        pseudo = ["StraightFlush", sf_cards[0][1] if sf_cards else "", sf_cards]
+        if _action_beats_greater(pseudo, greater_action, cur_rank):
+            latent.append(sf_cards)
+
+    for bomb in getattr(best_plan, "bombs", []) or []:
+        bomb_cards = [str(c) for c in bomb]
+        if _cards_key(bomb_cards) in listed_keys:
+            continue
+        rank = bomb_cards[0][1] if bomb_cards else ""
+        pseudo = ["Bomb", rank, bomb_cards]
+        if _action_beats_greater(pseudo, greater_action, cur_rank):
+            latent.append(bomb_cards)
+
+    return latent
+
+
 def _is_control_action(action: List) -> bool:
     """是否为真实控牌动作；平台声明优先，PASS/FREE 视为非控牌。"""
     declared = _get_declared_action_type(action)
@@ -291,10 +614,13 @@ def _q1_structure_priority(action_type: str) -> int:
 def _sort_q1_block_candidates(
     actions: List, hand_cards: List[str], game_state: Dict[str, Any],
 ) -> List:
-    """Q1 候选排序：默认沿用回收优先；bomb-like 内部按最小足够成本优先。"""
+    """Q1 候选排序：回收优先 → 级牌单张少耗逢人配 → bomb-like 最小足够成本。"""
     ordered = _sort_by_recapture_first(actions, hand_cards)
     if not ordered or not GUARD_TOOLS_OK:
         return ordered
+
+    cur_rank = str(game_state.get("curRank", "2"))
+    ordered = _sort_q1_prefer_non_wild_level_singles(ordered, cur_rank)
 
     greater_action = game_state.get("greaterAction")
     if not greater_action:
@@ -311,7 +637,6 @@ def _sort_q1_block_candidates(
         if greater_type in (ACTION_TYPE_PASS, ACTION_TYPE_FREE):
             return ordered
 
-    cur_rank = str(game_state.get("curRank", "2"))
     bomb_items = [
         item for item in ordered
         if _is_bomb_like_action(item[1] if isinstance(item, tuple) and len(item) == 2 else item)
@@ -418,9 +743,14 @@ class EndgameDecider:
         if not GUARD_TOOLS_OK:
             return action_list, False
 
-        # 硬排除
+        hand_counter = _hand_counter_from_state(game_state)
+
+        # 硬排除（GUA-112：一手清候选永不被 banned 删掉）
         filtered = []
         for a in action_list:
+            if hand_counter and _is_finish_now_action(a, hand_counter):
+                filtered.append(a)
+                continue
             try:
                 atype = get_action_type(a)
                 if atype not in banned_set:
@@ -450,6 +780,7 @@ class EndgameDecider:
         ec: Dict[str, Any],
         main_pos: int,
         main_enemy: Dict[str, Any],
+        action_list: Optional[List] = None,
     ) -> set:
         """
         Q1 中不应被 secondary ban 删掉的“保护型”。
@@ -457,6 +788,7 @@ class EndgameDecider:
         规则：
           1. 主目标 enemy 的 recommended / block_with 对应类型受保护
           2. 当前 greaterPos 若是敌人且已进残局，则 greaterAction 同型受保护
+          3. GUA-112：存在一手清候选时，其 ACTION_TYPE 受保护
         """
         protected: set = set()
         try:
@@ -480,6 +812,9 @@ class EndgameDecider:
             except Exception:
                 pass
 
+        if action_list:
+            protected.update(finish_now_protected_action_types(game_state, action_list))
+
         return protected
 
     def _collect_q1_banned_set(
@@ -498,7 +833,9 @@ class EndgameDecider:
           - 次要敌人的 ban 删掉主目标 recommended 类型
           - 当前敌人已用 Pair/Trips 控牌，但同型被规则表 ban 掉
         """
-        protected_types = self._get_q1_protected_types(game_state, ec, main_pos, main_enemy)
+        protected_types = self._get_q1_protected_types(
+            game_state, ec, main_pos, main_enemy, action_list,
+        )
         banned_set: set = set()
         try:
             from .endgame_preprocessor import _ACTION_TYPE_CARD_COUNT as _card_count
@@ -604,34 +941,26 @@ class EndgameDecider:
         self, game_state: Dict[str, Any], action_list: List, ec: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
         """
-        两手整牌 + 有炸 → 出最大整炸抢头游。
+        两手整牌 + 有 bomb-like 资源 → 按出牌权动态选冲刺顺序。
 
-        按出牌权 + 对手残局状态动态选「先炸后整」还是「先整后炸」。
+        被动跟压敌控时优先两手冲刺先手（如 StraightFlush→对子），
+        非 GUA-103 最小足够炸节炸逻辑。
         """
         my_pos = ec.get("my_pos", 0)
         cur_pos = game_state.get("curPos", my_pos)
         is_my_turn = (cur_pos == my_pos)
         enemies = ec.get("enemies", {})
 
-        # 分离炸弹和非炸弹
+        # 分离 bomb-like（含平台 StraightFlush）与非 bomb-like
         bombs = []
         non_bombs = []
-        if GUARD_TOOLS_OK:
-            for i, a in enumerate(action_list):
-                try:
-                    if is_bomb(a):
-                        bombs.append((i, a))
-                    else:
-                        non_bombs.append((i, a))
-                except Exception:
-                    non_bombs.append((i, a))
-        else:
-            for i, a in enumerate(action_list):
-                cards = _get_cards(a)
-                if len(cards) >= 4:
-                    bombs.append((i, a))
-                else:
-                    non_bombs.append((i, a))
+        for i, a in enumerate(action_list):
+            if _get_declared_action_type(a) in (ACTION_TYPE_PASS, "PASS"):
+                non_bombs.append((i, a))
+            elif _is_bomb_like_action(a):
+                bombs.append((i, a))
+            else:
+                non_bombs.append((i, a))
 
         if not bombs:
             # 没有炸弹 → 按非炸弹最佳出牌
@@ -672,13 +1001,54 @@ class EndgameDecider:
         else:
             # 出牌权不在我手
             if enemy_in_endgame:
-                # 敌方已进残局 → 必须炸，夺回出牌权
-                return self._select_best_bomb(bombs, action_list)
+                # 两手冲刺：被动跟压时优先出能压敌且保留完整第二手的先手（如 SF→对子）
+                sprint_first = self._q0_passive_sprint_vs_enemy_control(
+                    game_state, action_list, ec,
+                )
+                if sprint_first is not None:
+                    return sprint_first
+                if bombs:
+                    return self._select_best_bomb(bombs, action_list)
+                return None
             else:
                 # 不急于炸，让对手出
                 if non_bombs:
                     return self._select_best_index(non_bombs, action_list, game_state)
                 return None  # 只有炸，但没有合适时机
+
+    def _q0_passive_sprint_vs_enemy_control(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        Q0 被动跟压：两手冲刺时出能压敌控且保留完整第二手的先手整牌。
+
+        非 GUA-103「最小足够炸」逻辑（节炸仅在 Q1 多档 bomb-like 间比较）。
+        """
+        if not self._is_q1_following_enemy_control(game_state, ec):
+            return None
+
+        greater_action = game_state.get("greaterAction")
+        if not greater_action or not _is_control_action(greater_action):
+            return None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+        all_candidates = [(i, a) for i, a in enumerate(action_list)]
+        playable = []
+        for idx, act in all_candidates:
+            if _get_declared_action_type(act) in (ACTION_TYPE_PASS, "PASS"):
+                continue
+            if _action_beats_greater(act, greater_action, cur_rank):
+                playable.append((idx, act))
+
+        if not playable:
+            return None
+
+        return self._select_two_turn_sprint_structure(
+            playable, all_candidates, game_state, ec,
+        )
 
     # ═══════════════════════════════════════════════════
     #  Q1: 封锁敌方
@@ -716,6 +1086,12 @@ class EndgameDecider:
         )
         if gua115_pass is not None:
             return gua115_pass
+
+        counter_bomb = self._q1_counter_enemy_bomb(
+            game_state, action_list, ec, main_pos, main_enemy,
+        )
+        if counter_bomb is not None:
+            return counter_bomb
 
         # 敌方剩 5 张 + 当前控牌为 Single 的残局特判：
         # 先判断上/下家、4+1/整牌型、队友牌力和“敌方是否仍可能有更大单张”，
@@ -831,6 +1207,31 @@ class EndgameDecider:
             return False
         return bool(ec.get("self", {}).get("has_two_clean_hands"))
 
+    def _q1_counter_enemy_bomb(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-123：敌 sprint 出炸时，从 actionList 选最小足够反炸。"""
+        if main_enemy.get("remaining", 99) > 5:
+            return None
+        if not self._is_q1_following_enemy_control(game_state, ec):
+            return None
+        greater_action = game_state.get("greaterAction")
+        if not _is_bomb_like_action(greater_action):
+            return None
+        picked = select_counter_bomb_like(action_list, greater_action, game_state)
+        if picked:
+            return picked
+        # 敌 sprint 出炸但压不过 → 明确 PASS，避免后续 Q1 误选弱炸
+        for i, act in enumerate(action_list):
+            if _get_declared_action_type(act) in (ACTION_TYPE_PASS, "PASS"):
+                return (i, act)
+        return None
+
     def _q1_gua115_fire_no_bomb_four_pass(
         self,
         game_state: Dict[str, Any],
@@ -868,19 +1269,7 @@ class EndgameDecider:
         self, game_state: Dict[str, Any], action_list: List,
     ) -> Optional[Tuple[int, List]]:
         """GUA-112：若平台给出一手清牌候选，Q1 不得拆完整手牌。"""
-        hand_counter = Counter(game_state.get("handCards", []) or [])
-        if not hand_counter:
-            return None
-
-        for i, act in enumerate(action_list):
-            if not isinstance(act, list):
-                continue
-            if _get_declared_action_type(act) in (ACTION_TYPE_PASS, "PASS"):
-                continue
-            cards = _get_cards(act)
-            if cards and Counter(cards) == hand_counter:
-                return i, act
-        return None
+        return find_finish_now_candidate(game_state, action_list)
 
     def _q1_hold_teammate_max_control(
         self, game_state: Dict[str, Any], action_list: List, ec: Dict[str, Any],
@@ -1300,16 +1689,24 @@ class EndgameDecider:
             if residue_item is None:
                 continue
 
-            residue_type = get_action_type(residue_item[1])
+            residue_type = _effective_structure_type(residue_item[1])
             residue_bucket = 0
             if residue_type == ACTION_TYPE_SINGLE:
                 safe_residue = self._select_enemy_one_safe_single([residue_item], game_state, ec)
                 residue_bucket = 1 if safe_residue is not None else 2
 
-            act_type = get_action_type(act)
+            act_type = _effective_structure_type(act)
+            declared = _get_declared_action_type(act)
+            # 两手冲刺先手：StraightFlush 优于临时星炸（保留第二手整牌结构）
+            bomb_sprint_rank = (
+                0 if declared == "StraightFlush"
+                else 1 if declared == "Bomb"
+                else 2
+            )
             sprint_candidates.append((
                 (
                     residue_bucket,
+                    bomb_sprint_rank,
                     _q1_structure_priority(act_type),
                     -len(cards),
                     _max_card_value(act, cur_rank),

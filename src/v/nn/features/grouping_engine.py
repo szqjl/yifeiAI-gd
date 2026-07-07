@@ -13,7 +13,9 @@ GUA-061→GUA-062 GroupingEngine — M3 组牌逻辑提取 + v2 升级（静态�
     1. 同花顺检测（天然 → wild辅助，枚举所有 SF 候选）
     2. 拆弹 → singles 池（≤10 小炸可拆，J/Q/K/A 炸保护；**仅在 _make_plan_from_sf Step2、break_bombs=True 时执行**，不在 SF 池预拆）
     3. wild → 升炸（逢人配固化炸弹，避免被顺子/三带二消耗）
-    4. {} 多 pass 循环（三带二 → 顺子1 → 顺子2 → 三连对 → 钢板
+    4. {} 多 pass 循环（三带二 ↔ 三连对 / 顺子 可换序，见 GUA-109
+       THREE_PAIR_FIRST / STRAIGHT_BEFORE_TWT；
+       默认三带二 → 顺子1 → 顺子2 → 三连对 → 钢板
        → trip降级+三连对扩展+trip恢复 → 单张合并对子）
     5. 剩余牌重分类
   生成方案：每个 SF 候选 → SF_FIRST/ROUND_OPTIMAL/ALL_COMBOS ×3
@@ -138,7 +140,7 @@ class GroupingPlan:
             - 同牌串多枚（如双 SQ）共 key，lookup 仍可用；**张数/成员以 group_members 为准**
           group_type_map: Dict[group_id, type_string]
           group_members: Dict[group_id, List[str]] — 保留重复牌串的多集合真源（4~8 星炸等）
-            - type_string: "bomb"/"straight_flush"/"straight"/"trips"/"pair"
+            - type_string: "Bomb"/"StraightFlush"/"straight"/"trips"/"pair"
               /"trip_in_three_with_two"/"pair_in_three_with_two"
               /"pair_in_three_pair"/"trip_in_steel_plate"
 
@@ -161,9 +163,9 @@ class GroupingPlan:
 
         # 核心牌型（炸弹/同花顺）
         for b in self.bombs:
-            groups.append((list(b), True, "bomb"))
+            groups.append((list(b), True, "Bomb"))
         for sf in self.straight_flushes:
-            groups.append((list(sf), True, "straight_flush"))
+            groups.append((list(sf), True, "StraightFlush"))
 
         # 结构化牌型（顺子/三张 → is_core=1.0，GUA-063）
         for s in self.straights:
@@ -1610,6 +1612,8 @@ def _run_multi_pass_loop(
     singles: List[str], pairs: List[List[str]], trips: List[List[str]],
     wilds: List[str], cur_rank: str, double_straights: bool,
     bomb_core_ranks: Optional[Set[str]] = None,
+    three_pair_first: bool = False,
+    straight_before_twt: bool = False,
 ) -> Tuple[
     List[str], List[List[str]], List[List[str]], List[str],
     List[List[str]], List[List[List[str]]], List[List[List[str]]],
@@ -1618,8 +1622,10 @@ def _run_multi_pass_loop(
     """
     新流水线 Step 4：{} 多 pass 循环（2026-06-20 重构）。
 
-    每轮依次：三带二 → 顺子1 → 顺子2(可选) → 三连对 → 钢板
+    每轮依次（默认）：三带二 → 顺子1 → 顺子2(可选) → 三连对 → 钢板
             → trip降级+三连对扩展+trip恢复 → 单张合并对子
+    GUA-109：`three_pair_first=True` 时每轮先三连对再三带二，使 334455 等与双三带二竞争方案并存。
+    GUA-109：`straight_before_twt=True` 时每轮先顺子再三带二，使 6-10 顺子与 JJJ+66 等竞争方案并存。
     循环直到无变化（退化为不变）。
 
     返回 (singles, pairs, trips, wilds, straights, three_pairs, steel_plates, three_with_twos)
@@ -1638,25 +1644,38 @@ def _run_multi_pass_loop(
     for _pass_idx in range(MAX_PASS):
         prev_total = len(s) + sum(len(pp) for pp in p) * 2 + sum(len(tt) for tt in t) * 3
 
-        # 1. 三带二
-        new_twt, t, p = _detect_three_with_two(
-            t, p, cur_rank, singles=s, bomb_core_ranks=bomb_core_ranks)
-        three_with_twos.extend(new_twt)
+        # 1/5. 三带二 ↔ 三连对 ↔ 顺子（GUA-109 竞争分支：换序但不删另一检测）
+        if straight_before_twt:
+            new_st, s, p, t, w = _detect_straights(s, p, t, cur_rank, w)
+            straights.extend(new_st)
+
+        if three_pair_first:
+            new_tp, p = _detect_three_pairs(p, cur_rank)
+            three_pairs.extend(new_tp)
+            new_twt, t, p = _detect_three_with_two(
+                t, p, cur_rank, singles=s, bomb_core_ranks=bomb_core_ranks)
+            three_with_twos.extend(new_twt)
+        else:
+            new_twt, t, p = _detect_three_with_two(
+                t, p, cur_rank, singles=s, bomb_core_ranks=bomb_core_ranks)
+            three_with_twos.extend(new_twt)
 
         # 2. 三张 — 保留 trip 结构（不做额外检测，trip 在步骤 7 降级前保持原样）
 
-        # 3. 顺子（第 1 轮）
-        new_st, s, p, t, w = _detect_straights(s, p, t, cur_rank, w)
-        straights.extend(new_st)
+        # 3. 顺子（第 1 轮；straight_before_twt 已在步骤 1 处理）
+        if not straight_before_twt:
+            new_st, s, p, t, w = _detect_straights(s, p, t, cur_rank, w)
+            straights.extend(new_st)
 
         # 4. 顺子（第 2 轮 / 双重）
         if double_straights:
             new_st2, s, p, t, w = _detect_straights(s, p, t, cur_rank, w)
             straights.extend(new_st2)
 
-        # 5. 三连对
-        new_tp, p = _detect_three_pairs(p, cur_rank)
-        three_pairs.extend(new_tp)
+        # 5. 三连对（默认序：三带二之后；three_pair_first 已在步骤 1 处理）
+        if not three_pair_first:
+            new_tp, p = _detect_three_pairs(p, cur_rank)
+            three_pairs.extend(new_tp)
 
         # 6. 钢板
         new_sp, t = _detect_steel_plate(t, cur_rank)
@@ -1829,6 +1848,8 @@ def _enumerate_plans(
         strategy: str, break_bombs: bool, double_st: bool,
         large_bomb_peel: int = 0,
         bridge_bomb_idx: Optional[int] = None,
+        three_pair_first: bool = False,
+        straight_before_twt: bool = False,
     ) -> GroupingPlan:
         all_sf = nat_sf + wild_sf
 
@@ -1882,7 +1903,9 @@ def _enumerate_plans(
 
         # Step 4: {} 多 pass 循环
         pool_s, pool_p, pool_t, pool_w, straights, three_pairs, steel_plates, twt_list = _run_multi_pass_loop(
-            pool_s, pool_p, pool_t, pool_w, cur_rank, double_st, bomb_core_ranks)
+            pool_s, pool_p, pool_t, pool_w, cur_rank, double_st, bomb_core_ranks,
+            three_pair_first=three_pair_first,
+            straight_before_twt=straight_before_twt)
 
         # Step 5: 剩余牌重分类
         rem_all = pool_s + [x for px in pool_p for x in px] + [x for tx in pool_t for x in tx]
@@ -1921,6 +1944,14 @@ def _enumerate_plans(
                 nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
                 "BOMB_FIRST", break_bombs=False, double_st=False,
                 large_bomb_peel=0))
+            plans.append(_make_plan_from_sf(
+                nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
+                "THREE_PAIR_FIRST", break_bombs=True, double_st=False,
+                large_bomb_peel=0, three_pair_first=True))
+            plans.append(_make_plan_from_sf(
+                nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
+                "STRAIGHT_BEFORE_TWT", break_bombs=True, double_st=False,
+                large_bomb_peel=0, straight_before_twt=True))
             for bridge_idx in _eligible_straight_bridge_bombs(
                 rem_s, rem_p, rem_t, rem_w, res_b, cur_rank
             ):
@@ -1940,10 +1971,26 @@ def _enumerate_plans(
                 [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
                 "ALL_COMBOS", break_bombs=True, double_st=True,
                 large_bomb_peel=peel))
+            plans.append(_make_plan_from_sf(
+                [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
+                "THREE_PAIR_FIRST", break_bombs=True, double_st=False,
+                large_bomb_peel=peel, three_pair_first=True))
+            plans.append(_make_plan_from_sf(
+                [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
+                "STRAIGHT_BEFORE_TWT", break_bombs=True, double_st=False,
+                large_bomb_peel=peel, straight_before_twt=True))
         plans.append(_make_plan_from_sf(
             [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
             "BOMB_FIRST", break_bombs=False, double_st=False,
             large_bomb_peel=0))
+        plans.append(_make_plan_from_sf(
+            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
+            "THREE_PAIR_FIRST", break_bombs=True, double_st=False,
+            large_bomb_peel=0, three_pair_first=True))
+        plans.append(_make_plan_from_sf(
+            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
+            "STRAIGHT_BEFORE_TWT", break_bombs=True, double_st=False,
+            large_bomb_peel=0, straight_before_twt=True))
         for bridge_idx in _eligible_straight_bridge_bombs(
             sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs, cur_rank
         ):

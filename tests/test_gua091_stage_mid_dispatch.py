@@ -179,7 +179,7 @@ def test_stage_mid_dispatch_ignites_bomb_when_sprint_fire_ready():
             "HK": (-1, 0.0, 0),
         },
     )
-    engine._group_type_map = {0: "bomb", 1: "bomb"}
+    engine._group_type_map = {0: "Bomb", 1: "Bomb"}
     gs = {
         "_current_stage": "stage_2",
         "_belief": {"hand_counts": {0: 9, 1: 6, 2: 7, 3: 8}},
@@ -224,7 +224,7 @@ def test_stage_mid_dispatch_holds_bomb_when_rear_teammate_can_cover_enemy_out_si
             "DA": (1, 1.0, 4),
         },
     )
-    engine._group_type_map = {0: "bomb", 1: "bomb"}
+    engine._group_type_map = {0: "Bomb", 1: "Bomb"}
     engine._recommend_min_press_impl = lambda *args, **kwargs: None
     engine._r11_bomb_throttle_check = lambda *args, **kwargs: (True, "critical_enemy")
     engine._recommend_bomb_from_mask = lambda *args, **kwargs: {
@@ -291,8 +291,8 @@ def test_stage_mid_dispatch_three_with_two_pressure_counter_avoids_pass():
         },
     )
     engine._group_type_map = {
-        0: "bomb",
-        1: "bomb",
+        0: "Bomb",
+        1: "Bomb",
         2: "pair",
         3: "pair_in_three_pair",
         4: "pair_in_three_pair",

@@ -4,6 +4,12 @@
 
 ## 如何使用本文件（Agent 必读）
 
+﻿# 迭代日志（Iteration Log）— MOC 入口
+
+> **已重构为 Obsidian 式组织**（2026-06-17）。历史迭代从单文件 157 行拆分为主题文件，按 [[wikilink]] 交叉引用。
+
+## 如何使用本文件（Agent 必读）
+
 | 场景 | 操作 |
 |------|------|
 | **接续任务 / 了解当前进度** | 打开本文件 → 查最新迭代（文件清单底部高亮项）→ 点 `[[GUA-xxx]]` wikilink 直达详情 |
@@ -176,3 +182,6 @@ ecord_decision / C 仅文档说明。 | pytest（待定）| 待 yf_replay.py 读
 | 2026-07-05 | gua117-p1-p2-roadmap | **GUA-117→118–121** | **P1/P2 登记**… | … |
 | 2026-07-06 | v7-gua117-layer0-guard | **GUA-117** 🟡 | **117-2a–2g**：`guards/assist_layer0_guard.py` → `filter_action_list`；B1–B6+让权；`decide()` 注入 `_card_mask` / `_group_gid_type_map` | `assist_layer0_guard.py`、`v7_guards.py`、`ultimate_win_rate_engine_v7.py`、`tests/test_gua117_assist_layer0_guard.py` | **117-7f bundle 86/86** ✅；§6 #2/#7 齐套 |
 | 2026-07-06 | v7-gua116-main-attack-lead | **GUA-116** 🟡 | **主攻 P1–4**：`stage_main_attack_lead.py`；P1 O10 倒数第二小、P2/P3+defer、P4 小对；路由 open/mid/075 | `stage_main_attack_lead.py`、`ultimate_win_rate_engine_v7.py`、`tests/test_gua116_main_attack_lead.py` | `pytest test_gua116 + gua090/091` ✅ |
+
+| 2026-07-07 | v7-gua125-two-turn-sprint-press-draft | **GUA-125** 🟢 P0 | **登记「残局 Q1 跟压整牌 两手冲刺(接力清空)-preserving / 同型 min 压」**。WF-12 锚点 20260706222548831117 步51/89:yf2 6J 炸压 TWT/3,应 777+22 或 888+22 保两手冲刺(接力清空)。P0:`_q1_block_enemy` ④→⑥ 间 hook + `_select_two_turn_sprint_structure` + `_has_recapture` 真 curRank（两手接力 = 冲刺定义）;**不做** GUA-115 扩 rem=5–8。P1:队友深牌让道 / 仅 bomb 可压 PASS。 | `docs/guandan-brain/ISSUES.md`、`docs/guandan-brain/issues/GUA-125-completion.md` | 仅文档登记;未改代码。**下一步**:补丁 A–C + `tests/test_gua125_q1_sprint_preserving_press.py`;用户补充 S2–S4 场景后再扩 pytest。 |
+| 2026-07-07 | v7-gua125-chain-clean-two-form-def | **GUA-125** 🟢 P0 | **「一手清空」与「冲刺(接力清空)」双情形定义归一**(与 two-turn-sprint-press-draft 配套):① **一手清空**:出完一手即归零 → 牌型不限(6J / 6张炸 / 5张三带二 / 4张炸 / 3张三张 / 2张对 / 1张单 / 5+顺子 / 6钢 / 三连对 / 同花顺),只要手牌只剩这一手 + 出完无人压 = 头游;② **接力清空**:6J + 任意 ≤5 张 X(X ∈ {单 / 对 / 三张 / 三带二 / 顺子 / 钢板 / 三连对 / 同花顺}),出 6J 无人压接力 X → 头游。**核心判据**:冲刺真闭环(only 两手接力清空;一手清空不叫冲刺) ≡ 出完自方手牌归零 ∧ 出牌路径上对手无反击力(无更大炸)+ 队友不抢权(teammate_rest>5)。**纠错**:本回轮曾误解「6J 单独不算 sprint」——修正为「**一手清空=任何一手出完归零(不叫冲刺);只有「出+下一手接力清空」= 两只可清才叫冲刺;3+手接力在掼蛋不可清**」。 | 本行(备忘) | 与 two-turn-sprint-preserving-press-draft 行配套,下一步并入 GUA-125 v1 实施。本行不涉及代码改动。 |

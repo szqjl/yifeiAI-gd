@@ -68,14 +68,22 @@ def test_l11_defer_single_twt_in_stage_1():
     card_mask = {
         "S3": (0, 0.0, 2),
         "H3": (0, 0.0, 2),
-        "S6": (1, 0.0, 3),
-        "H6": (1, 0.0, 3),
-        "C6": (1, 0.0, 3),
-        "S4": (1, 0.0, 3),
-        "H4": (1, 0.0, 3),
+        "S6": (1, 1.0, 3),
+        "H6": (1, 1.0, 3),
+        "C6": (1, 1.0, 3),
+        "S4": (2, 1.0, 2),
+        "H4": (2, 1.0, 2),
     }
-    group_type_map = {0: "pair", 1: "three_with_two"}
-    group_members = {0: ["S3", "H3"], 1: ["S6", "H6", "C6", "S4", "H4"]}
+    group_type_map = {
+        0: "pair",
+        1: "trip_in_three_with_two",
+        2: "pair_in_three_with_two",
+    }
+    group_members = {
+        0: ["S3", "H3"],
+        1: ["S6", "H6", "C6"],
+        2: ["S4", "H4"],
+    }
     engine = _make_engine(
         card_mask=card_mask,
         group_type_map=group_type_map,

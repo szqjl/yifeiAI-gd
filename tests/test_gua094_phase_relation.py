@@ -132,7 +132,7 @@ class TestUltimateWinRateEnginePhaseRelationInject:
             "H7": (2, 0.0, 2),
             "HK": (-1, 0.0, 0),
         }
-        engine._group_type_map = {0: "bomb", 1: "bomb", 2: "pair"}
+        engine._group_type_map = {0: "Bomb", 1: "Bomb", 2: "pair"}
         engine._group_members = {}
         engine._current_role = "主攻"
         engine.logger = logging.getLogger("test_gua094")

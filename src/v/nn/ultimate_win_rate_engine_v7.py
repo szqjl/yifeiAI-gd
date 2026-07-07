@@ -446,6 +446,25 @@ class UltimateWinRateEngineV7:
             EndgamePreprocessor().preprocess(game_state)
             ec = game_state.get("_endgame_context", {})
             if ec.get("is_active"):
+                try:
+                    from src.v.nn.endgame.endgame_decide import (
+                        _is_following_enemy_bomb_control,
+                        find_latent_bomb_like_beaters_not_in_action_list,
+                    )
+                    if _is_following_enemy_bomb_control(game_state):
+                        latent = find_latent_bomb_like_beaters_not_in_action_list(
+                            game_state.get("handCards") or [],
+                            str(game_state.get("curRank", "2")),
+                            game_state.get("greaterAction"),
+                            action_list,
+                        )
+                        if latent:
+                            self.logger.warning(
+                                "GUA-124: 组牌可压敌炸但 actionList 未枚举 latent=%s",
+                                latent[:2],
+                            )
+                except Exception as diag_err:
+                    self.logger.debug("GUA-124 诊断跳过: %s", diag_err)
                 self._endgame_activated_count += 1
                 decider = EndgameDecider()
                 # 保存原始 action_list 用于索引映射
@@ -514,11 +533,17 @@ class UltimateWinRateEngineV7:
                                 self._group_type_map,
                                 self._group_members,
                             )
-                            if broken in ("bomb", "straight_flush"):
-                                self.logger.info(
-                                    "GUA-075 推荐被组牌保护拦截: %s/%s 拆 %s → 回退",
-                                    recommendation.get("type"), recommendation.get("rank"), broken)
-                                blocked_by_mask = True
+                            if broken in ("Bomb", "StraightFlush"):
+                                from src.v.nn.endgame.endgame_decide import (
+                                    should_allow_counter_bomb_core_exempt,
+                                )
+                                if not should_allow_counter_bomb_core_exempt(
+                                    action_list[act_index], game_state,
+                                ):
+                                    self.logger.info(
+                                        "GUA-075 推荐被组牌保护拦截: %s/%s 拆 %s → 回退",
+                                        recommendation.get("type"), recommendation.get("rank"), broken)
+                                    blocked_by_mask = True
                         if not blocked_by_mask:
                             self.recommend_valid_count += 1
                             self.logger.info(
@@ -878,7 +903,7 @@ class UltimateWinRateEngineV7:
 
         type_counter = Counter(self._group_type_map.values())
         single_residue = len(self._scatter_singles(card_mask))
-        bomb_count = int(type_counter.get("bomb", 0) + type_counter.get("straight_flush", 0))
+        bomb_count = int(type_counter.get("Bomb", 0) + type_counter.get("StraightFlush", 0))
         pair_count = int(type_counter.get("pair", 0))
         trips_count = int(type_counter.get("trips", 0))
         straight_count = int(type_counter.get("straight", 0))
@@ -1139,7 +1164,7 @@ class UltimateWinRateEngineV7:
                 core_str = f" core={core_cards}" if core_cards else ""
                 non_str = f" loose={non_core}" if non_core else ""
                 lines.append(f"  G{gid}({gtype}):{cards}{core_str}{non_str}")
-            bomb_gids = [gid for gid, gt in self._group_type_map.items() if gt == "bomb"]
+            bomb_gids = [gid for gid, gt in self._group_type_map.items() if gt == "Bomb"]
             self.logger.info(
                 "组牌引擎: role=%s handCards=%d curRank=%s total_groups=%d bombs=%d\n%s",
                 self._current_role,
@@ -1230,7 +1255,7 @@ class UltimateWinRateEngineV7:
         Returns:
             (card_mask, group_type_map, group_members)
             card_mask: card → (group_id, is_core, group_size)
-            group_type_map: group_id → "bomb" | "straight_flush" | ...
+            group_type_map: group_id → "Bomb" | "StraightFlush" | ...
             group_members: group_id → 该组全部牌（含重复牌串）
         """
         import re
@@ -1260,7 +1285,7 @@ class UltimateWinRateEngineV7:
                 group_members[gid] = list(cards)
                 for card in cards:
                     card_mask[card] = (gid, 1.0, count)
-                group_type_map[gid] = "bomb"
+                group_type_map[gid] = "Bomb"
                 gid += 1
 
         # 降级模式下不做同花顺/顺子/对子/三张识别，
@@ -1363,6 +1388,8 @@ class UltimateWinRateEngineV7:
             return action_list, list(range(len(action_list)))
 
         # ── 过滤逻辑（角色分流） ──
+        from src.v.nn.endgame.endgame_decide import should_allow_counter_bomb_core_exempt
+
         keep_indices: List[int] = []
         removed_count = 0
 
@@ -1391,7 +1418,13 @@ class UltimateWinRateEngineV7:
             if broken_type is None:
                 # 不拆任何 core → 保留
                 keep_indices.append(idx)
-            elif broken_type in ("bomb", "straight_flush"):
+            elif broken_type in ("Bomb", "StraightFlush"):
+                # GUA-123：敌 sprint 反炸允许拆 core
+                if should_allow_counter_bomb_core_exempt(
+                    action, game_state, cur_rank,
+                ):
+                    keep_indices.append(idx)
+                    continue
                 # 炸弹/同花顺 → 永不放行（全角色）
                 removed_count += 1
                 continue
@@ -2652,8 +2685,6 @@ class UltimateWinRateEngineV7:
 
     # 牌型 → 行动类型映射（group_type → action_type）
     GROUP_TO_ACTION: Dict[str, str] = {
-        "bomb": "Bomb",
-        "straight_flush": "StraightFlush",
         "straight": "Straight",
         "trips": "Trips",
         "pair": "Pair",
@@ -2662,6 +2693,13 @@ class UltimateWinRateEngineV7:
         "trip_in_three_with_two": "Trips",   # 三张主体仍可做纯三张（Trips 跟牌用）
         "trip_in_steel_plate": "Trips",       # 同上
     }
+
+    @staticmethod
+    def _group_type_to_platform_action(gtype: str) -> str:
+        """组牌 group_type → 平台 action 类型名（Bomb/StraightFlush 已与平台一致）。"""
+        if gtype in ("Bomb", "StraightFlush"):
+            return gtype
+        return UltimateWinRateEngineV7.GROUP_TO_ACTION.get(gtype, "Unknown")
 
     def _recommend_play(
         self, game_state: Dict[str, Any], action_list: Optional[List] = None
@@ -2922,6 +2960,15 @@ class UltimateWinRateEngineV7:
                     self.logger.warning(
                         "GUA-075 跟上家改炸: 推荐存在但 actionList 无匹配 → return None 回退")
                     return None
+            # 不让改炸 → 尝试 GUA-123 敌炸 counter
+            counter = self._recommend_counter_bomb_in_action_list(game_state)
+            if counter:
+                rec = _ensure_valid(counter, "跟上家敌炸counter")
+                if rec:
+                    self.logger.info(
+                        "GUA-075 推荐: 跟上家敌炸counter → type=%s rank=%s cards=%s",
+                        rec.get("type"), rec.get("rank"), rec.get("cards"))
+                    return rec
             # 不让改炸 → PASS 让道
             self.logger.info(
                 "GUA-075 推荐: 跟上家无同型 → R11决定PASS(%s)", reason)
@@ -2959,6 +3006,15 @@ class UltimateWinRateEngineV7:
                     self.logger.warning(
                         "GUA-075 卡下家改炸: 推荐存在但 actionList 无匹配 → return None 回退")
                     return None
+            # 不让改炸 → 尝试 GUA-123 敌炸 counter
+            counter = self._recommend_counter_bomb_in_action_list(game_state)
+            if counter:
+                rec = _ensure_valid(counter, "卡下家敌炸counter")
+                if rec:
+                    self.logger.info(
+                        "GUA-075 推荐: 卡下家敌炸counter → type=%s rank=%s cards=%s",
+                        rec.get("type"), rec.get("rank"), rec.get("cards"))
+                    return rec
             # 不让改炸 → PASS
             self.logger.info(
                 "GUA-075 推荐: 卡下家无同型 → R11决定PASS(%s)", reason)
@@ -3012,7 +3068,7 @@ class UltimateWinRateEngineV7:
         groups = self._build_group_index(card_mask)
         group_type_map = self._group_type_map or {}
         group_members = self._group_members or None
-        protected_core = frozenset(("bomb", "straight_flush", "straight"))
+        protected_core = frozenset(("Bomb", "StraightFlush", "straight"))
 
         if is_teammate:
             return {
@@ -3294,6 +3350,9 @@ class UltimateWinRateEngineV7:
                     "cards": [],
                     "intent": "mid_hold_for_teammate",
                 }
+            counter = self._recommend_counter_bomb_in_action_list(game_state)
+            if counter:
+                return _with_intent(counter, "mid_counter_enemy_bomb")
             return {
                 "type": "PASS",
                 "rank": "",
@@ -3345,6 +3404,10 @@ class UltimateWinRateEngineV7:
                 if bomb:
                     return _with_intent(bomb, f"mid_bomb_cutoff:{reason}")
 
+            counter = self._recommend_counter_bomb_in_action_list(game_state)
+            if counter:
+                return _with_intent(counter, "mid_counter_enemy_bomb")
+
             return {
                 "type": "PASS",
                 "rank": "",
@@ -3381,7 +3444,7 @@ class UltimateWinRateEngineV7:
 
         group_type_map = self._group_type_map or {}
         group_members = self._group_members or None
-        _PROTECTED_LEAD_CORE = frozenset(("bomb", "straight_flush", "straight"))
+        _PROTECTED_LEAD_CORE = frozenset(("Bomb", "StraightFlush", "straight"))
 
         def _single_breaks_protected_core(card: str) -> bool:
             pr = _prank(get_card_rank(str(card)))
@@ -3435,6 +3498,32 @@ class UltimateWinRateEngineV7:
             return {"type": "Single", "rank": _prank(get_card_rank(singles[0])), "cards": [str(singles[0])]}
 
         return None
+
+    def _recommend_counter_bomb_in_action_list(
+        self, game_state: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """GUA-123：从平台 actionList 选最小足够反炸（敌 sprint ≤5 张）。"""
+        from src.v.nn.endgame.endgame_decide import (
+            _is_following_enemy_bomb_control,
+            _enemy_bomb_sprint_remaining,
+            select_counter_bomb_like,
+            action_list_item_to_feed_recommendation,
+        )
+
+        if not _is_following_enemy_bomb_control(game_state):
+            return None
+        enemy_rem = _enemy_bomb_sprint_remaining(game_state)
+        if enemy_rem is None or enemy_rem > 5:
+            return None
+        greater_action = game_state.get("greaterAction")
+        action_list = game_state.get("actionList") or []
+        picked = select_counter_bomb_like(action_list, greater_action, game_state)
+        if not picked:
+            return None
+        _, act = picked
+        return action_list_item_to_feed_recommendation(
+            act, "mid_counter_enemy_bomb",
+        )
 
     def _recommend_min_press_impl(
         self, game_state, card_mask, greater_action, greater_type,
@@ -3550,7 +3639,7 @@ class UltimateWinRateEngineV7:
                 continue
             c_rank = get_card_rank(str(cards[0]))
             c_val = get_card_value(str(cards[0]), cur_rank)
-            c_type = self.GROUP_TO_ACTION.get(gtype, "Unknown")
+            c_type = self._group_type_to_platform_action(gtype)
 
             if c_type == greater_type and c_val > greater_val:
                 candidates.append((c_val, gid, ginfo, c_rank, c_type))
@@ -3670,7 +3759,7 @@ class UltimateWinRateEngineV7:
                     group_type_map,
                     group_members,
                 )
-                if broken in ("bomb", "straight_flush") and not allow_break_protected_core:
+                if broken in ("Bomb", "StraightFlush") and not allow_break_protected_core:
                     continue
             return {
                 "type": "ThreeWithTwo",
@@ -3832,7 +3921,7 @@ class UltimateWinRateEngineV7:
                 continue
             c_rank = get_card_rank(str(cards[0]))
             c_val = self.RANK_ORDER.get(c_rank, 0)
-            c_type = self.GROUP_TO_ACTION.get(ginfo["type"], "Unknown")
+            c_type = self._group_type_to_platform_action(ginfo["type"])
             if c_type == greater_type and c_val > greater_val:
                 candidates.append((c_val, gid, ginfo, c_rank, c_type))
 
@@ -3952,14 +4041,14 @@ class UltimateWinRateEngineV7:
                 if gid < 0:
                     continue
                 gtype = self._group_type_map.get(gid, "")
-                if gtype not in ("bomb", "straight_flush"):
+                if gtype not in ("Bomb", "StraightFlush"):
                     continue
                 if len(g_cards) < 4:
                     continue
                 rank = get_card_rank(str(g_cards[0]))
                 is_pure = is_pure_bomb(g_cards, cur_rank)
                 action_type = (
-                    ACTION_TYPE_STRAIGHT_FLUSH if gtype == "straight_flush"
+                    ACTION_TYPE_STRAIGHT_FLUSH if gtype == "StraightFlush"
                     else ACTION_TYPE_BOMB
                 )
                 sample = card_mask.get(g_cards[0], (gid, 1.0, len(g_cards)))
@@ -3978,7 +4067,7 @@ class UltimateWinRateEngineV7:
                 if gid < 0 or gid in seen_gids:
                     continue
                 gtype = self._group_type_map.get(gid, "")
-                if gtype not in ("bomb", "straight_flush"):
+                if gtype not in ("Bomb", "StraightFlush"):
                     continue
                 seen_gids.add(gid)
                 g_cards = [c for c, (g, _, _) in card_mask.items() if g == gid]
@@ -3987,7 +4076,7 @@ class UltimateWinRateEngineV7:
                 rank = get_card_rank(str(g_cards[0]))
                 is_pure = is_pure_bomb(g_cards, cur_rank)
                 action_type = (
-                    ACTION_TYPE_STRAIGHT_FLUSH if gtype == "straight_flush"
+                    ACTION_TYPE_STRAIGHT_FLUSH if gtype == "StraightFlush"
                     else ACTION_TYPE_BOMB
                 )
                 bomb_candidates.append({

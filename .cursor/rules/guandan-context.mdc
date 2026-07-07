@@ -33,10 +33,44 @@ alwaysApply: true
 
 **禁止**：用 `game_records` 文件数、`episodeOver` 次数当局数；用 `victoryNum` 当副数。
 
+## 术语与平台一致（强制）
+
+**文档与代码所用术语，必须与平台使用说明一致。** 术语双轨会在联调、批跑解读、Guard/残局分支处**静默漏判**；产品发布后再统一命名，改动面大且易引入行为回归。完整条文见 [`AGENTS.md`](../AGENTS.md)「术语与平台一致」。
+
+**真源（按优先级）**：
+
+1. `offline_platform/掼蛋平台使用说明书v1006.pdf`
+2. `docs/guandan-brain/掼蛋AI算法对抗平台使用说明.md`
+3. [guandan-platform-v1006.mdc](./guandan-platform-v1006.mdc)
+4. [`platform-data-interpretation.md`](../docs/knowledge/platform-data-interpretation.md)
+
+| 类别 | 平台标准 | 禁止混用（无注释例外时） |
+|------|----------|-------------------------|
+| 牌型 / `action[0]` | `Single` `Pair` `Trips` `ThreeWithTwo` `ThreePair` `TwoTrips` `Straight` `StraightFlush` `Bomb` | `bomb` `straight_flush` `three_with_two` 等 snake_case 动作类型名 |
+| 特殊动作 | `PASS` `tribute` `back` | 自造动作类型字符串 |
+| `stage` | `episodeOver`（一副）`gameOver`（整局结束） | 把小局叫「局」、把 `gameOver` 叫「副」 |
+| 等级 | `curRank` `selfRank` `oppoRank` | 协议外别名 |
+| 计数 | **局** / **副**（见上表） | 牌谱条数当局数 |
+
+**允许的内部名（须在定义处注释「平台名 ↔ 内部名」）**：
+
+- V7 `group_type` 子结构：`trip_in_three_with_two` / `pair_in_three_with_two` → `ThreeWithTwo`；`pair_in_three_pair` → `ThreePair`；`trip_in_steel_plate` → `TwoTrips`
+- 原子组牌键 `pair` / `trips` / `straight` → 经 `GROUP_TO_ACTION` 映射到 `Pair` / `Trips` / `Straight`；对接 `actionList` 时必须走平台名
+- `GroupingPlan` 字段（如 `straight_flushes`）仅为数据结构名，**不是** `action[0]`
+
+**硬禁止**：
+
+- 新增**从未由组牌产出、却被当作 `group_type` 消费**的幽灵键（如 `three_with_two`、`three_pair`、`two_trips`；历史教训见 ITERATIONS `v7-group-type-platform-unify`）
+- 在 `action[0]`、`get_action_type` 返回值、残局 `recommended_types` / `banned_types`、ISSUES/ITERATIONS 牌型描述中混用非平台牌型名
+- **无注释**地把内部 snake_case 键当作与平台 PascalCase 等价
+
+**动手前**：新类型名 / 文档小节 / JSON 字段 → 先查真源；若保留内部名 → 代码行内注释 + 文档一句对照。**改名统一须带 pytest 回归**，禁止大规模重命名无测试兜底。
+
 ## 禁止
 
 - 仅凭对话历史推断「上次修了什么」或「约定是什么」而不查上述文件。
 - 在同一迭代内无目标地同时改多处 unrelated 逻辑（除非 ITERATIONS 明确列出并说明原因）。
+- 引入与平台说明书不一致的术语且不在定义处标明映射（见上节）。
 
 ## 完成后
 

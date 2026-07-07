@@ -66,15 +66,14 @@ _B2G_YIELD_STRUCTURES = frozenset(
     )
 )
 
+# 与 grouping_engine.to_card_mask() 产出一致（无整组 three_with_two / three_pair / two_trips 键）
 _CORE_BREAK_TYPES = frozenset(
     (
         "straight",
-        "three_with_two",
-        "three_pair",
-        "two_trips",
         "trip_in_three_with_two",
         "pair_in_three_with_two",
         "pair_in_three_pair",
+        "trip_in_steel_plate",
     )
 )
 

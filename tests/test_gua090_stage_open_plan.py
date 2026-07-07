@@ -151,7 +151,7 @@ def test_stage_open_plan_ignites_bomb_when_sprint_fire_ready():
     engine = _make_engine(
         role="主攻",
         card_mask=card_mask,
-        group_type_map={0: "bomb", 1: "bomb"},
+        group_type_map={0: "Bomb", 1: "Bomb"},
     )
     action_list = _build_action_list(
         ("Single", "K", ["HK"]),
@@ -197,7 +197,7 @@ def test_stage_open_plan_keeps_min_press_when_not_sprint_fire_ready():
     engine = _make_engine(
         role="主攻",
         card_mask=card_mask,
-        group_type_map={0: "bomb", 1: "bomb"},
+        group_type_map={0: "Bomb", 1: "Bomb"},
     )
     action_list = _build_action_list(
         ("Single", "K", ["HK"]),
@@ -261,10 +261,10 @@ def test_stage_open_plan_three_with_two_pressure_counter_avoids_first_round_pass
         role="主攻",
         card_mask=card_mask,
         group_type_map={
-            0: "bomb",
-            1: "bomb",
-            2: "bomb",
-            3: "bomb",
+            0: "Bomb",
+            1: "Bomb",
+            2: "Bomb",
+            3: "Bomb",
             4: "pair",
             5: "pair",
         },

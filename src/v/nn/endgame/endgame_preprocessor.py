@@ -104,8 +104,8 @@ endgame_rule: Dict[int, tuple] = {
     3:  ("高",   ["单张", "对子"],        ["Trips"]),
     4:  ("中高", ["大单张", "Straight"],  ["Pair"]),
     5:  ("中",   ["Pair", "Trips", "大单张"], []),
-    6:  ("中",   ["Trips"],             ["Single", "Pair"]),
-    7:  ("低",   ["Straight", "TwoTrips", "ThreePair"], []),
+    6:  ("中",   ["Trips"],             ["Single", "Pair"]),  # 敌剩6：禁散牌，宜三同张（深牌难用单对冲刺）
+    7:  ("低",   ["Straight", "TwoTrips", "ThreePair"], []),  # 敌剩7-8：宜整牌结构；跟压时同理可出三带二（GUA-125 §0）
     8:  ("低",   ["Straight", "TwoTrips", "ThreePair"], []),
     9:  ("低",   ["Straight", "ThreePair", "TwoTrips"], []),
     10: ("低",   ["Straight", "ThreePair", "TwoTrips"], []),
@@ -465,20 +465,28 @@ class EndgamePreprocessor:
 
     def _has_bomb(self, game_state: Dict[str, Any]) -> bool:
         """
-        手牌中是否有炸弹可用。
+        手牌中是否有炸弹类资源可用（含同花顺）。
+
+        掼蛋牌力：4星炸 < 5星炸 < 同花顺(5张) < 6星炸+。
+        组牌与平台统一使用 ``Bomb`` / ``StraightFlush``。
 
         先查 grouptype_map（组牌引擎产出），再查 actionList。
         """
         grouptype_map = game_state.get("_group_type_map", {})
         if grouptype_map:
-            # 如果有炸类标记，说明手牌里有炸弹
-            bomb_count = grouptype_map.get("炸", 0) + grouptype_map.get("bomb", 0)
-            sf_count = grouptype_map.get("StraightFlush", 0) + grouptype_map.get("同花顺", 0)
+            bomb_count = grouptype_map.get("Bomb", 0) + grouptype_map.get("炸", 0)
+            sf_count = grouptype_map.get("StraightFlush", 0)
             if bomb_count > 0 or sf_count > 0:
                 return True
 
-        # 回退：遍历 actionList 找炸弹
+        # 回退：遍历 actionList（平台声明 Bomb / StraightFlush 优先）
         action_list = game_state.get("actionList", [])
+        for act in action_list:
+            if not act or not isinstance(act, list):
+                continue
+            declared = act[0] if act else ""
+            if declared in ("Bomb", "StraightFlush"):
+                return True
         if GUARD_TOOLS_OK:
             for act in action_list:
                 try:
@@ -492,7 +500,6 @@ class EndgamePreprocessor:
                     continue
                 cards = act[2] if len(act) >= 3 and isinstance(act[2], list) else act
                 if len(cards) >= 4:
-                    # 简单判断：4 张同点数为炸
                     ranks = [c[1] if len(c) >= 2 else c for c in cards]
                     if len(set(ranks)) == 1:
                         return True

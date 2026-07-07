@@ -18,7 +18,7 @@ def _step64_engine_and_state():
         "HA": (0, 0.0, 3),
         "H8": (-1, 0.0, 1),
     }
-    group_type_map = {0: "bomb", 1: "pair", 2: "pair"}
+    group_type_map = {0: "Bomb", 1: "pair", 2: "pair"}
     hand = list(card_mask.keys())
     engine = UltimateWinRateEngineV7(player_id=2)
     engine._card_mask = card_mask

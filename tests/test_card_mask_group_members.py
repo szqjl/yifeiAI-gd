@@ -38,10 +38,10 @@ class TestGroupMembersMultiset:
     ])
     def test_star_bomb_member_count(self, rank, count, label):
         mask, type_map, group_members = _plan_with_bomb(rank, count)
-        bomb_gid = next(gid for gid, t in type_map.items() if t == "bomb")
+        bomb_gid = next(gid for gid, t in type_map.items() if t == "Bomb")
         members = group_members[bomb_gid]
         assert len(members) == count, f"{label}: group_members 应有 {count} 张"
-        assert type_map[bomb_gid] == "bomb"
+        assert type_map[bomb_gid] == "Bomb"
         # mask 因重复 key 可能少于 count，但 gsize 仍应正确
         sample = mask[members[0]]
         assert sample[2] == count
@@ -53,7 +53,7 @@ class TestGroupMembersMultiset:
         plan.bombs = [["SQ", "SQ", "HQ", "DQ"]]
         plan.singles = ["S3"]
         mask, type_map, group_members = plan.to_card_mask()
-        bomb_gid = next(gid for gid, t in type_map.items() if t == "bomb")
+        bomb_gid = next(gid for gid, t in type_map.items() if t == "Bomb")
         assert len(group_members[bomb_gid]) == 4
         assert len([c for c in mask if c.endswith("Q") or c == "SQ"]) <= 3
         assert group_members[bomb_gid].count("SQ") == 2
@@ -70,7 +70,7 @@ class TestBrokenCoreStarBombs:
     ])
     def test_partial_star_bomb_breaks_core(self, rank, count):
         mask, type_map, group_members = _plan_with_bomb(rank, count)
-        bomb_gid = next(gid for gid, t in type_map.items() if t == "bomb")
+        bomb_gid = next(gid for gid, t in type_map.items() if t == "Bomb")
         cards = group_members[bomb_gid]
 
         full = ["Bomb", rank if rank != "10" else "T", list(cards)]
@@ -79,11 +79,11 @@ class TestBrokenCoreStarBombs:
 
         partial = ["Single", rank if rank != "10" else "T", [cards[0]]]
         assert UltimateWinRateEngineV7._get_broken_core_type(
-            partial, mask, type_map, group_members) == "bomb"
+            partial, mask, type_map, group_members) == "Bomb"
 
         two = ["Pair", rank if rank != "10" else "T", cards[:2]]
         assert UltimateWinRateEngineV7._get_broken_core_type(
-            two, mask, type_map, group_members) == "bomb"
+            two, mask, type_map, group_members) == "Bomb"
 
     def test_duplicate_sq_partial_breaks_four_q(self):
         hand = ["SQ", "SQ", "HQ", "DQ"]
@@ -93,7 +93,7 @@ class TestBrokenCoreStarBombs:
 
         partial = ["Single", "Q", ["SQ"]]
         assert UltimateWinRateEngineV7._get_broken_core_type(
-            partial, mask, type_map, group_members) == "bomb"
+            partial, mask, type_map, group_members) == "Bomb"
 
         full = ["Bomb", "Q", hand]
         assert UltimateWinRateEngineV7._get_broken_core_type(
@@ -113,7 +113,7 @@ class TestBasicClassifyStarBombs:
         hand = _bomb_hand(rank, count)
         mask, type_map, group_members = UltimateWinRateEngineV7._basic_classify(
             hand, "2")
-        bomb_gid = next(gid for gid, t in type_map.items() if t == "bomb")
+        bomb_gid = next(gid for gid, t in type_map.items() if t == "Bomb")
         assert len(group_members[bomb_gid]) == count
 
 

@@ -43,8 +43,8 @@ class RecommenderTester:
     INTERNAL_TO_PLATFORM_RANK = {"HR": "R", "SB": "B"}
     PLATFORM_TO_INTERNAL_RANK = {"R": "HR", "B": "SB"}
     GROUP_TO_ACTION = {
-        "bomb": "Bomb",
-        "straight_flush": "StraightFlush",
+        "Bomb": "Bomb",
+        "StraightFlush": "StraightFlush",
         "straight": "Straight",
         "trips": "Trips",
         "pair": "Pair",
@@ -414,7 +414,7 @@ class RecommenderTester:
             if gid < 0 or gid in seen_gids:
                 continue
             gtype = self._group_type_map.get(gid, "")
-            if gtype not in ("bomb", "straight_flush"):
+            if gtype not in ("Bomb", "StraightFlush"):
                 continue
             seen_gids.add(gid)
             g_cards = [c for c, (g, _, _) in card_mask.items() if g == gid]
@@ -422,7 +422,7 @@ class RecommenderTester:
                 continue
             rank = get_card_rank(str(g_cards[0]))
             is_pure = is_pure_bomb(g_cards, cur_rank)
-            action_type = ACTION_TYPE_STRAIGHT_FLUSH if gtype == "straight_flush" else ACTION_TYPE_BOMB
+            action_type = ACTION_TYPE_STRAIGHT_FLUSH if gtype == "StraightFlush" else ACTION_TYPE_BOMB
             bomb_candidates.append({
                 "gid": gid, "type": action_type, "rank": rank,
                 "cards": sorted(g_cards), "is_core": is_core,

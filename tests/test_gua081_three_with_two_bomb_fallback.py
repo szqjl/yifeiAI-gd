@@ -20,7 +20,7 @@ def _engine_with_bomb_mask():
         "D6": (4, 0.0, 2),
     }
     eng._group_type_map = {
-        0: "bomb",
+        0: "Bomb",
         1: "trip_in_three_with_two",
         2: "pair_in_three_with_two",
         3: "pair_in_three_with_two",

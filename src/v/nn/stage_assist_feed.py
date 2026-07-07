@@ -94,7 +94,7 @@ def _feed_stage1_open(
     groups = engine._build_group_index(card_mask)
     group_type_map = engine._group_type_map or {}
     group_members = engine._group_members or None
-    protected_core = frozenset(("bomb", "straight_flush", "straight"))
+    protected_core = frozenset(("Bomb", "StraightFlush", "straight"))
 
     def _single_breaks_protected_core(card: str) -> bool:
         rank = _prank(get_card_rank(str(card)))

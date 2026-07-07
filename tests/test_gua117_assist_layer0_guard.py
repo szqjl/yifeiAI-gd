@@ -87,6 +87,36 @@ def test_b4_blocks_breaking_core_straight_when_not_pressing():
     assert "Single" not in types
 
 
+def test_b4_blocks_breaking_core_trip_in_three_with_two_when_not_pressing():
+    actions = [
+        ["PASS", "PASS", "PASS"],
+        ["Trips", "6", ["S6", "H6", "C6"]],
+    ]
+    gs = _gs(
+        greaterPos=0,
+        greaterAction=["PASS", "PASS", "PASS"],
+        _card_mask={"S6": (0, 1.0, 3), "H6": (0, 1.0, 3), "C6": (0, 1.0, 3)},
+        _group_gid_type_map={0: "trip_in_three_with_two"},
+    )
+    types = _types_kept(gs, actions)
+    assert "Trips" not in types
+
+
+def test_b4_blocks_breaking_core_steel_plate_trip_when_not_pressing():
+    actions = [
+        ["PASS", "PASS", "PASS"],
+        ["Trips", "6", ["S6", "H6", "C6"]],
+    ]
+    gs = _gs(
+        greaterPos=0,
+        greaterAction=["PASS", "PASS", "PASS"],
+        _card_mask={"S6": (0, 1.0, 3), "H6": (0, 1.0, 3), "C6": (0, 1.0, 3)},
+        _group_gid_type_map={0: "trip_in_steel_plate"},
+    )
+    types = _types_kept(gs, actions)
+    assert "Trips" not in types
+
+
 def test_non_assist_role_unfiltered_b2():
     actions = [
         ["PASS", "PASS", "PASS"],

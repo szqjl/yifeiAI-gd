@@ -51,7 +51,7 @@ def _eligible_p1_singles(
     """O10：<10 散单（3–9，不含级牌）。"""
     from src.v.nn.guards.v7_guards import CARD_RANK_ORDER, get_card_rank
 
-    protected = frozenset(("bomb", "straight_flush", "straight"))
+    protected = frozenset(("Bomb", "StraightFlush", "straight"))
 
     def _prank(internal_rank: str) -> str:
         return engine.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
@@ -108,20 +108,41 @@ def _has_k_principle_pair_recapture(
     return False
 
 
+def _enumerate_twt_units(groups: Dict[int, dict]) -> List[Dict[str, Any]]:
+    """三带二 = trip_in_three_with_two + 紧邻 pair_in_three_with_two（to_card_mask 顺序）。"""
+    units: List[Dict[str, Any]] = []
+    for gid in sorted(groups.keys()):
+        trip = groups.get(gid)
+        if not trip or trip["type"] != "trip_in_three_with_two":
+            continue
+        pair = groups.get(gid + 1)
+        if not pair or pair["type"] != "pair_in_three_with_two":
+            continue
+        cards = sorted(str(c) for c in trip["cards"]) + sorted(
+            str(c) for c in pair["cards"]
+        )
+        if len(cards) != 5:
+            continue
+        units.append(
+            {
+                "trip_gid": gid,
+                "pair_gid": gid + 1,
+                "cards": cards,
+                "is_core": max(trip["is_core"], pair["is_core"]),
+            }
+        )
+    return units
+
+
 def _has_twt_recapture(
     groups: Dict[int, dict],
-    lead_gid: Optional[int],
+    lead_trip_gid: Optional[int],
 ) -> bool:
-    """P2：除拟出 TWT 外仍有更大三带二 / 三张结构。"""
-    twt_types = ("three_with_two", "trip_in_three_with_two")
-    candidates = []
-    for gid, ginfo in groups.items():
-        if ginfo["type"] not in twt_types:
-            continue
-        if gid == lead_gid:
-            continue
-        candidates.append(gid)
-    return len(candidates) >= 1
+    """P2：除拟出 TWT 外仍有另一手三带二。"""
+    others = [
+        u for u in _enumerate_twt_units(groups) if u["trip_gid"] != lead_trip_gid
+    ]
+    return len(others) >= 1
 
 
 def _has_straight_recapture(
@@ -146,25 +167,18 @@ def _pick_smallest_twt(
     def _prank(internal_rank: str) -> str:
         return engine.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
 
-    twt_types = ("three_with_two", "trip_in_three_with_two")
     best = None
-    for gid, ginfo in groups.items():
-        if ginfo["type"] not in twt_types:
-            continue
-        if ginfo["is_core"] > 0:
-            continue
-        cards = sorted(str(c) for c in ginfo["cards"])
-        if len(cards) < 5:
-            continue
+    for unit in _enumerate_twt_units(groups):
+        cards = unit["cards"]
         trip_rank = get_card_rank(cards[0])
         key = (_pip_order(cards[0], cur_rank), cards)
         if best is None or key < best[0]:
             pr = _prank(trip_rank)
-            best = (key, gid, "ThreeWithTwo", pr, cards[:5])
+            best = (key, unit["trip_gid"], "ThreeWithTwo", pr, cards)
     if not best:
         return None
-    _, gid, typ, pr, cards = best
-    return gid, typ, pr, cards
+    _, trip_gid, typ, pr, cards = best
+    return trip_gid, typ, pr, cards
 
 
 def _pick_smallest_straight(
@@ -268,9 +282,8 @@ def recommend_main_attack_lead(
                 "intent": "main_p1_second_single",
             }
 
-    twt_types = frozenset(("three_with_two", "trip_in_three_with_two"))
     straight_types = frozenset(("straight",))
-    twt_count = _count_groups(groups, twt_types)
+    twt_count = len(_enumerate_twt_units(groups))
     straight_count = _count_groups(groups, straight_types)
 
     # ── P2 ──

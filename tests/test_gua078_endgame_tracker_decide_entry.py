@@ -1017,3 +1017,61 @@ class TestGua113AssistYieldToTeammateControl:
         assert idx == 1
         assert act[0] == "ThreeWithTwo"
         assert act[1] == "K"
+
+
+class TestQ0StraightFlushSprint:
+    """Q0：StraightFlush 计入 bomb-like 资源 + 被动压炸两手冲刺。"""
+
+    def test_has_bomb_recognizes_grouping_straight_flush_key(self):
+        """组牌引擎 StraightFlush 计数应触发 should_sprint。"""
+        gs = {
+            "handCards": ["D9", "DJ", "CQ", "DQ", "DQ", "DK", "HA"],
+            "curRank": "A",
+            "myPos": 2,
+            "numofplayers": [12, 1, 7, 12],
+            "_group_type_map": {"StraightFlush": 1, "pair": 1},
+        }
+        EndgamePreprocessor().preprocess(gs)
+        self_ctx = gs["_endgame_context"]["self"]
+        assert self_ctx["has_two_clean_hands"] is True
+        assert self_ctx["has_bomb"] is True
+        assert self_ctx["should_sprint"] is True
+
+    def test_q0_passive_sprint_prefers_straight_flush_over_star_bomb(self):
+        """WF-12 84441894503 步45：SF+对子压敌8炸，应出 StraightFlush 而非 Q 星炸。"""
+        hand = ["D9", "DJ", "CQ", "DQ", "DQ", "DK", "HA"]
+        sf = ["StraightFlush", "9", ["D9", "DJ", "DQ", "DK", "HA"]]
+        gs = {
+            "myPos": 2,
+            "curPos": 1,
+            "greaterPos": 1,
+            "greaterAction": ["Bomb", "8", ["S8", "H8", "C8", "D8"]],
+            "handCards": list(hand),
+            "actionList": [
+                ["PASS", "PASS", "PASS"],
+                sf,
+                ["Bomb", "Q", ["CQ", "DQ", "DQ", "HA"]],
+            ],
+            "curRank": "A",
+            "selfRank": "A",
+            "oppoRank": "A",
+            "numofplayers": [12, 1, 7, 12],
+            "_group_type_map": {"StraightFlush": 1, "pair": 1},
+        }
+
+        EndgamePreprocessor().preprocess(gs)
+        assert gs["_endgame_context"]["self"]["should_sprint"] is True
+
+        idx, act = EndgameDecider().decide(gs, gs["actionList"])
+
+        assert idx == 1
+        assert act[0] == "StraightFlush"
+        assert sorted(act[2]) == sorted(sf[2])
+
+    def test_action_beats_greater_straight_flush_beats_four_bomb(self):
+        from src.v.nn.endgame.endgame_decide import _action_beats_greater
+
+        sf = ["StraightFlush", "9", ["D9", "DJ", "DQ", "DK", "HA"]]
+        bomb8 = ["Bomb", "8", ["S8", "H8", "C8", "D8"]]
+        assert _action_beats_greater(sf, bomb8, "A") is True
+        assert _action_beats_greater(bomb8, sf, "A") is False

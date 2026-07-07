@@ -164,4 +164,4 @@ class TestGua085LeadRecommendSkipsSfCore:
             eng._group_type_map,
             eng._group_members,
         )
-        assert broken not in ("bomb", "straight_flush", "straight")
+        assert broken not in ("Bomb", "StraightFlush", "straight")
