@@ -183,6 +183,8 @@
 | GUA-132 | **open** | **P0** | V-nn, v7, policy, endgame, sprint, guard | v7 | **C2 同花顺 finish 闭合路径：bomb family SF 跨型压 TWT，yf2 跟 TWT/PASS 必败，唯一闭合依赖 yf1 bomb family 接力** | GUA-125 §0.5.2 C2 行：@1 finish = SF（bomb family §4.1）跨型可压杂牌 TWT → yf2 圈 1 跟 TWT 必败（@1 SF 跨型压回 → @1 头游）。根因：① §4.1 总序 bomb family 跨型优势；② yf2 跟 TWT 触发 @1 SF 跨型压回；③ yf1 必须在 @1 SF 出手前拦截（出牌顺序限制）。**5 问准入**：① 一类局面（C2 finish SF）；② 阶段 A 落 `_q1_block_enemy` ④ 与 ⑤ 之间新增 `_c2_decision` 通道；③ P0 损头游；④ pytest + 锚点；⑤ 复用 GUA-131 `_is_bomb_family`。**不做**：完整锚点验证（待 WF-12 后续回放）；C3/C5/C6 高闭合情形留 GUA-134+。 | `src/v/nn/endgame/endgame_decide.py`、`tests/test_gua132_c2_sf_decision.py` | **登记 2026-07-07**。完成定义 [[GUA-132-completion]]。**停手条件**：① pytest 全绿；② WF-12 锚点验证 yf1 拦截闭合；③ 同 seed 同 12 局回归 vn 改善。**关联**：GUA-125/131、WF-12 |
 | GUA-133 | **open** | **P0** | V-nn, v7, policy, endgame, sprint, guard | v7 | **C4 5 星炸 finish 闭合路径：yf2 圈 1 必须出 6 张炸压 5 张炸（同型张数优势 §4.1）** | GUA-125 §0.5.2 C4 行：@1 finish = 5 星炸（bomb family §4.1）→ yf2 圈 1 跟 TWT 必败（@1 5 炸同型压回）。**唯一闭合**：yf2 圈 1 出 JJJJJJ（6 张炸）→ 6 张压 5 张（同型张数优势 §4.1）→ @1 PASS → yf2 圈 2 领出 → 圈 2 三连对 + 圈 3 对 → yf2 头游（**自闭合，高闭合率**）。根因：① §4.1 同型张数优势；② 圈 1 跟 TWT 触发 @1 5 炸同型压回；③ yf2 自闭合不依赖 yf1。**5 问准入**：① 一类局面（C4 finish 5 炸）；② 阶段 A 落 `_q1_block_enemy` ⑤ `block_with` 命中 bomb-like 时校验「6 张炸压 5 炸」；③ P0 损头游；④ pytest + 锚点；⑤ 闭合条件 @3 无 6+ 张炸/同花顺/王炸/同型更大三连对。**不做**：完整锚点验证（待 WF-12 后续回放）；与 C1/C2 决策树对比分析。 | `src/v/nn/endgame/endgame_decide.py`、`tests/test_gua133_c4_5bomb_decision.py` | **登记 2026-07-07**。完成定义 [[GUA-133-completion]]。**停手条件**：① pytest 全绿；② WF-12 锚点验证 yf2 6J 闭合；③ 同 seed 同 12 局回归 vn 改善。**关联**：GUA-125/131/132、WF-12 |
 
+| GUA-134 | **open** | **P0** | V-nn, v7, policy, endgame, sprint, guard | v7 | **C3/C5/C6 高闭合率 yf2 自闭合（圈 1 跟 TWT → @1 必 PASS → 圈 2 6J + 圈 3 三连对 + 圈 4 对 = 头游）** | GUA-125 §0.5.2 C3/C5/C6 行：@1 finish ∈ {顺子 / 更小 TWT / 5 张散}，杂牌通道不能跨型 / 同型压 yf2 跟的 TWT（§4.4）→ @1 圈 1 末必 PASS → yf2 圈 2 必领出 6J。**闭合路径**：圈 1 yf2 跟 min TWT → 圈 2 出 6J → 圈 3 出 777+888 三连对 → 圈 4 出 22 对 → yf2 头游（**自闭合三手清空，高闭合率**）。根因：① §4.4 杂牌同型不能跨型；② yf2 圈 1 跟 TWT 触发 @1 PASS；③ yf2 自闭合不依赖 yf1。**5 问准入**：① 一类局面（C3/C5/C6 finish 杂牌 / 更小 TWT / 散牌）；② 阶段 A 落 `_q1_block_enemy` ④ 与 ⑤ 之间新增 `_q1_c3_c5_c6_dispatch`（与 GUA-131/132/133 并联）；③ P0 损头游；④ pytest + 锚点；⑤ 与 C1/C2/C4 dispatch 互斥（finish_type 区分）。**不做**：圈 2 领出 6J 后 @3 / yf1 拦截能力评估（C1 路径 A 的镜像，留 GUA-135）；完整锚点验证（待 WF-12 后续回放）。 | `src/v/nn/endgame/endgame_decide.py`、`tests/test_gua134_c3_c5_c6.py` | **登记 2026-07-07**。完成定义 [[GUA-134-completion]]。**停手条件**：① pytest 全绿（16 cases）；② WF-12 锚点验证 yf2 跟 TWT 夺权；③ 同 seed 同 12 局回归 vn 改善。**关联**：GUA-125/131/132/133、WF-12 |
+
 ## 交叉引用
 
 | ID | 相关文档 |
@@ -255,6 +257,7 @@
 | GUA-131 | GUA-125 §0.5.1 C1 决策树落地；`_is_bomb_family` / `_c1_decision` / `_has_bigger_twt` / `_sprint_capability_after_twt`；[[GUA-131-completion]]；联动 GUA-065/125/123 |
 | GUA-132 | GUA-125 §0.5.2 C2 行；SF（bomb family §4.1）跨型压 TWT；yf2 跟 TWT 必败；yf1 bomb family 接力；[[GUA-132-completion]]；联动 GUA-131 |
 | GUA-133 | GUA-125 §0.5.2 C4 行；5 星炸（bomb family §4.1）；yf2 6 张炸自闭合（同型张数优势）；[[GUA-133-completion]]；联动 GUA-131/132 |
+| GUA-134 | GUA-125 §0.5.2 C3/C5/C6 行；杂牌 finish 不能跨型 / 同型压 TWT §4.4；yf2 跟 TWT 夺权 → 圈 2 6J + 圈 3 三连对 + 圈 4 对 = 自闭合；[[GUA-134-completion]]；联动 GUA-131/132/133 |
 
 ---
 

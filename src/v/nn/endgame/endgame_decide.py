@@ -1125,6 +1125,13 @@ class EndgameDecider:
         if c124 is not None:
             return c124
 
+        # ④.5b GUA-134 C3/C5/C6 决策（高闭合率 yf2 自闭合三手清空）
+        c356 = self._q1_c3_c5_c6_dispatch(
+            game_state, action_list, ec, main_pos, main_enemy,
+        )
+        if c356 is not None:
+            return c356
+
         # 敌方剩 5 张 + 当前控牌为 Single 的残局特判：
         # 先判断上/下家、4+1/整牌型、队友牌力和“敌方是否仍可能有更大单张”，
         # 再决定是直接用我方最大合法单张压，还是保留炸弹。
@@ -2642,6 +2649,9 @@ class EndgameDecider:
 
         仅在 C1/C2/C4 上下文触发；其他情形返回 None 让 Q1 走原流程。
         """
+        # GUA-134 互斥：如果 C3/C5/C6 命中，让 _q1_c3_c5_c6_dispatch 处理
+        if self._is_c3_c5_c6_scenario(game_state, ec) is not None:
+            return None
         ctx = self._detect_c1_c2_c4_context(game_state, ec)
         if ctx is None:
             return None
@@ -2657,4 +2667,102 @@ class EndgameDecider:
         # 推断 C1（finish 是更大 TWT）：与 c1/c2/c4 中其他 finish 区分
         # 简化：finish_kind == "twt" 且 ctx.remaining_after_press ≤ 5 → C1
         return self._c1_decision(game_state, action_list, ec, ctx)
+
+
+    # ═══════════════════════════════════════════════════════
+    #  GUA-134  C3 / C5 / C6 决策（高闭合率自闭合三手清空）
+    #  关联：docs/guandan-brain/issues/GUA-134-completion.md
+    #  决策真源：GUA-125 §0.5.2 C3/C5/C6 行
+    # ═══════════════════════════════════════════════════════
+
+    def _classify_c356_kind(
+        self, enemy_ctx, game_state, greater_action,
+    ) -> str:
+        """
+        C3/C5/C6 finish 牌型细分。
+
+        返回:
+          "straight" - C3（@1 finish = 顺子）
+          "smaller_twt" - C5（@1 finish = 更小 TWT）
+          "scatter" - C6（@1 finish = 5 张散）
+          "unknown" - 探测不到
+        """
+        if not GUARD_TOOLS_OK:
+            return "unknown"
+        finish_atype = enemy_ctx.get("finish_type")
+        if not finish_atype:
+            remaining = int(enemy_ctx.get("remaining", 0)) - 5
+            if remaining == 5:
+                finish_atype = "Straight"
+            elif remaining == 3:
+                finish_atype = "ThreeWithTwo"
+            elif 0 < remaining < 5:
+                finish_atype = "Scatter"
+        if not finish_atype:
+            return "unknown"
+        if finish_atype in ("Straight", "STRAIGHT"):
+            return "straight"
+        if finish_atype in ("ThreeWithTwo", "THREE_WITH_TWO"):
+            fv = enemy_ctx.get("finish_rank_value", 0)
+            if fv and fv < 7:
+                return "smaller_twt"
+            return "unknown"
+        if finish_atype in ("Scatter", "SCATTER"):
+            return "scatter"
+        return "unknown"
+
+    def _is_c3_c5_c6_scenario(self, game_state, ec):
+        """
+        C3/C5/C6 通用上下文探测。
+
+        复用 C1/C2/C4 上下文探测，叠加 finish 牌型判定。
+        返回 ctx dict 或 None
+        """
+        ctx = self._detect_c1_c2_c4_context(game_state, ec)
+        if ctx is None:
+            return None
+        greater_action = game_state.get("greaterAction")
+        kind = self._classify_c356_kind(ctx["enemy_ctx"], game_state, greater_action)
+        if kind in ("straight", "smaller_twt", "scatter"):
+            ctx["c356_kind"] = kind
+            return ctx
+        return None
+
+    def _c3_c5_c6_decision(self, game_state, action_list, ec, ctx):
+        """
+        GUA-134 C3/C5/C6 决策：yf2 圈 1 必跟 min TWT 夺权。
+
+        闭合路径（高闭合率 yf2 自闭合三手清空）：
+          圈 1: yf2 跟 TWT → @1 PASS → @3 PASS → yf1 PASS
+          圈 2: yf2 领出 6J → 三家 PASS
+          圈 3: yf2 领出 777+888 三连对 → 三家 PASS
+          圈 4: yf2 领出 22 对 → 三家 PASS → yf2 头游
+        """
+        if not ctx:
+            return None
+        cur_rank = str(game_state.get("curRank", "2"))
+        twt = self._find_twt_min_point(action_list, cur_rank)
+        if twt is not None:
+            kind = ctx.get("c356_kind", "unknown")
+            logger.info(
+                "GUA-134 C3/C5/C6(%s): 跟 min TWT 夺权，三手清空闭合",
+                kind,
+            )
+            return twt
+        pass_act = self._find_pass_action(action_list)
+        if pass_act is not None:
+            return pass_act
+        return None
+
+    def _q1_c3_c5_c6_dispatch(
+        self, game_state, action_list, ec, main_pos, main_enemy,
+    ):
+        """
+        C3/C5/C6 决策分发器，挂在 _q1_block_enemy ④ 与 ⑤ 之间，
+        与 GUA-131/132/133 并联（C1/C2/C4 优先）。
+        """
+        ctx = self._is_c3_c5_c6_scenario(game_state, ec)
+        if ctx is None:
+            return None
+        return self._c3_c5_c6_decision(game_state, action_list, ec, ctx)
 
