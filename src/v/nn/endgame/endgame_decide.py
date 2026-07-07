@@ -2412,8 +2412,6 @@ class EndgameDecider:
         bomb_risk = float(belief.get(enemy_pos, 0.0)) if enemy_pos >= 0 else 0.0
         if bomb_risk >= 0.5:
             return "bomb_family"
-        if remaining >= 5:
-            return "bomb_family"
         return "twt"
 
     def _has_six_joker_bomb(

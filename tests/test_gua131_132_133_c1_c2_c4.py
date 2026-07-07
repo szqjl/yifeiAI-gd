@@ -29,6 +29,7 @@ from src.v.nn.endgame.endgame_decide import (
     _is_joker_bomb,
     _is_bomb_like_action,
 )
+from src.v.nn.features.memory_tracker import MemoryTracker
 from src.v.nn.endgame.endgame_preprocessor import EndgamePreprocessor
 
 
@@ -212,7 +213,6 @@ class TestDetectC1C2C4Context:
 class TestClassifyFinishType:
     def test_bomb_family_when_remaining_5_with_high_bomb_risk(self):
         """remaining == 5 + bomb_risk ≥ 0.5 → bomb_family"""
-        from src.v.nn.endgame.endgame_decide import _classify_finish_type
         enemy_ctx = {"pos": 1, "remaining": 5}
         gs = {"_belief": {"opp_bomb_risks": {1: 0.7}}}
         decider = EndgameDecider()
@@ -236,17 +236,28 @@ class TestC1Decision:
         """C1：yf1 有拦截能力 → 跟 min TWT 形成冲刺能力"""
         gs = _preprocess(_build_anchor_state(teammate_remaining=12))
         ec = gs["_endgame_context"]
+        # 装 MemoryTracker：yf1(seat=2) 有 KKK + 99 形态的 TWT 可拦截 @1
+        tracker = MemoryTracker(my_pos=0, enable_inference=False, max_infer_depth=0)
+        tracker.init_from_hand(gs["handCards"])
+        tracker.set_level_rank(gs["curRank"])
+        tracker.hand_counts = {0: len(gs["handCards"]), 1: 5, 2: 12, 3: 8}
+        gs["_memory_tracker"] = tracker
+        # 给 yf1 注入 KKK + 99：3 张 K + 2 张 9，让 _seat_may_hold_three_with_two_above 命中
+        for s in ("S", "H", "D"):
+            tracker.card_state[f"{s}K"] = [2, 2, 2, -1, -1, -1]
+            tracker.card_state[f"{s}9"] = [2, 2, -1, -1, -1, -1]
         action_list = gs["actionList"]
         decider = EndgameDecider()
         ctx = decider._detect_c1_c2_c4_context(gs, ec)
         assert ctx is not None
+        yf1_has_twt = decider._has_teammate_bigger_twt(gs, 2, gs["greaterAction"])
+        assert yf1_has_twt, "yf1 应有 KKK + 99 形态 TWT 可拦截 @1 finish (3)"
         result = decider._c1_decision(gs, action_list, ec, ctx)
         assert result is not None
         idx, act = result
         # 应该是 777+22 或 888+22（min TWT）
-        assert act[0] == "ThreeWithTwo"
+        assert act[0] == "ThreeWithTwo", f"应出 TWT；实际出 {act}"
         assert act[1] in ("7", "8")
-
     def test_plays_6j_when_yf1_cannot_intercept(self):
         """C1：yf1 拦截能力弱 + yf2 有 6J → 出 6J 自闭合"""
         gs = _preprocess(_build_anchor_state(teammate_remaining=3))
@@ -315,11 +326,21 @@ class TestIntegrationAnchorStep51:
     步 51/89：@1 333+22 (5 张 TWT) → yf2 必出 777+22 或 888+22，**不出 6J**。
     """
     def test_anchor_step_51_selects_twt_not_6j(self):
-        gs = _preprocess(_build_anchor_state())
+        gs = _preprocess(_build_anchor_state(teammate_remaining=12))
+        # 装 MemoryTracker：yf1(seat=2) 有 KKK+99 可拦截 @1 finish（3）
+        tracker = MemoryTracker(my_pos=0, enable_inference=False, max_infer_depth=0)
+        tracker.init_from_hand(gs["handCards"])
+        tracker.set_level_rank(gs["curRank"])
+        tracker.hand_counts = {0: len(gs["handCards"]), 1: 5, 2: 12, 3: 8}
+        gs["_memory_tracker"] = tracker
+        for s in ("S", "H", "D"):
+            tracker.card_state[f"{s}K"] = [2, 2, 2, -1, -1, -1]
+            tracker.card_state[f"{s}9"] = [2, 2, -1, -1, -1, -1]
         idx, act = EndgameDecider().decide(gs, gs["actionList"])
         assert idx is not None and act is not None
         # 关键：不能出 6J
         assert act[0] != "Bomb", f"步 51 不应出 6J；实际出 {act}"
         # 应出 777+22 或 888+22
         assert act[0] == "ThreeWithTwo"
+        assert act[1] in ("7", "8")
         assert act[1] in ("7", "8")
