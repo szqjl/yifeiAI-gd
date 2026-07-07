@@ -370,6 +370,31 @@ def _is_bomb_like_action(action: List) -> bool:
     return atype in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH)
 
 
+
+def _is_joker_bomb(action: List) -> bool:
+    """是否为王炸（两个王，bomb family 最大成员）。"""
+    cards = _get_cards(action)
+    if len(cards) != 2:
+        return False
+    norm = {str(c).upper() for c in cards}
+    return norm == {"SJ", "BJ"} or norm == {"BJ", "SJ"}
+
+
+def _is_bomb_family(action: List) -> bool:
+    """
+    GUA-131：判别一手牌型是否属于 bomb family（4+ 张同点炸 + 同花顺 + 王炸）。
+
+    见 GUA-125 §0.0 / §4.1：bomb family 可跨型压杂牌（TWT / 顺子 / 三带二 / ...）。
+    """
+    if not action or not isinstance(action, list):
+        return False
+    if _is_bomb_like_action(action):
+        return True
+    if _is_joker_bomb(action):
+        return True
+    return False
+
+
 def _get_declared_action_type(action: List) -> str:
     """优先取平台声明牌型；无声明时退回空串。"""
     if isinstance(action, list) and action and isinstance(action[0], str):
@@ -1092,6 +1117,13 @@ class EndgameDecider:
         )
         if counter_bomb is not None:
             return counter_bomb
+
+        # ④.5 GUA-131/132/133 C1/C2/C4 决策（C1 队友协作冲刺 / C2 SF finish / C4 5星炸 finish）
+        c124 = self._q1_c1_c2_c4_dispatch(
+            game_state, action_list, ec, main_pos, main_enemy,
+        )
+        if c124 is not None:
+            return c124
 
         # 敌方剩 5 张 + 当前控牌为 Single 的残局特判：
         # 先判断上/下家、4+1/整牌型、队友牌力和“敌方是否仍可能有更大单张”，
@@ -2298,3 +2330,333 @@ class EndgameDecider:
             except Exception:
                 pass
         return (max_idx, max_act)
+
+    # ═══════════════════════════════════════════════════════
+    #  GUA-131 / GUA-132 / GUA-133  C1/C2/C4 决策树
+    #  关联：docs/guandan-brain/issues/GUA-131/132/133-completion.md
+    #  决策真源：GUA-125 §0.5.1 / §0.5.2
+    # ═══════════════════════════════════════════════════════
+
+    def _detect_c1_c2_c4_context(
+        self, game_state: Dict[str, Any], ec: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        C1/C2/C4 通用上下文探测。
+
+        触发条件（与 GUA-131/132/133 §1 对齐）：
+          - 当前 greaterAction 是 5 张 TWT（5 张三带二）
+          - greaterPos 是 yf2 的上家或下家（@1 报 5 张）
+          - 该敌 remaining ∈ {5, 6}（5 张 = @1 报 5 张 finish 含 5 张；6 张残局）
+          - yf2 整手 ≥ 10 张
+          - yf2 属于跟压（greaterPos != my_pos）
+
+        返回 dict 或 None：{
+          "kind": "C1" | "C2" | "C4" | None,
+          "enemy_pos": int,
+          "enemy_ctx": dict,
+          "teammate_pos": int,
+          "remaining_after_press": int,  # 5 张 TWT 出完 @1 余张
+        }
+        """
+        greater_action = game_state.get("greaterAction")
+        if not greater_action:
+            return None
+        if not GUARD_TOOLS_OK:
+            return None
+        try:
+            if get_action_type(greater_action) != ACTION_TYPE_THREE_WITH_TWO:
+                return None
+        except Exception:
+            return None
+        cards = _get_cards(greater_action)
+        if len(cards) != 5:
+            return None
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        greater_pos = game_state.get("greaterPos", -1)
+        if greater_pos not in ((my_pos - 1) % 4, (my_pos + 1) % 4):
+            return None
+        enemies = ec.get("enemies", {})
+        enemy_ctx = enemies.get(greater_pos, {})
+        if not enemy_ctx:
+            return None
+        remaining = int(enemy_ctx.get("remaining", 0))
+        if remaining < 5 or remaining > 6:
+            return None
+        hand_cards = list(game_state.get("handCards", []) or [])
+        if len(hand_cards) < 10:
+            return None
+        teammate_pos = (my_pos + 2) % 4
+        return {
+            "enemy_pos": greater_pos,
+            "enemy_ctx": enemy_ctx,
+            "teammate_pos": teammate_pos,
+            "remaining_after_press": max(remaining - 5, 0),
+            "my_pos": my_pos,
+            "hand_cards": hand_cards,
+        }
+
+    def _classify_finish_type(
+        self, enemy_ctx: Dict[str, Any], game_state: Dict[str, Any],
+    ) -> str:
+        """
+        推断 @1 余手（finish）的可能牌型。
+
+        返回 "bomb_family"（含 SF/4+ 炸/王炸）、"straight"（普通顺子）、"twt"（杂牌 TWT）、
+        "scatter"（5 张散）的概率元组近似，但本实现只返回最可能的一类。
+        """
+        remaining = int(enemy_ctx.get("remaining", 0))
+        if remaining < 1:
+            return "scatter"
+        belief = (game_state.get("_belief") or {}).get("opp_bomb_risks") or {}
+        enemy_pos = enemy_ctx.get("pos", -1)
+        bomb_risk = float(belief.get(enemy_pos, 0.0)) if enemy_pos >= 0 else 0.0
+        if bomb_risk >= 0.5:
+            return "bomb_family"
+        if remaining >= 5:
+            return "bomb_family"
+        return "twt"
+
+    def _has_six_joker_bomb(
+        self, hand_cards: List[str],
+    ) -> bool:
+        """yf2 整手中是否含 6+ 张同点炸（JJJJJJ 6J 形态）。"""
+        if not hand_cards:
+            return False
+        from collections import Counter
+        ranks = Counter(get_card_rank(c) for c in hand_cards)
+        return any(cnt >= 6 for cnt in ranks.values())
+
+    def _has_teammate_bomb_family(
+        self, game_state: Dict[str, Any], teammate_pos: int,
+    ) -> bool:
+        """队友（yf1）是否仍可能持有 bomb family。"""
+        tracker = game_state.get("_memory_tracker")
+        if tracker is None:
+            return False  # 无记忆模块 → 不能验证，留作 GUA-134 跟进
+        my_pos = game_state.get("myPos", 0)
+        partner_pos = (my_pos + 2) % 4
+        if teammate_pos != partner_pos:
+            return False
+        try:
+            if self._seat_may_hold_four_of_kind(game_state, teammate_pos):
+                return True
+            if self._seat_may_hold_structured_five(game_state, teammate_pos):
+                return True
+        except Exception:
+            return False
+        return False
+
+    def _has_teammate_bigger_twt(
+        self, game_state: Dict[str, Any], teammate_pos: int,
+        greater_action: List,
+    ) -> bool:
+        """
+        队友（yf1）是否仍可能持有 ≥ greaterAction 点 的杂牌 TWT。
+
+        用于 C1 拦截能力评估：若 yf1 有 ≥@1 finish 点的 TWT，可同型压回。
+        """
+        if not GUARD_TOOLS_OK:
+            return False
+        try:
+            greater_rank = get_action_rank(greater_action)
+        except Exception:
+            return False
+        if not greater_rank:
+            return False
+        cur_rank = str(game_state.get("curRank", "2"))
+        return self._seat_may_hold_three_with_two_above(
+            game_state, teammate_pos, greater_rank, cur_rank,
+        )
+
+    def _find_twt_min_point(
+        self, action_list: List, cur_rank: str,
+    ) -> Optional[Tuple[int, List]]:
+        """从 action_list 中找杂牌 TWT（min 牌力优先）。"""
+        if not GUARD_TOOLS_OK:
+            return None
+        best: Optional[Tuple[int, List]] = None
+        best_value = 10**9
+        for i, a in enumerate(action_list):
+            try:
+                if get_action_type(a) != ACTION_TYPE_THREE_WITH_TWO:
+                    continue
+            except Exception:
+                continue
+            cards = _get_cards(a)
+            if not cards:
+                continue
+            if _is_bomb_like_action(a):
+                continue
+            try:
+                v = max(get_card_value(c, cur_rank) for c in cards)
+            except Exception:
+                continue
+            if v < best_value:
+                best_value = v
+                best = (i, a)
+        return best
+
+    def _find_six_joker_bomb_in_actions(
+        self, action_list: List, hand_cards: List[str],
+    ) -> Optional[Tuple[int, List]]:
+        """从 action_list 中找 yf2 的 6+ 张同点炸。"""
+        if not GUARD_TOOLS_OK:
+            return None
+        from collections import Counter
+        ranks = Counter(get_card_rank(c) for c in hand_cards)
+        big_ranks = [r for r, cnt in ranks.items() if cnt >= 6]
+        if not big_ranks:
+            return None
+        for i, a in enumerate(action_list):
+            try:
+                if get_action_type(a) != ACTION_TYPE_BOMB:
+                    continue
+            except Exception:
+                continue
+            cards = _get_cards(a)
+            if len(cards) >= 6:
+                return (i, a)
+        return None
+
+    def _find_pass_action(
+        self, action_list: List,
+    ) -> Optional[Tuple[int, List]]:
+        """找 PASS 动作。"""
+        for i, a in enumerate(action_list):
+            if _get_declared_action_type(a) in (ACTION_TYPE_PASS, "PASS"):
+                return (i, a)
+            if GUARD_TOOLS_OK:
+                try:
+                    if get_action_type(a) == ACTION_TYPE_PASS:
+                        return (i, a)
+                except Exception:
+                    pass
+        return None
+
+    def _c1_decision(
+        self, game_state: Dict[str, Any], action_list: List,
+        ec: Dict[str, Any], ctx: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        GUA-131 C1 决策：@1 出 5 张 TWT + 余 finish 是更大 TWT。
+
+        yf2 圈 1 策略（与 GUA-125 §0.5.1 终版对齐）：
+          - PASS 蓄力 → @1 圈 2 必出 finish → @1 头游（必败）
+          - 出 bomb family（6J）→ @3 / yf1 反应可能打断；闭合路径依赖圈 2 领出
+          - 跟 min TWT（777+22 / 888+22）→ 剩 2 手 = 冲刺能力，等 yf1 接力闭合
+
+        闭合依赖：yf1 需用 bomb family 或 ≥@1 finish 点的 TWT 拦截 @1 finish。
+        """
+        if not ctx:
+            return None
+        teammate_pos = ctx["teammate_pos"]
+        greater_action = game_state.get("greaterAction")
+        hand_cards = ctx["hand_cards"]
+
+        # 1. 校验 yf1 是否有 bomb family（最稳的拦截手段）
+        yf1_has_bomb = self._has_teammate_bomb_family(game_state, teammate_pos)
+        # 2. 校验 yf1 是否有 ≥@1 finish 点的 TWT（同型压回）
+        yf1_has_bigger_twt = self._has_teammate_bigger_twt(
+            game_state, teammate_pos, greater_action,
+        )
+
+        if yf1_has_bomb or yf1_has_bigger_twt:
+            # 路径 A：跟 min TWT 形成冲刺能力（剩 2 手 = 6J + 单手）
+            cur_rank = str(game_state.get("curRank", "2"))
+            twt = self._find_twt_min_point(action_list, cur_rank)
+            if twt is not None:
+                logger.info(
+                    "GUA-131 C1: 跟 min TWT 形成冲刺能力（yf1_has_bomb=%s, yf1_has_bigger_twt=%s）",
+                    yf1_has_bomb, yf1_has_bigger_twt,
+                )
+                return twt
+
+        # 3. 兜底：yf1 不能接力，尝试 yf2 圈 1 出 6J 自闭合
+        six_j = self._find_six_joker_bomb_in_actions(action_list, hand_cards)
+        if six_j is not None:
+            logger.info("GUA-131 C1 兜底: 出 6J 自闭合（yf1 不能接力）")
+            return six_j
+
+        # 4. 路径 C：PASS 蓄力（必败，仅在无可行动作时兜底）
+        pass_act = self._find_pass_action(action_list)
+        if pass_act is not None:
+            return pass_act
+        return None
+
+    def _c2_decision(
+        self, game_state: Dict[str, Any], action_list: List,
+        ec: Dict[str, Any], ctx: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        GUA-132 C2 决策：@1 finish = 同花顺 SF（bomb family）。
+
+        牌理：@1 SF 可跨型压所有杂牌 → @1 一手清必头游，不可阻挡。
+        yf 队策略：接受 @1 头游，yf2 圈 1 跟 min TWT 形成冲刺能力，
+        圈 2 反抢 @3 拿第二名。
+        """
+        if not ctx:
+            return None
+        cur_rank = str(game_state.get("curRank", "2"))
+        twt = self._find_twt_min_point(action_list, cur_rank)
+        if twt is None:
+            # 无 TWT 可跟 → 出 6J 圈 2 反抢 @3
+            six_j = self._find_six_joker_bomb_in_actions(
+                action_list, ctx["hand_cards"],
+            )
+            if six_j is not None:
+                logger.info("GUA-132 C2: 无 TWT，出 6J 反抢 @3")
+                return six_j
+            return self._find_pass_action(action_list)
+        logger.info("GUA-132 C2: 跟 min TWT 形成冲刺能力，圈 2 反抢 @3")
+        return twt
+
+    def _c4_decision(
+        self, game_state: Dict[str, Any], action_list: List,
+        ec: Dict[str, Any], ctx: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        GUA-133 C4 决策：@1 finish = 5 星炸（bomb family）。
+
+        牌理：6 张炸压 5 张炸（§4.1 bomb family 张数优势），@1 5 炸不能压 6J。
+        yf 队策略：接受 @1 头游，yf2 圈 1 必出 JJJJJJ（6 张炸）自闭合拿第二名。
+        """
+        if not ctx:
+            return None
+        hand_cards = ctx["hand_cards"]
+        six_j = self._find_six_joker_bomb_in_actions(action_list, hand_cards)
+        if six_j is not None:
+            logger.info("GUA-133 C4: 出 6J 反抢 @1 5 炸，自闭合拿第二名")
+            return six_j
+        # 兜底：无 6+ 张炸 → 跟 min TWT 形成冲刺能力，圈 2 反抢 @3
+        cur_rank = str(game_state.get("curRank", "2"))
+        twt = self._find_twt_min_point(action_list, cur_rank)
+        if twt is not None:
+            logger.info("GUA-133 C4 兜底: 无 6J，跟 min TWT 形成冲刺能力")
+            return twt
+        return self._find_pass_action(action_list)
+
+    def _q1_c1_c2_c4_dispatch(
+        self, game_state: Dict[str, Any], action_list: List,
+        ec: Dict[str, Any], main_pos: int, main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        C1/C2/C4 决策分发器，挂在 _q1_block_enemy ④ 与 ⑤ 之间。
+
+        仅在 C1/C2/C4 上下文触发；其他情形返回 None 让 Q1 走原流程。
+        """
+        ctx = self._detect_c1_c2_c4_context(game_state, ec)
+        if ctx is None:
+            return None
+
+        finish_kind = self._classify_finish_type(ctx["enemy_ctx"], game_state)
+        ctx["finish_kind"] = finish_kind
+
+        if finish_kind == "bomb_family":
+            # 简化：bomb family 暂统一走 C4（5+ 炸）。C2(SF) 与 C4 闭合路径一致（接受 @1 头游 + 闭合 @3），
+            # 区别仅在 yf2 自闭合的难度，不影响圈 1 决策。C2 精确判定留 GUA-134 跟进。
+            return self._c4_decision(game_state, action_list, ec, ctx)
+
+        # 推断 C1（finish 是更大 TWT）：与 c1/c2/c4 中其他 finish 区分
+        # 简化：finish_kind == "twt" 且 ctx.remaining_after_press ≤ 5 → C1
+        return self._c1_decision(game_state, action_list, ec, ctx)
+
