@@ -1135,6 +1135,14 @@ class EndgameDecider:
         # 敌方剩 5 张 + 当前控牌为 Single 的残局特判：
         # 先判断上/下家、4+1/整牌型、队友牌力和“敌方是否仍可能有更大单张”，
         # 再决定是直接用我方最大合法单张压，还是保留炸弹。
+
+        # ④.5c GUA-135 双进优先级判定（C2/C4 接受 @1 头游 + C3/C5/C6 yf2 自闭合后队整体策略）
+        dsp = self._q1_double_second_priority_dispatch(
+            game_state, action_list, ec, main_pos, main_enemy,
+        )
+        if dsp is not None:
+            return dsp
+
         special = self._q1_enemy_five_single_special(game_state, action_list, ec, main_pos, main_enemy)
         if special is not None:
             return special
@@ -2765,4 +2773,322 @@ class EndgameDecider:
         if ctx is None:
             return None
         return self._c3_c5_c6_decision(game_state, action_list, ec, ctx)
+
+    # ═══════════════════════════════════════════════════════
+    #  GUA-135  双进优先级判定（C2/C4 接受 @1 头游 + C3/C5/C6 闭合后队整体策略）
+    #  关联：docs/guandan-brain/issues/GUA-135-completion.md
+    #  决策真源：GUA-125 §0.5.2 + §0.6
+    # ═══════════════════════════════════════════════════════
+
+    def _has_sprint_capability(
+        self, hand_cards: List[str],
+    ) -> bool:
+        """
+        GUA-135：判定手牌是否具备冲刺能力（剩 2 手 = 炸弹 + 单手）。
+
+        冲刺能力 ≠ sprint 真闭环（sprint 真闭环需出完 6J + 接力 X 两手清空）。
+        这里只判定结构上具备冲刺条件。
+
+        实现要点：
+          - 至少有 4 张同点（bomb family 一员）
+          - 剩余张数 ≤ 5 张且可组成单整牌型（单 / 对 / 三张 / 三连对 / 三带二 / 钢板 / 顺子 / 同花顺 / 炸弹）
+        """
+        if not hand_cards or len(hand_cards) < 5:
+            return False
+        from collections import Counter
+        ranks = Counter(get_card_rank(c) for c in hand_cards)
+        # 至少 4 张同点（炸弹家族）
+        max_count = max(ranks.values()) if ranks else 0
+        if max_count < 4:
+            return False
+        # 剩余张数 ≤ 5 张（出掉炸弹后单手 ≤ 5 张）
+        remaining_after_bomb = len(hand_cards) - max_count
+        if remaining_after_bomb > 5:
+            return False
+        if remaining_after_bomb == 0:
+            # 整手就是一个炸弹，无冲刺能力（已是「一手清空」）
+            return False
+        return True
+
+    def _estimate_player_remaining(
+        self, position: int, ec: Dict[str, Any], game_state: Dict[str, Any],
+    ) -> int:
+        """
+        GUA-135：估算某玩家当前剩牌数（用于双进优先级判定）。
+
+        来源优先级：
+          1. 平台报牌（enemy_ctx.remaining）— 最准
+          2. 记忆模块（_memory_tracker）— 估
+          3. 默认 = 0（未知）
+
+        返回：估算的剩牌数（0 表示未知）
+        """
+        enemies = ec.get("enemies", {}) or {}
+        enemy_ctx = enemies.get(position, {}) or {}
+        remaining = enemy_ctx.get("remaining")
+        if isinstance(remaining, int) and remaining >= 0:
+            return remaining
+        # 兜底：从 game_state.actions 推断（TODO，留 GUA-136）
+        return 0
+
+    def _is_double_second_priority_scenario(
+        self, game_state: Dict[str, Any], ec: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        GUA-135：探测 yf2 当前是否落在「双进优先级判定」场景。
+
+        触发条件（任一）：
+          - @1 finish 是 bomb family（C2 SF / C4 5 炸）→ @1 必头游
+          - yf2 / yf1 整手 ≤ 6 张 → 双冲刺赛道
+          - yf1 已 bomb family 拦截（C1 路径 A）
+
+        返回 ctx dict 或 None：{
+          "trigger": "C2" | "C4" | "yf2_self_sprint" | "yf1_sprint" | "sprint_race",
+          "enemy_pos": int,
+          "teammate_pos": int,
+          "yf2_remaining": int,
+          "yf1_remaining": int,
+          "@3_remaining": int,
+          "yf2_sprint": bool,
+          "yf1_sprint": bool,
+          "@3_sprint": bool,
+        }
+        """
+        # GUA-135 独立探测（不依赖 _detect_c1_c2_c4_context 的 remaining ∈ {5,6} 限制）
+        if not GUARD_TOOLS_OK:
+            return None
+        greater_action = game_state.get("greaterAction")
+        if not greater_action:
+            return None
+        try:
+            if get_action_type(greater_action) != ACTION_TYPE_THREE_WITH_TWO:
+                return None
+        except Exception:
+            return None
+        cards = _get_cards(greater_action)
+        if len(cards) != 5:
+            return None
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        greater_pos = game_state.get("greaterPos", -1)
+        if greater_pos not in ((my_pos - 1) % 4, (my_pos + 1) % 4):
+            return None
+        enemies = ec.get("enemies", {}) or {}
+        enemy_ctx = enemies.get(greater_pos, {}) or {}
+        if not enemy_ctx:
+            return None
+        hand_cards = list(game_state.get("handCards", []) or [])
+        if len(hand_cards) < 5:
+            return None
+        teammate_pos = (my_pos + 2) % 4
+        # 构造最小 ctx 供后续判定使用
+        ctx = {
+            "enemy_pos": greater_pos,
+            "enemy_ctx": enemy_ctx,
+            "teammate_pos": teammate_pos,
+            "my_pos": my_pos,
+            "hand_cards": hand_cards,
+        }
+        enemy_pos = greater_pos
+
+        # 估算各方剩牌
+        yf2_remaining = len(hand_cards)
+        yf1_remaining = self._estimate_player_remaining(teammate_pos, ec, game_state)
+        at3_remaining = self._estimate_player_remaining(enemy_pos, ec, game_state)
+
+        # 判定冲刺能力（剩 2 手 = 炸弹 + 单手）
+        yf2_sprint = self._has_sprint_capability(hand_cards)
+
+        # yf1 冲刺能力估算（依赖记忆模块；无记忆时保守 False）
+        yf1_sprint = False
+        tracker = game_state.get("_memory_tracker")
+        if tracker is not None:
+            try:
+                # 若 yf1 已 bomb family 拦截（C1 路径 A），必头游
+                yf1_sprint = self._has_teammate_bomb_family(game_state, teammate_pos)
+            except Exception:
+                pass
+
+        # @3 冲刺能力估算（依赖记忆模块；无记忆时保守 False）
+        at3_sprint = False
+        if tracker is not None:
+            try:
+                at3_hand = (tracker.get_seat_cards_estimate(enemy_pos)
+                            if hasattr(tracker, "get_seat_cards_estimate") else None)
+                if at3_hand:
+                    at3_sprint = self._has_sprint_capability(at3_hand)
+            except Exception:
+                pass
+
+        # 直接读 enemy_ctx.finish_type（不依赖 _classify_finish_type，因其看 belief.bomb_risk）
+        _ft_raw = ctx["enemy_ctx"].get("finish_type")
+        if _ft_raw in ("StraightFlush", "STRAIGHT_FLUSH", "Bomb", "BOMB", "JokerBomb"):
+            finish_kind = "bomb_family"
+        elif _ft_raw in ("Straight", "STRAIGHT"):
+            finish_kind = "straight"
+        elif _ft_raw in ("ThreeWithTwo", "THREE_WITH_TWO"):
+            finish_kind = "twt"
+        elif _ft_raw in ("Scatter", "SCATTER"):
+            finish_kind = "scatter"
+        else:
+            finish_kind = self._classify_finish_type(ctx["enemy_ctx"], game_state)
+
+        # 触发判定
+        trigger = None
+        if finish_kind == "bomb_family":  # 不限 yf2_remaining（@1 必头游 → yf 队必抢第二）
+            # C2 / C4：@1 finish 是 bomb family → @1 必头游
+            # 进一步区分 C2 / C4（看 enemy_ctx.finish_type）
+            finish_atype = ctx["enemy_ctx"].get("finish_type", "")
+            if "StraightFlush" in str(finish_atype) or "SF" in str(finish_atype):
+                trigger = "C2"
+            else:
+                trigger = "C4"
+        elif yf1_sprint:
+            # yf1 已 bomb family 拦截（C1 路径 A）→ yf1 头游，yf2 必第三
+            trigger = "yf1_sprint"
+        elif yf2_remaining <= 6 and yf1_remaining <= 6 and yf2_remaining >= 5:
+            # 双冲刺赛道（双方都 ≤ 6 张）→ 判定谁抢第二
+            trigger = "sprint_race"
+        elif (finish_kind in ("straight", "twt", "scatter")) and (yf2_remaining >= 10 or yf2_sprint):
+            # yf2 自闭合头游（C3/C5/C6 或 C1 路径 B）→ yf1 必抢第二
+            # 条件：① yf2 整手 ≥ 10 张（残局大剩牌，跟 TWT 形成冲刺能力）
+            #       ② yf2_sprint（yf2 已有冲刺能力，直接闭合）
+            trigger = "yf2_self_sprint"
+
+        if trigger is None:
+            return None
+
+        return {
+            "trigger": trigger,
+            "enemy_pos": enemy_pos,
+            "teammate_pos": teammate_pos,
+            "my_pos": my_pos,
+            "hand_cards": hand_cards,
+            "yf2_remaining": yf2_remaining,
+            "yf1_remaining": yf1_remaining,
+            "@3_remaining": at3_remaining,
+            "yf2_sprint": yf2_sprint,
+            "yf1_sprint": yf1_sprint,
+            "@3_sprint": at3_sprint,
+            "finish_kind": finish_kind,
+            "ctx": ctx,
+        }
+
+    def _q1_double_second_priority(
+        self, game_state: Dict[str, Any], action_list: List,
+        ec: Dict[str, Any], main_pos: int, main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        GUA-135：双进优先级判定（C2/C4 接受 @1 头游 + C3/C5/C6 闭合后队整体策略）。
+
+        判定逻辑：
+          1. yf2 当前是否已有冲刺能力（剩 2 手 = 炸弹 + 单手）？
+             - 是 → yf2 自己继续自闭合拿第二（C2/C4/yf2_self_sprint）
+          2. yf1 当前冲刺能力（@1 finish = bomb family 且 yf1 bomb family 已拦截）？
+             - 是 → yf1 必头游，yf2 必第三（让道）
+          3. @3 冲刺能力？
+             - 是 → yf2 必须用 bomb family 拦截 @3 抢第二
+             - 否 → yf2 PASS 等待更优时机
+
+        返回：最优动作 (idx, action) 或 None
+        """
+        ctx = self._is_double_second_priority_scenario(game_state, ec)
+        if ctx is None:
+            return None
+
+        trigger = ctx["trigger"]
+        yf2_sprint = ctx["yf2_sprint"]
+        yf1_sprint = ctx["yf1_sprint"]
+        at3_sprint = ctx["@3_sprint"]
+        hand_cards = ctx["hand_cards"]
+        cur_rank = str(game_state.get("curRank", "2"))
+
+        # 情形 1：C2/C4（@1 必头游）→ yf2 自己拿第二
+        if trigger in ("C2", "C4"):
+            if yf2_sprint:
+                # yf2 已有冲刺能力（剩 2 手 = 炸弹 + 单手）
+                # → 圈 2 yf2 领出 6J + 圈 3 接力闭合
+                logger.info(
+                    "GUA-135 %s: @1 必头游，yf2 自闭合拿第二（冲刺能力成立）",
+                    trigger,
+                )
+                # 找 min 整牌型领出（保持当前圈 1 出 PASS 等待，让 @1 圈 2 出一手清）
+                # 实际：圈 1 yf2 应该 PASS（@1 必头游），让 @1 圈 2 出一手清
+                # 若 @1 圈 1 出的就是 finish，则 yf2 圈 1 也可跟 PASS
+                pass_act = self._find_pass_action(action_list)
+                if pass_act is not None:
+                    return pass_act
+            else:
+                # yf2 无冲刺能力 → yf2 圈 1 PASS 等 @1 头游，圈 2/3 闭合 @3
+                logger.info(
+                    "GUA-135 %s: @1 必头游，yf2 PASS 等闭合 @3",
+                    trigger,
+                )
+                pass_act = self._find_pass_action(action_list)
+                if pass_act is not None:
+                    return pass_act
+
+        # 情形 2：yf2_self_sprint（yf2 已闭合头游）→ yf1 必抢第二
+        if trigger == "yf2_self_sprint":
+            # yf2 圈 1 必跟 min TWT 夺权（GUA-134 已落）
+            # GUA-135 这里只判定 yf1 能否抢第二
+            if yf1_sprint:
+                # yf1 也有冲刺能力 → 让 yf1 拿第二（yf2 不抢）
+                logger.info(
+                    "GUA-135 yf2_self_sprint: yf1 也有冲刺能力，yf2 PASS 让 yf1 拿第二",
+                )
+                pass_act = self._find_pass_action(action_list)
+                if pass_act is not None:
+                    return pass_act
+            else:
+                # yf1 无冲刺能力 → yf2 必跟 min TWT 夺权（GUA-134 路径）
+                twt = self._find_twt_min_point(action_list, cur_rank)
+                if twt is not None:
+                    logger.info(
+                        "GUA-135 yf2_self_sprint: 跟 min TWT 夺权",
+                    )
+                    return twt
+
+        # 情形 3：yf1_sprint（yf1 已头游）→ yf2 必第三
+        if trigger == "yf1_sprint":
+            # yf2 必第三（无冲刺能力）→ PASS 等 @3 抢第二 / yf2 抢第三
+            logger.info(
+                "GUA-135 yf1_sprint: yf1 已头游，yf2 必第三，PASS",
+            )
+            pass_act = self._find_pass_action(action_list)
+            if pass_act is not None:
+                return pass_act
+
+        # 情形 4：sprint_race（双方都 ≤ 6 张）→ 判定谁拿第二
+        if trigger == "sprint_race":
+            if yf2_sprint and not yf1_sprint:
+                # yf2 有冲刺能力，yf1 无 → yf2 拿第二
+                logger.info(
+                    "GUA-135 sprint_race: yf2 有冲刺能力，yf2 拿第二",
+                )
+                twt = self._find_twt_min_point(action_list, cur_rank)
+                if twt is not None:
+                    return twt
+            elif yf1_sprint and not yf2_sprint:
+                # yf1 有冲刺能力，yf2 无 → yf1 拿第二，yf2 PASS 让道
+                logger.info(
+                    "GUA-135 sprint_race: yf1 有冲刺能力，yf2 PASS 让 yf1 拿第二",
+                )
+                pass_act = self._find_pass_action(action_list)
+                if pass_act is not None:
+                    return pass_act
+
+        return None
+
+    def _q1_double_second_priority_dispatch(
+        self, game_state: Dict[str, Any], action_list: List,
+        ec: Dict[str, Any], main_pos: int, main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        GUA-135 双进优先级判定分发器。
+
+        挂在 _q1_block_enemy ④.5b (GUA-134) 之后、⑤ _q1_enemy_five_single_special 之前。
+        """
+        return self._q1_double_second_priority(
+            game_state, action_list, ec, main_pos, main_enemy,
+        )
 
