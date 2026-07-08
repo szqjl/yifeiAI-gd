@@ -3140,3 +3140,89 @@ class EndgameDecider:
             return False
         return self._has_sprint_capability(hand_cards)
 
+    # ═══════════════════════════════════════════════════════
+    #  GUA-137  玩家整手结构推断增强（grouping_engine）
+    #  关联：docs/guandan-brain/issues/GUA-137-completion.md
+    #  决策真源：GUA-136 sprint 判定升级
+    # ═══════════════════════════════════════════════════════
+
+    def _estimate_player_grouping_plan(
+        self, position: int, game_state: Dict[str, Any],
+    ) -> Optional[Any]:
+        """
+        GUA-137：推断 yf1/@3 整手结构（GroupingPlan）。
+
+        实现：
+          - Layer 1：MemoryTracker.card_state → 手牌列表 → enumerate_groupings
+          - Layer 2：enemy_ctx.hand_types 构造虚拟 plan（仅 singles）
+          - Layer 3：返回 None
+
+        返回：GroupingPlan 实例或 None
+        """
+        # Layer 1: MemoryTracker → 手牌 → enumerate_groupings
+        hand_cards = self._estimate_player_hand_cards(position, game_state)
+        if hand_cards:
+            try:
+                from src.v.nn.features.grouping_engine import enumerate_groupings
+                cur_rank = str(game_state.get("curRank", "2"))
+                best_plan, _ = enumerate_groupings(hand_cards, cur_rank)
+                return best_plan
+            except Exception:
+                pass
+        # Layer 2: enemy_ctx.hand_types 兜底
+        ec = game_state.get("_endgame_context") or {}
+        enemies = ec.get("enemies", {}) or {}
+        enemy_ctx = enemies.get(position, {}) or {}
+        hand_types = enemy_ctx.get("hand_types", [])
+        if hand_types:
+            try:
+                from src.v.nn.features.grouping_engine import GroupingPlan
+                return GroupingPlan(
+                    singles=list(hand_types),
+                    cur_rank=str(game_state.get("curRank", "2")),
+                )
+            except Exception:
+                pass
+        return None
+
+    def _estimate_player_num_rounds(
+        self, position: int, game_state: Dict[str, Any],
+    ) -> int:
+        """
+        GUA-137：推断 yf1/@3 出完所有牌需要几圈（num_rounds）。
+
+        返回：圈数（0 表示未知）
+        """
+        plan = self._estimate_player_grouping_plan(position, game_state)
+        if plan is None:
+            return 0
+        try:
+            return plan.num_rounds()
+        except Exception:
+            return 0
+
+    def _estimate_player_sprint_capability_v2(
+        self, position: int, game_state: Dict[str, Any],
+    ) -> bool:
+        """
+        GUA-137：冲刺能力精确判定（基于整手结构）。
+
+        算法：
+          - 推断整手 plan → num_rounds + has_bomb_family
+          - 冲刺能力 = num_rounds ≤ 2 AND has_bomb_family
+
+        返回：True / False
+        """
+        plan = self._estimate_player_grouping_plan(position, game_state)
+        if plan is None:
+            return False
+        try:
+            num_rounds = plan.num_rounds()
+        except Exception:
+            return False
+        has_bomb_family = (
+            len(getattr(plan, "bombs", [])) > 0
+            or len(getattr(plan, "straight_flushes", [])) > 0
+        )
+        return num_rounds <= 2 and has_bomb_family
+
