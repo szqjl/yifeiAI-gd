@@ -286,6 +286,50 @@ class TestQ1DoubleSecondPriority:
         idx, act = result
         assert act[0] == "PASS"
 
+    def test_c2_at3_sprint_intercepts_with_bomb(self):
+        """C2 + yf2/yf1 无冲刺 + @3 有冲刺 → 出 6J 拦截（§4.1 步骤 3）"""
+        gs = _build_state(
+            hand_cards=list(BOMB_6J) + ["S2", "D2", "S3", "D3", "S4", "D4", "S5", "D5"],
+            enemy_finish_type="StraightFlush",
+            enemy_remaining=10,
+        )
+        d = EndgameDecider()
+        original = d._estimate_player_sprint_capability
+        d._estimate_player_sprint_capability = lambda pos, _gs: pos == 1
+        try:
+            gs = _preprocess(gs)
+            ec = gs["_endgame_context"]
+            result = d._q1_double_second_priority(
+                gs, gs["actionList"], ec, 1, ec["enemies"][1],
+            )
+        finally:
+            d._estimate_player_sprint_capability = original
+        assert result is not None
+        idx, act = result
+        assert act[0] == "Bomb"
+
+    def test_c4_yf1_sprint_passes_in_c2_c4_branch(self):
+        """C4 + yf2 无冲刺 + yf1 有冲刺 → PASS 让 yf1 拿第二（§4.1 步骤 2）"""
+        gs = _build_state(
+            hand_cards=list(BOMB_6J) + ["S2", "D2", "S3", "D3", "S4", "D4", "S5", "D5"],
+            enemy_finish_type="Bomb",
+            enemy_remaining=10,
+        )
+        d = EndgameDecider()
+        original = d._estimate_player_sprint_capability
+        d._estimate_player_sprint_capability = lambda pos, _gs: pos == 2
+        try:
+            gs = _preprocess(gs)
+            ec = gs["_endgame_context"]
+            result = d._q1_double_second_priority(
+                gs, gs["actionList"], ec, 1, ec["enemies"][1],
+            )
+        finally:
+            d._estimate_player_sprint_capability = original
+        assert result is not None
+        idx, act = result
+        assert act[0] == "PASS"
+
     def test_yf2_self_sprint_follows_twt(self):
         """yf2_self_sprint（yf2 有冲刺能力，yf1 无）→ 跟 min TWT 夺权"""
         gs = _build_state(

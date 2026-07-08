@@ -3002,25 +3002,59 @@ class EndgameDecider:
         hand_cards = ctx["hand_cards"]
         cur_rank = str(game_state.get("curRank", "2"))
 
-        # 情形 1：C2/C4（@1 必头游）→ yf2 自己拿第二
+        # 情形 1：C2/C4（@1 必头游）→ 队整体抢第二（§4.1 三步判定）
         if trigger in ("C2", "C4"):
+            teammate_pos = ctx.get("teammate_pos", (ec.get("my_pos", 0) + 2) % 4)
             if yf2_sprint:
-                # yf2 已有冲刺能力（剩 2 手 = 炸弹 + 单手）
-                # → 圈 2 yf2 领出 6J + 圈 3 接力闭合
+                # ① yf2 已有冲刺能力 → 圈 1 PASS，圈 2/3 自闭合拿第二
                 logger.info(
                     "GUA-135 %s: @1 必头游，yf2 自闭合拿第二（冲刺能力成立）",
                     trigger,
                 )
-                # 找 min 整牌型领出（保持当前圈 1 出 PASS 等待，让 @1 圈 2 出一手清）
-                # 实际：圈 1 yf2 应该 PASS（@1 必头游），让 @1 圈 2 出一手清
-                # 若 @1 圈 1 出的就是 finish，则 yf2 圈 1 也可跟 PASS
                 pass_act = self._find_pass_action(action_list)
                 if pass_act is not None:
                     return pass_act
             else:
-                # yf2 无冲刺能力 → yf2 圈 1 PASS 等 @1 头游，圈 2/3 闭合 @3
+                # ② yf1 能否/应否抢第二
+                yf1_bomb_intercept = False
+                try:
+                    yf1_bomb_intercept = self._has_teammate_bomb_family(
+                        game_state, teammate_pos,
+                    )
+                except Exception:
+                    pass
+                if yf1_bomb_intercept:
+                    logger.info(
+                        "GUA-135 %s: yf1 bomb family 拦截，yf2 必第三，PASS",
+                        trigger,
+                    )
+                    pass_act = self._find_pass_action(action_list)
+                    if pass_act is not None:
+                        return pass_act
+                if yf1_sprint:
+                    logger.info(
+                        "GUA-135 %s: yf1 有冲刺能力，yf2 PASS 让 yf1 拿第二",
+                        trigger,
+                    )
+                    pass_act = self._find_pass_action(action_list)
+                    if pass_act is not None:
+                        return pass_act
+                # ③ @3 冲刺能力 → 拦截抢第二，否则 PASS 等闭合
+                if at3_sprint:
+                    logger.info(
+                        "GUA-135 %s: @3 有冲刺能力，yf2 拦截抢第二",
+                        trigger,
+                    )
+                    six_j = self._find_six_joker_bomb_in_actions(
+                        action_list, hand_cards,
+                    )
+                    if six_j is not None:
+                        return six_j
+                    twt = self._find_twt_min_point(action_list, cur_rank)
+                    if twt is not None:
+                        return twt
                 logger.info(
-                    "GUA-135 %s: @1 必头游，yf2 PASS 等闭合 @3",
+                    "GUA-135 %s: @1 必头游，@3 无冲刺能力，yf2 PASS 等闭合",
                     trigger,
                 )
                 pass_act = self._find_pass_action(action_list)
@@ -3150,23 +3184,39 @@ class EndgameDecider:
         self, position: int, game_state: Dict[str, Any],
     ) -> Optional[Any]:
         """
-        GUA-137：推断 yf1/@3 整手结构（GroupingPlan）。
+        GUA-137 推断 yf1/@3 整手结构（GroupingPlan） + GUA-138 LRU 缓存。
 
         实现：
-          - Layer 1：MemoryTracker.card_state → 手牌列表 → enumerate_groupings
+          - Layer 1：MemoryTracker.card_state → 手牌列表 → enumerate_groupings（缓存）
           - Layer 2：enemy_ctx.hand_types 构造虚拟 plan（仅 singles）
           - Layer 3：返回 None
 
+        GUA-138 性能优化：使用 _GroupingPlanCache LRU 缓存避免重复计算。
+        缓存键：(tuple(sorted(hand)), cur_rank)；容量 64；深拷贝避免污染。
+
         返回：GroupingPlan 实例或 None
         """
-        # Layer 1: MemoryTracker → 手牌 → enumerate_groupings
+        # GUA-138：lazy init LRU 缓存（每个 EndgameDecider 实例独立）
+        if not hasattr(self, "_grouping_plan_cache"):
+            self._grouping_plan_cache = _GroupingPlanCache(max_size=64)
+        # GUA-138：cur_rank 变化 → 失效整缓存（GUA-138 §3.3）
+        prev_cur_rank = getattr(self, "_last_cur_rank", None)
+        cur_rank_now = str(game_state.get("curRank", "2"))
+        if prev_cur_rank is not None and prev_cur_rank != cur_rank_now:
+            self._grouping_plan_cache.invalidate(cur_rank=prev_cur_rank)
+        self._last_cur_rank = cur_rank_now
+
+        # Layer 1: MemoryTracker → 手牌 → 缓存命中/计算
         hand_cards = self._estimate_player_hand_cards(position, game_state)
         if hand_cards:
             try:
                 from src.v.nn.features.grouping_engine import enumerate_groupings
-                cur_rank = str(game_state.get("curRank", "2"))
-                best_plan, _ = enumerate_groupings(hand_cards, cur_rank)
-                return best_plan
+                def _compute_fn(h, r):
+                    best_plan, _ = enumerate_groupings(h, r)
+                    return best_plan
+                return self._grouping_plan_cache.get_or_compute(
+                    hand_cards, cur_rank_now, _compute_fn,
+                )
             except Exception:
                 pass
         # Layer 2: enemy_ctx.hand_types 兜底
@@ -3225,4 +3275,93 @@ class EndgameDecider:
             or len(getattr(plan, "straight_flushes", [])) > 0
         )
         return num_rounds <= 2 and has_bomb_family
+
+# ═══════════════════════════════════════════════════════
+#  GUA-138  grouping_engine LRU 缓存（性能优化）
+#  关联：docs/guandan-brain/issues/GUA-138-completion.md
+#  决策真源：GUA-137 §1 性能瓶颈
+# ═══════════════════════════════════════════════════════
+
+
+class _GroupingPlanCache:
+    """GUA-138：GroupingPlan LRU 缓存。
+
+    键：tuple(sorted(hand_cards)) + (cur_rank,)
+    值：GroupingPlan 深拷贝（避免下游修改污染）
+    容量：默认 64（LRU 淘汰）
+    """
+
+    def __init__(self, max_size: int = 64):
+        from collections import OrderedDict
+        self._cache: "OrderedDict" = OrderedDict()
+        self._max_size = max_size
+        self._hits = 0
+        self._misses = 0
+
+    @staticmethod
+    def _make_key(hand_cards, cur_rank):
+        return (tuple(sorted(hand_cards)), cur_rank)
+
+    def get_or_compute(self, hand_cards, cur_rank, compute_fn):
+        """获取缓存或计算并缓存。
+
+        Args:
+            hand_cards: 手牌列表
+            cur_rank: 当前级牌
+            compute_fn: (hand_cards, cur_rank) -> GroupingPlan
+
+        Returns:
+            GroupingPlan 深拷贝（缓存命中时）或新计算结果（cache miss）
+        """
+        key = self._make_key(hand_cards, cur_rank)
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            self._hits += 1
+            return self._deepcopy_plan(self._cache[key])
+        self._misses += 1
+        plan = compute_fn(hand_cards, cur_rank)
+        if plan is not None:
+            self._cache[key] = plan
+            if len(self._cache) > self._max_size:
+                self._cache.popitem(last=False)
+        return plan
+
+    def invalidate(self, hand_cards=None, cur_rank=None):
+        """失效缓存（全部或特定 hand/cur_rank）。
+
+        Args:
+            hand_cards: 失效特定手牌；None 时不按 hand 过滤
+            cur_rank: 失效特定 cur_rank；None 时不按 cur_rank 过滤
+        """
+        if hand_cards is None and cur_rank is None:
+            self._cache.clear()
+            return
+        keys_to_remove = []
+        if hand_cards is not None:
+            sorted_hand = tuple(sorted(hand_cards))
+            keys_to_remove.extend(k for k in self._cache if k[0] == sorted_hand)
+        if cur_rank is not None:
+            keys_to_remove.extend(k for k in self._cache if k[1] == cur_rank)
+        for k in set(keys_to_remove):
+            self._cache.pop(k, None)
+
+    def stats(self):
+        return {
+            "hits": self._hits,
+            "misses": self._misses,
+            "size": len(self._cache),
+            "max_size": self._max_size,
+        }
+
+    def clear(self):
+        self._cache.clear()
+
+    @staticmethod
+    def _deepcopy_plan(plan):
+        """深拷贝 GroupingPlan（避免下游修改污染缓存）。"""
+        import copy
+        try:
+            return copy.deepcopy(plan)
+        except Exception:
+            return plan
 
