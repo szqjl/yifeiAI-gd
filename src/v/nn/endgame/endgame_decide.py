@@ -2823,12 +2823,21 @@ class EndgameDecider:
 
         返回：估算的剩牌数（0 表示未知）
         """
+        # GUA-136 增强：MemoryTracker 优先（仅当返回 > 0 时，否则回退 enemy_ctx）
+        tracker = game_state.get("_memory_tracker")
+        if tracker is not None:
+            try:
+                count = tracker.get_hand_count(position)
+                if isinstance(count, int) and count > 0:
+                    return count
+            except Exception:
+                pass
+        # 兜底：平台报牌
         enemies = ec.get("enemies", {}) or {}
         enemy_ctx = enemies.get(position, {}) or {}
         remaining = enemy_ctx.get("remaining")
         if isinstance(remaining, int) and remaining >= 0:
             return remaining
-        # 兜底：从 game_state.actions 推断（TODO，留 GUA-136）
         return 0
 
     def _is_double_second_priority_scenario(
@@ -2898,26 +2907,17 @@ class EndgameDecider:
         # 判定冲刺能力（剩 2 手 = 炸弹 + 单手）
         yf2_sprint = self._has_sprint_capability(hand_cards)
 
-        # yf1 冲刺能力估算（依赖记忆模块；无记忆时保守 False）
-        yf1_sprint = False
-        tracker = game_state.get("_memory_tracker")
-        if tracker is not None:
+        # GUA-136 增强：yf1 冲刺能力精确评估（基于推断手牌）
+        yf1_sprint = self._estimate_player_sprint_capability(teammate_pos, game_state)
+        # 兜底：若 yf1 bomb family 已拦截（C1 路径 A），必头游
+        if not yf1_sprint:
             try:
-                # 若 yf1 已 bomb family 拦截（C1 路径 A），必头游
                 yf1_sprint = self._has_teammate_bomb_family(game_state, teammate_pos)
             except Exception:
                 pass
 
-        # @3 冲刺能力估算（依赖记忆模块；无记忆时保守 False）
-        at3_sprint = False
-        if tracker is not None:
-            try:
-                at3_hand = (tracker.get_seat_cards_estimate(enemy_pos)
-                            if hasattr(tracker, "get_seat_cards_estimate") else None)
-                if at3_hand:
-                    at3_sprint = self._has_sprint_capability(at3_hand)
-            except Exception:
-                pass
+        # GUA-136 增强：@3 冲刺能力精确评估（基于推断手牌）
+        at3_sprint = self._estimate_player_sprint_capability(enemy_pos, game_state)
 
         # 直接读 enemy_ctx.finish_type（不依赖 _classify_finish_type，因其看 belief.bomb_risk）
         _ft_raw = ctx["enemy_ctx"].get("finish_type")
@@ -3091,4 +3091,52 @@ class EndgameDecider:
         return self._q1_double_second_priority(
             game_state, action_list, ec, main_pos, main_enemy,
         )
+
+    # ═══════════════════════════════════════════════════════
+    #  GUA-136  玩家剩牌估算增强（记忆模块 + 圈序出牌历史）
+    #  关联：docs/guandan-brain/issues/GUA-136-completion.md
+    #  决策真源：GUA-135 §4.1 数据源升级
+    # ═══════════════════════════════════════════════════════
+
+    def _estimate_player_hand_cards(
+        self, position: int, game_state: Dict[str, Any],
+    ) -> List[str]:
+        """
+        GUA-136：推断某玩家当前手牌（具体牌列表）。
+
+        实现：遍历 MemoryTracker.card_state 找 position 标记的牌种，展开为实际牌列表。
+        无记忆模块 → 返回 []。
+
+        返回：手牌列表（具体牌），可能为空
+        """
+        tracker = game_state.get("_memory_tracker")
+        if tracker is None or not hasattr(tracker, "card_state"):
+            return []
+        try:
+            result: List[str] = []
+            for ct, copies in tracker.card_state.items():
+                own_count = sum(1 for c in copies if c == position)
+                for _ in range(own_count):
+                    result.append(ct)
+            return result
+        except Exception:
+            return []
+
+    def _estimate_player_sprint_capability(
+        self, position: int, game_state: Dict[str, Any],
+    ) -> bool:
+        """
+        GUA-136：判定某玩家（yf1 或 @3）是否具备冲刺能力。
+
+        冲刺能力 = 剩 2 手 = 炸弹 + 单手（参见 GUA-135 §0）
+
+        实现：推断手牌 → 应用 _has_sprint_capability 判定。
+        无推断 → 保守 False。
+
+        返回：True / False
+        """
+        hand_cards = self._estimate_player_hand_cards(position, game_state)
+        if not hand_cards:
+            return False
+        return self._has_sprint_capability(hand_cards)
 
