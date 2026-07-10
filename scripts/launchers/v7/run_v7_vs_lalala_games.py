@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +18,7 @@ project_root = Path(__file__).resolve().parents[3]  # repo root
 sys.path.insert(0, str(project_root))
 
 from batch_executor.executor import BatchExecutor
+from batch_executor.subprocess_utils import run_text_capture
 from src.utils.v7_paths import get_server_exe, get_v7_client_scripts
 
 log_dir = project_root / "logs"
@@ -103,13 +103,7 @@ def _run_endgame_anomaly_scan(
     ]
     logger.info("开始批后残局异常扫描: %s", " ".join(cmd))
     try:
-        result = subprocess.run(
-            cmd,
-            cwd=str(project_root),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-        )
+        result = run_text_capture(cmd, cwd=str(project_root))
     except Exception as exc:
         logger.warning("残局异常扫描执行失败: %s", exc)
         return False

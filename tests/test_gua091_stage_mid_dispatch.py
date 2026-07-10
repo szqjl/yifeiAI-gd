@@ -338,3 +338,88 @@ def test_stage_mid_dispatch_three_with_two_pressure_counter_avoids_pass():
     assert rec is not None
     assert rec["type"] == "ThreeWithTwo"
     assert rec["rank"] == "3"
+
+
+def test_mid_hold_skipped_when_teammate_already_finished():
+    """队友已头游（remaining=0）不得 mid_hold_for_teammate PASS。"""
+    engine = _make_engine(role="主攻")
+    engine._recommend_min_press_impl = lambda *args, **kwargs: None
+    engine._recommend_max_press_impl = lambda *args, **kwargs: None
+    engine._r11_bomb_throttle_check = lambda *args, **kwargs: (False, "")
+    engine._recommend_counter_bomb_in_action_list = lambda *args, **kwargs: {
+        "type": "Bomb",
+        "rank": "K",
+        "cards": ["SK", "HK", "CK", "DK"],
+    }
+    gs = {
+        "_current_stage": "stage_2",
+        "_belief": {"hand_counts": {0: 14, 1: 16, 2: 0, 3: 8}},
+        "_phase_relation": {
+            "critical_enemy_seat": 3,
+            "enemy_shape_hint": "unknown",
+            # 即便误传高 cover，remaining=0 也必须跳过 hold
+            "teammate_cover_confidence": 1.0,
+            "teammate_rear_single_cover_confidence": 0.0,
+            "same_type_suppressor_outside": True,
+            "enemy_bomb_risk_max": 0.2,
+            "sprint_fire_ready": False,
+        },
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 3,
+        "greaterAction": ["Single", "K", ["HK"]],
+        "handCards": ["SK", "HK", "CK", "DK", "H6", "C6", "D6"],
+        "curRank": "A",
+        "numofplayers": [14, 16, 0, 8],
+    }
+    action_list = _build_action_list(
+        ("Bomb", "K", ["SK", "HK", "CK", "DK"]),
+        ("Single", "A", ["HA"]),
+    )
+    # greaterPos=3 = 上家（myPos+3）→ is_upper 分支
+    rec = engine._stage_mid_dispatch(
+        gs,
+        engine._card_mask,
+        gs["handCards"],
+        "A",
+        greater_action=gs["greaterAction"],
+        greater_type="Single",
+        greater_rank="K",
+        is_lead=False,
+        is_teammate=False,
+        is_upper=True,
+        is_lower=False,
+        teammate_pos=2,
+    )
+    assert rec is not None
+    assert rec.get("intent") != "mid_hold_for_teammate"
+    assert rec["type"] != "PASS" or rec.get("intent") == "mid_no_same_type_pass"
+    # 有反炸推荐时应走出 bomb，而非 hold
+    if rec["type"] == "Bomb":
+        assert rec.get("intent") == "mid_counter_enemy_bomb"
+
+
+def test_should_sprint_true_for_double_bomb_plus_twt():
+    """双炸+TWT：语义 3 手，但冲刺能力成立 → should_sprint True。"""
+    from src.v.nn.endgame.endgame_preprocessor import EndgamePreprocessor
+
+    hand = (
+        ["S2", "H2", "C2", "D2"]
+        + ["SK", "SK", "HK", "CK", "DK"]
+        + ["H6", "C6", "D6", "D9", "D9"]
+    )
+    gs = {
+        "handCards": hand,
+        "myPos": 0,
+        "numofplayers": [14, 16, 0, 8],
+        "_group_type_map": {
+            "Bomb": 2,
+            "trip_in_three_with_two": 1,
+            "pair_in_three_with_two": 1,
+        },
+    }
+    EndgamePreprocessor().preprocess(gs)
+    self_ctx = gs["_endgame_context"]["self"]
+    assert self_ctx["has_two_clean_hands"] is False  # 3 手
+    assert self_ctx["has_bomb"] is True
+    assert self_ctx["should_sprint"] is True  # 冲刺能力 OR

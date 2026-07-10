@@ -404,9 +404,10 @@ class RuleCardCounter:
     def _estimate_teammate_cover_confidence(self, game_state=None) -> float:
         partner_pos = self._t.partner_pos
         remaining = self._t.hand_counts.get(partner_pos, 27)
+        # 队友已头游：无法再承接任何牌权，cover 必须为 0（禁止 mid_hold_for_teammate）
         if remaining <= 0:
-            base = 1.0
-        elif remaining <= 2:
+            return 0.0
+        if remaining <= 2:
             base = 0.85
         elif remaining <= 4:
             base = 0.70

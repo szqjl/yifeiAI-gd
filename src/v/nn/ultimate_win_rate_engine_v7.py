@@ -67,19 +67,24 @@ class UltimateWinRateEngineV7:
         # GUA-061: 组牌引擎开关（训练后用 bc_model_v3.pth 时开启）
         self.use_grouping_engine = use_grouping_engine
 
-        # 设备（必须在 _load_model 前设置）
+        # 设备（必须在 _load_model 前设置；规则栈路径仍可能用到 device）
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        # 模型路径（GUA-061: 分组引擎模式用 bc_model_v3.pth，默认用 v2）
-        # __file__ = src/v/nn/ultimate_win_rate_engine_v7.py → 4层 parent 到项目根
-        if use_grouping_engine:
-            self.model_path = Path(__file__).parent.parent.parent.parent / "models" / "v-nn" / "bc_model_v3.pth"
-        else:
-            self.model_path = Path(__file__).parent.parent.parent.parent / "models" / "v-nn" / "bc_model_v2.pth"
-
-        # 加载模型
-        self.model = None  # 确保 get_statistics 不爆 AttributeError
-        self._load_model()
+        # ── BC 权重挂载（已停用 · 2026-07-10）──────────────────────────────
+        # 战略口径：GUA-064/071 + 推荐法主路径；bc_model_v3 非必须，缺文件/挂上
+        # 均走规则栈。回滚：恢复下方 model_path 赋值，并改 _load_model 为真正加载。
+        # if use_grouping_engine:
+        #     self.model_path = Path(__file__).parent.parent.parent.parent / "models" / "v-nn" / "bc_model_v3.pth"
+        # else:
+        #     self.model_path = Path(__file__).parent.parent.parent.parent / "models" / "v-nn" / "bc_model_v2.pth"
+        self.model_path = None
+        self.model = None  # 强制规则栈 / GUA-075 推荐 / heuristic；不加载 BC
+        # self._load_model()
+        self.logger.info(
+            "BC 权重挂载已禁用（model=None）；决策走推荐法+规则栈。"
+            " 组牌引擎 use_grouping_engine=%s",
+            use_grouping_engine,
+        )
 
         # 决策统计
         self.decision_count = 0
@@ -308,35 +313,33 @@ class UltimateWinRateEngineV7:
         return act_index
 
     def _load_model(self):
-        """加载终极胜率导向模型"""
-        try:
-            if not self.model_path.exists():
-                self.logger.warning(f"[警告] 终极胜率导向模型未找到！模型路径: {self.model_path}")
-                self.logger.warning("将使用规则引擎作为回退")
-                return False
-            
-            # 加载模型
-            checkpoint = torch.load(self.model_path, map_location=self.device)
-            
-            # 创建模型架构（与训练时一致的UltimateWinRateNet）
-            from src.train.ultimate_win_rate_training import UltimateWinRateNet
-            self.model = UltimateWinRateNet().to(self.device)
-            
-            # 加载权重
-            if 'model_state_dict' in checkpoint:
-                self.model.load_state_dict(checkpoint['model_state_dict'])
-            else:
-                self.model.load_state_dict(checkpoint)
-            
-            self.model.eval()
-            
-            self.logger.info(f"✓ 终极胜率导向模型加载成功: {self.model_path}")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"✗ 模型加载失败: {e}")
-            self.model = None
-            return False
+        """加载终极胜率导向模型（当前停用：不挂 bc_model_v3/v2）。
+
+        回滚时恢复 __init__ 中 model_path + self._load_model() 调用，并还原本方法体。
+        """
+        self.model = None
+        self.logger.info("跳过 BC 权重加载（_load_model 已禁用）")
+        return False
+        # --- 以下为原加载逻辑（保留备查，勿删）---
+        # try:
+        #     if not self.model_path or not self.model_path.exists():
+        #         self.logger.warning(f"[警告] 终极胜率导向模型未找到！模型路径: {self.model_path}")
+        #         self.logger.warning("将使用规则引擎作为回退")
+        #         return False
+        #     checkpoint = torch.load(self.model_path, map_location=self.device)
+        #     from src.train.ultimate_win_rate_training import UltimateWinRateNet
+        #     self.model = UltimateWinRateNet().to(self.device)
+        #     if 'model_state_dict' in checkpoint:
+        #         self.model.load_state_dict(checkpoint['model_state_dict'])
+        #     else:
+        #         self.model.load_state_dict(checkpoint)
+        #     self.model.eval()
+        #     self.logger.info(f"✓ 终极胜率导向模型加载成功: {self.model_path}")
+        #     return True
+        # except Exception as e:
+        #     self.logger.error(f"✗ 模型加载失败: {e}")
+        #     self.model = None
+        #     return False
     
     # ── GUA-075 推荐路径统计 ──
     recommend_count: int = 0        # 推荐器尝试次数
@@ -1393,6 +1396,14 @@ class UltimateWinRateEngineV7:
         keep_indices: List[int] = []
         removed_count = 0
 
+        # 自由领出：禁止半组钢板 Trips / 半组三连对 Pair
+        my_pos_lead = game_state.get("myPos", self.player_id)
+        cur_pos_lead = game_state.get("curPos", -1)
+        greater_pos_lead = game_state.get("greaterPos", -1)
+        is_free_lead = (cur_pos_lead == -1) or (
+            greater_pos_lead in (-1, my_pos_lead) and 0 <= my_pos_lead <= 3
+        )
+
         # ── R12: 拆对子出单检查（有现成单张时禁止）──
         cur_rank = str(game_state.get("curRank", "2"))
         hand_cards_for_r12 = game_state.get("handCards", []) or []
@@ -1411,6 +1422,10 @@ class UltimateWinRateEngineV7:
                             and self._has_any_natural_single(hand_cards_for_r12, cur_rank)):
                         removed_count += 1
                         continue
+
+            if is_free_lead and self._is_partial_composite_lead(action):
+                removed_count += 1
+                continue
 
             broken_type = self._get_broken_core_type(
                 action, self._card_mask, self._group_type_map, self._group_members)
@@ -1499,6 +1514,42 @@ class UltimateWinRateEngineV7:
             if info[0] == gid:
                 return info[2]
         return 0
+
+    def _is_partial_composite_lead(self, action) -> bool:
+        """
+        自由领出禁半组：钢板只出 Trips、三连对只出 Pair、TWT 只出 Trips/Pair。
+
+        组牌把整型拆成子 gid 后，used==total 对单 gid 会误放行；此处按声明牌型拦截。
+        """
+        if not action or not isinstance(action, list) or len(action) < 3:
+            return False
+        declared = str(action[0] or "")
+        action_cards = action[2] if isinstance(action[2], list) else []
+        if not action_cards or self._card_mask is None:
+            return False
+
+        touched_types = set()
+        for card in action_cards:
+            info = self._card_mask.get(card)
+            if info is None:
+                continue
+            gid, is_core, _ = info
+            if gid < 0 or not is_core:
+                continue
+            gtype = (self._group_type_map or {}).get(gid)
+            if gtype:
+                touched_types.add(gtype)
+
+        if declared == "Trips" and "trip_in_steel_plate" in touched_types:
+            return True
+        if declared == "Pair" and "pair_in_three_pair" in touched_types:
+            return True
+        if declared in ("Trips", "Pair") and (
+            "trip_in_three_with_two" in touched_types
+            or "pair_in_three_with_two" in touched_types
+        ):
+            return True
+        return False
 
     @staticmethod
     def _get_broken_core_type(
@@ -3343,7 +3394,7 @@ class UltimateWinRateEngineV7:
                 if bomb:
                     return _with_intent(bomb, f"mid_bomb_cutoff:{reason}")
 
-            if teammate_cover_confidence >= 0.75 and _remaining(teammate_pos) <= 4:
+            if teammate_cover_confidence >= 0.75 and 0 < _remaining(teammate_pos) <= 4:
                 return {
                     "type": "PASS",
                     "rank": "",

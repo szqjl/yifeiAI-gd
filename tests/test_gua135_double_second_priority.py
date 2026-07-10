@@ -61,12 +61,16 @@ def _build_state(
     """通用 Q1 状态构造。"""
     if greater_action is None:
         greater_action = TWT_333_22
-    numofplayers = [
-        len(hand_cards or ANCHOR_HAND),
-        enemy_remaining,
-        at3_remaining,
-        teammate_remaining,
-    ]
+    # 按座位下标填 numofplayers：my / greater(敌) / teammate / 另一敌
+    hand_n = len(hand_cards or ANCHOR_HAND)
+    numofplayers = [27, 27, 27, 27]
+    numofplayers[my_pos] = hand_n
+    numofplayers[greater_pos] = enemy_remaining
+    numofplayers[(my_pos + 2) % 4] = teammate_remaining
+    other_enemy = (my_pos + 1) % 4
+    if other_enemy == greater_pos:
+        other_enemy = (my_pos + 3) % 4
+    numofplayers[other_enemy] = at3_remaining
     gs = {
         "myPos": my_pos,
         "curPos": greater_pos,
@@ -142,14 +146,30 @@ class TestHasSprintCapability:
         assert d._has_sprint_capability(hand) is False
 
     def test_bomb_plus_too_many_no_sprint(self):
-        """6J + 6 张单 = 剩 6 张，超 5 张 = 无冲刺能力"""
-        hand = list(BOMB_6J) + ["S2", "D2", "S3", "D3", "S4", "D4"]
+        """6J + 6 张散单（非钢板/三连对）= 无冲刺能力"""
+        hand = list(BOMB_6J) + ["S2", "S3", "S4", "S5", "S6", "S7"]
         d = EndgameDecider()
         assert d._has_sprint_capability(hand) is False
 
     def test_4bomb_plus_pair_has_sprint(self):
         """4 张同点（炸弹家族起点）+ 22 = 冲刺能力 ✓"""
         hand = ["S7", "H7", "D7", "C7", "S2", "D2"]
+        d = EndgameDecider()
+        assert d._has_sprint_capability(hand) is True
+
+    def test_double_bomb_plus_twt_has_sprint(self):
+        """双炸 + 三带二（人眼冲刺结构）：剥两层炸后剩一手 TWT → True"""
+        hand = (
+            ["S2", "H2", "C2", "D2"]  # 4 炸
+            + ["SK", "SK", "HK", "CK", "DK"]  # 5 炸
+            + ["H6", "C6", "D6", "D9", "D9"]  # TWT
+        )
+        d = EndgameDecider()
+        assert d._has_sprint_capability(hand) is True
+
+    def test_bomb_plus_steel_plate_has_sprint(self):
+        """炸 + 钢板 6 张 = 冲刺能力（钢板算一手整牌）"""
+        hand = ["S4", "H4", "C4", "D4"] + ["H7", "C7", "S7", "S8", "H8", "C8"]
         d = EndgameDecider()
         assert d._has_sprint_capability(hand) is True
 
@@ -168,12 +188,24 @@ class TestEstimatePlayerRemaining:
         d = EndgameDecider()
         assert d._estimate_player_remaining(1, ec, gs) == 8
 
-    def test_unknown_returns_zero(self):
-        """无 enemy_ctx 返回 0"""
+    def test_unknown_returns_minus_one(self):
+        """无 enemy_ctx / numofplayers 信息 → -1（未知，非已头游）"""
         gs = _build_state()
-        ec = {"enemies": {}}
+        gs["numofplayers"] = []
+        ec = {"enemies": {}, "numofplayers": []}
         d = EndgameDecider()
-        assert d._estimate_player_remaining(1, ec, gs) == 0
+        assert d._estimate_player_remaining(1, ec, gs) == -1
+
+    def test_numofplayers_fallback_for_teammate(self):
+        """队友不在 enemies 时，用 numofplayers 估剩牌"""
+        gs = _build_state(teammate_remaining=24)
+        ec = {
+            "enemies": {},
+            "my_pos": 0,
+            "numofplayers": [24, 20, 24, 9],
+        }
+        d = EndgameDecider()
+        assert d._estimate_player_remaining(2, ec, gs) == 24
 
 
 # ════════════════════════════════════════════
@@ -201,8 +233,8 @@ class TestIsDoubleSecondPriorityScenario:
         assert ctx is not None
         assert ctx["trigger"] == "C4"
 
-    def test_c5_smaller_twt_triggers_yf2_self_sprint(self):
-        """C5（finish 更小 TWT）+ yf2 整手 ≤ 10 张有冲刺能力 → trigger='yf2_self_sprint'"""
+    def test_c5_smaller_twt_triggers_self_sprint(self):
+        """C5（finish 更小 TWT）+ self 整手 ≥ 10 或有冲刺 → trigger='self_sprint'"""
         gs = _build_state(
             enemy_finish_type="ThreeWithTwo",
             enemy_finish_rank_value=4,
@@ -211,9 +243,9 @@ class TestIsDoubleSecondPriorityScenario:
         ec = gs["_endgame_context"]
         d = EndgameDecider()
         ctx = d._is_double_second_priority_scenario(gs, ec)
-        # ANCHOR_HAND 有 14 张 + 冲刺能力 → yf2_self_sprint
+        # ANCHOR_HAND 有 14 张 + 冲刺能力 → self_sprint
         assert ctx is not None
-        assert ctx["trigger"] == "yf2_self_sprint"
+        assert ctx["trigger"] == "self_sprint"
 
     def test_sprint_race_triggers(self):
         """双方都 ≤ 6 张 → trigger='sprint_race'"""
@@ -330,8 +362,8 @@ class TestQ1DoubleSecondPriority:
         idx, act = result
         assert act[0] == "PASS"
 
-    def test_yf2_self_sprint_follows_twt(self):
-        """yf2_self_sprint（yf2 有冲刺能力，yf1 无）→ 跟 min TWT 夺权"""
+    def test_self_sprint_follows_twt(self):
+        """self_sprint（本家有冲刺能力，队友无）→ 跟 min TWT 夺权"""
         gs = _build_state(
             hand_cards=list(BOMB_6J) + ["S2", "D2"],  # 6J + 22 有冲刺能力
             enemy_finish_type="ThreeWithTwo",
@@ -349,24 +381,25 @@ class TestQ1DoubleSecondPriority:
         # 跟 min TWT = 777+22（点最小）
         assert act[0] == "ThreeWithTwo"
 
-    def test_yf1_sprint_passes(self):
-        """yf1_sprint（yf1 bomb family 拦截，yf2 必第三）→ PASS"""
+    def test_teammate_sprint_passes_only_when_remaining_zero(self):
+        """teammate_sprint：仅队友 remaining==0（真已头游）→ PASS"""
         gs = _build_state(
-            hand_cards=list(BOMB_6J) + ["S2", "D2"],  # yf2 8 张
-            enemy_finish_type="Bomb",  # C4
+            hand_cards=list(BOMB_6J) + ["S2", "D2"],
+            enemy_finish_type="ThreeWithTwo",
             enemy_remaining=10,
-            teammate_remaining=4,
+            teammate_remaining=0,
         )
-        # 注入 mock memory_tracker
+
         class MockTracker:
-            def __init__(self):
-                self._data = {}
+            def get_hand_count(self, pos):
+                return 0 if pos == 2 else 8
+
             def get_seat_cards_estimate(self, pos):
                 return None
+
         gs["_memory_tracker"] = MockTracker()
         gs = _preprocess(gs)
         ec = gs["_endgame_context"]
-        # Mock _has_teammate_bomb_family 让 yf1_sprint 触发
         d = EndgameDecider()
         original = d._has_teammate_bomb_family
         d._has_teammate_bomb_family = lambda *a, **kw: True
@@ -378,11 +411,47 @@ class TestQ1DoubleSecondPriority:
             d._has_teammate_bomb_family = original
         assert result is not None
         idx, act = result
-        # yf1_sprint → yf2 PASS（让 yf1 头游）
         assert act[0] == "PASS"
 
+    def test_teammate_sprint_not_finished_does_not_force_pass(self):
+        """
+        WF-12 锚点回归：队友仍有牌时，不得因「冲刺/炸族」假已头游强制 PASS。
+        本家 24 张主攻应对敌 TWT → GUA-135 应放行（return None）。
+        """
+        hand_24 = (
+            list(BOMB_6J)
+            + ["S2", "D2", "S3", "D3", "S4", "D4", "S5", "D5", "S7", "H7", "D7", "S8", "H8", "D8", "S9", "H9"]
+        )
+        assert len(hand_24) == 22
+        # pad to 24
+        hand_24 = hand_24 + ["ST", "HT"]
+        gs = _build_state(
+            hand_cards=hand_24,
+            enemy_finish_type="ThreeWithTwo",
+            enemy_remaining=9,
+            teammate_remaining=24,
+        )
+        gs = _preprocess(gs)
+        ec = gs["_endgame_context"]
+        d = EndgameDecider()
+        original = d._has_teammate_bomb_family
+        d._has_teammate_bomb_family = lambda *a, **kw: True
+        try:
+            ctx = d._is_double_second_priority_scenario(gs, ec)
+            # 队友未出完 → 不得 trigger=teammate_sprint
+            if ctx is not None:
+                assert ctx["trigger"] != "teammate_sprint"
+            result = d._q1_double_second_priority(
+                gs, gs["actionList"], ec, 1, ec["enemies"][1],
+            )
+            # 若落到 self_sprint 可能跟 TWT；关键是不得因假已头游 PASS
+            if result is not None:
+                assert result[1][0] != "PASS" or ctx["trigger"] != "teammate_sprint"
+        finally:
+            d._has_teammate_bomb_family = original
+
     def test_no_scenario_returns_none(self):
-        """无场景触发 → None（yf2 整手 < 5 张，探测门槛不满足）"""
+        """无场景触发 → None（self 整手 < 5 张，探测门槛不满足）"""
         gs = _build_state(hand_cards=["S7", "H7", "D7", "S8"])  # 4 张 < 5
         gs = _preprocess(gs)
         ec = gs["_endgame_context"]

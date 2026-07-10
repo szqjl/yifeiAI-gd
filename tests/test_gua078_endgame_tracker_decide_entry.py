@@ -458,7 +458,8 @@ class TestGua078TrackerAtDecideEntry:
             "myPos": 2,
             "curPos": 1,
             "greaterPos": 1,
-            "greaterAction": ["ThreeWithTwo", "K", ["SK", "HK", "CK", "SB", "SB"]],
+            # 用 Pair 控牌测 GUA-103 最小足够炸；ThreeWithTwo 会先被 GUA-135 截走
+            "greaterAction": ["Pair", "K", ["SK", "HK"]],
             "handCards": list(hand_cards),
             "actionList": [
                 ["PASS", "PASS", "PASS"],
@@ -1075,3 +1076,56 @@ class TestQ0StraightFlushSprint:
         bomb8 = ["Bomb", "8", ["S8", "H8", "C8", "D8"]]
         assert _action_beats_greater(sf, bomb8, "A") is True
         assert _action_beats_greater(bomb8, sf, "A") is False
+
+    def test_semantic_hands_coalesce_steel_plate(self):
+        """Bomb + 2×trip_in_steel_plate 语义手数=2，应触发 should_sprint。"""
+        from src.v.nn.endgame.endgame_preprocessor import EndgamePreprocessor
+
+        gs = {
+            "handCards": ["C4", "D4", "H4", "S4", "H7", "C7", "S7", "S8", "H8", "C8"],
+            "curRank": "A",
+            "myPos": 2,
+            "numofplayers": [12, 9, 10, 12],
+            "_group_type_map": {
+                "Bomb": 1,
+                "trip_in_steel_plate": 2,
+            },
+        }
+        EndgamePreprocessor().preprocess(gs)
+        self_ctx = gs["_endgame_context"]["self"]
+        assert self_ctx["has_two_clean_hands"] is True
+        assert self_ctx["has_bomb"] is True
+        assert self_ctx["should_sprint"] is True
+
+    def test_q0_lead_bomb_plus_steel_prefers_two_trips(self):
+        """GUA-110/Q0：炸+钢板自由领出须整组 TwoTrips，不得 Trips/7。"""
+        bomb = ["C4", "D4", "H4", "S4"]
+        t7 = ["H7", "C7", "S7"]
+        t8 = ["S8", "H8", "C8"]
+        hand = bomb + t7 + t8
+        gs = {
+            "myPos": 2,
+            "curPos": -1,
+            "greaterPos": -1,
+            "greaterAction": [],
+            "handCards": list(hand),
+            "actionList": [
+                ["PASS", "PASS", "PASS"],
+                ["Trips", "7", t7],
+                ["Trips", "8", t8],
+                ["TwoTrips", "7", t7 + t8],
+                ["Bomb", "4", bomb],
+            ],
+            "curRank": "A",
+            "selfRank": "A",
+            "oppoRank": "A",
+            "numofplayers": [12, 9, 10, 12],
+            "_group_type_map": {"Bomb": 1, "trip_in_steel_plate": 2},
+        }
+        EndgamePreprocessor().preprocess(gs)
+        assert gs["_endgame_context"]["self"]["should_sprint"] is True
+
+        idx, act = EndgameDecider().decide(gs, gs["actionList"])
+        assert idx is not None
+        assert act[0] == "TwoTrips"
+        assert set(act[2]) == set(t7 + t8)

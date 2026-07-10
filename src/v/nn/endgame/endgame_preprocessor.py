@@ -104,7 +104,7 @@ endgame_rule: Dict[int, tuple] = {
     3:  ("高",   ["单张", "对子"],        ["Trips"]),
     4:  ("中高", ["大单张", "Straight"],  ["Pair"]),
     5:  ("中",   ["Pair", "Trips", "大单张"], []),
-    6:  ("中",   ["Trips"],             ["Single", "Pair"]),  # 敌剩6：禁散牌，宜三同张（深牌难用单对冲刺）
+    6:  ("中",   ["ThreePair", "TwoTrips", "Straight", "Trips"], []),  # GUA-142：宜整结构；不禁 Pair（小对可作冲刺尾手）
     7:  ("低",   ["Straight", "TwoTrips", "ThreePair"], []),  # 敌剩7-8：宜整牌结构；跟压时同理可出三带二（GUA-125 §0）
     8:  ("低",   ["Straight", "TwoTrips", "ThreePair"], []),
     9:  ("低",   ["Straight", "ThreePair", "TwoTrips"], []),
@@ -450,18 +450,51 @@ class EndgamePreprocessor:
 
     # ── 核心判定 ──
 
+    @staticmethod
+    def count_semantic_hands(grouptype_map: Dict[str, int]) -> int:
+        """
+        语义手数：把 to_card_mask 子结构合并为整牌型后再计数。
+
+        组牌引擎把钢板拆成 2×trip_in_steel_plate、三连对拆成 3×pair_in_three_pair、
+        三带二拆成 trip+pair；冲刺「两手」必须按整牌型计，否则 Bomb+钢板会被算成 3 组。
+        """
+        if not grouptype_map:
+            return 99
+        m = {str(k): int(v) for k, v in grouptype_map.items() if int(v) > 0}
+        hands = 0
+
+        twt_trips = m.pop("trip_in_three_with_two", 0)
+        twt_pairs = m.pop("pair_in_three_with_two", 0)
+        twt_units = min(twt_trips, twt_pairs)
+        hands += twt_units
+        hands += (twt_trips - twt_units) + (twt_pairs - twt_units)
+
+        steel = m.pop("trip_in_steel_plate", 0)
+        hands += steel // 2
+        hands += steel % 2
+
+        three_pair = m.pop("pair_in_three_pair", 0)
+        hands += three_pair // 3
+        hands += three_pair % 3
+
+        # scatter 注入为散牌张数；每张散单算一手
+        hands += m.pop("scatter", 0)
+
+        for _gtype, cnt in m.items():
+            hands += cnt
+        return hands
+
     def _has_two_clean_hands(self, game_state: Dict[str, Any]) -> bool:
         """
-        两手整牌判定：手牌拆分后总共 ≤2 组。
+        两手整牌判定：语义手数 ≤2（子结构已合并为整牌型）。
 
-        基于 grouptype_map（组牌引擎产出）。
+        基于 grouptype_map（组牌引擎产出 / 引擎注入的 type→count）。
         """
         grouptype_map = game_state.get("_group_type_map", {})
         if not grouptype_map:
             # 回退：没有组牌引擎 → 不敢说两手整牌
             return False
-        total_groups = sum(grouptype_map.values())
-        return total_groups <= 2
+        return self.count_semantic_hands(grouptype_map) <= 2
 
     def _has_bomb(self, game_state: Dict[str, Any]) -> bool:
         """
@@ -506,8 +539,21 @@ class EndgamePreprocessor:
         return False
 
     def _should_sprint(self, game_state: Dict[str, Any]) -> bool:
-        """自己是否应该冲刺抢头游：两手整牌 + 有炸弹"""
-        return self._has_two_clean_hands(game_state) and self._has_bomb(game_state)
+        """
+        自己是否应该冲刺：
+          ① 两手整牌 + 有炸（语义手数 ≤2）
+          ② 或具备冲刺能力（炸(+炸*)+单手结构，GUA-135；覆盖双炸+结构）
+        """
+        if self._has_two_clean_hands(game_state) and self._has_bomb(game_state):
+            return True
+        hand_cards = list(game_state.get("handCards") or [])
+        if not hand_cards:
+            return False
+        try:
+            from src.v.nn.endgame.endgame_decide import EndgameDecider
+            return EndgameDecider._hand_has_sprint_capability(hand_cards)
+        except Exception:
+            return False
 
     # ── 静态工具方法 ──
 

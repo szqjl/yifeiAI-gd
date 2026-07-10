@@ -76,12 +76,15 @@ def _build_state(
     """通用 Q1 状态构造。"""
     if greater_action is None:
         greater_action = TWT_333_22
-    numofplayers = [
-        len(hand_cards or ANCHOR_HAND),
-        enemy_remaining,
-        at3_remaining,
-        teammate_remaining,
-    ]
+    hand_n = len(hand_cards or ANCHOR_HAND)
+    numofplayers = [27, 27, 27, 27]
+    numofplayers[my_pos] = hand_n
+    numofplayers[greater_pos] = enemy_remaining
+    numofplayers[(my_pos + 2) % 4] = teammate_remaining
+    other_enemy = (my_pos + 1) % 4
+    if other_enemy == greater_pos:
+        other_enemy = (my_pos + 3) % 4
+    numofplayers[other_enemy] = at3_remaining
     gs = {
         "myPos": my_pos,
         "curPos": greater_pos,
@@ -260,16 +263,17 @@ class TestEstimatePlayerRemainingEnhanced:
         result = d._estimate_player_remaining(2, ec, gs)
         assert result == 6
 
-    def test_no_tracker_no_enemy_ctx_returns_zero(self):
-        """完全未知 → 返回 0"""
+    def test_no_tracker_no_enemy_ctx_returns_unknown(self):
+        """完全未知 → 返回 -1（禁止把未知当成已头游 0）"""
         gs = _build_state()
-        ec = {"enemies": {}}
+        gs["numofplayers"] = []
+        ec = {"enemies": {}, "numofplayers": []}
         d = EndgameDecider()
         result = d._estimate_player_remaining(1, ec, gs)
-        assert result == 0
+        assert result == -1
 
-    def test_tracker_returns_zero_for_unknown_seat(self):
-        """MemoryTracker 无该 seat → 0（再回退 enemy_ctx）"""
+    def test_tracker_empty_falls_back_to_enemy_ctx(self):
+        """MemoryTracker 无该 seat → 回退 enemy_ctx"""
         tracker = MockMemoryTracker(hand_counts={})  # 空
         gs = _build_state(enemy_remaining=5, memory_tracker=tracker)
         ec = {"enemies": {1: {"remaining": 5}}}
@@ -283,12 +287,12 @@ class TestEstimatePlayerRemainingEnhanced:
 # ═══════════════════════════════════════════════════════
 
 class TestDoubleSecondPrioritySprintEvalEnhanced:
-    def test_yf1_sprint_true_via_tracker(self):
-        """GUA-136：yf1 推断手牌有冲刺能力 → yf1_sprint=True"""
+    def test_teammate_sprint_true_via_tracker_but_not_finished(self):
+        """GUA-136：队友推断有冲刺，但 remaining>0 → 不得 trigger=teammate_sprint"""
         # teammate_pos = (0 + 2) % 4 = 2
         card_state = {
-            "SJ": [2, 2], "HJ": [2, 2], "DJ": [2, 2],  # 6J yf1 有
-            "S2": [2, 2], "D2": [2, 2],  # 22 yf1 有
+            "SJ": [2, 2], "HJ": [2, 2], "DJ": [2, 2],  # 6J teammate 有
+            "S2": [2, 2], "D2": [2, 2],  # 22 teammate 有
         }
         tracker = MockMemoryTracker(hand_counts={2: 8}, card_state=card_state)
         gs = _build_state(
@@ -301,12 +305,12 @@ class TestDoubleSecondPrioritySprintEvalEnhanced:
         ec = gs["_endgame_context"]
         d = EndgameDecider()
         ctx = d._is_double_second_priority_scenario(gs, ec)
-        # GUA-136 增强后：yf1 有 sprint 能力 → trigger=yf1_sprint（yf1 必头游）
-        # 注：触发顺序 C2/C4 → yf1_sprint → sprint_race → yf2_self_sprint
         assert ctx is not None
-        assert ctx["trigger"] == "yf1_sprint"
-        # GUA-136 增强：yf1_sprint 应基于推断手牌 = True（6J+22）
-        assert ctx["yf1_sprint"] is True
+        # 队友未出完 → 走 self_sprint（本家 ≥10 / 有冲刺），而非假已头游
+        assert ctx["trigger"] == "self_sprint"
+        assert ctx["teammate_sprint"] is True
+        assert ctx["yf1_sprint"] is True  # 兼容别名
+        assert ctx["teammate_remaining"] == 8
 
     def test_at3_sprint_true_via_tracker(self):
         """GUA-136：@3 推断手牌有冲刺能力 → @3_sprint=True"""

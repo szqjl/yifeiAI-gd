@@ -52,7 +52,7 @@ def main() -> int:
         try:
             all_findings.extend(scan_record_file(path, critical_remaining=critical_remaining))
         except Exception as exc:
-            print(f"⚠ 跳过 {path.name}: {exc}")
+            print(f"[WARN] 跳过 {path.name}: {exc}")
 
     print(f"扫描目录: {scan_dir}")
     print(f"记录文件: {len(files)}")

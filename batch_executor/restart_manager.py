@@ -467,11 +467,10 @@ class RestartManager:
                     except ValueError:
                         # 如果无法计算相对路径，使用绝对路径
                         rel_path_normalized = abs_script_path.replace('/', '\\')
-                    # 使用与CMD文件相同的格式：start "窗口标题" cmd /k "python 相对路径"
-                    # 这样工作目录会自动设置为当前目录（项目根目录）
+                    # cmd /c：客户端脚本结束后自动关闭窗口；/k 会留下空 CMD（批跑 cleanup 后仍可见）
                     # 注意：python_exe 不加引号（路径无空格），否则 cmd 内层引号与外层冲突导致秒退
                     start_command = (
-                        f'start "{window_title}" cmd /k "cd /d {work_dir} && '
+                        f'start "{window_title}" cmd /c "cd /d {work_dir} && '
                         f'{python_exe} {rel_path_normalized}"'
                     )
                     process = subprocess.Popen(

@@ -111,3 +111,197 @@ def test_wf12_orphan_falls_p4_not_bare_high_single():
     assert rec is not None
     assert rec["type"] == "Pair"
     assert rec["rank"] == "4"
+
+
+def test_p3_leads_core_straight_with_bomb_recapture():
+    """
+    is_core 顺可整组领出（≠拆核）；回手=组内炸。
+    构造：两顺 + 两炸，无 P1 累赘散单 → 应领最小整顺，非散单/拆炸。
+    """
+    # G0 Bomb/J, G1 Bomb/Q, G2 straight 45678, G3 straight 23456
+    s_low = ["S2", "C3", "C4", "C5", "D6"]
+    s_hi = ["D4", "H5", "S6", "H7", "H8"]
+    bomb_j = ["SJ", "HJ", "CJ", "DJ"]
+    bomb_q = ["SQ", "HQ", "CQ", "DQ"]
+    card_mask = {}
+    group_members = {
+        0: bomb_j,
+        1: bomb_q,
+        2: s_hi,
+        3: s_low,
+    }
+    group_type_map = {
+        0: "Bomb",
+        1: "Bomb",
+        2: "straight",
+        3: "straight",
+    }
+    for gid, cards in group_members.items():
+        for c in cards:
+            card_mask[c] = (gid, 1.0, len(cards))
+    engine = _make_engine(
+        card_mask=card_mask,
+        group_type_map=group_type_map,
+        group_members=group_members,
+    )
+    rec = recommend_main_attack_lead(
+        engine, {}, card_mask, list(card_mask), "2", "stage_2",
+    )
+    assert rec is not None
+    assert rec["type"] == "Straight"
+    assert rec["intent"] == "main_p3_short_straight"
+    assert set(rec["cards"]) == set(s_low)
+
+
+def test_p2_leads_core_twt_with_bomb_recapture():
+    """单手 core TWT + 炸作回手，stage_2：整组领三带二。"""
+    trip = ["S6", "H6", "C6"]
+    pair = ["S4", "H4"]
+    bomb = ["SJ", "HJ", "CJ", "DJ"]
+    card_mask = {}
+    group_members = {0: trip, 1: pair, 2: bomb}
+    group_type_map = {
+        0: "trip_in_three_with_two",
+        1: "pair_in_three_with_two",
+        2: "Bomb",
+    }
+    for gid, cards in group_members.items():
+        for c in cards:
+            card_mask[c] = (gid, 1.0, len(cards))
+    engine = _make_engine(
+        card_mask=card_mask,
+        group_type_map=group_type_map,
+        group_members=group_members,
+    )
+    rec = recommend_main_attack_lead(
+        engine, {}, card_mask, list(card_mask), "2", "stage_2",
+    )
+    assert rec is not None
+    assert rec["type"] == "ThreeWithTwo"
+    assert rec["intent"] == "main_p2_three_with_two"
+    assert set(rec["cards"]) == set(trip + pair)
+
+
+def test_whole_group_core_not_break_filter():
+    """整组打出 core 顺：_get_broken_core_type 必须为 None（不算拆）。"""
+    cards = ["S3", "S4", "S5", "S6", "S7"]
+    card_mask = {c: (0, 1.0, 5) for c in cards}
+    group_type_map = {0: "straight"}
+    group_members = {0: list(cards)}
+    engine = _make_engine(
+        card_mask=card_mask,
+        group_type_map=group_type_map,
+        group_members=group_members,
+    )
+    broken = UltimateWinRateEngineV7._get_broken_core_type(
+        ["Straight", "3", list(cards)],
+        card_mask,
+        group_type_map,
+        group_members,
+    )
+    assert broken is None
+    # 拆一张则算拆
+    broken_part = UltimateWinRateEngineV7._get_broken_core_type(
+        ["Single", "5", ["S5"]],
+        card_mask,
+        group_type_map,
+        group_members,
+    )
+    assert broken_part == "straight"
+
+
+def test_p3b_leads_two_trips_with_bomb_recapture():
+    """炸 + 钢板：整组 TwoTrips 领出，不得拆成 Trips。"""
+    bomb = ["C4", "D4", "H4", "S4"]
+    t7 = ["H7", "C7", "S7"]
+    t8 = ["S8", "H8", "C8"]
+    card_mask = {}
+    group_members = {0: bomb, 1: t7, 2: t8}
+    group_type_map = {
+        0: "Bomb",
+        1: "trip_in_steel_plate",
+        2: "trip_in_steel_plate",
+    }
+    for gid, cards in group_members.items():
+        for c in cards:
+            card_mask[c] = (gid, 1.0, len(cards))
+    engine = _make_engine(
+        card_mask=card_mask,
+        group_type_map=group_type_map,
+        group_members=group_members,
+    )
+    rec = recommend_main_attack_lead(
+        engine, {}, card_mask, list(card_mask), "A", "stage_2",
+    )
+    assert rec is not None
+    assert rec["type"] == "TwoTrips"
+    assert rec["intent"] == "main_p3b_two_trips"
+    assert set(rec["cards"]) == set(t7 + t8)
+
+
+def test_partial_steel_trips_blocked_on_free_lead():
+    """自由领出：半组 trip_in_steel_plate 的 Trips 须被 filter 拦掉。"""
+    bomb = ["C4", "D4", "H4", "S4"]
+    t7 = ["H7", "C7", "S7"]
+    t8 = ["S8", "H8", "C8"]
+    card_mask = {}
+    group_members = {0: bomb, 1: t7, 2: t8}
+    group_type_map = {
+        0: "Bomb",
+        1: "trip_in_steel_plate",
+        2: "trip_in_steel_plate",
+    }
+    for gid, cards in group_members.items():
+        for c in cards:
+            card_mask[c] = (gid, 1.0, len(cards))
+    engine = _make_engine(
+        card_mask=card_mask,
+        group_type_map=group_type_map,
+        group_members=group_members,
+    )
+    engine._current_role = "主攻"
+    engine.group_filter_bypass_count = 0
+    engine.group_filtered_count = 0
+    gs = {
+        "myPos": 0,
+        "curPos": -1,
+        "greaterPos": -1,
+        "handCards": list(card_mask.keys()),
+        "curRank": "A",
+        "numofplayers": [11, 12, 10, 12],
+        "publicInfo": [{"rest": 11}, {"rest": 12}, {"rest": 10}, {"rest": 12}],
+    }
+    action_list = [
+        ["Trips", "7", t7],
+        ["TwoTrips", "7", t7 + t8],
+        ["Bomb", "4", bomb],
+    ]
+    filtered, _ = engine._group_consistency_filter(action_list, gs)
+    types = [a[0] for a in filtered]
+    assert "Trips" not in types
+    assert "TwoTrips" in types
+    assert "Bomb" in types
+
+
+def test_p3d_natural_trips_with_bomb_recapture():
+    """天然 trips + 炸回手 → 整组 Trips 领出。"""
+    trips = ["S5", "H5", "C5"]
+    bomb = ["SJ", "HJ", "CJ", "DJ"]
+    card_mask = {}
+    group_members = {0: trips, 1: bomb}
+    group_type_map = {0: "trips", 1: "Bomb"}
+    for gid, cards in group_members.items():
+        for c in cards:
+            card_mask[c] = (gid, 1.0, len(cards))
+    engine = _make_engine(
+        card_mask=card_mask,
+        group_type_map=group_type_map,
+        group_members=group_members,
+    )
+    rec = recommend_main_attack_lead(
+        engine, {}, card_mask, list(card_mask), "2", "stage_2",
+    )
+    assert rec is not None
+    assert rec["type"] == "Trips"
+    assert rec["intent"] == "main_p3d_trips"
+    assert set(rec["cards"]) == set(trips)
