@@ -9,6 +9,7 @@ import sys
 import time
 import logging
 import os
+import socket
 from typing import List, Optional
 from pathlib import Path
 
@@ -204,6 +205,7 @@ class RestartManager:
         max_retries: int = 3,
         wait_time: int = 15,
         platform: str = "v1006",  # V8: 平台类型
+        server_port: int = None,  # V8: 服务器端口，None 时根据 platform 自动推导
     ) -> Optional[subprocess.Popen]:
         """
         重启服务器
@@ -217,10 +219,15 @@ class RestartManager:
             max_retries: 最大重试次数，默认3次
             wait_time: 等待服务器就绪的时间（秒），默认15秒
             platform: 平台类型（v1006/openguandan）
+            server_port: 服务器 WebSocket 端口（None 时自动：8181 for openguandan, 23456 for v1006）
             
         Returns:
             成功启动的服务器进程，如果失败返回None
         """
+        # 端口推导
+        if server_port is None:
+            server_port = 8181 if platform == "openguandan" else 23456
+
         # V8: 同时清理新旧平台服务器进程
         _SERVER_PROC_NAMES = ("guandan_offline_v1006", "guandan")
         for attempt in range(max_retries):
@@ -293,85 +300,141 @@ class RestartManager:
                 
                 logger.info(f"服务器进程已启动，PID: {process.pid}")
                 
-                # Enhanced waiting loop with real-time stdout reading
+                # --- 服务器就绪等待（平台自适应）---
                 check_interval = 2
                 elapsed = 0
                 server_output_lines = []
 
                 logger.info(f"服务器窗口已启动，PID: {process.pid}")
-                logger.info("等待服务器输出 'ready for connect' 或类似就绪消息...")
 
-                while elapsed < wait_time:
-                    time.sleep(min(check_interval, wait_time - elapsed))
-                    elapsed += check_interval
-                    
-                    # Try to read available stdout lines (may be limited in CREATE_NEW_CONSOLE mode)
-                    try:
-                        if process.stdout:
-                            while True:
-                                line = process.stdout.readline()
-                                if not line:
-                                    break
-                                line = line.strip()
-                                if line:
-                                    server_output_lines.append(line)
-                                    logger.info(f"[服务器] {line}")
-                                    # Check for readiness message
-                                    if any(keyword in line.lower() for keyword in ["ready for connect", "server started", "listening", "waiting for players", "ready"]):
-                                        logger.info("✓ 检测到服务器就绪消息!")
-                                        # We can break early if ready message found
-                                        elapsed = wait_time  # Force exit loop
-                                        break
-                    except Exception as read_error:
-                        # In CREATE_NEW_CONSOLE mode, stdout might not be available
-                        logger.debug(f"读取服务器输出时出错 (正常在可见窗口模式): {read_error}")
-                    
-                    # Check process status
-                    return_code = process.poll()
-                    if return_code is not None:
-                        logger.warning(f"服务器进程在 {elapsed} 秒后退出，返回码: {return_code}")
-                        # Read any remaining output
-                        try:
-                            if process.stdout:
-                                remaining = process.stdout.read()
-                                if remaining:
-                                    remaining_lines = [line.strip() for line in remaining.splitlines() if line.strip()]
-                                    server_output_lines.extend(remaining_lines)
-                                    for line in remaining_lines[-5:]:
-                                        logger.info(f"[服务器最终输出] {line}")
-                        except:
-                            pass
-                        break
-
-                # If using visible window, check port instead of stdout
-                if visible_server and sys.platform == 'win32':
-                    logger.info("服务端窗口已可见，检查端口是否监听...")
-                    # Try to detect if port 23456 is listening
-                    import socket
+                if platform == "openguandan":
+                    # OpenGuanDan 不输出 v1006 风格的 "ready for connect" 等关键词；
+                    # 直接轮询其 WebSocket 端口确认服务已监听
+                    logger.info("等待 OpenGuanDan 服务器端口 %d 就绪...", server_port)
                     port_ready = False
-                    for _ in range(5):  # Try 5 times
+
+                    while elapsed < wait_time:
+                        time.sleep(min(check_interval, wait_time - elapsed))
+                        elapsed += check_interval
+
+                        # 检查进程存活
+                        return_code = process.poll()
+                        if return_code is not None:
+                            logger.warning(f"服务器进程在 {elapsed} 秒后退出，返回码: {return_code}")
+                            try:
+                                if process.stdout:
+                                    remaining = process.stdout.read()
+                                    if remaining:
+                                        for line in remaining.splitlines():
+                                            line = line.strip()
+                                            if line:
+                                                server_output_lines.append(line)
+                                                logger.info("[服务器] %s", line)
+                            except Exception:
+                                pass
+                            break
+
+                        # 尝试连接端口
                         try:
                             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                             sock.settimeout(1)
-                            result = sock.connect_ex(('127.0.0.1', 23456))
+                            result = sock.connect_ex(('127.0.0.1', server_port))
                             sock.close()
                             if result == 0:
-                                logger.info("✓ 检测到服务器端口23456已监听!")
+                                logger.info("✓ 检测到 OpenGuanDan 服务器端口 %d 已监听!", server_port)
                                 port_ready = True
                                 break
-                        except:
+                        except Exception:
                             pass
-                        time.sleep(1)
-                    
-                    if not port_ready:
-                        logger.warning("未能检测到端口监听，但继续执行（服务器可能需要更多时间）")
-                    logger.info("如果连接失败，请检查服务器窗口输出")
 
-                # Log captured output summary
+                        # 同时读取 stdout 日志（非阻塞，仅记录）
+                        try:
+                            if process.stdout:
+                                while True:
+                                    line = process.stdout.readline()
+                                    if not line:
+                                        break
+                                    line = line.strip()
+                                    if line:
+                                        server_output_lines.append(line)
+                                        logger.info("[服务器] %s", line)
+                        except Exception:
+                            pass
+
+                    if not port_ready:
+                        if process.poll() is None:
+                            logger.warning(
+                                "端口 %d 未检测到监听，但进程仍在运行（启动可能较慢）。"
+                                "若客户端连接失败，请增大 wait_time 或检查 guandan.exe 运行状态。",
+                                server_port,
+                            )
+                else:
+                    # v1006: 原有逻辑——等待 stdout 就绪关键词
+                    logger.info("等待服务器输出 'ready for connect' 或类似就绪消息...")
+
+                    while elapsed < wait_time:
+                        time.sleep(min(check_interval, wait_time - elapsed))
+                        elapsed += check_interval
+
+                        try:
+                            if process.stdout:
+                                while True:
+                                    line = process.stdout.readline()
+                                    if not line:
+                                        break
+                                    line = line.strip()
+                                    if line:
+                                        server_output_lines.append(line)
+                                        logger.info("[服务器] %s", line)
+                                        if any(keyword in line.lower() for keyword in ["ready for connect", "server started", "listening", "waiting for players", "ready"]):
+                                            logger.info("✓ 检测到服务器就绪消息!")
+                                            elapsed = wait_time  # Force exit loop
+                                            break
+                        except Exception as read_error:
+                            logger.debug("读取服务器输出时出错 (正常在可见窗口模式): %s", read_error)
+
+                        return_code = process.poll()
+                        if return_code is not None:
+                            logger.warning("服务器进程在 %d 秒后退出，返回码: %d", elapsed, return_code)
+                            try:
+                                if process.stdout:
+                                    remaining = process.stdout.read()
+                                    if remaining:
+                                        remaining_lines = [line.strip() for line in remaining.splitlines() if line.strip()]
+                                        server_output_lines.extend(remaining_lines)
+                                        for line in remaining_lines[-5:]:
+                                            logger.info("[服务器最终输出] %s", line)
+                            except Exception:
+                                pass
+                            break
+
+                    # visible_server 端口兜底检测（使用正确的端口，不再硬编码 23456）
+                    if visible_server and sys.platform == 'win32':
+                        logger.info("服务端窗口已可见，检查端口 %d 是否监听...", server_port)
+                        port_ready = False
+                        for _ in range(5):
+                            try:
+                                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                sock.settimeout(1)
+                                result = sock.connect_ex(('127.0.0.1', server_port))
+                                sock.close()
+                                if result == 0:
+                                    logger.info("✓ 检测到服务器端口 %d 已监听!", server_port)
+                                    port_ready = True
+                                    break
+                            except Exception:
+                                pass
+                            time.sleep(1)
+
+                        if not port_ready:
+                            logger.warning("未能检测到端口监听，但继续执行（服务器可能需要更多时间）")
+                        logger.info("如果连接失败，请检查服务器窗口输出")
+
+                # --- 输出摘要 + 最终判定 ---
                 if server_output_lines:
-                    logger.info(f"捕获到服务器输出 {len(server_output_lines)} 行 (最后5行):")
+                    logger.info("捕获到服务器输出 %d 行 (最后5行):", len(server_output_lines))
                     for line in server_output_lines[-5:]:
-                        logger.info(f"  {line}")
+                        logger.info("  %s", line)
                 else:
                     if visible_server:
                         logger.info("无捕获输出 (正常，可见窗口模式)，请查看弹出的服务端窗口")
@@ -385,11 +448,11 @@ class RestartManager:
                     return process
                 else:
                     return_code = process.returncode
-                    logger.error(f"✗ 服务器进程已终止，返回码: {return_code}")
+                    logger.error("✗ 服务器进程已终止，返回码: %d", return_code)
                     if server_output_lines:
                         logger.error("服务器错误输出 (最后10行):")
                         for line in server_output_lines[-10:]:
-                            logger.error(f"  {line}")
+                            logger.error("  %s", line)
                     else:
                         logger.error("提示: 服务器可能启动失败，请检查服务器路径、参数和权限")
                     
@@ -413,7 +476,8 @@ class RestartManager:
     def restart_clients(
         self,
         client_scripts: List[str],
-        wait_between: int = 3  # 3 seconds between clients to ensure connection order
+        wait_between: int = 3,  # 3 seconds between clients to ensure connection order
+        platform: str = "v1006",
     ) -> List[subprocess.Popen]:
         """
         重启所有客户端
@@ -424,6 +488,7 @@ class RestartManager:
         Args:
             client_scripts: 客户端脚本路径列表
             wait_between: 每个客户端之间的等待时间（秒），默认3秒
+            platform: 平台类型（v1006/openguandan），V8: openguandan 时自动追加 --platform/--role
             
         Returns:
             成功启动的客户端进程列表
@@ -431,7 +496,9 @@ class RestartManager:
         processes = []
         self._last_client_scripts = list(client_scripts)
         assigned_pids: set = set()
-        
+        # V8: 统计 v8_lalala_adapter.py 出现次数，用于区分 client3/client4
+        _lalala_seen = 0
+
         for i, script_path in enumerate(client_scripts):
             try:
                 script_path = script_path.strip()  # 去除前后空格
@@ -461,7 +528,22 @@ class RestartManager:
                 
                 # 确定如何启动客户端（Python脚本）— 与 test_t9 使用同一解释器
                 python_exe = sys.executable.replace("/", "\\")
-                command = [python_exe, abs_script_path]
+                
+                # V8: 为 openguandan 平台构建客户端参数
+                platform_args: list[str] = []
+                script_basename = os.path.basename(abs_script_path)
+                if platform == "openguandan":
+                    if script_basename == "yf1_v8.py":
+                        platform_args = ["--platform", "openguandan", "--role", "creator"]
+                    elif script_basename == "yf2_v8.py":
+                        platform_args = ["--platform", "openguandan", "--role", "joiner"]
+                    elif script_basename == "v8_lalala_adapter.py":
+                        _lalala_seen += 1
+                        client_name = "client3" if _lalala_seen == 1 else "client4"
+                        platform_args = [client_name, "--platform", "openguandan", "--role", "joiner"]
+                    logger.info(f"  平台参数: {platform_args}")
+
+                command = [python_exe, abs_script_path] + platform_args
                 
                 # 启动客户端进程
                 # 不捕获输出，让输出显示在控制台窗口中
@@ -482,9 +564,10 @@ class RestartManager:
                         rel_path_normalized = abs_script_path.replace('/', '\\')
                     # cmd /c：客户端脚本结束后自动关闭窗口；/k 会留下空 CMD（批跑 cleanup 后仍可见）
                     # 注意：python_exe 不加引号（路径无空格），否则 cmd 内层引号与外层冲突导致秒退
+                    platform_args_str = " ".join(platform_args) if platform_args else ""
                     start_command = (
                         f'start "{window_title}" cmd /c "cd /d {work_dir} && '
-                        f'{python_exe} {rel_path_normalized}"'
+                        f'{python_exe} {rel_path_normalized} {platform_args_str}"'
                     )
                     process = subprocess.Popen(
                         start_command,

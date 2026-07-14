@@ -499,6 +499,8 @@ class YF2_V8_Client:
             else:
                 message = {"actIndex": action_index}
                 self.logger.info(f"发送动作: actIndex={action_index}")
+            
+            await self.ws_manager.send_json(message)
 
         except Exception as e:
             self.logger.error(f"✗ Send action error: {e}", exc_info=True)

@@ -37,14 +37,28 @@ print(f"[lalala_adapter] LALALA_PATH={LALALA_PATH}", flush=True)
 if LALALA_PATH not in sys.path:
     sys.path.insert(0, LALALA_PATH)
 
-# 导入lalala的核心逻辑
-try:
-    from state import State
-    from action import Action
-    print("✓ 成功导入lalala核心模块")
-except ImportError as e:
-    print(f"✗ 导入lalala模块失败: {e}")
-    print(f"请确保 {LALALA_PATH} 存在且包含state.py和action.py")
+# Windows: 双 LALALA 进程同时启动会产生 .pyc 文件写入竞争，关掉字节码缓存 + 加重试
+import time as _import_time
+sys.dont_write_bytecode = True
+
+_lalala_imported = False
+_last_import_error = None
+for _import_attempt in range(5):
+    try:
+        from state import State
+        from action import Action
+        _lalala_imported = True
+        break
+    except Exception as e:
+        _last_import_error = e
+        print(f"[lalala_adapter] 导入重试 {_import_attempt + 1}/5: {e}", flush=True)
+        _import_time.sleep(1.0 + _import_attempt * 0.5)
+
+if _lalala_imported:
+    print("✓ 成功导入lalala核心模块", flush=True)
+else:
+    print(f"✗ 导入lalala模块失败: {_last_import_error}", flush=True)
+    print(f"请确保 {LALALA_PATH} 存在且包含state.py和action.py", flush=True)
     sys.exit(1)
 
 
@@ -90,13 +104,15 @@ class LalalaWebsocketsClient:
             self.room_id = resp.get("data", {}).get("roomId")
             room_file.parent.mkdir(parents=True, exist_ok=True)
             room_file.write_text(str(self.room_id), encoding="utf-8")
-            print(f"[{self.user_info}] CREATE_ROOM → roomId={self.room_id}")
+            print(f"[{self.user_info}] CREATE_ROOM → roomId={self.room_id}", flush=True)
         else:
+            print(f"[{self.user_info}] joiner: 等待 roomId 文件...", flush=True)
             import time as _time
             deadline = _time.monotonic() + 30
             while _time.monotonic() < deadline:
                 if room_file.exists():
                     self.room_id = int(room_file.read_text(encoding="utf-8").strip())
+                    print(f"[{self.user_info}] 读到 roomId={self.room_id}", flush=True)
                     break
                 await asyncio.sleep(0.5)
             if not self.room_id:
@@ -109,9 +125,11 @@ class LalalaWebsocketsClient:
                     "seatNum": 1 if "client3" in self.user_info else 3,
                 }
             }
+            print(f"[{self.user_info}] 发送 JOIN_ROOM: {json.dumps(msg, ensure_ascii=False)}", flush=True)
             await self.websocket.send(json.dumps(msg))
-            await asyncio.wait_for(self.websocket.recv(), timeout=10)
-            print(f"[{self.user_info}] JOIN_ROOM → roomId={self.room_id}")
+            resp = json.loads(await asyncio.wait_for(self.websocket.recv(), timeout=10))
+            print(f"[{self.user_info}] JOIN_ROOM 响应: {json.dumps(resp, ensure_ascii=False)}", flush=True)
+            print(f"[{self.user_info}] JOIN_ROOM → roomId={self.room_id}", flush=True)
     
     async def connect(self):
         port = "8181" if self.platform == "openguandan" else "23456"
@@ -119,6 +137,7 @@ class LalalaWebsocketsClient:
             uri = f"ws://127.0.0.1:{port}"
         else:
             uri = f"ws://127.0.0.1:{port}/game/{self.user_info}"
+        print(f"[{self.user_info}] 连接门闩开始，等待前序席位...", flush=True)
         try:
             gate_ok = await asyncio.to_thread(
                 wait_for_connect_turn,
@@ -126,16 +145,17 @@ class LalalaWebsocketsClient:
                 timeout=120.0,
             )
             if not gate_ok:
-                print(f"[{self.user_info}] 前序席位未就绪，放弃连接")
+                print(f"[{self.user_info}] 前序席位未就绪，放弃连接", flush=True)
                 return
 
+            print(f"[{self.user_info}] 门闩通过，开始 WebSocket 连接 {uri}...", flush=True)
             self.websocket = await websockets.connect(
                 uri,
                 ping_interval=None,
                 ping_timeout=None,
             )
             mark_client_ready(self.user_info)
-            print(f"[{self.user_info}] 连接成功! port={port}")
+            print(f"[{self.user_info}] 连接成功! port={port}", flush=True)
             
             # V8: 房间握手
             if self.platform == "openguandan":
@@ -143,7 +163,11 @@ class LalalaWebsocketsClient:
             
             await self.handle_messages()
         except Exception as e:
-            print(f"[{self.user_info}] 连接错误: {e}")
+            print(f"[{self.user_info}] 连接错误: {type(e).__name__}: {e}", flush=True)
+            import traceback as _tb2
+            _tb2.print_exc()
+            sys.stdout.flush()
+            sys.stderr.flush()
     
     def convert_card_format(self, data):
         """
@@ -225,10 +249,12 @@ class LalalaWebsocketsClient:
                     new_action_list.append(action)
             data["actionList"] = new_action_list
         
-        # 转换publicInfo中的playArea
+        # V8: 新服务器 publicInfo 不含 playArea 字段，补上 None 避免 LALALA KeyError
         if "publicInfo" in data:
             for i, player_info in enumerate(data["publicInfo"]):
-                if "playArea" in player_info and player_info["playArea"] is not None:
+                if "playArea" not in player_info:
+                    data["publicInfo"][i]["playArea"] = None
+                if player_info["playArea"] is not None:
                     play_area = player_info["playArea"]
                     
                     # 如果是字典格式
@@ -263,12 +289,30 @@ class LalalaWebsocketsClient:
         return data
 
     def _preprocess_message(self, data: dict) -> dict:
+        # V8: OpenGuanDan 消息为 {"type":"act","data":{...}} 嵌套格式；
+        #     LALALA state.parse() 期望所有字段在顶层，展开 data 到外层
+        nested = data.get("data")
+        if isinstance(nested, dict):
+            for k, v in nested.items():
+                if k != "type":  # 避免覆盖外层 type（act/notify）
+                    data[k] = v
+
         for field in ("curAction", "greaterAction", "handCards"):
             if field in data and isinstance(data[field], str):
                 try:
                     data[field] = ast.literal_eval(data[field])
                 except (ValueError, SyntaxError):
                     pass
+
+        # V8: 新服务器 gameResult 用 victory/victoryRank，LALALA 期望 victoryNum/draws
+        if data.get("stage") == "gameResult" and "victory" in data and "victoryNum" not in data:
+            vic = data["victory"]  # 0=team0(座0+2)胜, 1=team1(座1+3)胜
+            if vic == 0:
+                data["victoryNum"] = [1, 0, 1, 0]
+            else:
+                data["victoryNum"] = [0, 1, 0, 1]
+            data["draws"] = [0, 0, 0, 0]
+
         return self.convert_card_format(data)
 
     def _sync_parse_only(self, data: dict) -> None:
@@ -300,12 +344,22 @@ class LalalaWebsocketsClient:
                     if not self._game_ready_marked:
                         self._game_ready_marked = True
                         mark_game_ready(self.user_info)
-                        print(f"[{self.user_info}] ✓ 首条消息到达，game_ready")
+                        print(f"[{self.user_info}] ✓ 首条消息到达，game_ready", flush=True)
                     data = self._preprocess_message(data)
                     msg_type = data.get("type", "")
 
                     if msg_type == "notify":
+                        stage = data.get("stage", "")
                         await asyncio.to_thread(self._sync_parse_only, data)
+                        if stage == "beginning":
+                            hand_size = len(data.get("handCards", []))
+                            print(f"[{self.user_info}] 游戏开始，手牌={hand_size}张", flush=True)
+                        elif stage == "play":
+                            cur_pos = data.get("curPos", "?")
+                            cur_act = data.get("curAction", [])
+                            act_type = cur_act[0] if isinstance(cur_act, list) and cur_act else "?"
+                            print(f"[{self.user_info}] 观战: {cur_pos}号位出 {act_type}", flush=True)
+                        # epiodeOver/gameOver 等不打印，留到 act 消息再打印
                         continue
 
                     if msg_type != "act":
@@ -323,16 +377,16 @@ class LalalaWebsocketsClient:
                     try:
                         act_index = await asyncio.to_thread(self._decide_sync, data)
                     except IndexError as e:
-                        print(f"[ERROR] IndexError in state.parse: {e}")
+                        print(f"[ERROR] IndexError in state.parse: {e}", flush=True)
                         if data.get("curAction") and len(data["curAction"]) > 2:
-                            print(f"[ERROR] curAction[2] type: {type(data['curAction'][2])}")
+                            print(f"[ERROR] curAction[2] type: {type(data['curAction'][2])}", flush=True)
                         raise
 
                     if act_index is None:
-                        print(f"[{self.user_info}] actionList 缺失，回退 actIndex=0")
+                        print(f"[{self.user_info}] actionList 缺失，回退 actIndex=0", flush=True)
                         act_index = 0
 
-                    print(f"[{self.user_info}] 选择动作: {act_index}")
+                    print(f"[{self.user_info}] 选择动作: {act_index}", flush=True)
                     
                     # V8: 发送完整 action 三元组
                     if self.platform == "openguandan":
@@ -363,20 +417,22 @@ class LalalaWebsocketsClient:
                         await self.websocket.send(json.dumps({"actIndex": act_index}))
                         
                 except json.JSONDecodeError:
-                    print(f"[{self.user_info}] 无效的JSON")
+                    print(f"[{self.user_info}] 无效的JSON", flush=True)
                 except Exception as e:
-                    print(f"[{self.user_info}] 消息处理错误: {e}")
+                    print(f"[{self.user_info}] 消息处理错误: {type(e).__name__}: {e}", flush=True)
                     import traceback
                     traceback.print_exc()
+                    sys.stdout.flush()
                     
         except websockets.ConnectionClosed as e:
-            print(f"[{self.user_info}] 连接关闭: {e}")
+            print(f"[{self.user_info}] 连接关闭: {e}", flush=True)
         except Exception as e:
-            print(f"[{self.user_info}] 连接错误: {e}")
+            print(f"[{self.user_info}] 连接错误: {type(e).__name__}: {e}", flush=True)
             import traceback
             traceback.print_exc()
+            sys.stdout.flush()
         finally:
-            print(f"[{self.user_info}] 断开连接")
+            print(f"[{self.user_info}] 断开连接", flush=True)
 
 
 def run_lalala_client(client_name: str, platform: str = "v1006",
@@ -390,13 +446,37 @@ def run_lalala_client(client_name: str, platform: str = "v1006",
         v8_role: V8 房间角色
         v8_round_count: 局数
     """
-    print(f"[{client_name}] 启动lalala客户端（websockets版本，platform={platform}）")
+    print(f"[{client_name}] 启动lalala客户端（websockets版本，platform={platform}）", flush=True)
     
     client = LalalaWebsocketsClient(
         client_name, platform=platform,
         v8_role=v8_role, v8_round_count=v8_round_count,
     )
-    asyncio.run(client.connect())
+    print(f"[{client_name}] LalalaWebsocketsClient 创建完毕，准备 asyncio.run(connect)...", flush=True)
+    sys.stdout.flush()
+    
+    try:
+        asyncio.run(client.connect())
+    except KeyboardInterrupt:
+        print(f"[{client_name}] 用户中断", flush=True)
+    except Exception as e:
+        print(f"\n{'='*60}", flush=True)
+        print(f"[{client_name}] 致命异常: {type(e).__name__}: {e}", flush=True)
+        import traceback as _tb
+        _tb.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        # 记入日志文件
+        _log_dir = Path(__file__).resolve().parents[2] / "logs"
+        _log_dir.mkdir(exist_ok=True)
+        _err_log = _log_dir / f"lalala_{client_name}_error.log"
+        _err_log.write_text(
+            f"{type(e).__name__}: {e}\n{_tb.format_exc()}",
+            encoding="utf-8",
+        )
+        _import_time.sleep(10)  # 保持窗口打开 10 秒，方便查看错误
+    finally:
+        print(f"[{client_name}] 进程退出", flush=True)
 
 
 if __name__ == "__main__":

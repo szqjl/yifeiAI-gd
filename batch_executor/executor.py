@@ -857,6 +857,7 @@ class BatchExecutor:
                     batch_games,
                     visible_server=self.visible_server,
                     platform=self.platform,
+                    server_port=self._server_port,
                 )
                 
                 if server_process is None:
@@ -864,9 +865,10 @@ class BatchExecutor:
                     break
                 
                 # restart_manager.restart_server() 已经等待服务器就绪
-                # 检测到 "ready for connect" 后会立即返回
-                # 这里只需要额外等待2秒确保端口完全监听
-                self.logger.info("服务器已就绪，等待2秒确保端口完全监听...")
+                # v1006: 检测到 "ready for connect" 后返回
+                # openguandan: 检测到端口 %d 监听后返回
+                # 这里只需要额外等待2秒确保端口完全稳定
+                self.logger.info("服务器已就绪，等待2秒确保端口完全稳定...")
                 import time
                 time.sleep(2)
                 
@@ -910,7 +912,8 @@ class BatchExecutor:
                 
                 # 启动客户端
                 client_processes = self.restart_manager.restart_clients(
-                    self.client_scripts
+                    self.client_scripts,
+                    platform=self.platform,
                 )
                 
                 if not client_processes:
@@ -932,9 +935,14 @@ class BatchExecutor:
                 
                 # 等待所有客户端处理首条游戏消息（game_ready）
                 self.logger.info("等待所有客户端处理首条游戏消息...")
-                expected_client_ids = [
-                    client_id_from_script(s) for s in self.client_scripts
-                ]
+                if self.platform == "openguandan":
+                    # V8: v8_lalala_adapter.py 被 client3/client4 共用，
+                    #     client_id_from_script 无法从脚本名区分，显式指定
+                    expected_client_ids = ["yf1_v8", "client3", "yf2_v8", "client4"]
+                else:
+                    expected_client_ids = [
+                        client_id_from_script(s) for s in self.client_scripts
+                    ]
                 game_ready = wait_for_all_clients_game_ready(
                     expected_client_ids,
                     timeout=60,

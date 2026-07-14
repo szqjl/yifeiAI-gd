@@ -333,8 +333,6 @@ class YF1_V8_Client:
         # 使用已缓存的 action_list（见上方 last_action_list）
         
         if not action_list:
-        
-        if not action_list:
             self.logger.warning(
                 "Empty actionList stage=%s myPos=%s curPos=%s — 回退 actIndex=0 避免平台超时",
                 stage,
