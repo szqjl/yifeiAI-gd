@@ -320,7 +320,8 @@ class BatchExecutor:
         state_file: str = "execution_state.json",
         score_file: str = "game_scores.json",
         enable_signal_handler: bool = True,
-        visible_server: bool = False
+        visible_server: bool = False,
+        platform: str = "v1006",  # V8: 平台类型
     ):
         """
         初始化批量执行器
@@ -334,8 +335,11 @@ class BatchExecutor:
             score_file: 战绩保存文件
             enable_signal_handler: 是否启用信号处理器（GUI模式下应设为False）
             visible_server: 是否在Windows上显示服务器控制台窗口
+            platform: 平台类型 "v1006" 或 "openguandan"（V8）
         """
         self.target_games = target_games
+        self.platform = platform  # V8
+        self._server_port = 8181 if platform == "openguandan" else 23456  # V8: 端口自适应
         self.server_path = server_path
         self.client_scripts = client_scripts
         self.diagnose_only = diagnose_only
@@ -851,7 +855,8 @@ class BatchExecutor:
                 server_process = self.restart_manager.restart_server(
                     self.server_path,
                     batch_games,
-                    visible_server=self.visible_server
+                    visible_server=self.visible_server,
+                    platform=self.platform,
                 )
                 
                 if server_process is None:
@@ -868,26 +873,26 @@ class BatchExecutor:
                 # 验证服务器进程仍在运行（或端口已开放）
                 # NOTE: 掼蛋 exe 会启动 tornado 服务端后作为孤儿进程退出父进程，
                 #       因此直接检查 process.poll() 会误杀仍在运行的背景服务器。
-                #       改为检查端口 23456 是否开放 —— 如果开放说明服务端在运行。
+                #       改为检查端口是否开放 —— 如果开放说明服务端在运行。
                 if server_process.poll() is not None:
                     self.logger.warning(
                         f"服务器主进程已退出（返回码 {server_process.returncode}），"
-                        f"检查端口 23456 是否仍开放..."
+                        f"检查端口 {self._server_port} 是否仍开放..."
                     )
                     import socket
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     sock.settimeout(2)
-                    port_open = sock.connect_ex(('127.0.0.1', 23456)) == 0
+                    port_open = sock.connect_ex(('127.0.0.1', self._server_port)) == 0
                     sock.close()
                     if port_open:
                         self.logger.info(
-                            "✓ 端口 23456 已开放，孤儿服务端进程正常运行，"
-                            "继续执行"
+                            "✓ 端口 %s 已开放，孤儿服务端进程正常运行，"
+                            "继续执行", self._server_port
                         )
                     else:
                         self.logger.error(
                             f"服务器进程已退出（返回码: {server_process.returncode}），"
-                            "且端口 23456 未开放"
+                            f"且端口 {self._server_port} 未开放"
                         )
                         self.logger.error("请检查服务器窗口或日志，查看启动失败原因")
                         break
@@ -1199,8 +1204,9 @@ class BatchExecutor:
                             self.logger.error(
                                 "连续 %d 次重启仍无进度，停止执行。"
                                 "请检查：是否重复启动了 test_t9/batch_executor、"
-                                "客户端是否异常退出、端口 23456 是否被占用。",
+                                "客户端是否异常退出、端口 %s 是否被占用。",
                                 max_no_progress_restarts,
+                                self._server_port,
                             )
                             break
                     else:

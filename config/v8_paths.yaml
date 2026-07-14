@@ -1,0 +1,41 @@
+# V8 专用路径配置（OpenGuanDan 新平台）
+# 真源：offline_platform/openguandan_latest/
+
+# ── 服务器 ──
+server_exe: "%REPO_ROOT%/offline_platform/openguandan_latest/guandan.exe"
+# 备选 jar 启动（Windows 无 exe 或使用 Java 版）
+server_jar: "%REPO_ROOT%/offline_platform/openguandan_latest/target/guandan-java-1.0.0.jar"
+# 新平台无命令行局数参数（局数由 CREATE_ROOM.round 指定）
+server_args: ""
+
+# ── WebSocket 连接 ──
+ws_host: "127.0.0.1"
+ws_port: 8181
+ws_uri: "ws://127.0.0.1:8181"
+
+# ── HTTP 管理端口 ──
+http_port: 3000
+
+# ── 房间协调 ──
+# roomId 在 4 个客户端间传递的临时文件
+room_id_file: "tmp/.v8_room_id"
+room_id_poll_timeout: 30    # 秒钟；JOIN_ROOM 客户端轮询等待 roomId 的超时
+
+# ── 客户端脚本 ──
+yf1_script: "src/communication/yf1_v8.py"
+yf2_script: "src/communication/yf2_v8.py"
+lalala3_script: "src/communication/run_lalala_client3.py"
+lalala4_script: "src/communication/run_lalala_client4.py"
+
+# ── 牌谱目录 ──
+game_records_dir: "game_records_v8"
+
+# ── 战绩文件 ──
+scores_file: "v8_vs_lalala_scores.json"
+state_file: "v8_vs_lalala_state.json"
+
+# ── 批跑日志前缀 ──
+log_prefix: "v8_vs_lalala"
+
+# ── 平台标识 ──
+platform: "openguandan"

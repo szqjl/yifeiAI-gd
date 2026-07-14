@@ -202,7 +202,8 @@ class RestartManager:
         game_count: int,
         visible_server: bool = False,  # Add this parameter
         max_retries: int = 3,
-        wait_time: int = 15
+        wait_time: int = 15,
+        platform: str = "v1006",  # V8: 平台类型
     ) -> Optional[subprocess.Popen]:
         """
         重启服务器
@@ -212,27 +213,35 @@ class RestartManager:
         
         Args:
             server_path: 服务器可执行文件路径
-            game_count: 游戏场数
+            game_count: 游戏场数（v1006 有效，openguandan 忽略）
             max_retries: 最大重试次数，默认3次
             wait_time: 等待服务器就绪的时间（秒），默认15秒
+            platform: 平台类型（v1006/openguandan）
             
         Returns:
             成功启动的服务器进程，如果失败返回None
         """
+        # V8: 同时清理新旧平台服务器进程
+        _SERVER_PROC_NAMES = ("guandan_offline_v1006", "guandan")
         for attempt in range(max_retries):
             # 强制清理残留的旧服务器进程，确保端口释放（解决 WinError 10048 端口占用）
             if psutil is not None:
                 for proc in psutil.process_iter(['name']):
                     try:
-                        if proc.info['name'] and 'guandan_offline_v1006.exe' in proc.info['name']:
-                            logger.warning(f"强制结束残留服务器进程 PID={proc.pid}，确保端口释放")
+                        name = proc.info['name'] or ""
+                        if any(pat in name for pat in _SERVER_PROC_NAMES):
+                            logger.warning(f"强制结束残留服务器进程 PID={proc.pid} name={name}，确保端口释放")
                             proc.kill()
                             proc.wait(timeout=3)
                     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
                         pass
             else:
                 # 降级方案：使用 PowerShell 命令清理
-                os.system('powershell -Command "Get-Process guandan_offline_v1006 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"')
+                os.system(
+                    'powershell -Command '
+                    '"Get-Process guandan_offline_v1006,guandan -ErrorAction SilentlyContinue '
+                    '| Stop-Process -Force -ErrorAction SilentlyContinue"'
+                )
 
             try:
                 logger.info(f"尝试启动服务器 (尝试 {attempt + 1}/{max_retries})")
@@ -245,7 +254,11 @@ class RestartManager:
                     return None
                 
                 # 构建启动命令
-                command = [server_path, str(game_count)]
+                # V8 (openguandan): guandan.exe 不含 game_count 参数，局数由 CREATE_ROOM 传递
+                if platform == "openguandan":
+                    command = [server_path]
+                else:
+                    command = [server_path, str(game_count)]
                 
                 # 获取服务器所在目录作为工作目录
                 server_dir = os.path.dirname(server_path) or "."

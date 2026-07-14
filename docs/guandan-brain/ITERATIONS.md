@@ -52,6 +52,7 @@
 | [[v7-strategy-gua045-053]] | 2026-06-07 ~ 2026-06-17，Guard 壳与策略 | GUA-045, GUA-051, GUA-052, GUA-053 |
 | [[v7-bc-training-gua059-061]] | 2026-06-17，BC 训练诊断与模块化 | GUA-059, GUA-060, **GUA-061** |
 | [[v7-grouping-v2-gua062]] | 2026-06-18，组牌引擎 v2（回收能力+灵活性+真回溯） | **GUA-062** |
+| [[V8-新平台对接方案]] | 2026-07-14 ~ 待定，V8 OpenGuanDan 迁移 | **GUA-143**, **GUA-144**, **GUA-145**, **GUA-146** |
 
 ### 基础设施
 
@@ -211,4 +212,5 @@ ecord_decision / C 仅文档说明。 | pytest（待定）| 待 yf_replay.py 读
 
 | 2026-07-10 | v7-gua142-enemy-six-structure-lead | **GUA-142** ✅ | **敌剩6**：`endgame_rule[6]` 推 ThreePair/TwoTrips/Straight/Trips、`banned=[]`；Q1 自由领出整组三连对/钢板且剩 SF/炸冲刺路径优先。锚点步50 出 ThreePair 非 Trips/9。 | `endgame_preprocessor.py`、`endgame_decide.py`、`test_gua142_*`、`GUA-142-completion` | pytest 142+100+141+122+103 **18/18** ✅ |
 | 2026-07-14 | v8-dev 分支创建 | **Infra** | **`v8-dev` 分支从 `v7-dev`（commit `2904c08`）复制**。v7-dev 保留对接旧离线平台 `guandan_offline_v1006.exe` 作为回退基线；v8-dev 将全面迁移到新版 OpenGuanDan 服务器 `guandan.exe`（WebSocket 协议，`ws://127.0.0.1:8181`）。新平台资源已拉取至 `offline_platform/openguandan_latest/`。 | `offline_platform/openguandan_latest/`、`docs/governance/M-V-Series-治理方案.md` §2.2.2 | 等待迁移指令 |
+| 2026-07-14 | v8-migration-init | **GUA-143, GUA-144, GUA-145, GUA-146** | **V8 迁移启动 — 新开 ISSUES + 迭代登记**。正式登记 V8 迁移 4 个 P0 GUA：**GUA-143**（WebSocket 协议适配器 `new_platform_adapter.py`）、**GUA-144**（7 个批处理启动文件 bat/py）、**GUA-145**（客户端 `--platform openguandan` 参数注入）、**GUA-146**（房间模型启动协调 CREATE_ROOM→JOIN_ROOM）。方案真源 [`V8-新平台对接方案.md`](V8-新平台对接方案.md) §3-§9 已齐套，批处理文件内容已于 §4.6 全文列明。**引擎维护策略表新增 V8 行**（active，`v8-dev`，仅换通信层不改决策管线）。**不做**：新建 `YF_REPLAY.bat`（牌谱兼容）、V8 GUI（批跑稳定后补）。 | `ISSUES.md`（+GUA-143~146 主表 + 交叉引用 + P0 活跃列表）、`ITERATIONS.md`（本行）、`V8-新平台对接方案.md`（已齐套） | 按 §9 顺序：GUA-143 协议适配器 → GUA-145 platform 参数注入 → GUA-146 房间模型 → 批跑冒烟 → GUA-144 批处理文件 |
 
