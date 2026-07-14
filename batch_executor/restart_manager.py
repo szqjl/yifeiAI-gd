@@ -479,7 +479,7 @@ class RestartManager:
     def restart_clients(
         self,
         client_scripts: List[str],
-        wait_between: int = 3,  # 3 seconds between clients to ensure connection order
+        wait_between: int = 1,  # V8: 1s（连接顺序由 wait_for_connect_turn 保证）
         platform: str = "v1006",
         games: int = 1,  # V8: 局数，传给 yf1_v8 CREAT_ROOM.round
     ) -> List[subprocess.Popen]:
@@ -695,9 +695,8 @@ class RestartManager:
                 
                 if active_clients >= expected_count:
                     logger.info(f"✓ 检测到 {active_clients} 个客户端进程正在运行")
-                    # 额外等待几秒，确保连接建立
-                    logger.info("等待 5 秒确保所有连接完全建立...")
-                    time.sleep(5)
+                    # 额外等待确保连接建立
+                    time.sleep(1)
                     return True
                 
                 # 方法3: 尝试检测服务器端口连接数（需要服务器支持）

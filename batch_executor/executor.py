@@ -871,10 +871,12 @@ class BatchExecutor:
                 # restart_manager.restart_server() 已经等待服务器就绪
                 # v1006: 检测到 "ready for connect" 后返回
                 # openguandan: 检测到端口 %d 监听后返回
-                # 这里只需要额外等待2秒确保端口完全稳定
-                self.logger.info("服务器已就绪，等待2秒确保端口完全稳定...")
+                # 这里只需要额外等待确保端口完全稳定
+                _settle = 2 if self.platform != "openguandan" else 0
+                self.logger.info("服务器已就绪，等待 %d 秒确保端口完全稳定...", _settle)
                 import time
-                time.sleep(2)
+                if _settle:
+                    time.sleep(_settle)
                 
                 # 验证服务器进程仍在运行（或端口已开放）
                 # NOTE: 掼蛋 exe 会启动 tornado 服务端后作为孤儿进程退出父进程，
@@ -1025,7 +1027,7 @@ class BatchExecutor:
                     stdout_thread.start()
                     
                     # 主线程：等待进程结束，同时收集输出
-                    check_interval = 5  # 每5秒检查一次进程状态
+                    check_interval = 1 if self.platform == "openguandan" else 5
                     expected_clients = len(self.client_scripts)
                     while True:
                         # 客户端启动后需等待一段时间再监控，避免误判导致每批立即重启
@@ -1079,13 +1081,13 @@ class BatchExecutor:
                                     break
                         
                         # V8: OpenGuanDan 服务器不会自动退出，通过 game_records 检测完成
-                        if self.platform == "openguandan" and time.time() - start_time > 30:
+                        if self.platform == "openguandan" and time.time() - start_time > 15:
                             _v8_now_stats = self._get_game_records_stats()
                             if _v8_now_stats.paired_match_key > batch_start_stats.paired_match_key:
                                 # 有新牌谱落盘 → 平稳 3s 确认后 kill 服务器
                                 if not hasattr(self, '_v8_done_since'):
                                     self._v8_done_since = time.time()
-                                elif time.time() - self._v8_done_since >= 3:
+                                elif time.time() - self._v8_done_since >= 1:
                                     self.logger.info(
                                         "V8 检测到新 game_record (match_key %d→%d)，服务器完成，主动终止",
                                         batch_start_stats.paired_match_key,
@@ -1095,6 +1097,7 @@ class BatchExecutor:
                                         server_process.kill()
                                     except Exception:
                                         pass
+                                    server_terminated_by_kill = False  # 正常完成，仅手动关停
                                     break
                             elif hasattr(self, '_v8_done_since'):
                                 del self._v8_done_since
@@ -1172,7 +1175,7 @@ class BatchExecutor:
                         time.sleep(check_interval)
                     
                     # 等待stdout读取线程完成，并收集剩余输出
-                    read_complete.wait(timeout=2)
+                    read_complete.wait(timeout=1 if self.platform == "openguandan" else 2)
                     try:
                         while True:
                             line = output_queue.get_nowait()
@@ -1205,7 +1208,8 @@ class BatchExecutor:
                         state.completed_games,
                         state.target_games,
                     )
-                time.sleep(1.5)
+                if self.platform != "openguandan":
+                    time.sleep(1.5)
                 self._log_game_records_diagnostics(
                     state,
                     batch_games=batch_games,
