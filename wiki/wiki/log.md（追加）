@@ -1,0 +1,31 @@
+```
+
+| 时间 | 来源文件 | 操作 |
+|------|----------|------|
+| 2026-06-30 | docs/guandan-brain/handoff/2026-05-28-仓库整理方案执行中.md | 创建 source-summary |
+| 2026-06-30 | docs/guandan-brain/handoff/2026-05-31-m-dev-push-governance-compliance.md | 创建 source-summary |
+| 2026-06-30 | docs/guandan-brain/handoff/2026-05-31-M3-skills映射与组牌总纲.md | 创建 source-summary |
+| 2026-06-30 | docs/guandan-brain/handoff/2026-06-01-gua036-control-wind-team.md | 创建 source-summary |
+| 2026-06-30 | docs/guandan-brain/handoff/2026-06-04-V7-评审与实施方案就位-Qoder-SDK落地.md | 创建 source-summary |
+| 2026-06-30 | docs/guandan-brain/handoff/2026-06-29-V7-阶段化方案设计-GUA-096-097-098治理护栏落地.md | 创建 source-summary |
+
+---
+sources:
+  - docs\guandan-brain\handoff\2026-05-28-仓库整理方案执行中.md
+  - docs\guandan-brain\handoff\2026-05-31-m-dev-push-governance-compliance.md
+  - docs\guandan-brain\handoff\2026-05-31-M3-skills映射与组牌总纲.md
+  - docs\guandan-brain\handoff\2026-06-01-gua036-control-wind-team.md
+  - docs\guandan-brain\handoff\2026-06-04-V7-评审与实施方案就位-Qoder-SDK落地.md
+  - docs\guandan-brain\handoff\2026-06-29-V7-阶段化方案设计-GUA-096-097-098治理护栏落地.md
+
+## ⚠️ 分析质量提示
+
+本次摄入的 6 个 handoff 文件因上游分析器返回 `"error": "unmatched braces"`，**未提取到任何结构化实体（key_entities / key_concepts / connections）**。已生成的页面为基于文件名的**骨架摘要**，标记 `status: current` 但内容较为薄弱。
+
+**建议后续动作**：
+1. 修复上游分析器的 JSON 解析问题（很可能是 handoff 文件中含未转义的大括号）
+2. 对这 6 个文件重新执行摄入，补充实体识别（GUA 编号、引擎版本、模块名）
+3. 基于补充后的分析结果，建立：
+   - `entity-gua`：`gua-036.md`、`gua-096.md`、`gua-097.md`、`gua-098.md`
+   - `entity-engine`：`engine-v7.md`
+   - `synthesis`：`synthesis-v7-roadmap.md`（串联 06-04 与 06-29 两份 handoff）

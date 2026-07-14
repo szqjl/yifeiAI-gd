@@ -1,0 +1,7366 @@
+{
+  "game_id": "20260708230919486212",
+  "start_time": "2026-07-08T23:09:19.486212",
+  "player_id": 0,
+  "player_name": "yf1_v7",
+  "initial_hand": [
+    "S2",
+    "C2",
+    "H3",
+    "H4",
+    "S5",
+    "H5",
+    "C5",
+    "S6",
+    "H6",
+    "D6",
+    "H7",
+    "D7",
+    "S8",
+    "H8",
+    "H8",
+    "D8",
+    "S9",
+    "S9",
+    "C9",
+    "HT",
+    "CT",
+    "HK",
+    "HA",
+    "DA",
+    "SJ",
+    "CJ",
+    "HR"
+  ],
+  "all_players_hands": {
+    "0": [
+      "S2",
+      "C2",
+      "H3",
+      "H4",
+      "S5",
+      "H5",
+      "C5",
+      "S6",
+      "H6",
+      "D6",
+      "H7",
+      "D7",
+      "S8",
+      "H8",
+      "H8",
+      "D8",
+      "S9",
+      "S9",
+      "C9",
+      "HT",
+      "CT",
+      "HK",
+      "HA",
+      "DA",
+      "SJ",
+      "CJ",
+      "HR"
+    ]
+  },
+  "game_info": {
+    "curRank": "2",
+    "selfRank": "2",
+    "oppoRank": "2"
+  },
+  "actions": [
+    {
+      "timestamp": "2026-07-08T23:09:19.487129",
+      "cur_pos": 3,
+      "cur_action": [
+        "Straight",
+        "6",
+        [
+          "C6",
+          "S7",
+          "D8",
+          "H9",
+          "DT"
+        ]
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Straight",
+        "6",
+        [
+          "C6",
+          "S7",
+          "D8",
+          "H9",
+          "DT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.494752",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Straight",
+        "6",
+        [
+          "C6",
+          "S7",
+          "D8",
+          "H9",
+          "DT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.504011",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Straight",
+        "6",
+        [
+          "C6",
+          "S7",
+          "D8",
+          "H9",
+          "DT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.522394",
+      "cur_pos": 2,
+      "cur_action": [
+        "Bomb",
+        "4",
+        [
+          "S4",
+          "S4",
+          "C4",
+          "D4"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Bomb",
+        "4",
+        [
+          "S4",
+          "S4",
+          "C4",
+          "D4"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.524593",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Bomb",
+        "4",
+        [
+          "S4",
+          "S4",
+          "C4",
+          "D4"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.527748",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Bomb",
+        "4",
+        [
+          "S4",
+          "S4",
+          "C4",
+          "D4"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.529564",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Bomb",
+        "4",
+        [
+          "S4",
+          "S4",
+          "C4",
+          "D4"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.542929",
+      "cur_pos": 2,
+      "cur_action": [
+        "Single",
+        "7",
+        [
+          "C7"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "7",
+        [
+          "C7"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.545193",
+      "cur_pos": 3,
+      "cur_action": [
+        "Single",
+        "9",
+        [
+          "D9"
+        ]
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Single",
+        "9",
+        [
+          "D9"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.549800",
+      "cur_pos": 0,
+      "cur_action": [
+        "Single",
+        "K",
+        [
+          "HK"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "K",
+        [
+          "HK"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.556118",
+      "cur_pos": 1,
+      "cur_action": [
+        "Single",
+        "J",
+        [
+          "HJ"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "HJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.564015",
+      "cur_pos": 2,
+      "cur_action": [
+        "Single",
+        "B",
+        [
+          "SB"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "B",
+        [
+          "SB"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.565534",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "B",
+        [
+          "SB"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.573957",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "B",
+        [
+          "SB"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.575897",
+      "cur_pos": 1,
+      "cur_action": [
+        "Single",
+        "R",
+        [
+          "HR"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "R",
+        [
+          "HR"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.583341",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "R",
+        [
+          "HR"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.584977",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "R",
+        [
+          "HR"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.589330",
+      "cur_pos": 0,
+      "cur_action": [
+        "Bomb",
+        "8",
+        [
+          "S8",
+          "H8",
+          "H8",
+          "D8"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Bomb",
+        "8",
+        [
+          "S8",
+          "H8",
+          "H8",
+          "D8"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.590844",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Bomb",
+        "8",
+        [
+          "S8",
+          "H8",
+          "H8",
+          "D8"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.594074",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Bomb",
+        "8",
+        [
+          "S8",
+          "H8",
+          "H8",
+          "D8"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.595548",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Bomb",
+        "8",
+        [
+          "S8",
+          "H8",
+          "H8",
+          "D8"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.602115",
+      "cur_pos": 0,
+      "cur_action": [
+        "Single",
+        "7",
+        [
+          "D7"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "7",
+        [
+          "D7"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.604014",
+      "cur_pos": 1,
+      "cur_action": [
+        "Single",
+        "9",
+        [
+          "H9"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "9",
+        [
+          "H9"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.608544",
+      "cur_pos": 2,
+      "cur_action": [
+        "Single",
+        "B",
+        [
+          "SB"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "B",
+        [
+          "SB"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.610216",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "B",
+        [
+          "SB"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.615606",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "B",
+        [
+          "SB"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.617275",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "B",
+        [
+          "SB"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.630416",
+      "cur_pos": 2,
+      "cur_action": [
+        "Single",
+        "3",
+        [
+          "C3"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "3",
+        [
+          "C3"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.632317",
+      "cur_pos": 3,
+      "cur_action": [
+        "Single",
+        "K",
+        [
+          "SK"
+        ]
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Single",
+        "K",
+        [
+          "SK"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.635450",
+      "cur_pos": 0,
+      "cur_action": [
+        "Single",
+        "A",
+        [
+          "HA"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "A",
+        [
+          "HA"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.637222",
+      "cur_pos": 1,
+      "cur_action": [
+        "Single",
+        "J",
+        [
+          "CJ"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "CJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.644511",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "CJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.646335",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "CJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.651810",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "CJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.654799",
+      "cur_pos": 1,
+      "cur_action": [
+        "Single",
+        "6",
+        [
+          "C6"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "6",
+        [
+          "C6"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.659172",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "6",
+        [
+          "C6"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.661172",
+      "cur_pos": 3,
+      "cur_action": [
+        "Single",
+        "A",
+        [
+          "SA"
+        ]
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Single",
+        "A",
+        [
+          "SA"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.664016",
+      "cur_pos": 0,
+      "cur_action": [
+        "Single",
+        "J",
+        [
+          "SJ"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "SJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.665558",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "SJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.669803",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "SJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.671952",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "SJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.678751",
+      "cur_pos": 0,
+      "cur_action": [
+        "Pair",
+        "5",
+        [
+          "S5",
+          "C5"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Pair",
+        "5",
+        [
+          "S5",
+          "C5"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.680359",
+      "cur_pos": 1,
+      "cur_action": [
+        "Pair",
+        "7",
+        [
+          "H7",
+          "D7"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Pair",
+        "7",
+        [
+          "H7",
+          "D7"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.684871",
+      "cur_pos": 2,
+      "cur_action": [
+        "Pair",
+        "9",
+        [
+          "C9",
+          "D9"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Pair",
+        "9",
+        [
+          "C9",
+          "D9"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.686974",
+      "cur_pos": 3,
+      "cur_action": [
+        "Pair",
+        "J",
+        [
+          "SJ",
+          "DJ"
+        ]
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Pair",
+        "J",
+        [
+          "SJ",
+          "DJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.691852",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Pair",
+        "J",
+        [
+          "SJ",
+          "DJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.693692",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Pair",
+        "J",
+        [
+          "SJ",
+          "DJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.700425",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Pair",
+        "J",
+        [
+          "SJ",
+          "DJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.704067",
+      "cur_pos": 3,
+      "cur_action": [
+        "Pair",
+        "2",
+        [
+          "H2",
+          "C2"
+        ]
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Pair",
+        "2",
+        [
+          "H2",
+          "C2"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.706955",
+      "cur_pos": 0,
+      "cur_action": [
+        "Pair",
+        "6",
+        [
+          "S6",
+          "D6"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Pair",
+        "6",
+        [
+          "S6",
+          "D6"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.709456",
+      "cur_pos": 1,
+      "cur_action": [
+        "Pair",
+        "T",
+        [
+          "HT",
+          "CT"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Pair",
+        "T",
+        [
+          "HT",
+          "CT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.713717",
+      "cur_pos": 2,
+      "cur_action": [
+        "Pair",
+        "K",
+        [
+          "HK",
+          "CK"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Pair",
+        "K",
+        [
+          "HK",
+          "CK"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.715563",
+      "cur_pos": 3,
+      "cur_action": [
+        "Bomb",
+        "Q",
+        [
+          "SQ",
+          "SQ",
+          "CQ",
+          "CQ",
+          "DQ"
+        ]
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Bomb",
+        "Q",
+        [
+          "SQ",
+          "SQ",
+          "CQ",
+          "CQ",
+          "DQ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.721911",
+      "cur_pos": 0,
+      "cur_action": [
+        "StraightFlush",
+        "3",
+        [
+          "H3",
+          "H4",
+          "H5",
+          "H6",
+          "H7"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "StraightFlush",
+        "3",
+        [
+          "H3",
+          "H4",
+          "H5",
+          "H6",
+          "H7"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.723566",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "StraightFlush",
+        "3",
+        [
+          "H3",
+          "H4",
+          "H5",
+          "H6",
+          "H7"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.729256",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "StraightFlush",
+        "3",
+        [
+          "H3",
+          "H4",
+          "H5",
+          "H6",
+          "H7"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.730878",
+      "cur_pos": 3,
+      "cur_action": [
+        "Bomb",
+        "3",
+        [
+          "S3",
+          "S3",
+          "H3",
+          "C3",
+          "D3",
+          "D3"
+        ]
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Bomb",
+        "3",
+        [
+          "S3",
+          "S3",
+          "H3",
+          "C3",
+          "D3",
+          "D3"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.737609",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Bomb",
+        "3",
+        [
+          "S3",
+          "S3",
+          "H3",
+          "C3",
+          "D3",
+          "D3"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.739211",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Bomb",
+        "3",
+        [
+          "S3",
+          "S3",
+          "H3",
+          "C3",
+          "D3",
+          "D3"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.743868",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Bomb",
+        "3",
+        [
+          "S3",
+          "S3",
+          "H3",
+          "C3",
+          "D3",
+          "D3"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.746349",
+      "cur_pos": 3,
+      "cur_action": [
+        "Pair",
+        "5",
+        [
+          "S5",
+          "H5"
+        ]
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Pair",
+        "5",
+        [
+          "S5",
+          "H5"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.750542",
+      "cur_pos": 0,
+      "cur_action": [
+        "Pair",
+        "9",
+        [
+          "S9",
+          "C9"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Pair",
+        "9",
+        [
+          "S9",
+          "C9"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.752142",
+      "cur_pos": 1,
+      "cur_action": [
+        "Pair",
+        "A",
+        [
+          "HA",
+          "CA"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Pair",
+        "A",
+        [
+          "HA",
+          "CA"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.755561",
+      "cur_pos": 2,
+      "cur_action": [
+        "Bomb",
+        "6",
+        [
+          "S6",
+          "H6",
+          "D6",
+          "HJ"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Bomb",
+        "6",
+        [
+          "S6",
+          "H6",
+          "D6",
+          "HJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.756854",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Bomb",
+        "6",
+        [
+          "S6",
+          "H6",
+          "D6",
+          "HJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.761215",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Bomb",
+        "6",
+        [
+          "S6",
+          "H6",
+          "D6",
+          "HJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.763350",
+      "cur_pos": 1,
+      "cur_action": [
+        "Bomb",
+        "K",
+        [
+          "SK",
+          "CK",
+          "DK",
+          "DK"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Bomb",
+        "K",
+        [
+          "SK",
+          "CK",
+          "DK",
+          "DK"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.769872",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Bomb",
+        "K",
+        [
+          "SK",
+          "CK",
+          "DK",
+          "DK"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.771399",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Bomb",
+        "K",
+        [
+          "SK",
+          "CK",
+          "DK",
+          "DK"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.775095",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Bomb",
+        "K",
+        [
+          "SK",
+          "CK",
+          "DK",
+          "DK"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.777514",
+      "cur_pos": 1,
+      "cur_action": [
+        "ThreeWithTwo",
+        "2",
+        [
+          "H2",
+          "D2",
+          "D2",
+          "C5",
+          "D5"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "ThreeWithTwo",
+        "2",
+        [
+          "H2",
+          "D2",
+          "D2",
+          "C5",
+          "D5"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.781171",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "ThreeWithTwo",
+        "2",
+        [
+          "H2",
+          "D2",
+          "D2",
+          "C5",
+          "D5"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.782530",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "ThreeWithTwo",
+        "2",
+        [
+          "H2",
+          "D2",
+          "D2",
+          "C5",
+          "D5"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.785483",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "ThreeWithTwo",
+        "2",
+        [
+          "H2",
+          "D2",
+          "D2",
+          "C5",
+          "D5"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.787114",
+      "cur_pos": 1,
+      "cur_action": [
+        "Trips",
+        "4",
+        [
+          "H4",
+          "C4",
+          "D4"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Trips",
+        "4",
+        [
+          "H4",
+          "C4",
+          "D4"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.790089",
+      "cur_pos": 2,
+      "cur_action": [
+        "Trips",
+        "T",
+        [
+          "ST",
+          "ST",
+          "DT"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Trips",
+        "T",
+        [
+          "ST",
+          "ST",
+          "DT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.792778",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Trips",
+        "T",
+        [
+          "ST",
+          "ST",
+          "DT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.795932",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Trips",
+        "T",
+        [
+          "ST",
+          "ST",
+          "DT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.797278",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Trips",
+        "T",
+        [
+          "ST",
+          "ST",
+          "DT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.802092",
+      "cur_pos": 2,
+      "cur_action": [
+        "ThreeWithTwo",
+        "Q",
+        [
+          "HQ",
+          "HQ",
+          "DQ",
+          "SA",
+          "DA"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "ThreeWithTwo",
+        "Q",
+        [
+          "HQ",
+          "HQ",
+          "DQ",
+          "SA",
+          "DA"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.803602",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "ThreeWithTwo",
+        "Q",
+        [
+          "HQ",
+          "HQ",
+          "DQ",
+          "SA",
+          "DA"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.806384",
+      "cur_pos": 0,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "ThreeWithTwo",
+        "Q",
+        [
+          "HQ",
+          "HQ",
+          "DQ",
+          "SA",
+          "DA"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.808508",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "ThreeWithTwo",
+        "Q",
+        [
+          "HQ",
+          "HQ",
+          "DQ",
+          "SA",
+          "DA"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.815881",
+      "cur_pos": 2,
+      "cur_action": [
+        "Single",
+        "5",
+        [
+          "D5"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "5",
+        [
+          "D5"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.817759",
+      "cur_pos": 3,
+      "cur_action": [
+        "Single",
+        "7",
+        [
+          "C7"
+        ]
+      ],
+      "greater_pos": 3,
+      "greater_action": [
+        "Single",
+        "7",
+        [
+          "C7"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.820629",
+      "cur_pos": 0,
+      "cur_action": [
+        "Single",
+        "A",
+        [
+          "DA"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "A",
+        [
+          "DA"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.822152",
+      "cur_pos": 1,
+      "cur_action": [
+        "Single",
+        "J",
+        [
+          "DJ"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "DJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.825714",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "DJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.827282",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "DJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.831129",
+      "cur_pos": 0,
+      "cur_action": [
+        "Single",
+        "R",
+        [
+          "HR"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "R",
+        [
+          "HR"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.832718",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "R",
+        [
+          "HR"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.835234",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "R",
+        [
+          "HR"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.836655",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "R",
+        [
+          "HR"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.840869",
+      "cur_pos": 0,
+      "cur_action": [
+        "Pair",
+        "2",
+        [
+          "S2",
+          "C2"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Pair",
+        "2",
+        [
+          "S2",
+          "C2"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.842489",
+      "cur_pos": 1,
+      "cur_action": [
+        "Pair",
+        "8",
+        [
+          "C8",
+          "C8"
+        ]
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Pair",
+        "8",
+        [
+          "C8",
+          "C8"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.846021",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Pair",
+        "8",
+        [
+          "C8",
+          "C8"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.847532",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 1,
+      "greater_action": [
+        "Pair",
+        "8",
+        [
+          "C8",
+          "C8"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.851028",
+      "cur_pos": 0,
+      "cur_action": [
+        "Pair",
+        "T",
+        [
+          "HT",
+          "CT"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Pair",
+        "T",
+        [
+          "HT",
+          "CT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.852174",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Pair",
+        "T",
+        [
+          "HT",
+          "CT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.854840",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Pair",
+        "T",
+        [
+          "HT",
+          "CT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.856042",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Pair",
+        "T",
+        [
+          "HT",
+          "CT"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.859612",
+      "cur_pos": 0,
+      "cur_action": [
+        "Single",
+        "J",
+        [
+          "CJ"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "CJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.861323",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "CJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.863788",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "CJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.865153",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "J",
+        [
+          "CJ"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.868530",
+      "cur_pos": 0,
+      "cur_action": [
+        "Single",
+        "9",
+        [
+          "S9"
+        ]
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "9",
+        [
+          "S9"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.870062",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "9",
+        [
+          "S9"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.873037",
+      "cur_pos": 2,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 0,
+      "greater_action": [
+        "Single",
+        "9",
+        [
+          "S9"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.875569",
+      "cur_pos": 2,
+      "cur_action": [
+        "Single",
+        "A",
+        [
+          "CA"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "A",
+        [
+          "CA"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.877446",
+      "cur_pos": 3,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "A",
+        [
+          "CA"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.878704",
+      "cur_pos": 1,
+      "cur_action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "A",
+        [
+          "CA"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.881786",
+      "cur_pos": 2,
+      "cur_action": [
+        "Single",
+        "2",
+        [
+          "S2"
+        ]
+      ],
+      "greater_pos": 2,
+      "greater_action": [
+        "Single",
+        "2",
+        [
+          "S2"
+        ]
+      ],
+      "context": {
+        "publicInfo": [],
+        "selfRank": null,
+        "oppoRank": null,
+        "curRank": null,
+        "restCards": [],
+        "source": "notify",
+        "stage": "play",
+        "version": "v7"
+      }
+    }
+  ],
+  "my_decisions": [
+    {
+      "timestamp": "2026-07-08T23:09:19.493965",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 52,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 3,
+        "actionList_size": 52,
+        "handCards_size": 27,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "S5",
+          "H5",
+          "C5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "D7",
+          "S8",
+          "H8",
+          "H8",
+          "D8",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "HK",
+          "HA",
+          "DA",
+          "SJ",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "D7": [
+            -1,
+            0.0,
+            1
+          ],
+          "HK": [
+            -1,
+            0.0,
+            1
+          ],
+          "S8": [
+            0,
+            1.0,
+            4
+          ],
+          "H8": [
+            0,
+            1.0,
+            4
+          ],
+          "D8": [
+            0,
+            1.0,
+            4
+          ],
+          "H3": [
+            1,
+            1.0,
+            5
+          ],
+          "H4": [
+            1,
+            1.0,
+            5
+          ],
+          "H5": [
+            1,
+            1.0,
+            5
+          ],
+          "H6": [
+            1,
+            1.0,
+            5
+          ],
+          "H7": [
+            1,
+            1.0,
+            5
+          ],
+          "S5": [
+            2,
+            0.0,
+            2
+          ],
+          "C5": [
+            2,
+            0.0,
+            2
+          ],
+          "S6": [
+            3,
+            0.0,
+            2
+          ],
+          "D6": [
+            3,
+            0.0,
+            2
+          ],
+          "HT": [
+            4,
+            0.0,
+            2
+          ],
+          "CT": [
+            4,
+            0.0,
+            2
+          ],
+          "HA": [
+            5,
+            0.0,
+            2
+          ],
+          "DA": [
+            5,
+            0.0,
+            2
+          ],
+          "SJ": [
+            6,
+            0.0,
+            2
+          ],
+          "CJ": [
+            6,
+            0.0,
+            2
+          ],
+          "S9": [
+            7,
+            1.0,
+            3
+          ],
+          "C9": [
+            7,
+            1.0,
+            3
+          ],
+          "S2": [
+            8,
+            1.0,
+            2
+          ],
+          "C2": [
+            8,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "Bomb",
+          "1": "StraightFlush",
+          "2": "pair",
+          "3": "pair",
+          "4": "pair",
+          "5": "pair",
+          "6": "pair",
+          "7": "trip_in_three_with_two",
+          "8": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.526978",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 2,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 2,
+        "actionList_size": 2,
+        "handCards_size": 27,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "S5",
+          "H5",
+          "C5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "D7",
+          "S8",
+          "H8",
+          "H8",
+          "D8",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "HK",
+          "HA",
+          "DA",
+          "SJ",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Bomb",
+            "rank": "8",
+            "cards": [
+              "S8",
+              "H8",
+              "H8",
+              "D8"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "D7": [
+            -1,
+            0.0,
+            1
+          ],
+          "HK": [
+            -1,
+            0.0,
+            1
+          ],
+          "S8": [
+            0,
+            1.0,
+            4
+          ],
+          "H8": [
+            0,
+            1.0,
+            4
+          ],
+          "D8": [
+            0,
+            1.0,
+            4
+          ],
+          "H3": [
+            1,
+            1.0,
+            5
+          ],
+          "H4": [
+            1,
+            1.0,
+            5
+          ],
+          "H5": [
+            1,
+            1.0,
+            5
+          ],
+          "H6": [
+            1,
+            1.0,
+            5
+          ],
+          "H7": [
+            1,
+            1.0,
+            5
+          ],
+          "S5": [
+            2,
+            0.0,
+            2
+          ],
+          "C5": [
+            2,
+            0.0,
+            2
+          ],
+          "S6": [
+            3,
+            0.0,
+            2
+          ],
+          "D6": [
+            3,
+            0.0,
+            2
+          ],
+          "HT": [
+            4,
+            0.0,
+            2
+          ],
+          "CT": [
+            4,
+            0.0,
+            2
+          ],
+          "HA": [
+            5,
+            0.0,
+            2
+          ],
+          "DA": [
+            5,
+            0.0,
+            2
+          ],
+          "SJ": [
+            6,
+            0.0,
+            2
+          ],
+          "CJ": [
+            6,
+            0.0,
+            2
+          ],
+          "S9": [
+            7,
+            1.0,
+            3
+          ],
+          "C9": [
+            7,
+            1.0,
+            3
+          ],
+          "S2": [
+            8,
+            1.0,
+            2
+          ],
+          "C2": [
+            8,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "Bomb",
+          "1": "StraightFlush",
+          "2": "pair",
+          "3": "pair",
+          "4": "pair",
+          "5": "pair",
+          "6": "pair",
+          "7": "trip_in_three_with_two",
+          "8": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.549066",
+      "action_index": 3,
+      "action": [
+        "Single",
+        "K",
+        [
+          "HK"
+        ]
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 12,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 3,
+        "actionList_size": 12,
+        "handCards_size": 27,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "S5",
+          "H5",
+          "C5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "D7",
+          "S8",
+          "H8",
+          "H8",
+          "D8",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "HK",
+          "HA",
+          "DA",
+          "SJ",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "D7": [
+            -1,
+            0.0,
+            1
+          ],
+          "HK": [
+            -1,
+            0.0,
+            1
+          ],
+          "S8": [
+            0,
+            1.0,
+            4
+          ],
+          "H8": [
+            0,
+            1.0,
+            4
+          ],
+          "D8": [
+            0,
+            1.0,
+            4
+          ],
+          "H3": [
+            1,
+            1.0,
+            5
+          ],
+          "H4": [
+            1,
+            1.0,
+            5
+          ],
+          "H5": [
+            1,
+            1.0,
+            5
+          ],
+          "H6": [
+            1,
+            1.0,
+            5
+          ],
+          "H7": [
+            1,
+            1.0,
+            5
+          ],
+          "S5": [
+            2,
+            0.0,
+            2
+          ],
+          "C5": [
+            2,
+            0.0,
+            2
+          ],
+          "S6": [
+            3,
+            0.0,
+            2
+          ],
+          "D6": [
+            3,
+            0.0,
+            2
+          ],
+          "HT": [
+            4,
+            0.0,
+            2
+          ],
+          "CT": [
+            4,
+            0.0,
+            2
+          ],
+          "HA": [
+            5,
+            0.0,
+            2
+          ],
+          "DA": [
+            5,
+            0.0,
+            2
+          ],
+          "SJ": [
+            6,
+            0.0,
+            2
+          ],
+          "CJ": [
+            6,
+            0.0,
+            2
+          ],
+          "S9": [
+            7,
+            1.0,
+            3
+          ],
+          "C9": [
+            7,
+            1.0,
+            3
+          ],
+          "S2": [
+            8,
+            1.0,
+            2
+          ],
+          "C2": [
+            8,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "Bomb",
+          "1": "StraightFlush",
+          "2": "pair",
+          "3": "pair",
+          "4": "pair",
+          "5": "pair",
+          "6": "pair",
+          "7": "trip_in_three_with_two",
+          "8": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.573360",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 5,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 2,
+        "actionList_size": 5,
+        "handCards_size": 26,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "S5",
+          "H5",
+          "C5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "D7",
+          "S8",
+          "H8",
+          "H8",
+          "D8",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "HA",
+          "DA",
+          "SJ",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Single",
+            "rank": "R",
+            "cards": [
+              "HR"
+            ]
+          },
+          {
+            "type": "Bomb",
+            "rank": "8",
+            "cards": [
+              "S8",
+              "H8",
+              "H8",
+              "D8"
+            ]
+          },
+          {
+            "type": "StraightFlush",
+            "rank": "3",
+            "cards": [
+              "H3",
+              "H4",
+              "H5",
+              "H6",
+              "H7"
+            ]
+          },
+          {
+            "type": "StraightFlush",
+            "rank": "4",
+            "cards": [
+              "H4",
+              "H5",
+              "H6",
+              "H7",
+              "H8"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "D7": [
+            -1,
+            0.0,
+            1
+          ],
+          "S8": [
+            0,
+            1.0,
+            4
+          ],
+          "H8": [
+            0,
+            1.0,
+            4
+          ],
+          "D8": [
+            0,
+            1.0,
+            4
+          ],
+          "H3": [
+            1,
+            1.0,
+            5
+          ],
+          "H4": [
+            1,
+            1.0,
+            5
+          ],
+          "H5": [
+            1,
+            1.0,
+            5
+          ],
+          "H6": [
+            1,
+            1.0,
+            5
+          ],
+          "H7": [
+            1,
+            1.0,
+            5
+          ],
+          "S5": [
+            2,
+            0.0,
+            2
+          ],
+          "C5": [
+            2,
+            0.0,
+            2
+          ],
+          "S6": [
+            3,
+            0.0,
+            2
+          ],
+          "D6": [
+            3,
+            0.0,
+            2
+          ],
+          "HT": [
+            4,
+            0.0,
+            2
+          ],
+          "CT": [
+            4,
+            0.0,
+            2
+          ],
+          "HA": [
+            5,
+            0.0,
+            2
+          ],
+          "DA": [
+            5,
+            0.0,
+            2
+          ],
+          "SJ": [
+            6,
+            0.0,
+            2
+          ],
+          "CJ": [
+            6,
+            0.0,
+            2
+          ],
+          "S9": [
+            7,
+            1.0,
+            3
+          ],
+          "C9": [
+            7,
+            1.0,
+            3
+          ],
+          "S2": [
+            8,
+            1.0,
+            2
+          ],
+          "C2": [
+            8,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "Bomb",
+          "1": "StraightFlush",
+          "2": "pair",
+          "3": "pair",
+          "4": "pair",
+          "5": "pair",
+          "6": "pair",
+          "7": "trip_in_three_with_two",
+          "8": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.588684",
+      "action_index": 1,
+      "action": [
+        "Bomb",
+        "8",
+        [
+          "S8",
+          "H8",
+          "H8",
+          "D8"
+        ]
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 4,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 1,
+        "actionList_size": 4,
+        "handCards_size": 26,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "S5",
+          "H5",
+          "C5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "D7",
+          "S8",
+          "H8",
+          "H8",
+          "D8",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "HA",
+          "DA",
+          "SJ",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Bomb",
+            "rank": "8",
+            "cards": [
+              "S8",
+              "H8",
+              "H8",
+              "D8"
+            ]
+          },
+          {
+            "type": "StraightFlush",
+            "rank": "3",
+            "cards": [
+              "H3",
+              "H4",
+              "H5",
+              "H6",
+              "H7"
+            ]
+          },
+          {
+            "type": "StraightFlush",
+            "rank": "4",
+            "cards": [
+              "H4",
+              "H5",
+              "H6",
+              "H7",
+              "H8"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "D7": [
+            -1,
+            0.0,
+            1
+          ],
+          "S8": [
+            0,
+            1.0,
+            4
+          ],
+          "H8": [
+            0,
+            1.0,
+            4
+          ],
+          "D8": [
+            0,
+            1.0,
+            4
+          ],
+          "H3": [
+            1,
+            1.0,
+            5
+          ],
+          "H4": [
+            1,
+            1.0,
+            5
+          ],
+          "H5": [
+            1,
+            1.0,
+            5
+          ],
+          "H6": [
+            1,
+            1.0,
+            5
+          ],
+          "H7": [
+            1,
+            1.0,
+            5
+          ],
+          "S5": [
+            2,
+            0.0,
+            2
+          ],
+          "C5": [
+            2,
+            0.0,
+            2
+          ],
+          "S6": [
+            3,
+            0.0,
+            2
+          ],
+          "D6": [
+            3,
+            0.0,
+            2
+          ],
+          "HT": [
+            4,
+            0.0,
+            2
+          ],
+          "CT": [
+            4,
+            0.0,
+            2
+          ],
+          "HA": [
+            5,
+            0.0,
+            2
+          ],
+          "DA": [
+            5,
+            0.0,
+            2
+          ],
+          "SJ": [
+            6,
+            0.0,
+            2
+          ],
+          "CJ": [
+            6,
+            0.0,
+            2
+          ],
+          "S9": [
+            7,
+            1.0,
+            3
+          ],
+          "C9": [
+            7,
+            1.0,
+            3
+          ],
+          "S2": [
+            8,
+            1.0,
+            2
+          ],
+          "C2": [
+            8,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "Bomb",
+          "1": "StraightFlush",
+          "2": "pair",
+          "3": "pair",
+          "4": "pair",
+          "5": "pair",
+          "6": "pair",
+          "7": "trip_in_three_with_two",
+          "8": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.601408",
+      "action_index": 11,
+      "action": [
+        "Single",
+        "7",
+        [
+          "D7"
+        ]
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 128,
+      "context": {
+        "myPos": 0,
+        "curPos": -1,
+        "greaterPos": -1,
+        "actionList_size": 128,
+        "handCards_size": 22,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "S5",
+          "H5",
+          "C5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "D7",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "HA",
+          "DA",
+          "SJ",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "D7": [
+            -1,
+            0.0,
+            1
+          ],
+          "H3": [
+            0,
+            1.0,
+            5
+          ],
+          "H4": [
+            0,
+            1.0,
+            5
+          ],
+          "H5": [
+            0,
+            1.0,
+            5
+          ],
+          "H6": [
+            0,
+            1.0,
+            5
+          ],
+          "H7": [
+            0,
+            1.0,
+            5
+          ],
+          "S5": [
+            1,
+            0.0,
+            2
+          ],
+          "C5": [
+            1,
+            0.0,
+            2
+          ],
+          "S6": [
+            2,
+            0.0,
+            2
+          ],
+          "D6": [
+            2,
+            0.0,
+            2
+          ],
+          "HT": [
+            3,
+            0.0,
+            2
+          ],
+          "CT": [
+            3,
+            0.0,
+            2
+          ],
+          "HA": [
+            4,
+            0.0,
+            2
+          ],
+          "DA": [
+            4,
+            0.0,
+            2
+          ],
+          "SJ": [
+            5,
+            0.0,
+            2
+          ],
+          "CJ": [
+            5,
+            0.0,
+            2
+          ],
+          "S9": [
+            6,
+            1.0,
+            3
+          ],
+          "C9": [
+            6,
+            1.0,
+            3
+          ],
+          "S2": [
+            7,
+            1.0,
+            2
+          ],
+          "C2": [
+            7,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "StraightFlush",
+          "1": "pair",
+          "2": "pair",
+          "3": "pair",
+          "4": "pair",
+          "5": "pair",
+          "6": "trip_in_three_with_two",
+          "7": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.614898",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 3,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 2,
+        "actionList_size": 3,
+        "handCards_size": 21,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "S5",
+          "H5",
+          "C5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "HA",
+          "DA",
+          "SJ",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Single",
+            "rank": "R",
+            "cards": [
+              "HR"
+            ]
+          },
+          {
+            "type": "StraightFlush",
+            "rank": "3",
+            "cards": [
+              "H3",
+              "H4",
+              "H5",
+              "H6",
+              "H7"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "H3": [
+            0,
+            1.0,
+            5
+          ],
+          "H4": [
+            0,
+            1.0,
+            5
+          ],
+          "H5": [
+            0,
+            1.0,
+            5
+          ],
+          "H6": [
+            0,
+            1.0,
+            5
+          ],
+          "H7": [
+            0,
+            1.0,
+            5
+          ],
+          "S5": [
+            1,
+            0.0,
+            2
+          ],
+          "C5": [
+            1,
+            0.0,
+            2
+          ],
+          "S6": [
+            2,
+            0.0,
+            2
+          ],
+          "D6": [
+            2,
+            0.0,
+            2
+          ],
+          "HT": [
+            3,
+            0.0,
+            2
+          ],
+          "CT": [
+            3,
+            0.0,
+            2
+          ],
+          "HA": [
+            4,
+            0.0,
+            2
+          ],
+          "DA": [
+            4,
+            0.0,
+            2
+          ],
+          "SJ": [
+            5,
+            0.0,
+            2
+          ],
+          "CJ": [
+            5,
+            0.0,
+            2
+          ],
+          "S9": [
+            6,
+            1.0,
+            3
+          ],
+          "C9": [
+            6,
+            1.0,
+            3
+          ],
+          "S2": [
+            7,
+            1.0,
+            2
+          ],
+          "C2": [
+            7,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "StraightFlush",
+          "1": "pair",
+          "2": "pair",
+          "3": "pair",
+          "4": "pair",
+          "5": "pair",
+          "6": "trip_in_three_with_two",
+          "7": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.634719",
+      "action_index": 1,
+      "action": [
+        "Single",
+        "A",
+        [
+          "HA"
+        ]
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 7,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 3,
+        "actionList_size": 7,
+        "handCards_size": 21,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "S5",
+          "H5",
+          "C5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "HA",
+          "DA",
+          "SJ",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Single",
+            "rank": "A",
+            "cards": [
+              "HA"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "A",
+            "cards": [
+              "DA"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "J",
+            "cards": [
+              "SJ"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "J",
+            "cards": [
+              "CJ"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "R",
+            "cards": [
+              "HR"
+            ]
+          },
+          {
+            "type": "StraightFlush",
+            "rank": "3",
+            "cards": [
+              "H3",
+              "H4",
+              "H5",
+              "H6",
+              "H7"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "H3": [
+            0,
+            1.0,
+            5
+          ],
+          "H4": [
+            0,
+            1.0,
+            5
+          ],
+          "H5": [
+            0,
+            1.0,
+            5
+          ],
+          "H6": [
+            0,
+            1.0,
+            5
+          ],
+          "H7": [
+            0,
+            1.0,
+            5
+          ],
+          "S5": [
+            1,
+            0.0,
+            2
+          ],
+          "C5": [
+            1,
+            0.0,
+            2
+          ],
+          "S6": [
+            2,
+            0.0,
+            2
+          ],
+          "D6": [
+            2,
+            0.0,
+            2
+          ],
+          "HT": [
+            3,
+            0.0,
+            2
+          ],
+          "CT": [
+            3,
+            0.0,
+            2
+          ],
+          "HA": [
+            4,
+            0.0,
+            2
+          ],
+          "DA": [
+            4,
+            0.0,
+            2
+          ],
+          "SJ": [
+            5,
+            0.0,
+            2
+          ],
+          "CJ": [
+            5,
+            0.0,
+            2
+          ],
+          "S9": [
+            6,
+            1.0,
+            3
+          ],
+          "C9": [
+            6,
+            1.0,
+            3
+          ],
+          "S2": [
+            7,
+            1.0,
+            2
+          ],
+          "C2": [
+            7,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "StraightFlush",
+          "1": "pair",
+          "2": "pair",
+          "3": "pair",
+          "4": "pair",
+          "5": "pair",
+          "6": "trip_in_three_with_two",
+          "7": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.651162",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 3,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 1,
+        "actionList_size": 3,
+        "handCards_size": 20,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "S5",
+          "H5",
+          "C5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "DA",
+          "SJ",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Single",
+            "rank": "R",
+            "cards": [
+              "HR"
+            ]
+          },
+          {
+            "type": "StraightFlush",
+            "rank": "3",
+            "cards": [
+              "H3",
+              "H4",
+              "H5",
+              "H6",
+              "H7"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "H3": [
+            0,
+            1.0,
+            5
+          ],
+          "H4": [
+            0,
+            1.0,
+            5
+          ],
+          "H5": [
+            0,
+            1.0,
+            5
+          ],
+          "H6": [
+            0,
+            1.0,
+            5
+          ],
+          "H7": [
+            0,
+            1.0,
+            5
+          ],
+          "S5": [
+            1,
+            0.0,
+            2
+          ],
+          "C5": [
+            1,
+            0.0,
+            2
+          ],
+          "S6": [
+            2,
+            0.0,
+            2
+          ],
+          "D6": [
+            2,
+            0.0,
+            2
+          ],
+          "HT": [
+            3,
+            0.0,
+            2
+          ],
+          "CT": [
+            3,
+            0.0,
+            2
+          ],
+          "SJ": [
+            4,
+            0.0,
+            2
+          ],
+          "CJ": [
+            4,
+            0.0,
+            2
+          ],
+          "S9": [
+            5,
+            1.0,
+            3
+          ],
+          "C9": [
+            5,
+            1.0,
+            3
+          ],
+          "S2": [
+            6,
+            1.0,
+            2
+          ],
+          "C2": [
+            6,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "StraightFlush",
+          "1": "pair",
+          "2": "pair",
+          "3": "pair",
+          "4": "pair",
+          "5": "trip_in_three_with_two",
+          "6": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.663397",
+      "action_index": 1,
+      "action": [
+        "Single",
+        "J",
+        [
+          "SJ"
+        ]
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 5,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 3,
+        "actionList_size": 5,
+        "handCards_size": 20,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "S5",
+          "H5",
+          "C5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "DA",
+          "SJ",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Single",
+            "rank": "J",
+            "cards": [
+              "SJ"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "J",
+            "cards": [
+              "CJ"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "R",
+            "cards": [
+              "HR"
+            ]
+          },
+          {
+            "type": "StraightFlush",
+            "rank": "3",
+            "cards": [
+              "H3",
+              "H4",
+              "H5",
+              "H6",
+              "H7"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "H3": [
+            0,
+            1.0,
+            5
+          ],
+          "H4": [
+            0,
+            1.0,
+            5
+          ],
+          "H5": [
+            0,
+            1.0,
+            5
+          ],
+          "H6": [
+            0,
+            1.0,
+            5
+          ],
+          "H7": [
+            0,
+            1.0,
+            5
+          ],
+          "S5": [
+            1,
+            0.0,
+            2
+          ],
+          "C5": [
+            1,
+            0.0,
+            2
+          ],
+          "S6": [
+            2,
+            0.0,
+            2
+          ],
+          "D6": [
+            2,
+            0.0,
+            2
+          ],
+          "HT": [
+            3,
+            0.0,
+            2
+          ],
+          "CT": [
+            3,
+            0.0,
+            2
+          ],
+          "SJ": [
+            4,
+            0.0,
+            2
+          ],
+          "CJ": [
+            4,
+            0.0,
+            2
+          ],
+          "S9": [
+            5,
+            1.0,
+            3
+          ],
+          "C9": [
+            5,
+            1.0,
+            3
+          ],
+          "S2": [
+            6,
+            1.0,
+            2
+          ],
+          "C2": [
+            6,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "StraightFlush",
+          "1": "pair",
+          "2": "pair",
+          "3": "pair",
+          "4": "pair",
+          "5": "trip_in_three_with_two",
+          "6": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.677929",
+      "action_index": 19,
+      "action": [
+        "Pair",
+        "5",
+        [
+          "S5",
+          "C5"
+        ]
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 87,
+      "context": {
+        "myPos": 0,
+        "curPos": -1,
+        "greaterPos": -1,
+        "actionList_size": 87,
+        "handCards_size": 19,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "S5",
+          "H5",
+          "C5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "H3": [
+            0,
+            1.0,
+            5
+          ],
+          "H4": [
+            0,
+            1.0,
+            5
+          ],
+          "H5": [
+            0,
+            1.0,
+            5
+          ],
+          "H6": [
+            0,
+            1.0,
+            5
+          ],
+          "H7": [
+            0,
+            1.0,
+            5
+          ],
+          "S5": [
+            1,
+            0.0,
+            2
+          ],
+          "C5": [
+            1,
+            0.0,
+            2
+          ],
+          "S6": [
+            2,
+            0.0,
+            2
+          ],
+          "D6": [
+            2,
+            0.0,
+            2
+          ],
+          "HT": [
+            3,
+            0.0,
+            2
+          ],
+          "CT": [
+            3,
+            0.0,
+            2
+          ],
+          "S9": [
+            4,
+            1.0,
+            3
+          ],
+          "C9": [
+            4,
+            1.0,
+            3
+          ],
+          "S2": [
+            5,
+            1.0,
+            2
+          ],
+          "C2": [
+            5,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "StraightFlush",
+          "1": "pair",
+          "2": "pair",
+          "3": "pair",
+          "4": "trip_in_three_with_two",
+          "5": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.691164",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 2,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 3,
+        "actionList_size": 2,
+        "handCards_size": 17,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "H5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "StraightFlush",
+            "rank": "3",
+            "cards": [
+              "H3",
+              "H4",
+              "H5",
+              "H6",
+              "H7"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "H3": [
+            0,
+            1.0,
+            5
+          ],
+          "H4": [
+            0,
+            1.0,
+            5
+          ],
+          "H5": [
+            0,
+            1.0,
+            5
+          ],
+          "H6": [
+            0,
+            1.0,
+            5
+          ],
+          "H7": [
+            0,
+            1.0,
+            5
+          ],
+          "S6": [
+            1,
+            0.0,
+            2
+          ],
+          "D6": [
+            1,
+            0.0,
+            2
+          ],
+          "HT": [
+            2,
+            0.0,
+            2
+          ],
+          "CT": [
+            2,
+            0.0,
+            2
+          ],
+          "S9": [
+            3,
+            1.0,
+            3
+          ],
+          "C9": [
+            3,
+            1.0,
+            3
+          ],
+          "S2": [
+            4,
+            1.0,
+            2
+          ],
+          "C2": [
+            4,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "StraightFlush",
+          "1": "pair",
+          "2": "pair",
+          "3": "trip_in_three_with_two",
+          "4": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.706308",
+      "action_index": 1,
+      "action": [
+        "Pair",
+        "6",
+        [
+          "S6",
+          "D6"
+        ]
+      ],
+      "score": null,
+      "layer": "GUA-075推荐",
+      "candidates_count": 8,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 3,
+        "actionList_size": 8,
+        "handCards_size": 17,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "H5",
+          "S6",
+          "H6",
+          "D6",
+          "H7",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Pair",
+            "rank": "6",
+            "cards": [
+              "S6",
+              "D6"
+            ]
+          },
+          {
+            "type": "Pair",
+            "rank": "6",
+            "cards": [
+              "S6",
+              "H6"
+            ]
+          },
+          {
+            "type": "Pair",
+            "rank": "6",
+            "cards": [
+              "H6",
+              "D6"
+            ]
+          },
+          {
+            "type": "Pair",
+            "rank": "9",
+            "cards": [
+              "S9",
+              "C9"
+            ]
+          },
+          {
+            "type": "Pair",
+            "rank": "9",
+            "cards": [
+              "S9",
+              "S9"
+            ]
+          },
+          {
+            "type": "Pair",
+            "rank": "T",
+            "cards": [
+              "HT",
+              "CT"
+            ]
+          },
+          {
+            "type": "StraightFlush",
+            "rank": "3",
+            "cards": [
+              "H3",
+              "H4",
+              "H5",
+              "H6",
+              "H7"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "H3": [
+            0,
+            1.0,
+            5
+          ],
+          "H4": [
+            0,
+            1.0,
+            5
+          ],
+          "H5": [
+            0,
+            1.0,
+            5
+          ],
+          "H6": [
+            0,
+            1.0,
+            5
+          ],
+          "H7": [
+            0,
+            1.0,
+            5
+          ],
+          "S6": [
+            1,
+            0.0,
+            2
+          ],
+          "D6": [
+            1,
+            0.0,
+            2
+          ],
+          "HT": [
+            2,
+            0.0,
+            2
+          ],
+          "CT": [
+            2,
+            0.0,
+            2
+          ],
+          "S9": [
+            3,
+            1.0,
+            3
+          ],
+          "C9": [
+            3,
+            1.0,
+            3
+          ],
+          "S2": [
+            4,
+            1.0,
+            2
+          ],
+          "C2": [
+            4,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "StraightFlush",
+          "1": "pair",
+          "2": "pair",
+          "3": "trip_in_three_with_two",
+          "4": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.721144",
+      "action_index": 1,
+      "action": [
+        "StraightFlush",
+        "3",
+        [
+          "H3",
+          "H4",
+          "H5",
+          "H6",
+          "H7"
+        ]
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 2,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 3,
+        "actionList_size": 2,
+        "handCards_size": 15,
+        "handCards": [
+          "S2",
+          "C2",
+          "H3",
+          "H4",
+          "H5",
+          "H6",
+          "H7",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "StraightFlush",
+            "rank": "3",
+            "cards": [
+              "H3",
+              "H4",
+              "H5",
+              "H6",
+              "H7"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "H3": [
+            0,
+            1.0,
+            5
+          ],
+          "H4": [
+            0,
+            1.0,
+            5
+          ],
+          "H5": [
+            0,
+            1.0,
+            5
+          ],
+          "H6": [
+            0,
+            1.0,
+            5
+          ],
+          "H7": [
+            0,
+            1.0,
+            5
+          ],
+          "HT": [
+            1,
+            0.0,
+            2
+          ],
+          "CT": [
+            1,
+            0.0,
+            2
+          ],
+          "S9": [
+            2,
+            1.0,
+            3
+          ],
+          "C9": [
+            2,
+            1.0,
+            3
+          ],
+          "S2": [
+            3,
+            1.0,
+            2
+          ],
+          "C2": [
+            3,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "StraightFlush",
+          "1": "pair",
+          "2": "trip_in_three_with_two",
+          "3": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.736667",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 1,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 3,
+        "actionList_size": 1,
+        "handCards_size": 10,
+        "handCards": [
+          "S2",
+          "C2",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "HT": [
+            0,
+            0.0,
+            2
+          ],
+          "CT": [
+            0,
+            0.0,
+            2
+          ],
+          "S9": [
+            1,
+            1.0,
+            3
+          ],
+          "C9": [
+            1,
+            1.0,
+            3
+          ],
+          "S2": [
+            2,
+            1.0,
+            2
+          ],
+          "C2": [
+            2,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "pair",
+          "1": "trip_in_three_with_two",
+          "2": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.749766",
+      "action_index": 1,
+      "action": [
+        "Pair",
+        "9",
+        [
+          "S9",
+          "C9"
+        ]
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 4,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 3,
+        "actionList_size": 4,
+        "handCards_size": 10,
+        "handCards": [
+          "S2",
+          "C2",
+          "S9",
+          "S9",
+          "C9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Pair",
+            "rank": "9",
+            "cards": [
+              "S9",
+              "C9"
+            ]
+          },
+          {
+            "type": "Pair",
+            "rank": "9",
+            "cards": [
+              "S9",
+              "S9"
+            ]
+          },
+          {
+            "type": "Pair",
+            "rank": "T",
+            "cards": [
+              "HT",
+              "CT"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "HT": [
+            0,
+            0.0,
+            2
+          ],
+          "CT": [
+            0,
+            0.0,
+            2
+          ],
+          "S9": [
+            1,
+            1.0,
+            3
+          ],
+          "C9": [
+            1,
+            1.0,
+            3
+          ],
+          "S2": [
+            2,
+            1.0,
+            2
+          ],
+          "C2": [
+            2,
+            1.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "pair",
+          "1": "trip_in_three_with_two",
+          "2": "pair_in_three_with_two"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.760350",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 1,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 2,
+        "actionList_size": 1,
+        "handCards_size": 8,
+        "handCards": [
+          "S2",
+          "C2",
+          "S9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "S9": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "S2": [
+            0,
+            0.0,
+            2
+          ],
+          "C2": [
+            0,
+            0.0,
+            2
+          ],
+          "HT": [
+            1,
+            0.0,
+            2
+          ],
+          "CT": [
+            1,
+            0.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "pair",
+          "1": "pair"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.774450",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 1,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 1,
+        "actionList_size": 1,
+        "handCards_size": 8,
+        "handCards": [
+          "S2",
+          "C2",
+          "S9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "S9": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "S2": [
+            0,
+            0.0,
+            2
+          ],
+          "C2": [
+            0,
+            0.0,
+            2
+          ],
+          "HT": [
+            1,
+            0.0,
+            2
+          ],
+          "CT": [
+            1,
+            0.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "pair",
+          "1": "pair"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.784768",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 1,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 1,
+        "actionList_size": 1,
+        "handCards_size": 8,
+        "handCards": [
+          "S2",
+          "C2",
+          "S9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "S9": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "S2": [
+            0,
+            0.0,
+            2
+          ],
+          "C2": [
+            0,
+            0.0,
+            2
+          ],
+          "HT": [
+            1,
+            0.0,
+            2
+          ],
+          "CT": [
+            1,
+            0.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "pair",
+          "1": "pair"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.795215",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 1,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 2,
+        "actionList_size": 1,
+        "handCards_size": 8,
+        "handCards": [
+          "S2",
+          "C2",
+          "S9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "S9": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "S2": [
+            0,
+            0.0,
+            2
+          ],
+          "C2": [
+            0,
+            0.0,
+            2
+          ],
+          "HT": [
+            1,
+            0.0,
+            2
+          ],
+          "CT": [
+            1,
+            0.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "pair",
+          "1": "pair"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.805778",
+      "action_index": 0,
+      "action": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 1,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 2,
+        "actionList_size": 1,
+        "handCards_size": 8,
+        "handCards": [
+          "S2",
+          "C2",
+          "S9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "S9": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "S2": [
+            0,
+            0.0,
+            2
+          ],
+          "C2": [
+            0,
+            0.0,
+            2
+          ],
+          "HT": [
+            1,
+            0.0,
+            2
+          ],
+          "CT": [
+            1,
+            0.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "pair",
+          "1": "pair"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.819912",
+      "action_index": 4,
+      "action": [
+        "Single",
+        "A",
+        [
+          "DA"
+        ]
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 7,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 3,
+        "actionList_size": 7,
+        "handCards_size": 8,
+        "handCards": [
+          "S2",
+          "C2",
+          "S9",
+          "HT",
+          "CT",
+          "DA",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Single",
+            "rank": "9",
+            "cards": [
+              "S9"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "T",
+            "cards": [
+              "HT"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "T",
+            "cards": [
+              "CT"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "A",
+            "cards": [
+              "DA"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "J",
+            "cards": [
+              "CJ"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "R",
+            "cards": [
+              "HR"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "S9": [
+            -1,
+            0.0,
+            1
+          ],
+          "DA": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "S2": [
+            0,
+            0.0,
+            2
+          ],
+          "C2": [
+            0,
+            0.0,
+            2
+          ],
+          "HT": [
+            1,
+            0.0,
+            2
+          ],
+          "CT": [
+            1,
+            0.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "pair",
+          "1": "pair"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.830433",
+      "action_index": 1,
+      "action": [
+        "Single",
+        "R",
+        [
+          "HR"
+        ]
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 2,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 1,
+        "actionList_size": 2,
+        "handCards_size": 7,
+        "handCards": [
+          "S2",
+          "C2",
+          "S9",
+          "HT",
+          "CT",
+          "CJ",
+          "HR"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Single",
+            "rank": "R",
+            "cards": [
+              "HR"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "HR": [
+            -1,
+            0.0,
+            1
+          ],
+          "S9": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "S2": [
+            0,
+            0.0,
+            2
+          ],
+          "C2": [
+            0,
+            0.0,
+            2
+          ],
+          "HT": [
+            1,
+            0.0,
+            2
+          ],
+          "CT": [
+            1,
+            0.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "pair",
+          "1": "pair"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.840237",
+      "action_index": 6,
+      "action": [
+        "Pair",
+        "2",
+        [
+          "S2",
+          "C2"
+        ]
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 8,
+      "context": {
+        "myPos": 0,
+        "curPos": -1,
+        "greaterPos": -1,
+        "actionList_size": 8,
+        "handCards_size": 6,
+        "handCards": [
+          "S2",
+          "C2",
+          "S9",
+          "HT",
+          "CT",
+          "CJ"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "Single",
+            "rank": "2",
+            "cards": [
+              "S2"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "2",
+            "cards": [
+              "C2"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "9",
+            "cards": [
+              "S9"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "T",
+            "cards": [
+              "HT"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "T",
+            "cards": [
+              "CT"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "J",
+            "cards": [
+              "CJ"
+            ]
+          },
+          {
+            "type": "Pair",
+            "rank": "2",
+            "cards": [
+              "S2",
+              "C2"
+            ]
+          },
+          {
+            "type": "Pair",
+            "rank": "T",
+            "cards": [
+              "HT",
+              "CT"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "S9": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "S2": [
+            0,
+            0.0,
+            2
+          ],
+          "C2": [
+            0,
+            0.0,
+            2
+          ],
+          "HT": [
+            1,
+            0.0,
+            2
+          ],
+          "CT": [
+            1,
+            0.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "pair",
+          "1": "pair"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.850313",
+      "action_index": 1,
+      "action": [
+        "Pair",
+        "T",
+        [
+          "HT",
+          "CT"
+        ]
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 2,
+      "context": {
+        "myPos": 0,
+        "curPos": 3,
+        "greaterPos": 1,
+        "actionList_size": 2,
+        "handCards_size": 4,
+        "handCards": [
+          "S9",
+          "HT",
+          "CT",
+          "CJ"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "PASS",
+            "rank": "PASS",
+            "cards": []
+          },
+          {
+            "type": "Pair",
+            "rank": "T",
+            "cards": [
+              "HT",
+              "CT"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "S9": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ],
+          "HT": [
+            0,
+            0.0,
+            2
+          ],
+          "CT": [
+            0,
+            0.0,
+            2
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {
+          "0": "pair"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.858926",
+      "action_index": 1,
+      "action": [
+        "Single",
+        "J",
+        [
+          "CJ"
+        ]
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 2,
+      "context": {
+        "myPos": 0,
+        "curPos": -1,
+        "greaterPos": -1,
+        "actionList_size": 2,
+        "handCards_size": 2,
+        "handCards": [
+          "S9",
+          "CJ"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "Single",
+            "rank": "9",
+            "cards": [
+              "S9"
+            ]
+          },
+          {
+            "type": "Single",
+            "rank": "J",
+            "cards": [
+              "CJ"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "S9": [
+            -1,
+            0.0,
+            1
+          ],
+          "CJ": [
+            -1,
+            0.0,
+            1
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {}
+      }
+    },
+    {
+      "timestamp": "2026-07-08T23:09:19.867890",
+      "action_index": 0,
+      "action": [
+        "Single",
+        "9",
+        [
+          "S9"
+        ]
+      ],
+      "score": null,
+      "layer": "残局管线",
+      "candidates_count": 1,
+      "context": {
+        "myPos": 0,
+        "curPos": -1,
+        "greaterPos": -1,
+        "actionList_size": 1,
+        "handCards_size": 1,
+        "handCards": [
+          "S9"
+        ],
+        "selfRank": "5",
+        "oppoRank": "J",
+        "curRank": "J",
+        "version": "v7",
+        "series": "V",
+        "source": "act",
+        "stage": "play",
+        "actionList_sample": [
+          {
+            "type": "Single",
+            "rank": "9",
+            "cards": [
+              "S9"
+            ]
+          }
+        ],
+        "engine": "ultimate_win_rate",
+        "card_mask": {
+          "S9": [
+            -1,
+            0.0,
+            1
+          ]
+        },
+        "role": "主攻",
+        "group_type_map": {}
+      }
+    }
+  ],
+  "result": {
+    "order": [
+      0,
+      2,
+      1,
+      3
+    ],
+    "curRank": "J",
+    "restCards": [
+      [
+        1,
+        [
+          "S8"
+        ]
+      ],
+      [
+        3,
+        [
+          "S7"
+        ]
+      ]
+    ],
+    "total_decisions": 1283,
+    "game_count": 52,
+    "victoryNum": [
+      0,
+      3,
+      0,
+      3
+    ]
+  },
+  "game_round": 52,
+  "end_time": "2026-07-08T23:09:19.882131",
+  "duration": 0.395919
+}

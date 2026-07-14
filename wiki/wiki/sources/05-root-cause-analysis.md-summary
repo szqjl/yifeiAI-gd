@@ -1,0 +1,48 @@
+---
+type: source-summary
+title: "根因分析 · Lv1 改动无效须走 Lv2 路线"
+sources:
+  - docs/analysis/agent-sessions/05-root-cause-analysis.md
+tags:
+  - source
+  - root-cause
+  - strategic-layers
+status: current
+related_gua:
+  - GUA-006
+date: 2026-05-28
+---
+
+# 05 · 根因分析
+
+## 来源
+
+- 路径：`docs/analysis/agent-sessions/05-root-cause-analysis.md`
+- 字符数：4573
+- 摄入日期：2026-05-28
+
+## 核心论点
+
+### 战略三层模型
+
+| 层级 | 含义 |
+|------|------|
+| **Lv1** | 个别决策 — 这一张牌该出什么 |
+| **Lv2** | 队伍联动 — 这一副我+队友如何双上 |
+| **Lv3** | 全局对抗 — 这一局能否从 2 打到 A |
+
+### 关键诊断
+
+- **Lv1 改动无效**：PHASE2 改 50+ 处代码，0% 胜率未改变
+- **必须走 Lv2**：引入 P0 四项改进（历史追踪 / 残局两手 / 主动传牌 / 主动炸弹）
+- 样本：22 副对局，lalala 100% 双上
+
+## 归因风险
+
+> ⚠️ **tension_5**：Lv2 改动也尚未验证有效（见 [[synthesis/p0-verification-20260528]]）
+
+## 关联页面
+
+- [[concepts/strategic-layers]]
+- [[gua-006]]
+- [[synthesis/m1-vs-lalala-zero-percent]]

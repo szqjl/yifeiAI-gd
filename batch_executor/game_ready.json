@@ -1,0 +1,18 @@
+{
+  "client3": {
+    "ready": true,
+    "timestamp": "2026-07-08T23:08:44.204802"
+  },
+  "yf2_v7": {
+    "ready": true,
+    "timestamp": "2026-07-08T23:08:44.205032"
+  },
+  "yf1_v7": {
+    "ready": true,
+    "timestamp": "2026-07-08T23:08:44.206067"
+  },
+  "client4": {
+    "ready": true,
+    "timestamp": "2026-07-08T23:08:44.205798"
+  }
+}

@@ -1,0 +1,39 @@
+---
+type: source-summary
+title: "298 副对局数据分析"
+sources:
+  - docs/analysis/agent-sessions/06-game-data-analysis.md
+tags:
+  - source
+  - data-analysis
+  - batch
+status: current
+date: 2026-05-28
+---
+
+# 06 · 298 副对局数据分析
+
+## 来源
+
+- 路径：`docs/analysis/agent-sessions/06-game-data-analysis.md`
+- 字符数：1528
+- 摄入日期：2026-05-28
+
+## 关键指标基线
+
+| 指标 | M1/M3 基线 | lalala 基线 |
+|------|-----------|-------------|
+| PASS 率 | ~50% | ~15% |
+| 有问题 PASS | 高 | 低 |
+| 每局炸弹数 | 低 | 中高 |
+
+## 关键产出
+
+- 决策追踪脚本：`scripts/analyze_decisions.py`
+- 局级别分析：`scripts/analysis/analyze_game_rounds.py`
+- 历史样本数据：`decisions_20260528_batch30.md`
+
+## 关联页面
+
+- [[module-batch-executor]]
+- [[concepts/batch-evaluation]]

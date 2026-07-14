@@ -1,0 +1,39 @@
+---
+type: source-summary
+title: "30 条决策模式样本"
+sources:
+  - docs/analysis/agent-sessions/decision_patterns_sample.md
+tags:
+  - source
+  - decision-pattern
+  - sample
+status: current
+date: 2026-05-28
+---
+
+# 30 条决策模式样本
+
+## 来源
+
+- 路径：`docs/analysis/agent-sessions/decision_patterns_sample.md`
+- 字符数：3070
+- 摄入日期：2026-05-28
+
+## 内容概述
+
+- 来源文件：`decisions_20260528_batch30.md`
+- 样本：30 条决策模式
+- 用途：分析 Active / Passive / 进贡还贡阶段的策略分布
+
+## 模式分类
+
+| 模式 | 说明 |
+|------|------|
+| Active | 主动出牌（首发或接风） |
+| Passive | 被动跟压/过 |
+| Tribute Phase | 进贡还贡阶段 |
+
+## 关联页面
+
+- [[concepts/strategic-layers]]
+- [[concepts/team-coordination]]

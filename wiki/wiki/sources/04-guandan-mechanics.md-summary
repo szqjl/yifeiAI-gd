@@ -1,0 +1,54 @@
+---
+type: source-summary
+title: "掼蛋机制 + M3 决策引擎初步诊断"
+sources:
+  - docs/analysis/agent-sessions/04-guandan-mechanics.md
+tags:
+  - source
+  - guandan-rules
+  - m3-diagnosis
+  - mechanics
+status: current
+related_gua:
+  - GUA-005
+date: 2026-05-28
+---
+
+# 04 · 掼蛋机制 + M3 决策引擎初步诊断
+
+## 来源
+
+- 路径：`docs/analysis/agent-sessions/04-guandan-mechanics.md`
+- 字符数：4639
+- 摄入日期：2026-05-28
+
+## 关键内容
+
+### 掼蛋核心规则
+
+- **进贡/还贡/抗贡**：第二副起，末游向头游进贡
+- **双上(头+二)**：升 3 级，是胜负关键
+- **三层结构**：一圈出牌 → 一副牌（含进贡还贡多圈）→ 一局（2 到 A 双上）
+- **升级规则**：双上 +3、头三 +2、头末 +1、无头不升
+
+### 22 副对局关键发现
+
+- lalala 包揽头游+二游（系统性配合）
+- M3/M1 总拿三游+末游（**结构性失败**）
+
+### M3 五大 Bug 初步识别
+
+| Bug | 描述 |
+|------|------|
+| Bug 1 | action 下标错误 [1] vs [-1] 导致 TypeError 被静默捕获 |
+| Bug 2 | 无残局两手组合分析（≤12 张时） |
+| Bug 3 | （详见原文档） |
+| Bug 4 | 无队友协作策略（只检查是否控场，不主动传牌/压制） |
+| Bug 5 | 炸弹策略消极（pass_num≥5 才考虑，主动几乎不用） |
+
+## 关联页面
+
+- [[engine-m3]]
+- [[gua-005]]
+- [[concepts/strategic-layers|战略三层]]
+- [[concepts/double-up-mechanic|双上机制]]

@@ -1,0 +1,49 @@
+---
+type: source-summary
+title: "Batch30 · 20 局 P0 触发与胜率验证"
+sources:
+  - docs/analysis/agent-sessions/batch30_p0_trigger_vs_winrate_20260528.md
+tags:
+  - source
+  - batch
+  - p0-verification
+status: current
+related_gua:
+  - GUA-001
+  - GUA-002
+  - GUA-003
+  - GUA-004
+date: 2026-05-28
+---
+
+# Batch30 · 20 局 P0 触发与胜率验证（2026-05-28）
+
+## 来源
+
+- 路径：`docs/analysis/agent-sessions/batch30_p0_trigger_vs_winrate_20260528.md`
+- 字符数：3238
+- 摄入日期：2026-05-28
+- 平台：`offline_platform v1006`
+
+## 验证结果（关键负面证据）
+
+| 指标 | 结果 |
+|------|------|
+| 局数 | 20 局（NUM_GAMES=30 实际产出 20，见 [[concepts/batch-evaluation]]） |
+| 我方胜场 | **0/20** |
+| yf1 PASS 率 | 49.1%（基线 50.7%，无显著下降） |
+| P0-① 触发 | 0 次 |
+| P0-② 触发 | 8 次（yf1=4, yf2=4，对称） |
+| P0-③ 触发 | 0 次 |
+| P0-④ 触发 | 0 次（未在 M1 激活） |
+
+## 关键结论
+
+> **P0 改进未解决 0% 胜率问题** —— 必须重新审视根因归因。
+
+## 关联页面
+
+- [[synthesis/p0-verification-20260528]]
+- [[synthesis/m1-vs-lalala-zero-percent]]
+- [[gua-001]]~[[gua-004]]
+- [[concepts/batch-evaluation]]

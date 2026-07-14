@@ -1,0 +1,51 @@
+---
+type: source-summary
+title: "P0 四项实施与集成验证"
+sources:
+  - docs/analysis/agent-sessions/07-p0-implementation-verification.md
+tags:
+  - source
+  - p0
+  - implementation
+status: current
+related_gua:
+  - GUA-001
+  - GUA-002
+  - GUA-003
+  - GUA-004
+date: 2026-05-28
+---
+
+# 07 · P0 四项实施与集成验证
+
+## 来源
+
+- 路径：`docs/analysis/agent-sessions/07-p0-implementation-verification.md`
+- 字符数：5908
+- 摄入日期：2026-05-28
+
+## P0 四项实施
+
+| 编号 | 模块 | 行数 | 状态 |
+|------|------|------|------|
+| P0-① | `src/decision/history_tracker.py` | 265 行 | 已实现 |
+| P0-② | `src/decision/endgame_planner.py` (threshold=12 张) | 229 行 | 已实现 |
+| P0-③ | `src/decision/teammate_opportunity_finder.py` (集成到 4 个 PassiveHandler) | 176 行 | 已实现 |
+| P0-④ | `src/decision/bomb_strategy.py`（新增 4 条规则） | — | V5/V6 可激活 |
+
+## 关联提交
+
+- `2a918f3` — history_tracker 落地
+- `6a5ce60` — endgame_planner 集成
+- `f4de5b7` — teammate_opportunity_finder 集成
+
+## 关联页面
+
+- [[gua-001]]
+- [[gua-002]]
+- [[gua-003]]
+- [[gua-004]]
+- [[concepts/history-tracking]]
+- [[concepts/two-hand-endgame-planning]]
+- [[concepts/team-coordination]]
+- [[concepts/active-bomb-control]]

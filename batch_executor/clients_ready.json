@@ -1,0 +1,18 @@
+{
+  "yf1_v7": {
+    "connected": true,
+    "timestamp": "2026-07-08T23:08:33.119789"
+  },
+  "client3": {
+    "connected": true,
+    "timestamp": "2026-07-08T23:08:33.256274"
+  },
+  "yf2_v7": {
+    "connected": true,
+    "timestamp": "2026-07-08T23:08:35.060807"
+  },
+  "client4": {
+    "connected": true,
+    "timestamp": "2026-07-08T23:08:44.202951"
+  }
+}

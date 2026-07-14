@@ -1,0 +1,15 @@
+{
+  "provider": "anthropic",
+  "model": "abab7-chat",
+  "api_key": "sk-cp-x8vOMYwSJwtCqaT4lwY3VH2JOu2JjW_ynrnC7-aFls3gCrDyaqUOrzzIH09d-X7yV91KbwUOdnceNPmt2K2kzb_LRq1RSs_iUq8tFi0uSit0zKoWDVVGW_A",
+  "base_url": "https://api.minimaxi.com/anthropic",
+  "platforms": {
+    "Agnes": "https://apihub.agnes-ai.com/v1 (模型: agnes-2.0-flash) — 免费，OpenAI 兼容",
+    "MiniMax": "https://api.minimaxi.com/anthropic (模型: abab7-chat) — Anthropic 兼容，provider 改 anthropic",
+    "DeepSeek": "https://api.deepseek.com (模型: deepseek-chat) — OpenAI 兼容",
+    "智谱GLM": "https://open.bigmodel.cn/api/paas/v4 (模型: glm-4-plus) — OpenAI 兼容",
+    "Qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1 (模型: qwen-max) — OpenAI 兼容",
+    "OpenAI": "https://api.openai.com/v1 (模型: gpt-4o) — OpenAI 兼容"
+  },
+  "max_source_chars": "500000"
+}
