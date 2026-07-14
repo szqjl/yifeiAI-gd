@@ -64,7 +64,6 @@ def _resolve_server_exe(platform: str) -> Path:
     if platform == "openguandan":
         if _V8_SERVER_EXE.exists():
             return _V8_SERVER_EXE
-        # 兼容 jar 启动
         jar = project_root / "offline_platform" / "openguandan_latest" / "guandan-java-1.0.0.jar"
         if jar.exists():
             return jar

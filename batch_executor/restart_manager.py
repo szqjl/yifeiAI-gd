@@ -261,9 +261,12 @@ class RestartManager:
                     return None
                 
                 # 构建启动命令
-                # V8 (openguandan): guandan.exe 不含 game_count 参数，局数由 CREATE_ROOM 传递
+                # V8 (openguandan): guandan.exe/jar 不含 game_count 参数，局数由 CREATE_ROOM 传递
                 if platform == "openguandan":
-                    command = [server_path]
+                    if str(server_path).endswith(".jar"):
+                        command = ["java", "-jar", server_path]
+                    else:
+                        command = [server_path]
                 else:
                     command = [server_path, str(game_count)]
                 
@@ -478,6 +481,7 @@ class RestartManager:
         client_scripts: List[str],
         wait_between: int = 3,  # 3 seconds between clients to ensure connection order
         platform: str = "v1006",
+        games: int = 1,  # V8: 局数，传给 yf1_v8 CREAT_ROOM.round
     ) -> List[subprocess.Popen]:
         """
         重启所有客户端
@@ -489,6 +493,7 @@ class RestartManager:
             client_scripts: 客户端脚本路径列表
             wait_between: 每个客户端之间的等待时间（秒），默认3秒
             platform: 平台类型（v1006/openguandan），V8: openguandan 时自动追加 --platform/--role
+            games: V8 局数（仅 platform=openguandan 时用于 yf1_v8 --games 参数）
             
         Returns:
             成功启动的客户端进程列表
@@ -534,7 +539,7 @@ class RestartManager:
                 script_basename = os.path.basename(abs_script_path)
                 if platform == "openguandan":
                     if script_basename == "yf1_v8.py":
-                        platform_args = ["--platform", "openguandan", "--role", "creator"]
+                        platform_args = ["--platform", "openguandan", "--role", "creator", "--games", str(games)]
                     elif script_basename == "yf2_v8.py":
                         platform_args = ["--platform", "openguandan", "--role", "joiner"]
                     elif script_basename == "v8_lalala_adapter.py":

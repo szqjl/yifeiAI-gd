@@ -500,8 +500,9 @@ class BatchExecutor:
     def _get_game_records_stats(self) -> GameRecordsStats:
         if self._game_records_files_baseline is None:
             return GameRecordsStats()
+        records_dir = self.project_root / ("game_records_v8" if self.platform == "openguandan" else "game_records")
         return _scan_game_records_stats(
-            self.project_root / "game_records",
+            records_dir,
             self._game_records_files_baseline,
         )
 
@@ -844,6 +845,9 @@ class BatchExecutor:
                 # 计算本批次要执行的场数
                 remaining = state.target_games - state.completed_games
                 batch_games = min(remaining, self.validator.single_run_limit)
+                if self.platform == "openguandan":
+                    # 规避 OpenGuanDan 服务端 bug：round>1 时残局可能触发死循环
+                    batch_games = 1
                 
                 self.logger.info(f"开始批次 {state.current_batch}，执行 {batch_games} 场游戏")
                 self._write_current_batch_context(state, batch_games)
@@ -914,6 +918,7 @@ class BatchExecutor:
                 client_processes = self.restart_manager.restart_clients(
                     self.client_scripts,
                     platform=self.platform,
+                    games=batch_games,
                 )
                 
                 if not client_processes:
@@ -963,11 +968,10 @@ class BatchExecutor:
                 server_name = os.path.basename(self.server_path)
                 self.logger.info(f"等待服务器完成 {batch_games} 场游戏...")
                 
-                # 掼蛋单局（含多副升级）常超过 5 分钟；过短会误杀仍在出牌的服务器。
-                # 每场按 12 分钟估算，整批至少 3 分钟；可按环境变量调大（见 README）。
-                _min_batch_seconds = int(os.environ.get("BATCH_EXECUTOR_MIN_BATCH_SECONDS", "180"))
+                # V8 OpenGuanDan 单局约 1 分钟；按 2 分钟估算留余量
+                _min_batch_seconds = int(os.environ.get("BATCH_EXECUTOR_MIN_BATCH_SECONDS", "60"))
                 _seconds_per_game_estimate = int(
-                    os.environ.get("BATCH_EXECUTOR_SECONDS_PER_GAME_ESTIMATE", str(12 * 60))
+                    os.environ.get("BATCH_EXECUTOR_SECONDS_PER_GAME_ESTIMATE", str(2 * 60))
                 )
                 estimated_timeout = max(_min_batch_seconds, batch_games * _seconds_per_game_estimate)
                 self.logger.info(
@@ -1055,6 +1059,45 @@ class BatchExecutor:
                                 )
                             else:
                                 low_client_strikes = 0
+                        
+                        # V8 死循环检测：openguandan guandan.exe 残局可能无限 loop
+                        if self.platform == "openguandan":
+                            _v8_deadline = start_time + 5 * 60  # 5分钟无产出视为死循环
+                            if time.time() > _v8_deadline:
+                                _v8_current_stats = self._get_game_records_stats()
+                                if _v8_current_stats.paired_match_key == batch_start_stats.paired_match_key:
+                                    self.logger.warning(
+                                        "V8 死循环检测：%d 秒内无新 game_record，"
+                                        "疑似 guandan.exe 残局死循环，终止服务器",
+                                        int(time.time() - start_time),
+                                    )
+                                    server_terminated_by_kill = True
+                                    try:
+                                        server_process.kill()
+                                    except Exception:
+                                        pass
+                                    break
+                        
+                        # V8: OpenGuanDan 服务器不会自动退出，通过 game_records 检测完成
+                        if self.platform == "openguandan" and time.time() - start_time > 30:
+                            _v8_now_stats = self._get_game_records_stats()
+                            if _v8_now_stats.paired_match_key > batch_start_stats.paired_match_key:
+                                # 有新牌谱落盘 → 平稳 3s 确认后 kill 服务器
+                                if not hasattr(self, '_v8_done_since'):
+                                    self._v8_done_since = time.time()
+                                elif time.time() - self._v8_done_since >= 3:
+                                    self.logger.info(
+                                        "V8 检测到新 game_record (match_key %d→%d)，服务器完成，主动终止",
+                                        batch_start_stats.paired_match_key,
+                                        _v8_now_stats.paired_match_key,
+                                    )
+                                    try:
+                                        server_process.kill()
+                                    except Exception:
+                                        pass
+                                    break
+                            elif hasattr(self, '_v8_done_since'):
+                                del self._v8_done_since
                         
                         # 检查进程是否已结束
                         return_code = server_process.poll()

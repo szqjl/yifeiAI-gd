@@ -304,14 +304,15 @@ class LalalaWebsocketsClient:
                 except (ValueError, SyntaxError):
                     pass
 
-        # V8: 新服务器 gameResult 用 victory/victoryRank，LALALA 期望 victoryNum/draws
-        if data.get("stage") == "gameResult" and "victory" in data and "victoryNum" not in data:
-            vic = data["victory"]  # 0=team0(座0+2)胜, 1=team1(座1+3)胜
-            if vic == 0:
-                data["victoryNum"] = [1, 0, 1, 0]
-            else:
-                data["victoryNum"] = [0, 1, 0, 1]
-            data["draws"] = [0, 0, 0, 0]
+        # V8: 新服务器 gameResult 格式兼容
+        # ① victory (int 0/1) → victoryNum (list)，补 draws
+        # ② victoryNum 已有但 draws 缺失（V8 服务端直发 victoryNum 不带 draws）
+        if data.get("stage") == "gameResult":
+            if "victory" in data and "victoryNum" not in data:
+                vic = data["victory"]  # 0=team0(座0+2)胜, 1=team1(座1+3)胜
+                data["victoryNum"] = [1, 0, 1, 0] if vic == 0 else [0, 1, 0, 1]
+            if "draws" not in data:
+                data["draws"] = [0, 0, 0, 0]
 
         return self.convert_card_format(data)
 
@@ -345,6 +346,18 @@ class LalalaWebsocketsClient:
                         self._game_ready_marked = True
                         mark_game_ready(self.user_info)
                         print(f"[{self.user_info}] ✓ 首条消息到达，game_ready", flush=True)
+                    
+                    # V8: 在 _preprocess_message 之前提取原始 actionList
+                    #     （convert_card_format 会把 "SB"→["S","B"]，发给服务器的 PLAY 必须用原始格式）
+                    #     同时兼容嵌套 {"type":"act","data":{"actionList":[...]}} 和扁平格式
+                    _raw_nested = data.get("data")
+                    if isinstance(_raw_nested, dict) and "actionList" in _raw_nested:
+                        _orig_action_list = [list(a) if isinstance(a, list) else a for a in _raw_nested["actionList"]]
+                    elif "actionList" in data:
+                        _orig_action_list = [list(a) if isinstance(a, list) else a for a in data["actionList"]]
+                    else:
+                        _orig_action_list = []
+                    
                     data = self._preprocess_message(data)
                     msg_type = data.get("type", "")
 
@@ -365,8 +378,8 @@ class LalalaWebsocketsClient:
                     if msg_type != "act":
                         continue
 
-                    # V8: 缓存 actionList/stage
-                    al = data.get("actionList", [])
+                    # V8: 缓存 actionList/stage（用原始格式，不是 convert_card_format 后的）
+                    al = _orig_action_list or data.get("actionList", [])
                     self._last_action_list = al
                     stage = data.get("stage", "")
                     self._last_stage = stage
@@ -376,14 +389,12 @@ class LalalaWebsocketsClient:
 
                     try:
                         act_index = await asyncio.to_thread(self._decide_sync, data)
-                    except IndexError as e:
-                        print(f"[ERROR] IndexError in state.parse: {e}", flush=True)
-                        if data.get("curAction") and len(data["curAction"]) > 2:
-                            print(f"[ERROR] curAction[2] type: {type(data['curAction'][2])}", flush=True)
-                        raise
+                    except Exception as e:
+                        print(f"[{self.user_info}] _decide_sync 异常: {type(e).__name__}: {e}", flush=True)
+                        act_index = None
 
                     if act_index is None:
-                        print(f"[{self.user_info}] actionList 缺失，回退 actIndex=0", flush=True)
+                        print(f"[{self.user_info}] actionList 缺失或解析异常，回退 actIndex=0 (PASS)", flush=True)
                         act_index = 0
 
                     print(f"[{self.user_info}] 选择动作: {act_index}", flush=True)
@@ -391,6 +402,10 @@ class LalalaWebsocketsClient:
                     # V8: 发送完整 action 三元组
                     if self.platform == "openguandan":
                         act_tuple = al[act_index] if act_index < len(al) else ["PASS", "PASS", ["PASS"]]
+                        # 诊断：打印卡牌格式（应为 "SB" 字符串，非 ["S","B"] 列表）
+                        _cards = act_tuple[2] if len(act_tuple) > 2 and act_tuple[2] != "PASS" else None
+                        if _cards:
+                            print(f"[{self.user_info}] [V8 OUT] act={act_tuple[0]}/{act_tuple[1]} cards={_cards[:3]}", flush=True)
                         if stage == "tribute":
                             msg_out = {
                                 "type": "TRIBUTE",

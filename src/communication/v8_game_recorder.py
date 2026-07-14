@@ -369,6 +369,29 @@ def process_platform_game_end_notify(
         filled = game_recorder.backfill_victory_num(victory_num)
         if logger and filled:
             logger.info("✓ victoryNum 已回填 %s 条 game_records", filled)
+        # 战绩汇总打印
+        if logger and len(victory_num) >= 4:
+            vn = [int(v) for v in victory_num[:4]]
+            v_rank = result.get("victoryRank") or data.get("victoryRank")
+            vict = result.get("victory") if result.get("victory") is not None else data.get("victory")
+            # 判定胜负：victoryRank 优先（含 "A" 的队胜），否则用 victory
+            if v_rank and isinstance(v_rank, list) and len(v_rank) >= 2:
+                if v_rank[0] == "A":
+                    winner = "V8 队(座0+2)"
+                elif v_rank[1] == "A":
+                    winner = "LALALA(座1+3)"
+                else:
+                    winner = None
+            elif vict is not None:
+                winner = "V8 队(座0+2)" if int(vict) == 0 else "LALALA(座1+3)"
+            else:
+                winner = None
+            logger.info("=" * 50)
+            logger.info("🏆 最终等级: V8=%s LALALA=%s | 各席副胜: 座0=%d 座1=%d 座2=%d 座3=%d",
+                        v_rank[0] if v_rank else "?", v_rank[1] if v_rank else "?", *vn)
+            if winner:
+                logger.info("🥇 局胜者: %s", winner)
+            logger.info("=" * 50)
 
 
 def sync_pass_counters(
