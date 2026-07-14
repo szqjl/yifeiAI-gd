@@ -1,8 +1,8 @@
-# V7 Agent 启动指南（Bootstrap）
+# V7 / V8 Agent 启动指南（Bootstrap）
 
 > **工作流真源（步骤 / 格式 / Skill）**：[`工作流.md`](./工作流.md)  
 > **新 Agent 第一句**：[`AGENT_FIRST_MESSAGE.md`](./AGENT_FIRST_MESSAGE.md)  
-> 本文件 = V7 **深读**（环境、批跑恢复、命令大全）；新会话优先 **工作流 WF-01**，不必全文通读。
+> 本文件 = V7 / V8 **深读**（环境、批跑恢复、命令大全）；新会话优先 **工作流 WF-01**，不必全文通读。
 
 ---
 
@@ -30,12 +30,13 @@
 | **Python** | 项目自带 venv（Windows Python 3.13） |
 | **离线平台** | `guandan_offline_v1006.exe N`（N = 局数，非副数） |
 | **WebSocket** | `ws://127.0.0.1:23456/game/{user_info}` |
-| **当前分支** | `v7-dev` |
+| **当前分支** | `v7-dev`（V7 回退基线）/ **`v8-dev`**（OpenGuanDan 新版迁移） |
 | **引擎** | 深度学习胜率引擎 `src/decision/ultimate_win_rate_engine_v7.py` |
 | **客户端** | `yf1_v7.py` / `yf2_v7.py` |
+| **新旧平台** | v7-dev 对接 `guandan_offline_v1006.exe`（TCP Socket）；v8-dev 对接 `guandan.exe`（WebSocket `ws://127.0.0.1:8181`） |
 
-> **V7 是实验线**，与 `m-dev`（M 系列硬编码规则引擎）独立开发。  
-> 提交必须推 `git push origin v7-dev`，**绝不混推 m-dev**。
+> **V7 是实验线**，`v8-dev` 从 `v7-dev`（commit `2904c08`）复制，迁移新版 OpenGuanDan 服务器。V7/V8 与 `m-dev`（M 系列硬编码规则引擎）独立开发。  
+> 提交必须推 `git push origin v7-dev` 或 `git push origin v8-dev`，**绝不混推 m-dev**。
 
 ---
 
@@ -155,7 +156,7 @@ replay / 异常扫描 / 批跑结果
 
 ### 动手前
 
-- [ ] 当前分支：`git branch -vv` → **`v7-dev`**（非 main，非 m-dev）
+- [ ] 当前分支：`git branch -vv` → **`v7-dev`** 或 **`v8-dev`**（非 main，非 m-dev）
 - [ ] 已 `git status` / `git diff --stat`，**未** `git add .` 盲加
 - [ ] 未纳入 Layer 2：`v7_vs_lalala_scores.json`、`game_records/`、`models/*.pth`、`logs/`
 
@@ -163,8 +164,8 @@ replay / 异常扫描 / 批跑结果
 
 | 项 | 要求 |
 |----|------|
-| 前缀 | `[V-nn-v7]` / `[docs]` |
-| 推送 | **`git push origin v7-dev`** |
+| 前缀 | `[V-nn-v7]` / `[V-nn-v8]` / `[docs]` |
+| 推送 | **`git push origin v7-dev`** 或 **`git push origin v8-dev`** |
 | 禁止 | 推 `main` 或 `m-dev`、`--force`、跳过 hooks |
 
 ---
@@ -211,26 +212,28 @@ replay / 异常扫描 / 批跑结果
 ## 7. 常用命令
 
 > **⚠️ Python 环境**：本机**无 venv**，直接用 `python` 命令（系统 Python 3.14.4）。
-> **⚠️ 分支**：M3 / V7 批跑**均可在 v7-dev 直接跑**（M3 客户端/引擎 import 测试通过）。
+> **⚠️ 分支**：M3 / V7 批跑**均可在 v7-dev 和 v8-dev 直接跑**（M3 客户端/引擎 import 测试通过）。v8-dev 代码与 v7-dev 一致，仅文档有差异。
 > **⚠️ 数据目录分离**：M3 批跑 → `game_records/`，V7 批跑 → `game_records_v7/`（训练只读 V7 数据）。
 
 ```bash
 # 切分支
-git checkout -f v7-dev
+git checkout -f v7-dev     # V7 回退基线（v1006 旧平台）
+git checkout -f v8-dev     # V8 开发分支（OpenGuanDan 新平台）
 
 # 推送
 git push origin v7-dev
+git push origin v8-dev
 
 # V7 启动
 START_V7_GUI.bat         # Windows GUI 对战
 START_V7_AUTO.bat        # 自动启动服务器+客户端
 
-# V7 vs lalala 批跑（当前分支 v7-dev）
+# V7 vs lalala 批跑（v7-dev 或 v8-dev 均可跑）
 python scripts\launchers\v7\run_v7_vs_lalala_games.py --games 3
 python scripts\launchers\v7\run_v7_vs_lalala_games.py --games 12
 # 战绩文件：v7_vs_lalala_scores.json
 
-# M3 vs lalala 批跑（当前分支 v7-dev，直接跑）
+# M3 vs lalala 批跑（v7-dev 或 v8-dev 均可跑）
 python scripts\launchers\m\run_m3_vs_lalala_games.py --games 3
 python scripts\launchers\m\run_m3_vs_lalala_games.py --games 12
 # 战绩文件：m3_vs_lalala_scores.json

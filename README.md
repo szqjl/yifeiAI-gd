@@ -319,15 +319,15 @@ if hour == 12:  # ❌ 错误，应该从系统时间获取
 ### 当前分支
 
 - **`main`**: 主分支，用于最终合并和发布
-- **`m-dev`**: M1 系列硬编码规则引擎分支（本地开发）
-  - 包含：`yf1_m1.py`, `yf2_m1.py`, `rule_based_decision_engine_m1.py`
-  - 特点：全新的硬编码规则引擎，5阶段细分路由
-- **`m1-dev-clean`**: M1 系列干净分支（已推送，推荐用于训练）
-  - 轻量级干净分支，不含模型文件和游戏记录
-  - 适合远程训练和协作
-- **`v6-dev`**: V6 系列优化分支
-  - 包含：`yf1_v6.py`, `yf2_v6.py` 及相关优化
-  - 特点：基于现有架构的优化版本
+- **`m-dev`**: M3 硬编码规则引擎分支（本地开发）
+  - 包含：`yf1_m3.py`, `yf2_m3.py`, `rule_based_decision_engine_m3.py`
+  - 特点：硬编码规则引擎，5阶段细分路由
+- **`v7-dev`**: V7 神经网络引擎（**回退基线**）
+  - 对接旧离线平台 `guandan_offline_v1006.exe`（TCP Socket 协议）
+  - 包含：`ultimate_win_rate_engine_v7.py`、`dynamic_grouping_optimizer.py`
+- **`v8-dev`**: V8 分支（从 `v7-dev` 复制，commit `2904c08`）
+  - 对接新版 OpenGuanDan 服务器 `guandan.exe`（WebSocket `ws://127.0.0.1:8181`）
+  - 新平台资源：`offline_platform/openguandan_latest/`
 
 > V6 系列已归档（tag `archive/v6-dev-closed`），`v6-dev` 分支已删除。详见 [M/V 治理方案](docs/governance/M-V-Series-治理方案.md)。
 

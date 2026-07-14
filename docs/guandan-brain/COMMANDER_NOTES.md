@@ -2,7 +2,19 @@
 
 > 本文件是指挥官（Hermes CLI）的内部思考记录，供跨会话使用。不维护合并稿，每次开工前独立撰写或更新。
 
-更新时间：2026-05-22
+更新时间：2026-07-14
+
+---
+
+## 分支现状速览（2026-07-14）
+
+| 分支 | 定位 | 离线平台 |
+|------|------|----------|
+| `m-dev` | M3 硬编码规则引擎（当前开发） | v1006 `guandan_offline_v1006.exe` |
+| `v7-dev` | V7 神经网络引擎（**回退基线**） | v1006 `guandan_offline_v1006.exe`（TCP Socket） |
+| `v8-dev` | V8 分支（从 v7-dev 复制，commit `2904c08`） | 新版 `guandan.exe`（WebSocket `ws://127.0.0.1:8181`） |
+
+> v8-dev 代码与 v7-dev 一致，正等待 OpenGuanDan 新版服务器对接指令。新平台资源：`offline_platform/openguandan_latest/`。
 
 ---
 

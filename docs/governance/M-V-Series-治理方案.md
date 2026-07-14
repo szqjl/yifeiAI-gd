@@ -55,7 +55,8 @@ V 系列不是 M 的简单版本号延续，而是 **挂在 M 上的决策与学
 
 | 代号 | 倾向 | 说明 |
 |------|------|------|
-| v7 | 胜率引擎 + 模型推理 | 分支 `v7-dev`，与 v6 **不同阶梯** |
+| v7 | 胜率引擎 + 模型推理 | 分支 `v7-dev`，对接 v1006 旧离线平台，**回退基线** |
+| v8 | 对接 OpenGuanDan 新版 | 分支 `v8-dev`，从 `v7-dev` 复制（commit `2904c08`），迁移到新版 WebSocket 服务器 `guandan.exe` |
 
 ```mermaid
 flowchart TB
@@ -66,7 +67,7 @@ flowchart TB
         V4[v4] --> V5[v5] --> V6[v6 归档]
     end
     subgraph VN["V-nn · Layer 1"]
-        V7[v7]
+        V7[v7] --> V8[v8]
     end
     M3 --> VL
     M3 --> VN

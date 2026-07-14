@@ -10,7 +10,7 @@
 
 ## 项目一句
 
-掼蛋 AI 客户端（南邮 v1006）；**改 AI 行为真源** = `docs/guandan-brain/`（ISSUES、ITERATIONS、EVAL）。当前活跃：**v7-dev**（V7/组牌）与 **m-dev**（M3 交付）；**M1 frozen**；队 KPI **只看 M3 批跑**。
+掼蛋 AI 客户端（南邮 v1006 / OpenGuanDan）；**改 AI 行为真源** = `docs/guandan-brain/`（ISSUES、ITERATIONS、EVAL）。当前活跃：**v8-dev**（OpenGuanDan 新版服务器迁移，从 v7-dev 复制）、**v7-dev**（V7/组牌，v1006 回退基线）与 **m-dev**（M3 交付）；**M1 frozen**；队 KPI **只看 M3 批跑**。
 
 ---
 

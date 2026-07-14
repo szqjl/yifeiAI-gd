@@ -7,7 +7,7 @@
 ## 默认第一句（推送任务）
 
 ```text
-提交推送前先完成 docs/guandan-brain/AGENT_PUSH_CHECKLIST.md 全部勾选：必读 AGENTS.md § 分支说明/§ 治理要点/§ Git 提交与推送规则，按前缀 commit，最后 git push origin m-dev（或 v7-dev）。
+提交推送前先完成 docs/guandan-brain/AGENT_PUSH_CHECKLIST.md 全部勾选：必读 AGENTS.md § 分支说明/§ 治理要点/§ Git 提交与推送规则，按前缀 commit，最后 git push origin m-dev（或 v7-dev / v8-dev）。
 ```
 
 ---
@@ -20,7 +20,7 @@
 
 ### B. 环境与范围
 
-- [ ] 当前分支：`git branch -vv` → **`m-dev`** 或 **`v7-dev`**（非 main）
+- [ ] 当前分支：`git branch -vv` → **`m-dev`** 或 **`v7-dev`** 或 **`v8-dev`**（非 main）
 - [ ] 已 `git status` / `git diff --stat`，**未** `git add .` 盲加
 - [ ] 未纳入 Layer 2：`game_scores_m2.json`、`game_records/`、`models/*.pth`、`logs/`、大 replay
 
@@ -35,8 +35,8 @@
 
 ### E. Commit 与推送
 
-- [ ] Commit 标题含治理 §8.1 前缀：`[docs]` / `[M-m2]` / `[M-m3]` …
-- [ ] `git push origin m-dev`（**非** `origin main`）
+- [ ] Commit 标题含治理 §8.1 前缀：`[docs]` / `[M-m2]` / `[M-m3]` / `[V-nn-v7]` / `[V-nn-v8]` …
+- [ ] `git push origin m-dev` 或 `git push origin v7-dev` 或 `git push origin v8-dev`（**非** `origin main`）
 - [ ] GitHub 镜像（可选）：`scripts/tools/sync_github_mirror.ps1`，失败只报告、不 force
 
 ### F. 向人类回报

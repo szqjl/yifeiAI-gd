@@ -210,4 +210,5 @@ ecord_decision / C 仅文档说明。 | pytest（待定）| 待 yf_replay.py 读
 | 2026-07-10 | v7-gua141-q1-sort-card-strength | **GUA-141** ✅ | **Q1 排序第二键：张数多 → 牌力大**。`_sort_by_recapture_first` + 传 `curRank`；GUA-122 非 wild 级牌单张提到最前。锚点：有王/级牌跟压 Single 不再先出 4 炸。 | `endgame_decide.py`、`test_gua141_*` | pytest 141+122+103+100 **15/15** ✅ |
 
 | 2026-07-10 | v7-gua142-enemy-six-structure-lead | **GUA-142** ✅ | **敌剩6**：`endgame_rule[6]` 推 ThreePair/TwoTrips/Straight/Trips、`banned=[]`；Q1 自由领出整组三连对/钢板且剩 SF/炸冲刺路径优先。锚点步50 出 ThreePair 非 Trips/9。 | `endgame_preprocessor.py`、`endgame_decide.py`、`test_gua142_*`、`GUA-142-completion` | pytest 142+100+141+122+103 **18/18** ✅ |
+| 2026-07-14 | v8-dev 分支创建 | **Infra** | **`v8-dev` 分支从 `v7-dev`（commit `2904c08`）复制**。v7-dev 保留对接旧离线平台 `guandan_offline_v1006.exe` 作为回退基线；v8-dev 将全面迁移到新版 OpenGuanDan 服务器 `guandan.exe`（WebSocket 协议，`ws://127.0.0.1:8181`）。新平台资源已拉取至 `offline_platform/openguandan_latest/`。 | `offline_platform/openguandan_latest/`、`docs/governance/M-V-Series-治理方案.md` §2.2.2 | 等待迁移指令 |
 
