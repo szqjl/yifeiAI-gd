@@ -4,5 +4,17 @@
   },
   "files.encoding": "utf8",
   "editor.defaultFormatter": null,
-  "xml.format.enabled": true
+  "xml.format.enabled": true,
+  "files.watcherExclude": {
+    "**/game_records*/**": true,
+    "**/logs/**": true,
+    "**/wiki/**": true,
+    "**/data/**": true,
+    "**/output/**": true
+  },
+  "search.exclude": {
+    "**/game_records*/**": true,
+    "**/logs/**": true,
+    "**/wiki/**": true
+  }
 }

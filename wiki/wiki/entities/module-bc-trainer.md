@@ -1,36 +1,41 @@
+```markdown
 ---
 type: entity-module
-title: "BC 训练器模块（V7，已判定路径失败）"
+title: "BC 训练器（bc_trainer.py）"
 sources:
-  - docs/guandan-brain/MOCs/V7-Development.md
+  - docs/guandan-brain/ITERATIONS.md
 tags:
   - module
-  - v7
   - bc
-  - dead-end
+  - training
 status: current
 related_gua:
-  - GUA-059
-  - GUA-060
-date: 2026-06-18
+  - GUA-064
+date: 2026-07-15
 ---
 
-# BC 训练器模块
+# BC 训练器
 
-## 模块身份
-- **类型**：模仿学习训练器
-- **引擎**：wiki/entities/engine-v7.md
-- **状态**：🚫 路径已死（GUA-060 关闭）
+## 文件
+- `bc_trainer.py`
+- `bc_dataset.py`
+- `train_bc_v7.py`
 
-## 文件清单
-- `src/v/nn/training/bc_dataset.py` — 数据集
-- `src/v/nn/training/bc_trainer.py` — 训练器
+## 职责
+**行为克隆（Behavior Cloning）训练管线**：
+- 从人类/规则对局数据学习
+- 输出 `bc_model_v2` / `bc_model_v3.pth`
+- 保存到 `models/v-nn/`
 
-## ⚠️ 关闭原因
-- BC argmax collapse（见 wiki/concepts/bc-argmax-collapse.md）
-- 理论必然，非工程问题
+## 状态
+**BC 路线已死**（GUA-064）：
+- 2048 维输出仅用 2 维（argmax collapse）
+- 5 次批跑 0/12 一致
+- 需转向 GUA-039b 自对弈（RL）
 
-## 关联页面
-- [[gua-060]]
-- wiki/concepts/bc-argmax-collapse.md
-- [[modular-architecture-gua061]]（替代方向）
+## 关联
+- [[bc-argmax-collapse]] — 核心失败原因
+- [[gua-064]] — argmax collapse GUA
+```
+
+---

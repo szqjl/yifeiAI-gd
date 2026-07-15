@@ -1,18 +1,20 @@
 ---
 type: source-summary
-title: "GUA-036 完成定义摘要 · 控权压顺 + 接风配合（M3 guard）"
+title: "GUA-036 completion · 控权压顺 + 接风配合 M3 guard"
 sources:
   - docs/guandan-brain/issues/GUA-036-completion.md
 tags:
-  - gua
+  - source-summary
+  - gua-036
   - m3
-  - endgame
-  - control
-  - team-coordination
-  - wind
+  - guard
+  - 控权
+  - 接风
 status: current
 related_gua:
   - GUA-036
+  - GUA-026
+  - GUA-029
   - GUA-031
   - GUA-032
   - GUA-034
@@ -20,63 +22,41 @@ related_gua:
 date: 2026-06-17
 ---
 
-# GUA-036 完成定义摘要
+# GUA-036 completion · 控权压顺 + 接风配合 M3 guard
 
-## 概述
+## 摘要
 
-GUA-036 是 M3 末段博弈的**同级扩展**（与 [[GUA-035]] 并列），由 **batch7 round38 复盘**驱动。包含 4 个子规则：
+GUA-036 是 M3 guard 系列条目，来源 batch7 round38 复盘。它是 P-F02（队友配合）的扩展切片，包含四项子规则。
 
-## 子规则详解
+## 完成 ID
 
-### CTRL-P01：被动压敌顺
+- CTRL-P01 — 控权压敌顺的最小够用原则
+- CTRL-P02 — 阶段路由的夺权优先（与 STG-D01 协作）
+- WIND-P01 — 接风禁拆 trips / 钢板 / 炸弹成员
+- TEAM-P01 — 接风让道（与 GUA-031 PASS 边界耦合）
 
-- **触发**：`_Straight` `greaterPos` 属于对手
-- **动作**：用最小够用的牌压住对手的顺子
-- **关键约束**：**不前置要求** `combine_handcards['Straight']` 与 `action[-1]` 严格对齐
-- **影响**：延伸了 [[GUA-031]] 的边界——被动压敌顺不受结构对齐约束
+## 范围排除
 
-### CTRL-P02：被动夺权优先于 STG-D01
+- 整手组牌 → V5+-01/02
+- combine_handcards 重写
+- batch7 replay 逐步一致
 
-- **触发**：被动局面遇到 [[GUA-032]] CALC-M03 的 5/10 降权
-- **动作**：**降权不阻止被动夺权**
-- **原则**：夺权优先于 STG-D01（结构保护）
-- **影响**：[[GUA-032]] 的 CALC-M03 需要标注此例外
+## 关联 GUA
 
-### WIND-P01：接风禁拆
+- [[gua-026]] [[gua-029]] [[gua-031]] [[gua-032]] [[gua-034]] [[gua-035]]
 
-- **触发**：本方接风 + 队友仍在场
-- **动作**：**禁止**拆 `trips` / 钢板 / 炸弹的成员单张去接风
-- **目的**：保结构、保队友
+## 引用的原则
 
-### TEAM-P01：接风让道
+P-F02 / P-G01 / P-G02 / P-H04 / P-H06 / CG-T06 / STG-D01 / CALC-M03 / PASS-P02
 
-- **触发**：本方接风 + 队友是**末手**且手牌为 `Pair` / `Bomb`
-- **动作**：**优先不出**拆结构的对子
-- **目的**：让队友收官
+## 备注
 
-## 冲突解决
+本条目是 M3 guard 范式文档化的候选模板，建议在 [[engine-m3]] 页面作为典型示例引用。
 
-| 冲突点 | 优先级 |
-|--------|--------|
-| STG-D01（结构保护） vs CTRL-P01（夺权） | **夺权优先** |
-| WIND-P01（禁拆） vs 评分最高 | **禁拆优先** |
-| TEAM-P01（让道） vs 评分最高 | **让道优先**（仅限末手队友） |
+## 测试
 
-## 依赖关系
+`tests/test_m3_gua036.py`
 
-- **依赖 GUAs**：`GUA-026`、`GUA-029`、`GUA-031`、`GUA-032`、`GUA-034`、`GUA-035`
-- **关联回放**：`batch7 round38`
+## 入册日期
 
-## 关单口径
-
-> **pytest 构造态 + 回归通过即可关单**；不绑定具体 game_id
-
-## 关联页面
-
-- [[gua-036]] - GUA-036 实体页
-- [[gua-031]] - 队友让道边界（被延伸）
-- [[gua-032]] - CALC-M03（被标注例外）
-- [[gua-035]] - 同级扩展
-- [[control-press-straight]] - 控权压顺概念
-- [[wind-banned-dismantle]] - 接风禁拆概念
-- [[m3-endgame-guard]] - M3 末段博弈综合
+2026-06-01

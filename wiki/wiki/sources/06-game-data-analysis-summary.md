@@ -1,39 +1,31 @@
 ---
 type: source-summary
-title: "06 局数据分析摘要"
+title: "06-game-data-analysis - 摘要"
 sources:
   - docs/analysis/agent-sessions/06-game-data-analysis.md
 tags:
   - analysis
   - game-data
-  - session
+  - agent-session
 status: current
-related_gua:
-  - GUA-048
-  - GUA-049
-date: 2026-06-20
+related_gua: []
+date: 2026-07-15
 ---
 
-# 06 局数据分析摘要
+# 06-game-data-analysis - 摘要
 
-Agent 会话 #06 的局数据分析记录，主要涉及批跑卡顿与 game_ready 写盘 race condition 的根因定位。
+## 来源
+原始文件：`docs/analysis/agent-sessions/06-game-data-analysis.md`（1510 字符）
 
-## 关键发现
+## 核心内容
+Agent 会话 #06 的对局数据分析记录，针对具体对局数据进行解读、问题定位与经验总结。
 
-- **批跑 73s 卡顿**：双根因，详见 [[gua-048]]
-- **game_ready 写盘 race condition**：根因已锁定，详见 [[gua-049]]
+## 关键主题
+- 单局/单副对局数据切片
+- 异常牌局识别与根因初判
+- 局 ≠ 副 口径在数据解读中的体现
+- 后续分析方向
 
-## 关联 GUA
-
-- GUA-048：批跑 73s 卡顿双根因（P2）
-- GUA-049：game_ready 写盘 race condition 根因锁定（P1）
-
-## 相关页面
-
+## 关联页面
 - [[batch-evaluation]]
-- [[ISSUES-summary]]
-```
-
----
-
-## 批次 2：核心 P0 GUA 实体页
+- [[局≠副]]

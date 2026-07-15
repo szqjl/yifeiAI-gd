@@ -1,42 +1,70 @@
+```markdown
 ---
 type: concept
-title: "组牌引擎 v2 评分公式"
+title: "组牌引擎 v2 评分体系（5 维权重）"
 sources:
-  - docs/guandan-brain/ISSUES.md
-  - docs/guandan-brain/iterations/v7-grouping-v2-gua062.md
+  - docs/guandan-brain/ITERATIONS.md
 tags:
-  - v7
   - grouping
   - scoring
+  - v2
 status: current
 related_gua:
   - GUA-062
-date: 2026-06-19
+date: 2026-07-15
 ---
 
-# 组牌引擎 v2 评分公式
+# 组牌引擎 v2 评分体系（5 维权重）
 
-## 五维加权
-```
-score = 0.3 * bomb_score
-      + 0.3 * hand_count_score
-      + 0.1 * recovery_score
-      + 0.1 * flexibility_score
-      + 0.2 * de_singleton_score
-```
+## 评分维度
 
-### 维度说明
-| 维度 | 权重 | 含义 |
+`grouping_engine.py` v2 版本对每个候选组牌方案做 **5 维加权评分**：
+
+| 维度 | 权重 | 说明 |
 |------|------|------|
-| 炸弹 | 0.3 | 炸弹数量与价值 |
-| 手数 | 0.3 | 总手数（越少越好） |
-| 回收 | 0.1 | 兜底大牌评估（`_score_recovery_static`）|
-| 灵活 | 0.1 | 应对变化的灵活度 |
-| 去单化 | 0.2 | 减少单张，提升牌型结构 |
+| 炸弹 | 0.3 | 优先保留炸弹结构 |
+| 手数 | 0.3 | 减少出牌手数 |
+| 回收 | 0.1 | 利于下轮回收利用 |
+| 灵活 | 0.1 | 利于后续变化 |
+| 去单化 | 0.2 | 消除孤立单牌 |
 
-## 角色阈值
-按队友角色（主攻/超弱/助攻）调整各维度权重 — 例如超弱角色提高"回收"权重。
+总计 1.0。
+
+## 24 维评分变体
+
+早期版本为 4 维评分（炸弹 0.3 + 手数 0.2 + 回收 0.3 + 灵活 0.2），后续扩展为 5 维加入"去单化"。
+
+## 6 方案枚举
+
+组牌时枚举 **6 种典型拆牌方案**，按上述评分排序：
+
+1. 全保留（不动）
+2. 拆单牌
+3. 拆对子
+4. 拆三张
+5. 拆炸弹（兜底）
+6. 拆顺子/同花顺候选
+
+## A→2 包接支持
+
+组牌引擎 v2 支持 **A 下放当 1** 的包接规则，适用于：
+- 同花顺
+- 顺子
+- 三连对
+
+## 同花顺候选枚举
+
+`return_idx` 多候选策略：按 **wild 数升序 + 最低自然牌面升序** 排序。
+
+## NO_STRAIGHTS 双变体
+
+- `5a trips` 不参与顺子（默认）
+- `5b trips` 可参与顺子（开关控制）
 
 ## 关联
-- [[gua-062]] — GUA-062 实体
-- [[v7-grouping-v2-gua062-summary]] — 迭代记录
+
+- [[module-grouping-engine-v2]]
+- [[GUA-062]]
+```
+
+---

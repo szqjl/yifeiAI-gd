@@ -1,52 +1,74 @@
+```markdown
 ---
 type: source-summary
-title: "迭代记录总表"
+title: "ITERATIONS.md 摘要（迭代日志 MOC 入口）"
 sources:
   - docs/guandan-brain/ITERATIONS.md
 tags:
   - iterations
-  - changelog
-  - core
+  - moc
+  - obsidian-style
+  - v7
+  - v8
 status: current
-related_gua: []
-date: 2026-07-03
+related_gua:
+  - GUA-061
+  - GUA-062
+  - GUA-063
+  - GUA-064
+  - GUA-065
+  - GUA-066
+  - GUA-068
+  - GUA-069
+  - GUA-070
+  - GUA-072
+  - GUA-073
+date: 2026-07-15
 ---
 
-# 迭代记录总表（ITERATIONS.md）
+# ITERATIONS.md 摘要
 
-## 概述
+## 文件定位
+**迭代日志的 MOC（Map of Content）入口**，按 Obsidian 风格组织，所有 V7/V8 迭代条目以 GUA 编号锚定。
 
-`ITERATIONS.md` 记录双上计分王项目的**迭代历史**，按时间线追踪引擎版本演进、策略变更、批跑验证结果。
+## 章节结构
 
-## 关键内容
+| 章节 | 内容 | 关键 GUA |
+|------|------|----------|
+| V7 主迭代 | R7~R12 阶段演进 | GUA-061~073 |
+| V7 行为克隆 | BC v2/v3 重训 | GUA-064 |
+| V7 组牌引擎 | v2 五维评分 | GUA-062 |
+| V7 Guard 管道 | 三层决策管线整理 | GUA-073 |
+| V7 规则记牌 | belief input 引入 | GUA-072 |
+| V8 平台迁移 | OpenGuanDan 对接 | GUA-143~148 |
 
-- **文档规模**：20,015 字符
-- **记录粒度**：按迭代/版本/批次组织
-- **核心信息**：版本号、变更内容、批跑结果、决策记录
+## V7 关键迭代时间线
 
-## 当前主迭代
+1. **R7**：GUA-061 V7 BC v3 重训
+2. **R8**：GUA-062 组牌引擎 v2 主轴
+3. **R9**：GUA-063 组牌→NN 衔接三缺口修复（已 closed）
+4. **R10**：GUA-064 argmax collapse 确认 + GUA-066 领出不炸
+5. **R11**：GUA-068 全局抑制牌节流 + GUA-069 超弱 core 保护
+6. **R12**：GUA-070 不拆对子出单 + GUA-072 规则记牌引擎
+7. **整理**：GUA-073 Guard-Heuristic 管道职责划分
 
-**V7 引擎迁移**：从 M3 规则引擎向 V7 NN 引擎迁移，是当前最重要的迭代方向。
+## 核心论点
 
-## 迭代节奏
+1. **V7 BC 路线已死**：GUA-064 5 次批跑 0/12 一致结论，argmax collapse 不可治
+2. **GUA-039b 自对弈是唯一解**：从 BC 转向 RL 自对弈
+3. **组牌 v2 已转纯特征**：组牌引擎 v2 从"主导引擎"降级为"特征提供者"
+4. **M3→V7 知识传承**：GUA-065 队友识别从 M3 `_Single()`、`_update_teammate_last_trick` 借鉴
+5. **副胜率方差警告**：3.7% vs 25.5% vs 7.0% 剧烈波动，≥9 局是统计意义门槛
 
-- 高频小步快跑（每周 2-3 次批跑）
-- 重大版本变更需完整批跑验证
-- 所有策略改动必须经过离线批跑
+## 关联页面
 
-## 注意事项
+- [[gua-064]] — argmax collapse 硬瓶颈
+- [[gua-062]] — 组牌引擎 v2 主轴
+- [[gua-073]] — 三层决策管线整理
+- [[engine-v7]] — V7 引擎
+- [[engine-v8]] — V8 引擎
+- [[bc-argmax-collapse]] — BC 失败核心概念
+- [[three-layer-decision-pipeline]] — Guard→Heuristic→validate
+```
 
-> 该文件与 `ISSUES.md` 字符数完全相同（20,015），需通过文件头标识确认内容差异。
-
-## 相关页面
-
-- [[ISSUES-summary]]
-- [[engine-m3]]
-- [[engine-v7]]
-- [[overview]]
-
-## 原始信息
-
-- 路径：`docs/guandan-brain/ITERATIONS.md`
-- 字符数：20,015
-- 类型：迭代历史记录
+---

@@ -375,8 +375,15 @@ def process_platform_game_end_notify(
             v_rank = result.get("victoryRank") or data.get("victoryRank")
             vict = result.get("victory") if result.get("victory") is not None else data.get("victory")
             # 判定胜负：victoryRank 优先（含 "A" 的队胜），否则用 victory
+            # GUA-148：双方都到 A（victoryRank=["A","A"]）→ fallback 到服务器 victory 字段
             if v_rank and isinstance(v_rank, list) and len(v_rank) >= 2:
-                if v_rank[0] == "A":
+                if v_rank[0] == "A" and v_rank[1] == "A":
+                    # 双方都到 A → 以服务器 victory 字段为准
+                    if vict is not None:
+                        winner = "V8 队(座0+2)" if int(vict) == 0 else "LALALA(座1+3)"
+                    else:
+                        winner = None
+                elif v_rank[0] == "A":
                     winner = "V8 队(座0+2)"
                 elif v_rank[1] == "A":
                     winner = "LALALA(座1+3)"

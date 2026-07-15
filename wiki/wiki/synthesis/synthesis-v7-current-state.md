@@ -1,76 +1,84 @@
 ---
 type: synthesis
-title: "V7 当前状态综合分析"
+title: "V7 当前状态综合"
 sources:
-  - docs/guandan-brain/README.md
-  - docs/guandan-brain/v7-win-rate-history.md
+  - docs/development/M1_ARCHITECTURE.md
+  - docs/development/AI首秀分析报告.md
+  - docs/guandan-brain/AGENT_BOOTSTRAP.md
   - docs/guandan-brain/ISSUES.md
-  - docs/guandan-brain/ITERATIONS.md
 tags:
-  - v7
   - synthesis
-  - state-of-play
+  - v7
+  - m-series
+  - v-series
+  - strategy-lines
 status: current
 related_gua:
-  - GUA-039b
-  - GUA-064
-  - GUA-065
-  - GUA-071
-date: 2026-06-29
+  - GUA-061
+  - GUA-033
+  - GUA-022
+date: 2026-07-15
 ---
 
-# V7 当前状态综合分析
+# V7 当前状态综合
 
-## 一句话结论
-V7 NN 引擎历经 BC v1→v3（val_acc 35%→80.88%），但实战副胜率长期接近 0%；当前以 heuristic_select 四优先级作为实战兜底，单行达 25.5% 巅峰，综合批跑仍仅 3.7%。
+## 双线开发格局
 
-## 关键 KPI（截至 2026-06）
-| 指标 | 数值 | 备注 |
-|------|------|------|
-| BC v3 val_acc | 80.88% | 训练指标 |
-| 实战副胜（早期） | 0/164 | 与 val_acc 严重脱节 |
-| 综合批跑胜率 | 3.7% | 同月数据 |
-| 单行最高副胜 | 25.5% | GUA-065 |
-| 累计局队胜 | 1/138 ≈ 0.7% | 极低 |
+V7 与 M 系列是**两条独立策略线**，共享底层数据层但决策核心完全不同：
 
-## 当前破局方向
+| 维度 | M 系列 (M1 frozen / M3 主迭代) | V 系列 (V7 实验 / V8 迁移) |
+|------|-------------------------------|----------------------------|
+| 决策方式 | 硬编码 if-else 规则 | 神经网络策略 |
+| 阶段路由 | [[stage-router-architecture]] 5×2 | 部分继承 + NN 决策 |
+| 客户端 | yf1_m1/m3, yf2_m1/m3 | yf1_v7, yf2_v7 |
+| 数据目录 | game_records | game_records_v7 |
+| 状态 | M1 frozen, M3 主迭代 | V7 实验 (v7-dev), V8 迁移 (v8-dev) |
 
-### 主线：heuristic_select 四优先级
-- 已切换（GUA-071）
-- 实战可用但缺乏系统性优化
+## V7 当前状态
 
-### 副线：Guard 叠加
-- 出现 [[guard-overlap-puzzle]] 悖论
-- 暂停推进
+### 引擎配置
 
-### 储备：BC 模型
-- argmax collapse（GUA-064）未根治
-- val_acc 与实战脱节巨大
+- 文件：`ultimate_win_rate_engine_v7.py`
+- 路线：NN 策略
+- 分支：v7-dev
 
-## 与 README 叙事的张力
-README 强调「M3 主交付、队 KPI 只看 M3 批跑」，但实际：
-- 最新 GUA-061~080 全在 V7 线
-- 批跑数据全聚焦 V7
-- M3 线无 KPI 护栏文件
+### 批跑
 
-→ **V7 已成为事实焦点，建议更新 README 叙事**
+详见 [[batch-evaluation]]：
+- 命令：`python batch_run.py --engine v7 --target-games 300`
+- 数据落盘：`game_records_v7/`
+- `--target-games` 须为 3 的倍数（局数 × 3 副/局）
+
+### 执行卡片闭环
+
+V7 特有工作流：
+
+```
+replay → WF-12 → 准入审查 → 修复 → 批跑 → 复核
+```
+
+详见 [[agent-bootstrap-workflow]]。
+
+## 与 M3 的关系
+
+**独立开发**，但有以下耦合：
+1. 共用层（牌型识别、回合驱动）
+2. 同一组 yf1/yf2 玩家账户
+3. 同一套 [[gua-033]] 胜利解读口径
+
+## M1 的历史遗产
+
+[[engine-m1]] frozen 之后，[[stage-router-architecture]] 和模块化设计沉淀为 M 系列共有资产，V 系列部分继承。
 
 ## 下一步建议
 
-### P0
-1. 巩固 heuristic 方案，争取综合批跑 ≥15%
-2. 解决 Guard 叠加悖论
-3. 决定 BC 路线是否继续
+1. 持续维护 V7 v7-dev 分支，引入更多 replay 数据
+2. M3 主迭代聚焦当前 P0 GUA（[[gua-061]]）
+3. 关注 V8 平台迁移进度（v8-dev）
 
-### P1
-4. 补充 M3 线 KPI 护栏（治理对称）
-5. 更新 README 叙事对齐现状
+## 历史里程碑
 
-## 相关页面
-- [[engine-v7]]
-- [[engine-m3]]
-- [[v7-kpi-guardrail]]
-- [[heuristic-vs-bc]]
-- [[bc-collapse-pattern]]
-- [[gua-071]]
-- [[gua-064]]
+- 2025-11-24 v0.1-Random 首秀（[[first-debut-baseline]]）
+- M1 frozen（[[gua-022]]）
+- V7 实验线启动（v7-dev）
+- V8 平台迁移启动（v8-dev）

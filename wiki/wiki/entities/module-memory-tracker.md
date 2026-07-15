@@ -1,44 +1,36 @@
+```markdown
 ---
 type: entity-module
-title: "MemoryTracker 记忆追踪器"
+title: "记忆追踪器（memory_tracker.py）"
 sources:
-  - docs/guandan-brain/人类掼蛋决策流程完整分析.md
+  - docs/guandan-brain/ITERATIONS.md
 tags:
   - module
   - memory
-  - stage-3
-  - v7-architecture
+  - belief
 status: current
-related_gua: []
-date: 2026-06-18
+related_gua:
+  - GUA-072
+date: 2026-07-15
 ---
 
-# MemoryTracker 记忆追踪器
+# 记忆追踪器
 
-## 模块定义
+## 文件
+- `memory_tracker.py`
 
-**MemoryTracker** 是新 V7 架构中**结构化记忆**的核心实现:追踪对局中所有玩家的出牌历史,并组织为**人类可理解的结构**(已炸弹、已三张、信号牌、剩余估算)。
+## 职责
+**规则记牌引擎**，为 V7 提供 belief input：
+- 已出牌追踪
+- 剩余牌推断
+- 队友/对手手牌估计
 
-## 核心职责
+## 意义
+打破 V7 NN 的**零信念决策**，让模型能看到"还剩什么牌"。
 
-| 职责 | 说明 |
-|------|------|
-| 出牌记录 | 记录每轮每家出的牌 |
-| 牌型分类 | 将已出牌按牌型分类(炸弹/三张/对子/单张) |
-| 关键牌标记 | 标记关键牌(2、王、A)的归属 |
-| 信号追踪 | 识别队友的"信号牌" |
-| 剩余估算 | 推断每家可能的剩余牌型 |
+## 关联
+- [[belief-input-rule-engine]] — 信念输入概念
+- [[gua-072]] — 规则记牌引擎 GUA
+```
 
-## 数据结构
-
-```python
-class MemoryState:
-    played_history: List[PlayedRound]  # 完整出牌历史
-    bombs_played: List[Bomb]           # 已出炸弹
-    triples_played: List[Triple]       # 已出三张
-    pairs_played: List[Pair]           # 已出对子
-    singles_played: List[Single]       # 已出单张
-    
-    # 关键牌追踪
-    jokers_played: List[int]           # 大小王归属
-    twos_played: List[Tuple[int, Suit]] # 2 的归属
+---

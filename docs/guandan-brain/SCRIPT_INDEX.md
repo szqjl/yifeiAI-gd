@@ -14,6 +14,7 @@
 |------|------|
 | `batch_executor_gui_v7.py` | **V7 批跑 GUI**：预填 V7 vs Lalala 四客户端，选择局数一键批跑 |
 | `batch_executor_gui_m1.py` | Phase 5 stub → `scripts/gui/batch_executor_gui_m1.py` |
+| `RUN_V8_VS_LALALA.bat` | **V8 批跑入口** → `scripts/launchers/v8/RUN_V8_VS_LALALA.bat` |
 
 ### 启动器
 
@@ -31,6 +32,16 @@
 | `START_V7_AUTO.bat` | → `scripts/launchers/v-nn/START_V7_AUTO.bat` |
 | `RUN_V7_VS_LALALA.bat` | → `scripts/launchers/v-nn/RUN_V7_VS_LALALA.bat` |
 
+### V8 专用 .bat（根目录快捷方式）
+
+| 脚本 | 实际指向 |
+|------|---------|
+| `START_V8_GUI.bat` | → `scripts/launchers/v8/START_V8_GUI.bat` |
+| `START_V8_CLIENTS.bat` | → `scripts/launchers/v8/START_V8_CLIENTS.bat` |
+| `START_V8_COMPLETE.bat` | → `scripts/launchers/v8/START_V8_COMPLETE.bat` |
+| `START_V8_AUTO.bat` | → `scripts/launchers/v8/START_V8_AUTO.bat` |
+| `RUN_V8_VS_LALALA.bat` | → `scripts/launchers/v8/RUN_V8_VS_LALALA.bat` |
+
 ### 其他 V/M 系列
 
 | 脚本 | 实际指向 |
@@ -43,6 +54,7 @@
 | `START_M1_WORKFLOW_FULL.bat` | → `scripts/launchers/m/START_M1_WORKFLOW_FULL.bat` |
 | `START_M2_GUI.bat` | → `scripts/launchers/m/START_M2_GUI.bat` |
 | `START_M3_GUI.bat` | → `scripts/launchers/m/START_M3_GUI.bat` |
+| `START_M1_GUI.bat` | → `scripts/launchers/m1/START_M1_GUI.bat` |
 
 ### 工具/检查
 
@@ -74,6 +86,7 @@
 | `batch_executor.py` | 批跑执行器（Python 模块入口） |
 | `train_bc_v7.py` | V7 BC 行为克隆训练入口 |
 | `analyze_decisions.py` | M3 决策分析 |
+| `check_github_auth.ps1` | GitHub 认证检查 |
 
 ### batch_executor/ — 批跑引擎
 
@@ -104,6 +117,9 @@
 | `monitor_training.py` | 训练监控 |
 | `view_training_results.py` | 查看训练结果 |
 | `view_training_summary.py` | 查看训练摘要 |
+| `run_stage6_training_gui.bat` | Stage 6 训练 GUI 启动器 → `scripts/launchers/training/run_stage6_training_gui.bat` |
+| `QUICK_START_STAGE7.bat` | Stage 7 快速启动（轻量版） |
+| `QUICK_START_STAGE7_ULTRA.bat` | Stage 7 快速启动（超优化版） |
 
 ### scripts/analysis/ — 分析脚本
 
@@ -116,6 +132,11 @@
 | `analyze_and_improve_training.py` | 训练分析与改进 |
 | `analyze_m1_games.py` | M1 对局分析 |
 | `analyze_practical_records_for_training.py` | 实战记录训练分析 |
+| `analyze_grouping_engine_freq.py` | 组牌引擎出牌频率统计 |
+| `compare_sf_detection_vs_multipass.py` | 同花顺检测：单轮 vs 多轮对比 |
+| `dump_grouping_plans_scores.py` | 组牌方案分数导出 |
+| `simulate_gua072_delay.py` | GUA-072 延迟效应模拟 |
+| `trace_grouping_order.py` | 组牌引擎出牌顺序追踪 |
 
 ### scripts/tools/ — 工具脚本
 
@@ -144,6 +165,7 @@
 | `run_t9_direct.py` | T9 直接运行 |
 | `sync_lalala_reference.py` | 同步 Lalala 参考 |
 | `sync_github_mirror.ps1` | 同步 GitHub 镜像 |
+| `gua033_run_matrix.ps1` | GUA-033 跑矩阵脚本 |
 | `feishu_gateway_auth.py` | 飞书网关认证 |
 | `feishu_kanban_card_generator.py` | 飞书看板卡片生成器 |
 | `migrate_*.py` (5个) | Phase 5 目录迁移脚本 |
@@ -242,6 +264,35 @@
 | `run_m3_vs_lalala_games.py` | **M3 vs Lalala 批跑入口**（BatchExecutor，默认 3 局） |
 | `START_M3_BATCH.bat` | M3 命令行批跑 bat 入口 |
 
+### scripts/launchers/v8/ — V8 启动脚本（OpenGuanDan）
+
+| 脚本 | 用途 |
+|------|------|
+| `RUN_V8_VS_LALALA.bat` | V8 vs Lalala 批跑 bat 入口 |
+| `START_V8_GUI.bat` | V8 GUI 一键启动 |
+| `START_V8_CLIENTS.bat` | V8 多客户端一键启动 |
+| `START_V8_COMPLETE.bat` | V8 完整系统一键启动 |
+| `START_V8_AUTO.bat` | V8 自动重启启动 |
+| `run_v8_test.bat` | V8 端到端测试 bat 入口 |
+
+### scripts/launchers/m1/ — M1 启动器
+
+| 脚本 | 用途 |
+|------|------|
+| `START_M1_GUI.bat` | M1 GUI 一键启动 |
+
+### scripts/launchers/checks/ — 校验启动器
+
+| 脚本 | 用途 |
+|------|------|
+| `CHECK_RECORD_CONSISTENCY.bat` | 记录一致性校验入口 |
+
+### scripts/launchers/workflow/ — 工作流启动器
+
+| 脚本 | 用途 |
+|------|------|
+| `START_AUTO_RESTART_WORKFLOW.bat` | 自动重启工作流入口 |
+
 ### scripts/launchers/_env.bat — 环境变量
 
 **关键文件**：所有 .bat 启动器的公共环境变量（Python 路径、venv 激活等）。
@@ -254,6 +305,7 @@
 |------|------|
 | **V7 批跑（GUI）** | `python batch_executor_gui_v7.py` |
 | **V7 批跑（命令行）** | `python scripts/launchers/v7/run_v7_vs_lalala_games.py --games 3` |
+| **V8 批跑（命令行）** | `.\RUN_V8_VS_LALALA.bat`（当前未冒烟） |
 | **WF-04 批跑解读（主）** | `python scripts/analysis/analyze_v7_rounds.py --all` |
 | **WF-04 批跑解读（副级 curRank，可选）** | `python scripts/tools/analyze_v7_round_levels.py` |
 | **WF-04 L1/L3 对账文件** | `<repo_root>/batch_executor/latest_victory_num.json` · `<repo_root>/v7_vs_lalala_scores.json` · `<repo_root>/v7_vs_lalala_state.json`（**均在仓库根**，勿找 `batch_executor/v7_vs_lalala_scores.json`） |
@@ -280,7 +332,8 @@
 batch_convert_replays.bat     CHECK_RECORD_CONSISTENCY.bat
 INSTALL_STAGE7_DEPENDENCIES.bat  pre_push_check.bat
 run_new_test.bat              RUN_V7_VS_LALALA.bat
-START_AUTO_RESTART_WORKFLOW.bat  START_M1_TRAINING.bat
+RUN_V8_VS_LALALA.bat          START_AUTO_RESTART_WORKFLOW.bat
+START_M1_GUI.bat              START_M1_TRAINING.bat
 START_M1_WORKFLOW_FULL.bat    START_M2_GUI.bat
 START_M3_GUI.bat              START_SMART_TRAINING.bat
 START_STAGE7_TRAINING.bat     START_STRATEGY_TASKS_TRAINING.bat
@@ -288,6 +341,8 @@ START_V4_GUI.bat              START_V5_CLIENTS.bat
 START_V5_GUI.bat              START_V6_GUI.bat
 START_V7_AUTO.bat             START_V7_CLIENTS.bat
 START_V7_COMPLETE.bat         START_V7_GUI.bat
+START_V8_AUTO.bat             START_V8_CLIENTS.bat
+START_V8_COMPLETE.bat         START_V8_GUI.bat
 YF_REPLAY.bat
 ```
 

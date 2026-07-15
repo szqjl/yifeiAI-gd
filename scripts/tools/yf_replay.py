@@ -391,9 +391,9 @@ class YiFeiReplayGUI:
         """加载游戏记录列表（支持 JSON 和 Pickle 格式）"""
         self.status_bar.config(text="正在加载游戏记录...")
         
-        # 查找所有JSON和.data文件（默认路径 game_records_v7）
-        json_files = list(Path("game_records_v7").glob("*.json"))
-        data_files = list(Path("game_records_v7").glob("*.data"))
+        # 查找所有JSON和.data文件（默认路径 game_records_v8）
+        json_files = list(Path("game_records_v8").glob("*.json"))
+        data_files = list(Path("game_records_v8").glob("*.data"))
         
         # 合并文件列表
         game_files = json_files + data_files
@@ -427,7 +427,7 @@ class YiFeiReplayGUI:
                 ("Pickle文件", "*.data"),
                 ("所有文件", "*.*")
             ],
-            initialdir="game_records_v7"
+            initialdir="game_records_v8"
         )
         if file_path:
             self._load_specific_game(file_path)

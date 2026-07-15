@@ -1,56 +1,78 @@
+```markdown
 ---
 type: concept
-title: "Guard-Heuristic 三层决策管道"
+title: "Guard-Heuristic-validate 三层管道"
 sources:
-  - docs/guandan-brain/ISSUES.md
+  - docs/guandan-brain/ITERATIONS.md
 tags:
   - architecture
   - v7
-  - decision
+  - decision-pipeline
+  - guard
 status: current
 related_gua:
-  - GUA-065
-  - GUA-068
-  - GUA-069
-  - GUA-070
-  - GUA-071
-  - GUA-075
-date: 2026-06-19
+  - GUA-073
+  - GUA-031
+  - GUA-032
+  - GUA-034
+  - GUA-035
+  - GUA-036
+date: 2026-07-15
 ---
 
-# Guard-Heuristic 三层决策管道
+# Guard-Heuristic-validate 三层管道
 
-V7 引擎当前(2026-06-19 战略转向后)决策架构,由三层独立组件构成。
+## 定义
 
-## 层级结构
+V7 引擎在出牌决策时采用 **三层过滤管道**，明确各层职责边界：
 
-### Layer 1: Guard 硬排除
-- 15+ 条独立 guard(R01-R15+)
-- 每条 guard 是单一职责的硬规则,秒级 pytest
-- 命中即强制排除,不进入后续决策
-- 代表: [[gua-065|GUA-065]] 队友保护 / [[gua-068|GUA-068]] 抑制牌 / [[gua-069|GUA-069]] 超弱角色 / [[gua-070|GUA-070]] 拆对子保护
+```
+候选动作 → [Guard 硬排除] → [Heuristic 软排序] → [validate 兜底] → 最终出牌
+```
 
-### Layer 2: Heuristic 软排序
-- 8 优先级引擎([[gua-071|GUA-071]])
-- 候选动作按优先级打分排序
-- 牌力评分 5 维加权: 炸弹 0.3 + 手数 0.3 + 回收 0.1 + 灵活 0.1 + 去单化 0.2
-- 不做硬排除,只做软选择
+## 三层职责
 
-### Layer 3: validate 兜底
-- 最终合法性检查
-- card_mask 覆盖所有合法出牌
-- 应对 card_mask 退化保护([[gua-072|GUA-072]])
+### 1. Guard 层（硬排除）
 
-## 关键优势
-- Guard 可独立测试,失败定位快
-- Heuristic 调整不影响 Guard 体系
-- validate 是最后防线,绝不允许非法动作
+- **职责**：把绝对不合法的动作直接剔除
+- **示例**：
+  - R07 队友牌型识别 — 不打队友正在做的牌型
+  - R08 队友送接保护 — 不抢队友的接牌窗口
+  - R09 队友压制保护 — 不压制队友的牌
+  - R10 greaterPos 参数一致性 — 避免参数错位导致的非法比较
+  - R11 全局抑制牌检查 — 对手出不可压牌时禁止乱炸
+  - R12 有自然单时禁止拆对子出单
 
-## 当前问题
-- 2026-06-19 综合批跑副胜率 2.4%,远低于 [[gua-065|GUA-065]] 25.5% 基线
-- Heuristic 8 优先级尚未完整实现
-- 需补充 [[gua-072|GUA-072]] 规则记牌提供 24 维 state_vector
+### 2. Heuristic 层（软排序）
 
-## 演进方向
-- [[gua-075|GUA-075]] 推荐法改造:Heuristic 反向输出推荐而非排序
-- [[gua-078|GUA-078]] 残局智能体作为残局子管道的独立实现
+- **职责**：对剩余合法动作打分排序
+- **信号**：角色（主攻/助攻/超弱）、炸弹价值、手数、灵活度
+- **特征**：5 维评分（炸弹 0.3 + 手数 0.3 + 回收 0.1 + 灵活 0.1 + 去单化 0.2）
+
+### 3. validate 层（兜底）
+
+- **职责**：保证最终输出合法
+- **机制**：若 Guard/Heuristic 给出非法动作，回退到 M3 规则兜底
+
+## 架构价值
+
+GUA-073 明确整理三层边界后的收益：
+
+1. **可测试性**：每层可独立单测
+2. **可调参性**：Heuristic 权重调整不影响 Guard 硬约束
+3. **可解释性**：每层决策都有明确归因
+
+## 已知缺陷
+
+- R11 记忆泄漏（GUA-073 修复）
+- Guard 叠加过严可能导致副胜率暴跌（见 GUA-070 17.7% → Guard 综合 3.7%）
+
+## 关联
+
+- [[GUA-073]]
+- [[engine-v7]]
+- [[role-threshold-system]]
+- [[module-v7-guards]]
+```
+
+---

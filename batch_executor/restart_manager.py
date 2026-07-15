@@ -594,7 +594,9 @@ class RestartManager:
                         os.path.basename(abs_script_path),
                         window_title,
                     )
-                    process.resolve_pid(wait_seconds=6.0, exclude_pids=assigned_pids)
+                    # V8: 客户端启动 1~2s 内即可解析 PID，6s 过长
+                    _pid_wait = 3.0 if platform == "openguandan" else 6.0
+                    process.resolve_pid(wait_seconds=_pid_wait, exclude_pids=assigned_pids)
                     if process.pid:
                         assigned_pids.add(process.pid)
                         logger.info(f"  已解析客户端 Python PID: {process.pid}")

@@ -1,54 +1,69 @@
+```markdown
 ---
 type: entity-engine
-title: "M3 规则引擎"
+title: "M3 引擎（规则决策）"
 sources:
   - docs/guandan-brain/ITERATIONS.md
-  - docs/analysis/v7-kpi-vs-m3-vs-lalala-2026-06-29.md
 tags:
   - engine
+  - m3
   - rule-based
-  - m-dev
+  - legacy
 status: current
 related_gua:
-  - GUA-022
-  - GUA-055
-date: 2026-07-01
+  - GUA-024
+  - GUA-025
+  - GUA-026
+  - GUA-027
+  - GUA-028
+  - GUA-029
+  - GUA-030
+  - GUA-031
+  - GUA-032
+  - GUA-034
+  - GUA-035
+  - GUA-036
+date: 2026-07-15
 ---
 
-# M3 规则引擎
+# M3 引擎（规则决策）
 
-## 基本信息
+## 引擎定位
 
-- **分支**：`m-dev`
-- **类型**：规则引擎（rule-based）
-- **状态**：当前主迭代（规则层），但已**达瓶颈**
-- **客户端**：`yf1_m3` / `yf2_m3`（团队协作模式）
+M3 是项目 **规则引擎时代的巅峰**，在 [[engine-m1]]/M2 基础上集成了完整的 Guard 体系、策略映射、技能映射。
 
-## 团队协作模式
+## 关键迭代
 
-- **yf1_m3 + yf2_m3** 双客户端协作
-- 双上计分王 = 上对家 + 下对家 各两人队
+| 迭代文件 | GUA 范围 | 主题 |
+|----------|----------|------|
+| `m3-integration-gua024-028` | GUA-024~028 | M3 集成 |
+| `m3-strategy-gua026-029` | GUA-026/029 | M3 策略 |
+| `m3-guards-gua031-036` | GUA-031~036 | M3 Guards |
+| `m3-skills-mapping-gua030` | GUA-030 | M3 技能映射 |
 
-## M1 冻结
+## 核心能力
 
-- M1 已 frozen（[[gua-022]]）
-- 作为 M3 的对照基线
+- 完整的 Guard 体系（R07~R12 前身）
+- 角色阈值（主攻/助攻/超弱）
+- 策略映射表
+- 技能→动作的映射
 
-## M3 已知缺陷
+## 局限
 
-- [[gua-055]] — M3 决策引擎已知缺陷，修复进度需追踪
-- 规则引擎结构性瓶颈：无法处理对手牌型推断
+- 纯规则，缺乏对复杂局面的泛化能力
+- 对 Lalala 胜率仍偏低
+- 这是项目向 V7 NN 引擎迁移的根本原因
 
-## V7 迁移
+## 当前角色
 
-M3 已被认定为**达瓶颈**，未来方向是 [[engine-v7]]（NN 引擎）。
-详见 [[v7-nn-engine-migration]]。
+- 作为 V7 的 **validate 兜底层**（见 [[guard-heuristic-pipeline]]）
+- 作为 BC 训练的 **教师信号来源**（已被 [[bc-argmax-collapse]] 证伪）
 
-## 跨引用
+## 关联
 
-- [[engine-v7]] — 下一代
-- [[v7-nn-engine-migration]] — 迁移路径
-- synthesis-v-series-failure — V系列失败方法论
+- [[engine-m1]]
+- [[engine-v7]]
+- [[guard-heuristic-pipeline]]
 ```
 
 ---

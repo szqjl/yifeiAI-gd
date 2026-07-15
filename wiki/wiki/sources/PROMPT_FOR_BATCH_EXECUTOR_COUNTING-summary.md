@@ -1,38 +1,38 @@
 ---
 type: source-summary
-title: "PROMPT_FOR_BATCH_EXECUTOR_COUNTING.md 资料摘要"
+title: "批跑执行器计数 Prompt"
 sources:
   - docs/guandan-brain/PROMPT_FOR_BATCH_EXECUTOR_COUNTING.md
 tags:
-  - batch-executor
-  - counting
+  - batch
+  - executor
   - prompt
+  - counting
 status: current
-related_gua:
-  - GUA-033
-date: 2026-06-30
+related_gua: []
+date: 2026-07-15
 ---
 
-# 批跑执行器记数 Prompt 摘要
+# 批跑执行器计数 Prompt
 
 ## 概述
 
-该文档定义了批跑执行器（Batch Executor）在对局记数环节的 Prompt 规范，用于离线对局数据的统计与核验。
+`PROMPT_FOR_BATCH_EXECUTOR_COUNTING.md` 定义了**批跑执行器 (Batch Executor)** 的局/副计数相关 prompt 模板。
 
-## 已知信息
+## 涉及内容
 
-- 文件大小：约 3,470 字符（短文档）
-- 聚焦单一主题：批跑记数逻辑
-- 与"局 ≠ 副"口径问题直接相关
+- 批跑执行器在统计 **局 vs 副** 时的口径
+- Prompt 模板规范
+- 与 [[局≠副]] 概念的衔接
 
-## 核心内容（待确认）
+## 关键问题
 
-- 批跑过程中"局"（Round）与"副"（Pair）的统计规则
-- 如何区分一次完整对局（2 局）与单局结果
-- KPI 计算时的分母选择
+- 计数单位：局（一局两副）还是副（单副牌）？
+- 与 [[batch-evaluation]] 体系的关联
+- 与 SCRIPT_INDEX 中批跑脚本的对接
 
-## 关联
+## 关联页面
 
+- [[局≠副]] — 数据解读核心口径
 - [[batch-evaluation]] — 批跑评测体系
-- [[局不等于副]] — 核心口径概念
-- [[ISSUES-summary]] — 缺陷追踪
+- [[SCRIPT_INDEX-summary]] — 脚本索引

@@ -1,45 +1,49 @@
+```markdown
 ---
 type: concept
-title: "BC argmax collapse（NN 退化为随机选择器）"
+title: "BC argmax collapse（行为克隆输出坍缩）"
 sources:
-  - docs/guandan-brain/组牌-NN衔接设计-软引导vs硬约束.md
-  - docs/guandan-brain/掼蛋AI技术路径重校-V系列方法论反思.md
+  - docs/guandan-brain/ITERATIONS.md
 tags:
   - bc
-  - nn
-  - failure-mode
   - collapse
+  - blocker
+  - v7
 status: current
 related_gua:
   - GUA-064
-  - GUA-071
-date: 2026-07-01
+  - GUA-039b
+date: 2026-07-15
 ---
 
 # BC argmax collapse
 
 ## 现象
+V7 BC 模型的 2048 维输出空间**仅使用 2 维**：
+- PASS：50%
+- 首候选：48.9%
 
-V7 BC v3 模型输出层 2048 维：
-- **PASS 占比 50.1%**
-- **首候选占比 48.9%**
-- 两者之和 ≈ 99%，几乎无有意义选择
+模型坍缩为二元分类，**完全丧失掼蛋出牌的多样性**。
 
-→ NN 退化为**接近二选一的随机选择器**
+## 根因
+- BC 训练数据中 PASS 和首选项占绝对多数
+- Softmax + cross-entropy 在不平衡标签下退化为 argmax
+- 深层网络无 belief 输入，无法利用牌局信息
 
-## 结构性矛盾
+## 证据
+- 5 次批跑（GUA-059/060/062/063/064）一致 0/12
+- 不可通过学习率/正则化修复
 
-| 维度 | BC 训练目标 | V7 实际可用 |
-|------|------------|-------------|
-| 输入 | 单局面 + 玩家手牌 | 单局面 + 玩家手牌 + **对手牌型约束** |
-| 输出 | 2048 维动作 argmax | 动作空间受组牌候选+过滤规则限制 |
-| 信号 | 单步监督 | 多步牌局演化 |
+## 结论
+**V7 BC 路线已死**，唯一解是 [[GUA-039b]] 自对弈（RL）：
+- 自对弈可探索非首选项
+- 奖励信号直接优化胜率
+- 配合 [[belief-input-rule-engine]] 打破零信念
 
-**GAP**：
-1. **输入缺失对手手牌**（训练时只能见到自己手牌）
-2. **BC 目标 argmax 与可用信息 gap**（可用动作受规则引擎约束）
-3. **argmax 在受限空间内无意义**（强约束下 action 列表很短）
+## 关联
+- [[gua-064]] — 主 GUA
+- [[module-bc-trainer]] — 训练器
+- [[belief-input-rule-engine]] — 信念输入
+```
 
-## 历史对照：V5 失败
-
-1312 人类数据 BC 训练
+---

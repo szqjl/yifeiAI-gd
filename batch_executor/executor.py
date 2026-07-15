@@ -798,7 +798,7 @@ class BatchExecutor:
         self.tracker.total_games = 0
         self.logger.info("已清空之前的战绩，开始新的对战")
         
-        records_dir = self.project_root / "game_records"
+        records_dir = self.project_root / ("game_records_v8" if self.platform == "openguandan" else "game_records")
         self._game_records_files_baseline = {
             p.name for p in records_dir.glob("*.json")
         } if records_dir.is_dir() else set()
@@ -929,9 +929,11 @@ class BatchExecutor:
                 
                 # 等待所有客户端连接到服务器
                 expected_client_count = len(self.client_scripts)
+                # V8: 客户端通过 start 启动，PID 解析已证实存活，连通性等待可缩短
+                _connect_timeout = 15 if self.platform == "openguandan" else 30
                 clients_connected = self.restart_manager.wait_for_clients_connected(
                     expected_count=expected_client_count,
-                    timeout=30
+                    timeout=_connect_timeout,
                 )
                 
                 if not clients_connected:
@@ -952,7 +954,8 @@ class BatchExecutor:
                     ]
                 game_ready = wait_for_all_clients_game_ready(
                     expected_client_ids,
-                    timeout=60,
+                    # V8: game_ready 在首条消息到达后标记，实际 ~12s，20s 足够
+                    timeout=20 if self.platform == "openguandan" else 60,
                 )
                 if not game_ready:
                     self.logger.warning("部分客户端 game_ready 超时，继续执行（可能开局延迟）")
@@ -962,7 +965,8 @@ class BatchExecutor:
                 # 额外等待让对局启动，避免在此阶段提前消费 stdout（会影响后续完成判定）
                 self.logger.info("等待游戏开始（保留stdout给后续完成监控）...")
                 import time
-                game_start_wait_seconds = 10
+                # V8: game_ready 已确认所有客户端就绪，3s 足够
+                game_start_wait_seconds = 3 if self.platform == "openguandan" else 10
                 time.sleep(game_start_wait_seconds)
                 self.logger.info(f"已等待 {game_start_wait_seconds} 秒，进入完成监控阶段...")
                 

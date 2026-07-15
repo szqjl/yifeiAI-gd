@@ -1,57 +1,102 @@
 ---
 type: concept
-title: "局 ⊃ 副 (Recursion: Game ⊃ Round)"
+title: "局 vs 副 的递归解读"
 sources:
-  - docs/guandan-brain/v7-win-rate-history.md
-  - docs/guandan-brain/workflows/WF-12-yf-decision-trace.md
+  - docs/development/AI首秀分析报告.md
+  - docs/guandan-brain/AGENT_BOOTSTRAP.md
 tags:
-  - recursion
-  - data-model
-  - l1-l4
+  - guandan-rules
+  - victory-num
+  - definition
 status: current
-related_gua: []
-date: 2026-07-03
+related_gua:
+  - GUA-033
+date: 2026-07-15
 ---
 
-# 局 ⊃ 副 (Recursion: Game ⊃ Round)
+# 局 vs 副 的递归解读
 
-## 核心定音
+## 定音来源
 
-> **局 ⊃ 副**：1 局掼蛋 = 2 副牌（A 方 vs B 方 × 2 副）
->
-> 反过来不成立：副 ⊄ 局（单看一副不能反推整局）
+**[[gua-033]]** —— 已定音。
 
-## 数据载体
+## 核心定义
 
-| 层级 | 载体 | 含义 |
-|------|------|------|
-| L1 | `game_records/*.json` | 单条 JSON = 1 副（yf1 或 yf2 视角）|
-| L2 | yf1 + yf2 配对 | 1 副（双视角）|
-| L3 | 2 副组合 | 1 局（升 / 降级结果）|
-| L3' | 局级 log | `logs/` 下的批跑日志 |
-| L4 | 多次局聚合 | 队胜率 KPI |
+| 术语 | 含义 |
+|------|------|
+| **局** | 一局游戏（从发牌到结束） |
+| **副** | 一局内的"打副"（升级打法的最小单位） |
 
-## 易错点
+掼蛋一局通常包含**多个副**（升级玩法决定副数）。
 
-1. **副数 = JSON 数 / 2**（每副有 yf1 和 yf2 两条 JSON）
-2. **局数 ≠ 副数**：分母不同，不能混用
-3. **位次 [0]+[1] 是局级指标**，不是副级
+## victoryNum 的四层写入
 
-## 已记录的口径偏差
+1. 单副胜利
+2. 单局累计
+3. 双队累计（按位置 0+2 vs 1+3）
+4. 跨局累计
 
-`v7-win-rate-history.md` 末三行出现"队胜率 0/3 vs 副胜 4/28"的口径偏差，需统一为：
-- 队胜率：分母为局
-- 副胜率：分母为副
+## 位置映射
 
-## 对账流程
+```
+pos 0 ─┐
+       ├─ 队 A
+pos 2 ─┘
+       
+pos 1 ─┐
+       ├─ 队 B
+pos 3 ─┘
+```
 
-1. L1 → L2：yf_replay.py 配对 yf1/yf2
-2. L2 → L3：根据升/降级判定局结果
-3. L3 → L3'：与 logs/ 对账
-4. L3' → L4：聚合计算 KPI
+**同队 victoryNum 必须一致** —— 这是 GUA-033 自检规则。
 
-## 关联
+## 典型案例：首秀 [0,3,0,3]
 
-- [[win-rate-kpi]] — 队胜率定义
-- [[v7-win-rate-history-summary]] — V7 战 KPI
-- [[workflow-decision-trace]] — 决策链路中的副/局区分
+参见 [[first-debut-baseline]]。
+
+原始报告：`victoryNum = [0, 3, 0, 3]`（10 局统计）
+
+**正确解读**：
+- 位置 1 和位置 3 同属队 B
+- 位置 0 和位置 2 同属队 A
+- 按队叠加后：队 A = 0+0 = 0 胜，队 B = 3+3 = 6 胜
+- 这是纯随机下胜利按位置均匀分布的统计假象
+- ⚠️ 但首秀报告未明确标注此为"队胜率"
+
+## 数据解读规则
+
+读取任何 victoryNum 数据时：
+
+1. 先确认是"局"级还是"副"级统计
+2. 检查位置是否需要按 (0,2) / (1,3) 配对
+3. 校验同队 victoryNum 一致性
+4. 与 [[gua-033]] 定音对照
+
+## 出牌顺序
+
+`pos 0 → pos 1 → pos 2 → pos 3` 顺时针。
+```
+
+---
+
+## 总结
+
+本次摄入完成 **7 新增 + 5 更新**：
+
+**新增页面**：
+1. `wiki/entities/engine-m1.md` — 填补 M1 引擎实体空白
+2. `wiki/sources/AI首秀分析报告-summary.md` — 首秀里程碑摘要
+3. `wiki/sources/M1_ARCHITECTURE-summary.md` — M1 架构摘要
+4. `wiki/sources/AGENT_BOOTSTRAP-summary.md` — Agent 启动摘要
+5. `wiki/concepts/stage-router-architecture.md` — 5×2 路由架构概念
+6. `wiki/concepts/first-debut-baseline.md` — 随机基准线概念
+7. `wiki/concepts/agent-bootstrap-workflow.md` — Agent 工作流概念
+
+**更新页面**：
+1. `wiki/index.md` — 新增 4 个索引项
+2. `wiki/overview.md` — 补充 M1 frozen 状态与里程碑
+3. `wiki/log.md` — 记录本次摄入
+4. `wiki/synthesis/synthesis-v7-current-state.md` — 明确 M/V 双线独立性
+5. `wiki/concepts/recursion-game-round.md` — 补充 [0,3,0,3] 案例
+
+**关键交叉引用**：`[[gua-033]]`（局≠副）、`[[gua-022]]`（M1 frozen）、`[[stage-router-architecture]]`、`[[first-debut-baseline]]`、`[[batch-evaluation]]` 在多个页面间形成知识图谱。

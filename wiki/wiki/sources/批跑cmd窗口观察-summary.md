@@ -1,37 +1,37 @@
 ---
 type: source-summary
-title: "批跑 cmd 窗口观察笔记摘要"
+title: "V7 批跑 cmd 窗口观察（73 秒停顿）"
 sources:
   - docs/analysis/archive/批跑cmd窗口观察.md
 tags:
   - batch
-  - observation
-  - debugging
+  - performance
+  - cmd-window
   - archive
 status: current
-date: 2026-06-29
+date: 2026-06-21
 ---
 
-# 批跑 cmd 窗口观察笔记摘要
+# V7 批跑 cmd 窗口观察（73 秒停顿）
 
-## 文件信息
-- **路径**：`docs/analysis/archive/批跑cmd窗口观察.md`
-- **字符数**：2684
-- **定位**：批跑过程中对 cmd 终端输出的人工观察记录（已归档）
+## 来源
+- 原始文件：`docs/analysis/archive/批跑cmd窗口观察.md`（已归档）
+- 字数：约 2700 字
 
-## 用途
-- 记录批跑运行时的现象（如卡顿、异常输出、卡死等）
-- 为 [[batch-evaluation]] 提供原始观察证据
-- 当批跑结果异常时，回溯此笔记排查
+## 核心观察
+- 批跑运行期间 cmd 窗口出现 73 秒无输出停顿
+- 时间戳定位：`game_records_v7/20260621165949060489 [yf1_v7]-[opponent_1_3]-[16]-[2].json`
+- 日志对应：`logs/yf1_v7_20260621_165903.log`
+
+## 推断原因
+1. NN 推理批量调度阻塞（BC argmax collapse 反复回退到同一动作）
+2. `to_card_mask` 重复牌键冲突触发的 fallback 循环
+3. 组牌方案 v2 多方案评分回收过程中的锁竞争
+
+## 排查建议
+- 引入单步耗时埋点（每步记录 wall clock）
+- 对 argmax collapse 增加随机扰动（epsilon-greedy 退路）
+- 详见 [[bc-argmax-collapse]] 与 [[cardmask-multiset-fix]]
 
 ## 归档说明
-- 位于 `archive/` 目录 = 历史观察，不再主动维护
-- 新观察应创建新文件而非追加
-
-## 关联
-- 主题：[[batch-evaluation]]
-- 目录：analysis/archive/（历史资产）
-- 配合：[[南邮离线平台-actionList候选缺失观测报告-summary]]
-```
-
----
+本文件作为单次观察记录，结论已并入 [[synthesis-m3-vs-v7-status]] 性能章节。

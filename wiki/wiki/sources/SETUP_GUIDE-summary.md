@@ -1,27 +1,37 @@
 ---
 type: source-summary
-title: "SETUP_GUIDE.md 环境配置"
+title: "环境搭建指南"
 sources:
   - docs/guandan-brain/SETUP_GUIDE.md
 tags:
   - setup
-  - infrastructure
+  - environment
+  - onboarding
 status: current
-date: 2026-06-18
+related_gua: []
+date: 2026-07-15
 ---
 
-# SETUP_GUIDE.md 环境配置
+# 环境搭建指南
 
-## 文档定位
-V7 引擎开发与批跑的**环境搭建指南**。覆盖 Python 环境、依赖、训练/推理数据集路径。
+## 概述
 
-## 关键内容
-- Python 版本与虚拟环境
-- PyTorch / NumPy 等核心依赖
-- 训练数据集目录（BC 训练样本）
-- 推理环境配置
-- 批跑脚本调用方式
+`SETUP_GUIDE.md` 描述了双上计分王 AI 项目的**本地环境搭建流程**。
+
+## 涉及内容
+
+- 依赖安装（Python、CUDA、模型权重等）
+- 数据集准备
+- 训练 / 评测环境配置
+- 与 [[SCRIPT_INDEX]] 中脚本的衔接
+
+## 关键问题
+
+- 新成员 Onboarding 流程
+- 不同操作系统 (Linux/macOS) 的兼容性
+- GPU 环境要求（V7 NN 引擎依赖）
 
 ## 关联页面
-- wiki/entities/module-batch-executor.md：批跑执行模块
-- [[concept-batch-evaluation]]：批跑评测体系
+
+- [[SCRIPT_INDEX-summary]]
+- [[engine-v7]]

@@ -1,46 +1,43 @@
+```markdown
 ---
 type: entity-module
-title: "grouping_engine 组牌引擎 v2"
+title: "组牌引擎（grouping_engine）"
 sources:
-  - docs/guandan-brain/SCRIPT_INDEX.md
-  - docs/guandan-brain/v7-win-rate-history.md
+  - docs/guandan-brain/ITERATIONS.md
 tags:
   - module
   - grouping
-  - card-type
-  - v2
+  - v7
 status: current
 related_gua:
-  - GUA-070
-date: 2026-06-29
+  - GUA-062
+  - GUA-063
+date: 2026-07-15
 ---
 
-# grouping_engine 组牌引擎 v2
+# 组牌引擎
 
-## 身份
+## 文件
+- `grouping_engine.py`
+- `ultimate_win_rate_engine_v7.py`（调用方）
 
-- **规模**：v2 共 **1461 行**
-- **唯一验收入口**：`check_grouping_engine.py`
-- **职责**：将一手牌枚举为所有合法牌型组合，按 4 维加权+6 方案枚举最优
+## 版本演进
+- **v1**：基础枚举
+- **v2**（GUA-062）：5 维评分 + 6 方案枚举 + 牌力计分，10+ 次迭代
 
-## 核心特性
+## 当前定位
+**已从主导引擎降级为特征提供者**。在 V7 决策管线中：
+1. 输出中间态（候选牌型）
+2. 提供 `to_card_mask`, `is_core`, `group_size` 给 NN
+3. 不再直接决定出牌
 
-| 特性 | 描述 |
-|------|------|
-| **SF_FIRST 全候选枚举** | 先枚举所有同花顺（Straight Flush）候选，再枚举其他牌型 |
-| **NO_STRAIGHTS 双变体** | 两套无顺子方案（处理 A→2 包接 ×3） |
-| **A→2 包接** | A→2 视作 5 张顺子，×3 重复计数（接顺/接对/接三） |
-| **ThreePair 子结构拆分** | 三对拆解（影响 GUA-070 单行胜率） |
-| **SteelPlate 子结构拆分** | 钢板（双三）拆解 |
-| **4 维加权** | 权重 = (长度, 强度, 灵活性, 控场) |
-| **6 方案枚举** | 6 种枚举策略选最优 |
+## 子模块
+- `grouping_scanner` — 牌型扫描
 
-## 关键 GUA
+## 关联
+- [[grouping-engine-v2]] — v2 详细设计
+- [[gua-062]] — v2 主轴 GUA
+- [[gua-063]] — 组牌→NN 衔接
+```
 
-- **GUA-070**：ThreePair/SteelPlate 拆分影响单行胜率（17.7%）
-
-## 链接
-
-- 脚本索引：[[SCRIPT_INDEX-summary]]
-- V7 引擎：[[engine-v7]]
-- 守卫悖论：[[guard-overlap-puzzle]]
+---

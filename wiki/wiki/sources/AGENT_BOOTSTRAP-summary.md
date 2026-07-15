@@ -1,59 +1,67 @@
 ---
 type: source-summary
-title: "Agent Bootstrap 引导（wiki 入口）"
+title: "V7/V8 Agent 启动指南"
 sources:
   - docs/guandan-brain/AGENT_BOOTSTRAP.md
 tags:
-  - bootstrap
+  - source-summary
   - agent
-  - 入口
-  - 口径债
+  - workflow
+  - bootstrap
 status: current
 related_gua:
   - GUA-033
-  - GUA-036
-date: 2026-06-29
+date: 2026-07-15
 ---
 
-# Agent Bootstrap 引导
+# V7/V8 Agent 启动指南
 
-## 用途
+## 资料元信息
 
-新 agent session 启动时的**必读入口文档**，强制对齐知识体系基线。
+| 字段 | 值 |
+|------|-----|
+| 路径 | `docs/guandan-brain/AGENT_BOOTSTRAP.md` |
+| 字符数 | 9,943 |
+| 类型 | Agent 工作流真源 |
+| 状态 | 与 [[AGENT_FIRST_MESSAGE]] / [[AGENT_PUSH_CHECKLIST]] 配套使用 |
 
-## 核心要求
+## 章节结构
 
-1. **数据口径**：
-   - 局 ≠ 副（GUA-033 定音）
-   - victoryNum [0]=[2] / [1]=[3] 镜像校验
-   - WF-04 三口径对账
+### §1 项目身份与边界
+掼蛋 AI 项目定位、计分规则、双上计分王定义。
 
-2. **决策方法论**：
-   - PB-002 四层闭环
-   - WF-12 单步决策链路深挖
-   - 5 问准入审查（新增规则）
+### §2 V7 引擎配置（详见 [[engine-v7]]）
+- `ultimate_win_rate_engine_v7.py`
+- 客户端：`yf1_v7` / `yf2_v7`
+- 批跑命令模板
 
-3. **架构认知**：
-   - V7 三层架构（Layer 1/2/3）
-   - V7 阶段化方案（阶段 A/B/C）
-   - DanZero+ 论文同构
+### §3 关键定音（详见 [[recursion-game-round]]）
+- §3.1 局 vs 副区别（[[gua-033]] 定音）
+- §3.2 出牌顺序 0→1→2→3 顺时针
+- §3.3 队胜分布 `[0,3,0,3]` 解释
+- §3.4 四层 victoryNum 写入
+- §3.5 LLM Wiki 已初始化并摄入 107 个源文件
 
-4. **历史教训**：
-   - M3 GUA-036：加规则有负收益
-   - V 系列失败真根因：KPI 循环缺失 + 静默失败 + 知识库用死
-   - 信念建模是阶段 B 核心，非 P2
+### §4 V8 平台迁移（详见 [[v8-openguandan-protocol]]）
+- OpenGuanDan 新平台
+- WebSocket `ws://127.0.0.1:8181`
+- v8-dev 分支开发
 
-## ⚠️ 已知口径债
+### §5 引擎对照表
+M 系列 vs V 系列，共用层与差异层。
 
-| 文档引用路径 | 真实路径 | 状态 |
-|--------------|----------|------|
-| `scripts/analysis/analyze_v7_round_levels.py` | `scripts/tools/analyze_v7_round_levels.py` | 需修正 |
-| `scripts/analysis/analyze_v7_rounds.py` | `scripts/analysis/analyze_v7_rounds.py` | 一致 |
-| `scripts/launchers/v7/run_v7_vs_lalala_games.py` | `scripts/launchers/v7/run_v7_vs_lalala_games.py` | 一致 |
+### §7 批跑命令（详见 [[batch-evaluation]]）
+- M3 批跑命令
+- V7 批跑命令
+- game_records vs game_records_v7 目录分离
+- `--target-games` 须为 3 的倍数
 
-## 落点
+## 工作流编号
 
-- [[gua-033]] — 局≠副定音
-- [[gua-036]] — M3 加规则负收益教训
-- [[purpose]] — Wiki 目标
-- schema — Wiki 结构规范
+文档定义 12 个 Agent 工作流（WF-01 ~ WF-12），覆盖从开发到批跑到复核的全流程。
+
+## 关联页面
+
+- [[agent-bootstrap-workflow]] —— Agent 工作流概念
+- [[batch-evaluation]] —— 批跑评测
+- [[engine-v7]] / [[engine-m3]] —— 引擎实体

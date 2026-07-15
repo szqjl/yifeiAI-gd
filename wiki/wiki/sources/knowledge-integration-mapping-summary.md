@@ -1,71 +1,43 @@
 ---
 type: source-summary
-title: "GUA-073 知识库接入映射（源摘要）"
+title: "知识接入映射文档摘要"
 sources:
   - docs/guandan-brain/knowledge-integration-mapping.md
 tags:
-  - gua-073
-  - knowledge-integration
-  - granularity
-  - roadmap
+  - knowledge
+  - mapping
+  - governance
 status: current
 related_gua:
   - GUA-073
-  - GUA-071
   - GUA-072
-  - GUA-074
-date: 2026-06-19
+date: 2026-06-20
 ---
 
-# GUA-073 知识库接入映射（源摘要）
+# knowledge-integration-mapping.md 摘要
 
-## 目标
+> 将掼蛋知识库（基础策略/助攻/技能/组牌）按 7 级接入状态映射到 V7 引擎。
 
-将掼蛋领域知识**结构化、可控、可验证**地接入 V7 引擎，定义粒度分级与阶段化路线。
-
-## 知识粒度分级
+## 7 级接入体系
 
 | 级别 | 含义 | 示例 |
 |------|------|------|
-| **L0** | 牌张原子 | 单张牌面值、花色 |
-| **G** | 牌型 | 单张、对子、连对、钢板、炸弹 |
-| **H** | 牌型组合/手牌结构 | 头道/中道/尾道 |
-| **E** | 局势/外部信号 | 进张张数、级牌归属 |
-| **M** | 战术/方法论 | 控牌、跑牌、防炸 |
-| **V5** | V5 阶段遗留 | 牌力评分 |
-| **N** | NN 学到的隐式知识 | CardCountingNetwork 输出 |
+| **L0** | 已直接接入 | — |
+| **G** | Guard 层硬排除 | 队友保护 R07/R08/R09 |
+| **H** | Heuristic 层软排序 | 8 条优先级规则 |
+| **M** | 记牌（Memory） | GUA-072 规则记牌 |
+| **E** | 组牌（Grouping） | GUA-062 |
+| **V5** | 中长期记忆 | — |
+| **N** | 不可接入（理由说明） | — |
 
-详见 concept-knowledge-integration-granularity
+## 知识库分布
 
-## 标注规模
+- `01_foundation/`：基础策略（已 L0）
+- `03_assist_attack/`：助攻/传牌/角色转换（部分接 E/G）
+- `04_common_skills/`：11 类技能（单/对/牌语言/牌交互/计算/记忆/红桃/三带二/三连对/钢板/三张）
+- `07_opening/04_card_grouping_skills.md`：组牌技能（接 E）
 
-**阶段 1 已完成**：约 **149 条**知识点标注（与组牌 v2 GUA-062、Guard R 系列、heuristic 维度对齐）
+## 跳转
 
-## 阶段 2 P0 行动（紧迫）
-
-1. **6 条新 Guard 规则**（基于 GUA-073 标注缺口）
-   - 注意 GUA-066/068/069/070 **全量叠加翻车**教训：需**正交性设计**，避免非线性交互
-2. **5 条 heuristic 维度**（替代 NN argmax，参 [[gua-071]]）
-3. **记牌模块联动**（[[gua-072]] 规则记牌 + CardCountingNetwork 信念）
-4. **组牌引擎 v2 微调**（参 wiki/entities/module-grouping-engine.md，GUA-062）
-
-## 关键风险
-
-- **GUA-066 教训**：单点 Guard 提升 +18.5pp，但**全量叠加反而暴跌至 3.7%**。阶段 2 必须做正交性验证
-- **规则叠加的非线性交互效应**（参 [[gua-074]] §层级四）
-
-## 路线图
-
-- 阶段 1（已完成）：149 条标注 + 粒度分级
-- **阶段 2（P0）**：6 Guard + 5 heuristic + 记牌联动 + 组牌微调
-- 阶段 3：信念 NN 训练（CardCountingNetwork 替代规则记牌）
-- 阶段 4：自对弈 PG 阶段（参 wiki/concepts/self-play-policy-gradient.md）
-
-## 相关页面
-
-- [[gua-073]] 实体页
-- [[gua-071]] Guard 规则迭代
-- [[gua-072]] 规则记牌引擎
-- [[gua-074]] V 系列反思
-- concept-knowledge-integration-granularity
-- synthesis-knowledge-integration-roadmap
+- 完整体系 → [[knowledge-integration-mapping]]
+- 治理推进 → [[gua-073]]

@@ -901,6 +901,12 @@ def _log_operation(op: str, sources_info: list[dict]):
 # ============================================================
 
 def main():
+    # UTF-8 强制编码，避免 CMD/GBK 下 emoji 崩溃（如 lint 的 🔗🏝️📋📂）
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(
         description="LLM Wiki CLI — 知识编译工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,

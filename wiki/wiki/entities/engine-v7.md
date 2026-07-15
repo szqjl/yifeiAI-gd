@@ -1,75 +1,104 @@
+```markdown
 ---
 type: entity-engine
-title: "V7 NN 引擎"
+title: "V7 引擎（神经网络策略）"
 sources:
-  - docs/guandan-brain/v7-win-rate-history.md
-  - docs/guandan-brain/组牌-NN衔接设计-软引导vs硬约束.md
-  - docs/guandan-brain/掼蛋AI技术路径重校-V系列方法论反思.md
+  - docs/guandan-brain/ITERATIONS.md
 tags:
   - engine
+  - v7
   - nn
-  - v7-dev
+  - bc
 status: current
 related_gua:
-  - GUA-022
+  - GUA-037
+  - GUA-038
+  - GUA-039b
+  - GUA-041
+  - GUA-044
+  - GUA-045
+  - GUA-047
+  - GUA-048
+  - GUA-049
+  - GUA-050
+  - GUA-051
+  - GUA-052
+  - GUA-053
+  - GUA-059
+  - GUA-060
   - GUA-061
+  - GUA-062
+  - GUA-063
   - GUA-064
-  - GUA-091
-date: 2026-07-01
+  - GUA-065
+  - GUA-066
+  - GUA-068
+  - GUA-069
+  - GUA-070
+  - GUA-071
+  - GUA-072
+  - GUA-073
+date: 2026-07-15
 ---
 
-# V7 NN 引擎
+# V7 引擎（神经网络策略）
 
-## 基本信息
+## 引擎定位
 
-- **分支**：`v7-dev`
-- **客户端**：`yf1_v7` / `yf2_v7`
-- **核心模块**：
-  - `ultimate_win_rate_engine_v7.py`
-  - `engine_v7.py` / `v7_guards.py`
-- **认知架构**：Guard 规则 + NN 策略选择 + Heuristic 回退（混合架构）
+V7 是项目当前主迭代方向的引擎，从 [[engine-m3]] 的规则引擎范式迁移到 **神经网络策略头 + 规则记牌/战略框架** 的混合架构。
 
-## 当前状态（截至 2026-07-01）
+## 关键模块
 
-| 维度 | 数据 |
+| 模块 | 职责 |
 |------|------|
-| 累计局数 | 138 |
-| 累计胜局 | 1 |
-| 队胜率 | 0.7% |
-| 副胜率峰值 | 25.5%（GUA-065 队友识别） |
-| 副胜率谷值 | 2.4%（GUA-071） |
-| 硬门槛 | ≥30%（[[gua-039b]]） |
+| `ultimate_win_rate_engine_v7.py` | 主引擎入口 |
+| `v7_guards.py` | Guard 体系（R07~R12） |
+| `grouping_engine.py` (v2) | 组牌引擎 |
+| `memory_tracker.py` | 出牌记忆追踪 |
+| `bc_dataset.py` / `bc_trainer.py` | BC 数据集与训练器 |
+| `train_bc_v7.py` | BC 训练入口 |
+| `yf1_v7.py` / `yf2_v7.py` | 两位选手实现 |
+| `v7_game_recorder.py` | 对局记录 |
 
-## 已训练模型
+## 迭代历史
 
-| 模型 | val_acc | 状态 |
-|------|---------|------|
-| `bc_model_v2.pth` | 35.19% | 已弃用 |
-| `bc_model_v3.pth` | 80.88% | 当前；存在 [[bc-argmax-collapse]] |
-| GLM4-9B-Chat-mix | — | 竞品（9B 参数） |
+- **基础设施**：GUA-041~049（v7-infra）
+- **特征工程**：GUA-037/038（v7-features）
+- **策略层**：GUA-045~053（v7-strategy）
+- **BC 训练**：GUA-059~061（v7-bc-training）
+- **组牌 v2**：GUA-062（v7-grouping-v2）
+- **桥接与 guard**：GUA-063/065~073
 
-## 决策链路组件
+## 当前状态
 
-1. **MemoryTracker** — decide 入口 ①b 记牌
-2. **_heuristic_select** — 4 优先级启发式（NN 失败时回退）
-3. **_group_consistency_filter** — R16 组牌一致性
-4. **_stage_mid_dispatch** — [[gua-091]] 中局入口调度
+| 指标 | 数值 |
+|------|------|
+| vs Lalala 累计队胜 | 1/69（1.4%） |
+| 单次批跑副胜率波动 | 5.6% ~ 25.5% |
+| BC v3 val_acc | 80.88% |
+| BC v3 实战 | 0% |
+| 2048 维动作空间利用率 | 0.01（argmax collapse） |
 
-## 关键缺陷
+## 核心瓶颈
 
-- [[gua-064]] — BC argmax collapse（NN 退化为随机选择器）
-- [[gua-091]] — stage_2 中局入口
-- [[gua-097]] — baseline 校准
+1. **BC argmax collapse**：见 [[bc-argmax-collapse]]，已判定教师强制路线死亡
+2. **Guard 叠加过严**：GUA-070 副胜率 17.7% → 综合批跑 3.7%
+3. **P0 堆积**：GUA-064/068/072 等多条 P0 并行
 
-## 未来方向
+## 下一步方向
 
-→ [[three-layer-hybrid-architecture]]（Guard + 记牌 NN + 策略选择器）
+- 走 GUA-039b 自对弈路线
+- 或引入 RL 微调
+- 见 [[synthesis-v7-current-state]]
 
-## 跨引用
+## 关联
 
-- [[engine-m3]] — 规则引擎对照
-- [[v7-nn-engine-migration]] — M3→V7 迁移路径
-- [[synthesis-v7-current-state]] — 综合状态
+- [[bc-argmax-collapse]]
+- [[guard-heuristic-pipeline]]
+- [[three-engine-training-pipeline]]
+- [[engine-m3]]
+- [[engine-v8]]
+- [[synthesis-v7-current-state]]
 ```
 
 ---

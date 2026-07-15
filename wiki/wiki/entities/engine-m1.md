@@ -1,48 +1,76 @@
 ---
 type: entity-engine
-title: "M1 决策引擎"
-status: frozen
+title: "M1 引擎 (frozen)"
 sources:
-  - docs/guandan-brain/iterations/m1-strategy-gua022.md
-  - docs/guandan-brain/iterations/m1-pass-gua020-021.md
-related_gua:
-  - GUA-020
-  - GUA-021
-  - GUA-022
+  - docs/development/M1_ARCHITECTURE.md
+  - docs/development/AI首秀分析报告.md
 tags:
+  - engine
   - m1
-  - rule-engine
+  - rule-based
   - frozen
-date: 2026-06-18
+  - predecessor
+status: current
+related_gua:
+  - GUA-022
+  - GUA-014
+  - GUA-021
+date: 2026-07-15
 ---
 
-# M1 决策引擎
+# M1 引擎 (frozen)
 
 ## 状态
 
-> **frozen / 非交付线**
-> KPI 已迁 M3，P0 guard 改至 `m3_decision_engine`
+**已冻结 (frozen)** —— 由 GUA-022 标记，队胜率 KPI = 0，M1 不再作为主迭代方向。
 
-## 关键文件
+M1 是 M 系列的起点与前身，[[engine-m3]] 是其继承者。
 
-- `rule_based_decision_engine_m1.py`
-- `yf1_m1.py` / `yf2_m1.py`
-- `stage_router.py` / `phase_handlers.py`（共用层）
-- `intelligent_router.py`
+## 定位
 
-## 已知缺陷
+`RuleBasedDecisionEngineM1` —— 硬编码规则引擎，所有决策逻辑写死在代码中，无学习能力。与 [[engine-v7]] 的 NN 路线形成对照：
 
-- 0/12 队胜率同机对照（GUA-022）
-- 规则引擎能力瓶颈，复杂场景无法突破
+| 维度 | M1 | V7 |
+|------|----|----|
+| 决策方式 | 硬编码 if-else 规则 | 神经网络策略 |
+| 路线 | 规则线 | NN 线 |
+| 状态 | frozen (GUA-022) | 实验线 (v7-dev) |
+| 客户端 | yf1_m1 / yf2_m1 | yf1_v7 / yf2_v7 |
+| 数据目录 | game_records | game_records_v7 |
 
-## 历史 KPI
+## 核心架构
 
-- yf1 vs yf2 PASS率：扩样复测 ≈ 一致（GUA-020）
-- 问题 PASS：共用层收紧后清零（GUA-021）
-- 队胜率：0/12（GUA-022，frozen 原因）
+### 5 阶段路由
 
-## 关联
+M1 引入 [[stage-router-architecture]]：**5 阶段 × 2 模式 = 10 个 handler**：
 
-- m1-vs-m3-handoff
-- M1 frozen 迁 M3 决策路径
-- wiki-minimax/entities/engine-m3.md
+- 阶段：`opening` / `mid_early` / `mid_late` / `endgame_early` / `endgame_late`
+- 模式：`active` (主动) / `passive` (被动)
+
+### 模块组成
+
+- `StageRouter` —— 路由分发
+- `BasePhaseHandler` —— handler 基类
+- `phase_handlers/` —— 10 常规 + 2 特殊 (TributeHandler / BackHandler)
+- `strategy_engine` —— 策略主入口
+
+### 共用层
+
+M1 与 V 系列共享部分代码层（牌型识别、回合驱动），但决策核心独立。
+
+## 缺陷历史
+
+| GUA | 标题 | 状态 |
+|-----|------|------|
+| [[gua-022]] | M1 frozen, 队胜率 0 | P1 |
+| [[gua-014]] | 拆牌优先级 | P2 |
+| [[gua-021]] | Router 兜底修复 | 已修复 |
+
+## 历史价值
+
+M1 是项目第一个完整规则引擎，承担：
+1. 验证阶段路由架构的可行性
+2. 建立 yf1/yf2 双队对抗测试框架
+3. 作为 [[first-debut-baseline]] 之后的第一个有结构对手
+
+M1 frozen 之后，[[engine-m3]] 接管主迭代，沿用阶段路由思想但修复了多处硬编码缺陷。
