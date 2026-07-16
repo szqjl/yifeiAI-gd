@@ -1052,22 +1052,36 @@ class EndgameDecider:
             if bomb_first:
                 # 先炸后整：出最大炸弹
                 return self._select_best_bomb(bombs, action_list)
-            else:
-                # 先整后炸：两手冲刺优先整组（TwoTrips/ThreePair/TWT…），禁半组 Trips
-                all_cands = [(i, a) for i, a in enumerate(action_list)]
-                sprint_lead = self._select_two_turn_sprint_structure(
-                    non_bombs, all_cands, game_state, ec,
-                    prefer_structure_first=True,
-                )
-                if sprint_lead is not None:
-                    return sprint_lead
-                whole = self._select_q0_whole_structure_lead(non_bombs, game_state)
-                if whole is not None:
-                    return whole
-                if non_bombs:
-                    return self._select_best_index(non_bombs, action_list, game_state)
-                # 整牌没有 → 炸
-                return self._select_best_bomb(bombs, action_list)
+
+            # GUA-151: 领出时炸后剩牌 ≤1（一次清场或仅剩单张）→ 直接出炸抢头游
+            # 避免 prefer_structure_first 把炸排在整牌后面，
+            # 导致"全同点手牌可一次清场"被拆成 Trips+Pair 等错误选择。
+            if bombs:
+                hand_cards = game_state.get("handCards", []) or []
+                total = len(hand_cards)
+                for _idx, _act in bombs:
+                    if len(_get_cards(_act)) >= total - 1:
+                        logger.info(
+                            "Q0 领出炸清场抢头游: total=%d bomb_size=%d",
+                            total, len(_get_cards(_act)),
+                        )
+                        return self._select_best_bomb(bombs, action_list)
+
+            # 先整后炸：两手冲刺优先整组（TwoTrips/ThreePair/TWT…），禁半组 Trips
+            all_cands = [(i, a) for i, a in enumerate(action_list)]
+            sprint_lead = self._select_two_turn_sprint_structure(
+                non_bombs, all_cands, game_state, ec,
+                prefer_structure_first=True,
+            )
+            if sprint_lead is not None:
+                return sprint_lead
+            whole = self._select_q0_whole_structure_lead(non_bombs, game_state)
+            if whole is not None:
+                return whole
+            if non_bombs:
+                return self._select_best_index(non_bombs, action_list, game_state)
+            # 整牌没有 → 炸
+            return self._select_best_bomb(bombs, action_list)
         else:
             # 出牌权不在我手
             if enemy_in_endgame:
