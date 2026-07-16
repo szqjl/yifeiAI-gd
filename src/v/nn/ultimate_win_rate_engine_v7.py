@@ -982,7 +982,7 @@ class UltimateWinRateEngineV7:
         if teammate_cover_confidence >= 0.75:
             return None
 
-        bomb = self._recommend_bomb_from_mask(card_mask, cur_rank)
+        bomb = self._recommend_bomb_from_mask(card_mask, cur_rank, action_list=game_state.get("actionList") or [])
         if not bomb:
             return None
 
@@ -2944,6 +2944,7 @@ class UltimateWinRateEngineV7:
         # 中局不再直接落入通用四场景逻辑，而是先统一消费
         # `_belief + _phase_relation + role + greaterAction` 形成攻守意图。
         if current_stage == "stage_2" and self._is_stage2_dispatch_enabled():
+            game_state["actionList"] = action_list
             stage_rec = self._stage_mid_dispatch(
                 game_state=game_state,
                 card_mask=card_mask,
@@ -3409,7 +3410,7 @@ class UltimateWinRateEngineV7:
                 and teammate_cover_confidence < 0.5
                 and teammate_rear_single_cover_confidence < 0.65
             ):
-                bomb = self._recommend_bomb_from_mask(card_mask, cur_rank)
+                bomb = self._recommend_bomb_from_mask(card_mask, cur_rank, action_list=game_state.get("actionList") or [])
                 if bomb:
                     return _with_intent(bomb, f"mid_bomb_cutoff:{reason}")
 
@@ -3470,7 +3471,7 @@ class UltimateWinRateEngineV7:
                 and critical_enemy_remaining <= 3
                 and teammate_cover_confidence < 0.5
             ):
-                bomb = self._recommend_bomb_from_mask(card_mask, cur_rank)
+                bomb = self._recommend_bomb_from_mask(card_mask, cur_rank, action_list=game_state.get("actionList") or [])
                 if bomb:
                     return _with_intent(bomb, f"mid_bomb_cutoff:{reason}")
 
@@ -4090,92 +4091,69 @@ class UltimateWinRateEngineV7:
         return (True, f"改炸(suppressors={suppressors})")
 
     def _recommend_bomb_from_mask(
-        self, card_mask: Dict, cur_rank: str,
+        self,
+        card_mask: Dict,
+        cur_rank: str,
+        action_list: Optional[List] = None,
     ) -> Optional[Dict[str, Any]]:
-        """
-        从组牌引擎 card_mask 中选出最可牺牲的炸弹推荐。
-
-        优先级：非核心 > 核心；小张数 > 大张数；纯炸 > 含逢人配。
-        Returns:
-            {"type": "Bomb", "rank": str, "cards": [str, ...]} 或 None
-        """
+        """选择拿权价值最高且与平台动作一致的 Bomb-like 牌型。"""
         from src.v.nn.guards.v7_guards import (
-            get_card_rank, is_pure_bomb, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+            get_card_rank, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
         )
 
-        # 收集所有炸弹组（group_members 为 multiset 真源，支持 4~8 星炸）
-        bomb_candidates = []
-        members_src = self._group_members if self._group_members else {}
-        if members_src:
-            for gid, g_cards in members_src.items():
-                if gid < 0:
-                    continue
-                gtype = self._group_type_map.get(gid, "")
-                if gtype not in ("Bomb", "StraightFlush"):
-                    continue
-                if len(g_cards) < 4:
-                    continue
-                rank = get_card_rank(str(g_cards[0]))
-                is_pure = is_pure_bomb(g_cards, cur_rank)
-                action_type = (
-                    ACTION_TYPE_STRAIGHT_FLUSH if gtype == "StraightFlush"
-                    else ACTION_TYPE_BOMB
-                )
-                sample = card_mask.get(g_cards[0], (gid, 1.0, len(g_cards)))
-                bomb_candidates.append({
-                    "gid": gid,
-                    "type": action_type,
-                    "rank": rank,
-                    "cards": sorted(g_cards),
-                    "is_core": sample[1],
-                    "size": len(g_cards),
-                    "is_pure": is_pure,
-                })
-        else:
-            seen_gids = set()
-            for card, (gid, is_core, gsize) in card_mask.items():
-                if gid < 0 or gid in seen_gids:
-                    continue
-                gtype = self._group_type_map.get(gid, "")
-                if gtype not in ("Bomb", "StraightFlush"):
-                    continue
-                seen_gids.add(gid)
-                g_cards = [c for c, (g, _, _) in card_mask.items() if g == gid]
-                if len(g_cards) < 4:
-                    continue
-                rank = get_card_rank(str(g_cards[0]))
-                is_pure = is_pure_bomb(g_cards, cur_rank)
-                action_type = (
-                    ACTION_TYPE_STRAIGHT_FLUSH if gtype == "StraightFlush"
-                    else ACTION_TYPE_BOMB
-                )
-                bomb_candidates.append({
-                    "gid": gid,
-                    "type": action_type,
-                    "rank": rank,
-                    "cards": sorted(g_cards),
-                    "is_core": is_core,
-                    "size": len(g_cards),
-                    "is_pure": is_pure,
-                })
+        candidates = []
+        for action in action_list or []:
+            if not isinstance(action, list) or len(action) < 3:
+                continue
+            if action[0] not in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+                continue
+            if not isinstance(action[2], list):
+                continue
+            candidates.append({
+                "type": action[0],
+                "rank": str(action[1]),
+                "cards": sorted(str(card) for card in action[2]),
+            })
 
-        if not bomb_candidates:
+        if not candidates:
+            members_src = self._group_members if self._group_members else {}
+            if members_src:
+                for gid, g_cards in members_src.items():
+                    if gid < 0 or len(g_cards) < 4:
+                        continue
+                    gtype = self._group_type_map.get(gid, "")
+                    if gtype not in ("Bomb", "StraightFlush"):
+                        continue
+                    candidates.append({
+                        "type": (
+                            ACTION_TYPE_STRAIGHT_FLUSH
+                            if gtype == "StraightFlush" else ACTION_TYPE_BOMB
+                        ),
+                        "rank": get_card_rank(str(g_cards[0])),
+                        "cards": sorted(g_cards),
+                    })
+
+        if not candidates:
             return None
 
-        # 排序：非核心优先、张数少优先、纯炸优先
-        bomb_candidates.sort(key=lambda b: (
-            1 if b["is_core"] > 0 else 0,  # 核心排在后面
-            b["size"],                       # 张数少优先
-            0 if b["is_pure"] else 1,       # 纯炸优先
-        ))
+        wild_card = f"H{cur_rank}"
 
-        best = bomb_candidates[0]
+        def priority(candidate: Dict[str, Any]) -> tuple:
+            size = len(candidate["cards"])
+            strength = 9 if candidate["type"] == ACTION_TYPE_STRAIGHT_FLUSH else size
+            return (
+                -strength,
+                1 if wild_card in candidate["cards"] else 0,
+                -self.RANK_ORDER.get(candidate["rank"], -1),
+                tuple(candidate["cards"]),
+            )
+
+        best = min(candidates, key=priority)
         return {
             "type": best["type"],
             "rank": best["rank"],
             "cards": best["cards"],
         }
-
     def _recommend_vs_teammate(
         self, game_state, card_mask, greater_action, greater_type
     ) -> Optional[Dict[str, Any]]:

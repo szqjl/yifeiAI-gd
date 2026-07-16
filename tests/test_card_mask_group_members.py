@@ -134,3 +134,71 @@ class TestRecommendBombFromMask:
         rec = engine._recommend_bomb_from_mask(mask, "2")
         assert rec is not None
         assert len(rec["cards"]) == count
+class TestRecommendBombPlatformStrength:
+    """冲刺拿权遵循平台固定强度，并以 actionList 牌张为真源。"""
+
+    @staticmethod
+    def _engine_for_anchor():
+        hand = ["H2", "D2", "D3", "D3", "D5", "D6", "HK", "SK", "CK", "SK"]
+        plan, _ = enumerate_groupings(hand, "2")
+        mask, type_map, group_members = plan.to_card_mask()
+        engine = UltimateWinRateEngineV7(player_id=0)
+        engine._card_mask = mask
+        engine._group_type_map = type_map
+        engine._group_members = group_members
+        engine._current_role = "主攻"
+        return engine, hand, mask
+
+    def test_straight_flush_beats_five_star_bomb(self):
+        engine, _, mask = self._engine_for_anchor()
+        action_list = [
+            ["Bomb", "K", ["H2", "HK", "SK", "CK", "SK"]],
+            ["StraightFlush", "2", ["H2", "D2", "D3", "D5", "D6"]],
+        ]
+
+        rec = engine._recommend_bomb_from_mask(mask, "2", action_list=action_list)
+
+        assert rec == {
+            "type": "StraightFlush",
+            "rank": "2",
+            "cards": sorted(["H2", "D2", "D3", "D5", "D6"]),
+        }
+
+    def test_four_k_bomb_does_not_add_wild_card(self):
+        engine, _, mask = self._engine_for_anchor()
+        action_list = [["Bomb", "K", ["HK", "SK", "CK", "SK"]]]
+
+        rec = engine._recommend_bomb_from_mask(mask, "2", action_list=action_list)
+
+        assert rec["cards"] == sorted(["HK", "SK", "CK", "SK"])
+        assert "H2" not in rec["cards"]
+
+    def test_anchor_sprint_fire_selects_straight_flush(self):
+        engine, hand, _ = self._engine_for_anchor()
+        game_state = {
+            "actionList": [
+                ["PASS", "PASS", "PASS"],
+                ["Bomb", "K", ["H2", "HK", "SK", "CK", "SK"]],
+                ["StraightFlush", "2", ["H2", "D2", "D3", "D5", "D6"]],
+            ],
+            "myPos": 0,
+            "greaterPos": 3,
+            "greaterAction": ["Single", "T", ["HT"]],
+            "_phase_relation": {
+                "sprint_fire_ready": True,
+                "teammate_cover_confidence": 0.2,
+            },
+            "handCards": hand,
+        }
+
+        rec = engine._maybe_recommend_sprint_fire_bomb(
+            game_state,
+            engine._card_mask,
+            "2",
+            teammate_pos=2,
+            intent="mid_sprint_fire_bomb",
+        )
+
+        assert rec["type"] == "StraightFlush"
+        assert rec["cards"] == sorted(["H2", "D2", "D3", "D5", "D6"])
+        assert rec["intent"] == "mid_sprint_fire_bomb"

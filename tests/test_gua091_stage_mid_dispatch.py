@@ -208,7 +208,7 @@ def test_stage_mid_dispatch_ignites_bomb_when_sprint_fire_ready():
 
     assert rec is not None
     assert rec["type"] == "Bomb"
-    assert rec["rank"] == "4"
+    assert rec["rank"] == "5"
     assert rec["intent"] == "mid_sprint_fire_bomb"
 
 
