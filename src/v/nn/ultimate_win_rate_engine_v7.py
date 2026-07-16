@@ -2470,6 +2470,25 @@ class UltimateWinRateEngineV7:
         hand_cards = game_state.get("handCards", []) or []
         my_hand_size = len(hand_cards)
 
+        # ── GUA-149 soft guard: 仅剩 1 个非 PASS 合法候选时禁止 PASS ──
+        # R-D05: 组牌去单化后散牌极少，heuristic 打分中 PASS 靠
+        # 队友控牌 +200 / 对手双HR推断 +350 叠分，远超非组局一致的非PASS动作
+        # （如 Single/CJ 仅得 50-9=41），导致手牌僵死 3 轮不动。
+        # 硬守卫：唯一非 PASS 候选 → 跳过所有打分，直接选中。
+        non_pass_count = 0
+        non_pass_idx = -1
+        for i, act in enumerate(action_list):
+            if get_action_type(act) != ACTION_TYPE_PASS:
+                non_pass_count += 1
+                non_pass_idx = i
+        if non_pass_count == 1 and non_pass_idx >= 0:
+            self.logger.debug(
+                "GUA-149 soft guard: only 1 non-PASS candidate (idx=%d, type=%s), "
+                "force-selecting it over PASS to prevent hand freeze",
+                non_pass_idx, get_action_type(action_list[non_pass_idx])
+            )
+            return non_pass_idx
+
         # ── 场景判断 ──
         teammate_controls = (
             greater_pos == teammate_pos
