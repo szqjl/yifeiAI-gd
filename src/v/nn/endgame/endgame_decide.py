@@ -2790,6 +2790,53 @@ class EndgameDecider:
                 best = (i, a)
         return best
 
+    def _find_min_non_bomb_lead_action(
+        self, action_list: List, cur_rank: str,
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-150：从 action_list 中找最小非炸非 PASS 动作（用于 self_sprint 出牌夺权）。
+
+        优先级：Single > Pair > Trips > ThreeWithTwo > Straight > ThreePair > TwoTrips
+        （留炸弹给冲刺尾手）。同型取牌力最小。
+
+        返回：(idx, action) 或 None。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+        # 型优先级（值越小越优先）
+        type_priority = {
+            ACTION_TYPE_SINGLE: 0,
+            ACTION_TYPE_PAIR: 1,
+            ACTION_TYPE_TRIPS: 2,
+            ACTION_TYPE_THREE_WITH_TWO: 3,
+            ACTION_TYPE_STRAIGHT: 4,
+            ACTION_TYPE_THREE_PAIR: 5,
+            ACTION_TYPE_TWO_TRIPS: 6,
+        }
+        best: Optional[Tuple[int, List]] = None
+        best_key: Tuple[int, int] = (10**9, 10**9)
+        for i, a in enumerate(action_list):
+            try:
+                atype = get_action_type(a)
+            except Exception:
+                continue
+            if atype == ACTION_TYPE_PASS or atype == ACTION_TYPE_FREE:
+                continue
+            if _is_bomb_like_action(a):
+                continue
+            cards = _get_cards(a)
+            if not cards:
+                continue
+            prio = type_priority.get(atype, 8)
+            try:
+                v = max(get_card_value(c, cur_rank) for c in cards)
+            except Exception:
+                continue
+            key = (prio, v)
+            if key < best_key:
+                best_key = key
+                best = (i, a)
+        return best
+
     def _find_six_joker_bomb_in_actions(
         self, action_list: List, hand_cards: List[str],
     ) -> Optional[Tuple[int, List]]:
@@ -3416,9 +3463,39 @@ class EndgameDecider:
         # 情形 2：self_sprint（本家自闭合路径）→ 队友抢第二
         if trigger == "self_sprint":
             if teammate_sprint:
-                logger.info(
-                    "GUA-135 self_sprint: teammate 也有冲刺能力，self PASS 让 teammate 拿第二",
-                )
+                # GUA-150：比较 self 与 teammate 的冲刺路径长度（num_rounds）
+                # - self_hands ≤ teammate_hands → self 出牌夺权（不 PASS）
+                # - self_hands > teammate_hands 或 teammate 未知 → PASS 让道（保持原行为）
+                my_pos = ec.get("my_pos", 0)
+                teammate_pos = ctx.get("teammate_pos", (my_pos + 2) % 4)
+                self_hands = self._estimate_self_num_rounds(game_state)
+                teammate_hands = self._estimate_player_num_rounds(teammate_pos, game_state)
+
+                if self_hands > 0 and teammate_hands > 0 and self_hands <= teammate_hands:
+                    logger.info(
+                        "GUA-150 self_sprint_priority: self_hands=%d ≤ teammate_hands=%d → self 出牌夺权",
+                        self_hands, teammate_hands,
+                    )
+                    # 优先 TWT（与原 else 分支一致），其次最小非炸非 PASS 动作
+                    twt = self._find_twt_min_point(action_list, cur_rank)
+                    if twt is not None:
+                        logger.info("GUA-150 self_sprint_priority: 选 min TWT 夺权")
+                        return twt
+                    lead = self._find_min_non_bomb_lead_action(action_list, cur_rank)
+                    if lead is not None:
+                        logger.info(
+                            "GUA-150 self_sprint_priority: 选 min 非炸非 PASS 动作夺权 idx=%d",
+                            lead[0],
+                        )
+                        return lead
+                    logger.info(
+                        "GUA-150 self_sprint_priority: 无 TWT/非炸候选，仍 PASS 让道",
+                    )
+                else:
+                    logger.info(
+                        "GUA-150 self_sprint_priority: self_hands=%d > teammate_hands=%d（或未知）→ self PASS 让 teammate 拿第二",
+                        self_hands, teammate_hands,
+                    )
                 pass_act = self._find_pass_action(action_list)
                 if pass_act is not None:
                     return pass_act
@@ -3599,6 +3676,29 @@ class EndgameDecider:
             return 0
         try:
             return plan.num_rounds()
+        except Exception:
+            return 0
+
+    def _estimate_self_num_rounds(
+        self, game_state: Dict[str, Any],
+    ) -> int:
+        """
+        GUA-150：计算 self 最少几手能清完（基于实际 hand_cards，不依赖 MemoryTracker）。
+
+        用于 self_sprint_priority 比较：self_hands ≤ teammate_hands → self 出牌夺权。
+
+        返回：手数（0 表示未知/计算失败）
+        """
+        hand_cards = list(game_state.get("handCards") or [])
+        if not hand_cards:
+            return 0
+        cur_rank = str(game_state.get("curRank", "2"))
+        try:
+            from src.v.nn.features.grouping_engine import enumerate_groupings
+            best_plan, _ = enumerate_groupings(hand_cards, cur_rank)
+            if best_plan is None:
+                return 0
+            return best_plan.num_rounds()
         except Exception:
             return 0
 

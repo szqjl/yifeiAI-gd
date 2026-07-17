@@ -652,18 +652,19 @@ class BatchExecutor:
                         payload.get("vn_source", "?"),
                         raw,
                     )
-            if team_total != batch_games:
-                self.logger.warning(
-                    "批末 victoryNum 与 batch_games 不一致: vn=%s [0]+[1]=%d, batch_games=%d；"
-                    "本批队胜不计入 tracker",
-                    vn,
-                    team_total,
-                    batch_games,
-                )
-                return None
-            if int(vn[0]) != int(vn[2]) or int(vn[1]) != int(vn[3]):
-                self.logger.warning("批末 victoryNum 同队不一致: %s", vn)
-                return None
+            if self.platform != "openguandan":
+                if team_total != batch_games:
+                    self.logger.warning(
+                        "批末 victoryNum 与 batch_games 不一致: vn=%s [0]+[1]=%d, batch_games=%d；"
+                        "本批队胜不计入 tracker",
+                        vn,
+                        team_total,
+                        batch_games,
+                    )
+                    return None
+                if int(vn[0]) != int(vn[2]) or int(vn[1]) != int(vn[3]):
+                    self.logger.warning("批末 victoryNum 同队不一致: %s", vn)
+                    return None
             self.logger.info(
                 "批末 victoryNum 校验通过: vn=%s, batch_games=%d, Team0=%d Team1=%d",
                 vn,
@@ -1222,19 +1223,37 @@ class BatchExecutor:
                 if not server_terminated_by_kill:
                     vn = self._validate_batch_victory_num(batch_games)
                     if vn is not None:
-                        # 直接用 latest_victory_num.json 真源更新 tracker
-                        # pos 0+2 = Team A（V7），pos 1+3 = Team B（Lalala）
-                        team_a_wins = vn[0]
-                        team_b_wins = vn[1]
-                        for _ in range(team_a_wins):
-                            self.tracker.record_game("team_a")
-                        for _ in range(team_b_wins):
-                            self.tracker.record_game("team_b")
-                        self.logger.info(
-                            "本批战绩(来自victoryNum): Team A +%d, Team B +%d",
-                            team_a_wins,
-                            team_b_wins,
-                        )
+                        if self.platform == "openguandan":
+                            # V8: victoryNum=各席副胜次数，局胜负用 victoryRank 判定
+                            shared = self.project_root / "batch_executor" / "latest_victory_num.json"
+                            v_rank = None
+                            if shared.exists():
+                                try:
+                                    v_rank = json.loads(shared.read_text(encoding="utf-8")).get("victoryRank")
+                                except Exception:
+                                    pass
+                            team_a = vn[0] + vn[2]
+                            team_b = vn[1] + vn[3]
+                            if v_rank and isinstance(v_rank, list) and len(v_rank) >= 2:
+                                winner = "team_a" if v_rank[0] == "A" else "team_b" if v_rank[1] == "A" else None
+                            else:
+                                winner = "team_a" if team_a > team_b else "team_b" if team_b > team_a else None
+                            if winner:
+                                self.tracker.record_game(winner)
+                            self.logger.info(
+                                "本批战绩(V8): Team A %d副胜, Team B %d副胜, 局胜者=%s",
+                                team_a, team_b, winner or "未知",
+                            )
+                        else:
+                            # V7: vn[0]/[1] = 本局升级数
+                            for _ in range(vn[0]):
+                                self.tracker.record_game("team_a")
+                            for _ in range(vn[1]):
+                                self.tracker.record_game("team_b")
+                            self.logger.info(
+                                "本批战绩(来自victoryNum): Team A +%d, Team B +%d",
+                                vn[0], vn[1],
+                            )
                         self.logger.info(
                             "累计战绩: Team A %d胜, Team B %d胜",
                             self.tracker.team_a_wins,

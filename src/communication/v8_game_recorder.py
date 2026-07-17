@@ -308,6 +308,7 @@ def save_victory_num_shared(
     logger=None,
     *,
     vn_source: str = "gameResult",
+    victory_rank: list = None,
 ) -> bool:
     """写入 latest_victory_num.json，供 batch_executor 批末对账。"""
     if not victory_num or len(victory_num) < 4:
@@ -322,6 +323,8 @@ def save_victory_num_shared(
             "timestamp": datetime.now().isoformat(),
             "player": player,
         }
+        if victory_rank:
+            payload["victoryRank"] = victory_rank
         with open(shared_file, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         if logger:
@@ -365,7 +368,8 @@ def process_platform_game_end_notify(
         logger.info("局级结束通知(%s)，current_game 为空", key)
 
     if kind == "session" and victory_num:
-        save_victory_num_shared(victory_num, player_tag, logger)
+        v_rank = result.get("victoryRank") or data.get("victoryRank")
+        save_victory_num_shared(victory_num, player_tag, logger, victory_rank=v_rank)
         filled = game_recorder.backfill_victory_num(victory_num)
         if logger and filled:
             logger.info("✓ victoryNum 已回填 %s 条 game_records", filled)
