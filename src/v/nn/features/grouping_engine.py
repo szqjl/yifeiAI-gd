@@ -794,8 +794,8 @@ def _detect_three_with_two(
     remaining_pairs = [p[:] for p in pairs]
     three_with_twos: List[Tuple[List[str], List[str]]] = []
 
-    # 贪心：按 rank 排序三张（从高到低优先消耗大牌 trip）
-    sorted_trips = sorted(remaining_trips, key=lambda t: _card_rank_value(t[0], cur_rank), reverse=True)
+    # 贪心：按 rank 排序三张（从小到大优先让小 trip 吃小对，保留大对作独立跟牌）
+    sorted_trips = sorted(remaining_trips, key=lambda t: _card_rank_value(t[0], cur_rank))
     for trip in sorted_trips:
         rank_counts = _pool_rank_counts(pool_s, remaining_pairs, remaining_trips)
         pair_idx = None
@@ -2289,3 +2289,4 @@ def extract_grouping_score(
     返回 24 维特征向量（原 grouping_scanner 返回 9 维）。
     """
     return extract_grouping_features(hand_cards, cur_rank)
+

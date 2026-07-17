@@ -202,3 +202,41 @@ class TestRecommendBombPlatformStrength:
         assert rec["type"] == "StraightFlush"
         assert rec["cards"] == sorted(["H2", "D2", "D3", "D5", "D6"])
         assert rec["intent"] == "mid_sprint_fire_bomb"
+
+class TestDetectThreeWithTwoPairingOrder:
+    """`_detect_three_with_two` 应优先让小 trip 吃小对，避免浪费大对。"""
+
+    @staticmethod
+    def _grouped(hand, cur_rank="5"):
+        plan, _ = enumerate_groupings(hand, cur_rank)
+        return plan.three_with_twos
+
+    def test_small_trip_takes_small_pair(self):
+        hand = [
+            "S3", "C3", "S3", "S4", "C4", "H6", "D6",
+            "S7", "C7", "D7", "D7", "H8", "S8", "D8", "H8", "D8",
+            "CT", "SQ", "CQ", "DQ", "SK", "DK", "CA", "DA", "CA", "SB",
+        ]
+        twt = self._grouped(hand)
+        pairs_by_trip = {tuple(trip): tuple(pair) for trip, pair in twt}
+
+        assert pairs_by_trip[("S3", "C3", "S3")] == ("S4", "C4")
+        assert pairs_by_trip[("SQ", "CQ", "DQ")] == ("H6", "D6")
+        assert pairs_by_trip[("CA", "DA", "CA")] == ("SK", "DK")
+
+    def test_large_pair_kept_for_follow_press(self):
+        hand = [
+            "S3", "C3", "S3", "H6", "D6", "H8", "S8", "D8", "CT",
+            "SJ", "CJ", "DJ", "SK", "DK",
+            "HQ", "CQ", "DQ", "HA", "SA", "CA", "DA", "SB",
+            "H7", "C7", "D7", "H7",
+        ]
+        twt = self._grouped(hand)
+        pairs_by_trip = {tuple(trip): tuple(pair) for trip, pair in twt}
+
+        assert pairs_by_trip[("S3", "C3", "S3")] == ("H6", "D6")
+        assert pairs_by_trip[("H8", "S8", "D8")] == ("SK", "DK")
+        assert all(
+            pair != ("SK", "DK") or trip == ("H8", "S8", "D8")
+            for trip, pair in pairs_by_trip.items()
+        )

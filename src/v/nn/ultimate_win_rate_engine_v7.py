@@ -4096,7 +4096,12 @@ class UltimateWinRateEngineV7:
         cur_rank: str,
         action_list: Optional[List] = None,
     ) -> Optional[Dict[str, Any]]:
-        """选择拿权价值最高且与平台动作一致的 Bomb-like 牌型。"""
+        """选择拿权价值最高且与平台动作一致的 Bomb-like 牌型。
+
+        来源优先级：平台 actionList 真源 → _group_members multiset →
+        card_mask._group_type_map 退化路径。三者都没有则返回 None。
+        排序：同花顺(9) > 五星炸(5) > 四星炸(4)；再按 wild 配牌 + 牌点 + cards 元组。
+        """
         from src.v.nn.guards.v7_guards import (
             get_card_rank, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
         )
@@ -4117,26 +4122,51 @@ class UltimateWinRateEngineV7:
 
         if not candidates:
             members_src = self._group_members if self._group_members else {}
+            group_type_map = self._group_type_map or {}
             if members_src:
                 for gid, g_cards in members_src.items():
                     if gid < 0 or len(g_cards) < 4:
                         continue
-                    gtype = self._group_type_map.get(gid, "")
+                    gtype = group_type_map.get(gid, "")
                     if gtype not in ("Bomb", "StraightFlush"):
                         continue
+                    cards = sorted(g_cards)
                     candidates.append({
                         "type": (
                             ACTION_TYPE_STRAIGHT_FLUSH
                             if gtype == "StraightFlush" else ACTION_TYPE_BOMB
                         ),
                         "rank": get_card_rank(str(g_cards[0])),
-                        "cards": sorted(g_cards),
+                        "cards": cards,
+                    })
+            elif group_type_map:
+                # 退化路径：_group_members 为空但 _group_type_map 仍记录 group_id
+                gid_to_cards: Dict[int, List[str]] = {}
+                for card, info in card_mask.items():
+                    if not isinstance(info, tuple) or len(info) < 1:
+                        continue
+                    gid = info[0]
+                    if gid < 0:
+                        continue
+                    gid_to_cards.setdefault(gid, []).append(card)
+                for gid, g_cards in gid_to_cards.items():
+                    gtype = group_type_map.get(gid, "")
+                    if gtype not in ("Bomb", "StraightFlush") or len(g_cards) < 4:
+                        continue
+                    cards = sorted(g_cards)
+                    candidates.append({
+                        "type": (
+                            ACTION_TYPE_STRAIGHT_FLUSH
+                            if gtype == "StraightFlush" else ACTION_TYPE_BOMB
+                        ),
+                        "rank": get_card_rank(str(g_cards[0])),
+                        "cards": cards,
                     })
 
         if not candidates:
             return None
 
-        wild_card = f"H{cur_rank}"
+        wild_card = "H" + cur_rank
 
         def priority(candidate: Dict[str, Any]) -> tuple:
             size = len(candidate["cards"])
@@ -4154,11 +4184,11 @@ class UltimateWinRateEngineV7:
             "rank": best["rank"],
             "cards": best["cards"],
         }
+
     def _recommend_vs_teammate(
         self, game_state, card_mask, greater_action, greater_type
     ) -> Optional[Dict[str, Any]]:
         """对家出牌时：默认 PASS 让道，除非对手在压队友需要解围。"""
-        # 检查队友是否在控牌（greaterPos == 对家 → 对家在控牌）
         greater_pos = game_state.get("greaterPos", -1)
         my_pos = game_state.get("myPos", self.player_id)
         teammate_pos = (my_pos + 2) % 4
@@ -4170,6 +4200,7 @@ class UltimateWinRateEngineV7:
         # 队友被压（greaterPos 是对手）且队友剩牌多 → 可能需解围
         # 暂不做复杂解围判断，返回 PASS 让回退路径处理
         return {"type": "PASS", "rank": "", "cards": []}
+
 
     @staticmethod
     def _match_chosen_to_original_action_list(

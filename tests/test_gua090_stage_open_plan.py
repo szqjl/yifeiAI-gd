@@ -176,9 +176,8 @@ def test_stage_open_plan_ignites_bomb_when_sprint_fire_ready():
 
     assert rec is not None
     assert rec["type"] == "Bomb"
-    assert rec["rank"] == "4"
+    assert rec["rank"] == "5"
     assert rec["intent"] == "open_sprint_fire_bomb"
-
 
 def test_stage_open_plan_keeps_min_press_when_not_sprint_fire_ready():
     """GUA-102：非冲刺态仍保持最小跟单，不应硬点火开炸。"""
@@ -294,3 +293,5 @@ def test_stage_open_plan_three_with_two_pressure_counter_avoids_first_round_pass
     assert rec is not None
     assert rec["type"] == "ThreeWithTwo"
     assert rec["rank"] == "A"
+
+
