@@ -47,3 +47,4 @@ date: 2026-07-15
 
 ---
 | 2026-07-15 10:56 | ingest | docs\guandan-brain\v8-win-rate-history.md, docs\guandan-brain\ITERATIONS.md |
+| 2026-07-16 22:19 | ingest | docs\guandan-brain\handoff\2026-07-14-V8-迁移启动-基础设施齐套.md, docs\guandan-brain\issues\GUA-136-completion.md, docs\guandan-brain\issues\GUA-137-completion.md (+3) |

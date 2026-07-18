@@ -332,6 +332,9 @@ rg "GUA-075|残局管线|组牌保护|handCards=|actIndex=" logs/yf2_v7_*.log
 | `src/v/nn/endgame/` | 残局 Q0～Q3 |
 | `src/communication/v7_game_recorder.py` | `my_decisions`、贡还 `initial_hand` |
 | `docs/guandan-brain/ISSUES.md` | 登记 GUA |
+| **`docs/analysis/WF-12-<game_id>-<副序>-<yf>-<主题>.md`** | **WF-12 报告默认输出目录**（必须在收尾时主动报路径） |
+
+> **输出路径规范**：每份 WF-12 报告一律写盘到 `docs/analysis/`，命名 `WF-12-<game_id>-<副序>-<yf1|yf2>-<主题>.md`（主题中文短句，如「Q0让道决策分析」）。**Agent 必须在每次收尾时主动向用户报路径**，禁止只把报告贴在聊天里。
 | `replay_word.md`（仓根） | 典型步人类可读摘要 |
 
 ---

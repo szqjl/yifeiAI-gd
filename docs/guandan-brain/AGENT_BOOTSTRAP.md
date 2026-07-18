@@ -99,8 +99,6 @@ python scripts/wiki.py lint         # 健康检查（断链/孤立/格式）
 > **Wiki 目录**：`wiki/`（`purpose.md` 定义目标，`schema.md` 定义结构规则）  
 > **来源**：`docs/guandan-brain/` + `docs/analysis/`
 
-> **⚠️ MCP 工具状态**：本会话 `codebase-memory-mcp` **不可用**；详见 [`MCP_TOOLS_STATUS.md`](./MCP_TOOLS_STATUS.md)。Agent 默认走 ripgrep/Python 回退路径，避免对 MCP 图谱的依赖。
-
 ---
 
 ## 3.6. 出牌顺序与上下家策略 🆕

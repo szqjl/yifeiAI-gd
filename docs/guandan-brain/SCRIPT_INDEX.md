@@ -314,7 +314,6 @@
 | **yf 单步决策链路（WF-12）** | **yf1**：直开 `*yf1_*` JSON；**yf2**：`[副序]-[后缀]` 配对 → §2.2 **`find_decision_at_step`** 对齐 `handCards` + `logs/yf*_*.log`；回归 `python scripts/tools/wf12_find_decision_at_step.py`；见 [`WF-12`](./workflows/WF-12-yf-decision-trace.md) §2.0–§2.2 |
 | **回放单局** | `YF_REPLAY.bat` |
 | **BC 训练** | `python scripts/train_bc_v7.py` |
-| **MCP 工具状态查询** | 读 [`MCP_TOOLS_STATUS.md`](./MCP_TOOLS_STATUS.md)（`codebase-memory-mcp` 当前不可用） |
 | **推送前冗余校验** | `python verify_gitignore.py` |
 | **Wiki 摄入** | `python scripts/wiki.py ingest` |
 | **Wiki 查询** | `python scripts/wiki.py query "关键词"` |

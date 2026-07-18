@@ -1,51 +1,76 @@
 ---
 type: source-summary
-title: "ISSUES.md — 缺陷登记簿（活跃主表）"
+title: "ISSUES.md 主表摘要"
 sources:
   - docs/guandan-brain/ISSUES.md
 tags:
-  - issues
-  - gua-registry
-  - main-table
+  - gua-master-table
+  - issues-tracking
+  - state-of-record
 status: current
 related_gua:
-  - GUA-029
+  - GUA-052
+  - GUA-061
+  - GUA-135
+  - GUA-136
+  - GUA-137
+  - GUA-138
+  - GUA-143
+  - GUA-144
+  - GUA-145
   - GUA-146
-date: 2026-07-15
+date: 2026-07-16
 ---
 
-# ISSUES.md — 缺陷登记簿（活跃主表）
+# ISSUES.md 主表摘要
 
-## 摘要
+## 概述
 
-`ISSUES.md` 是项目**活跃缺陷的主表**，存放 GUA-029 起的 open / closed 条目。GUA-001~028 已拆分至 [[issues-ARCHIVE-summary]]。
+`ISSUES.md` 是掼蛋 AI 项目的**缺陷主表**（Single Source of Truth），记录所有 GUA（GuanDan AI）条目的生命周期状态。每条 GUA 包含：编号、标题、状态（open/closed）、优先级（P0/P1/P2）、负责人、关联分支/提交。
 
-## 当前结构
+## 当前主表结构（截至 2026-07-16）
 
-- **主表**：GUA-029 ~ GUA-146（活跃 + 近期 closed）
-- **归档**：GUA-001 ~ GUA-028 → `issues/ARCHIVE.md`
-- **状态标记**：`open` / `closed ✅` / `open 🔄`（重开）/ `closed (archived)`
+| 段位 | 范围 | 状态 |
+|------|------|------|
+| 早期已关闭 | GUA-001 ~ GUA-052 | 多为 closed（部分 P0 历史遗留） |
+| 进行中 sprint | GUA-135 ~ GUA-146 | 大部分 open，少数 draft 待登记 |
 
-## 当前 P0 列表（节选）
+## 关键观察
 
-- [[gua-054]] — V7 组牌质量中间表示
-- [[gua-055]] — V7 动作空间二阶段过滤
-- [[gua-059]] — BC v2 退化根因
-- [[gua-063]] — 组牌→出牌衔接（重开 🔄）
+### GUA-135：双进优先级判定（P0 open）
+- sprint_capability 算法的初始实现
+- 数据源：剩余手牌 ≥4 张同点 → 判定为「冲刺」
+- **已知缺陷**：粗粒度，未考虑炸弹/单手/贡牌贡献
 
-## 重要已 closed ✅
+### GUA-136/137/138（draft 2026-07-08 待登记）
+> ⚠️ **数据完整性警告**：ISSUES.md 主表在 GUA-054 行附近被截断（原始文本以 `9` 结尾），**GUA-136/137/138 在主表中可能尚未正式登记**。三份完成定义文档均标注 `draft（2026-07-08 待登记）`。
+>
+> **行动项**：下次摄入前需读完整 ISSUES.md 确认这些条目是否已加入主表。
 
-- [[gua-061]] — V7 模块化架构 GroupingEngine
-- [[gua-062]] — 组牌引擎 v2 + 首次批跑 V7 vs lalala
-- [[gua-022]] — M1 frozen
+### GUA-143~146：V8 迁移基础设施
+- handoff §背景声称「文件已全部创建」
+- 但 ISSUES.md 主表标注这 4 条仍为 open
+- **未冒烟状态**：代码齐套但未跑通端到端
+- 详见 [[v8-migration-handoff]]
 
-## 时间口径注意
+## 重要约定
 
-- 归档条目中部分 closed 日期早于 `ARCHIVE.md` 文件标注的「2026-07-15」归档时间
-- **正确理解**：归档是批量回填操作，非实时同步
+1. **状态字段**：`open` / `closed` / `draft`
+2. **优先级**：`P0`（必须解决）/ `P1`（应该解决）/ `P2`（可选）
+3. **每条 GUA 必须有完成定义**：完成条件 / 验收标准 / 回归测试
+4. **关闭流程**：实现 → 单测 → 集成测试 → 批跑验证 → 关闭
 
-## 关联
+## 相关 Wiki 页面
 
-- [[issues-ARCHIVE-summary]]
-- [[ITERATIONS-summary]]
-- [[EVAL-summary]]
+- [[gua-135]] — 双进优先级判定（上游）
+- [[gua-136]] — 玩家剩牌估算增强（数据源升级 1）
+- [[gua-137]] — 玩家整手结构推断增强（数据源升级 2）
+- [[gua-138]] — grouping_engine 推理性能优化（数据源升级 3）
+- [[v8-migration-handoff]] — V8 迁移基础设施齐套状态
+- [[sprint-precision-upgrade-chain]] — sprint 评估升级链综合
+
+## 已知问题
+
+1. **表格截断**：GUA-054 之后的行可能未读完
+2. **GUA-136/137/138 未登记**：draft 状态与主表脱节
+3. **GUA-143~146 状态模糊**：handoff vs 主表说法不一致

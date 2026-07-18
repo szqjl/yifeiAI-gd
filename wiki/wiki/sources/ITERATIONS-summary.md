@@ -1,74 +1,47 @@
-```markdown
 ---
 type: source-summary
-title: "ITERATIONS.md 摘要（迭代日志 MOC 入口）"
+title: "ITERATIONS.md 迭代记录摘要"
 sources:
   - docs/guandan-brain/ITERATIONS.md
 tags:
   - iterations
-  - moc
-  - obsidian-style
-  - v7
-  - v8
+  - sprint-tracking
+  - milestones
 status: current
 related_gua:
-  - GUA-061
-  - GUA-062
-  - GUA-063
-  - GUA-064
-  - GUA-065
-  - GUA-066
-  - GUA-068
-  - GUA-069
-  - GUA-070
-  - GUA-072
-  - GUA-073
-date: 2026-07-15
+  - GUA-135
+  - GUA-136
+  - GUA-137
+  - GUA-138
+date: 2026-07-16
 ---
 
-# ITERATIONS.md 摘要
+# ITERATIONS.md 迭代记录摘要
 
-## 文件定位
-**迭代日志的 MOC（Map of Content）入口**，按 Obsidian 风格组织，所有 V7/V8 迭代条目以 GUA 编号锚定。
+## 概述
 
-## 章节结构
+`ITERATIONS.md` 是项目迭代节奏的时序记录，跟踪每个迭代周期（v8-migration-init 等）的目标、产出、复盘。
 
-| 章节 | 内容 | 关键 GUA |
-|------|------|----------|
-| V7 主迭代 | R7~R12 阶段演进 | GUA-061~073 |
-| V7 行为克隆 | BC v2/v3 重训 | GUA-064 |
-| V7 组牌引擎 | v2 五维评分 | GUA-062 |
-| V7 Guard 管道 | 三层决策管线整理 | GUA-073 |
-| V7 规则记牌 | belief input 引入 | GUA-072 |
-| V8 平台迁移 | OpenGuanDan 对接 | GUA-143~148 |
+## 当前活跃迭代
 
-## V7 关键迭代时间线
+### `v8-migration-init`
+- **起始**：2026-07-08
+- **目标**：V8 引擎迁移基础设施齐套 + 首次冒烟
+- **关键产出**：
+  - 通信层 6 个文件完成（GUA-143~146）
+  - sprint 评估数据源升级（GUA-136/137/138 draft）
+  - 房间模型协议（CREATE_ROOM / JOIN_ROOM）
+- **当前阻塞**：3 局冒烟批跑未完成（详见 [[v8-migration-handoff]] §唯一未完成动作）
+- **关联分支**：`v8-dev @ 551dd855` / `v7-dev @ 2904c08`
+- **关键提交**：`6aea7604` / `551dd855`
 
-1. **R7**：GUA-061 V7 BC v3 重训
-2. **R8**：GUA-062 组牌引擎 v2 主轴
-3. **R9**：GUA-063 组牌→NN 衔接三缺口修复（已 closed）
-4. **R10**：GUA-064 argmax collapse 确认 + GUA-066 领出不炸
-5. **R11**：GUA-068 全局抑制牌节流 + GUA-069 超弱 core 保护
-6. **R12**：GUA-070 不拆对子出单 + GUA-072 规则记牌引擎
-7. **整理**：GUA-073 Guard-Heuristic 管道职责划分
+## 历史迭代参考
 
-## 核心论点
+详见 [[v7-current-state]] 的迭代历史段。
 
-1. **V7 BC 路线已死**：GUA-064 5 次批跑 0/12 一致结论，argmax collapse 不可治
-2. **GUA-039b 自对弈是唯一解**：从 BC 转向 RL 自对弈
-3. **组牌 v2 已转纯特征**：组牌引擎 v2 从"主导引擎"降级为"特征提供者"
-4. **M3→V7 知识传承**：GUA-065 队友识别从 M3 `_Single()`、`_update_teammate_last_trick` 借鉴
-5. **副胜率方差警告**：3.7% vs 25.5% vs 7.0% 剧烈波动，≥9 局是统计意义门槛
+## 相关 Wiki 页面
 
-## 关联页面
-
-- [[gua-064]] — argmax collapse 硬瓶颈
-- [[gua-062]] — 组牌引擎 v2 主轴
-- [[gua-073]] — 三层决策管线整理
-- [[engine-v7]] — V7 引擎
-- [[engine-v8]] — V8 引擎
-- [[bc-argmax-collapse]] — BC 失败核心概念
-- [[three-layer-decision-pipeline]] — Guard→Heuristic→validate
-```
-
----
+- [[engine-v7]] — V7 引擎状态
+- [[engine-v8]] — V8 引擎状态
+- [[v8-migration-handoff]] — 本迭代详细 handoff
+- [[sprint-precision-upgrade-chain]] — 本迭代关键技术产出
