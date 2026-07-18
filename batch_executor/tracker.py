@@ -34,24 +34,27 @@ class ScoreTracker:
         self.save_file = save_file
         self.team_a_wins = 0
         self.team_b_wins = 0
+        self.draws = 0
         self.total_games = 0
     
     def record_game(self, winner: str) -> None:
         """记录一场游戏结果
         
         Args:
-            winner: 获胜队伍，"team_a" 或 "team_b"
+            winner: 获胜队伍，"team_a"、"team_b" 或 "draw"（平局）
         
         Raises:
-            ValueError: 如果winner不是"team_a"或"team_b"
+            ValueError: 如果winner不是"team_a"、"team_b"或"draw"
         """
-        if winner not in ["team_a", "team_b"]:
-            raise ValueError(f"Invalid winner: {winner}. Must be 'team_a' or 'team_b'")
+        if winner not in ["team_a", "team_b", "draw"]:
+            raise ValueError(f"Invalid winner: {winner}. Must be 'team_a', 'team_b' or 'draw'")
         
         if winner == "team_a":
             self.team_a_wins += 1
-        else:
+        elif winner == "team_b":
             self.team_b_wins += 1
+        else:
+            self.draws += 1
         
         self.total_games += 1
     
@@ -63,6 +66,7 @@ class ScoreTracker:
         data = {
             "team_a_wins": self.team_a_wins,
             "team_b_wins": self.team_b_wins,
+            "draws": self.draws,
             "total_games": self.total_games
         }
         
@@ -93,6 +97,7 @@ class ScoreTracker:
         
         self.team_a_wins = data.get("team_a_wins", 0)
         self.team_b_wins = data.get("team_b_wins", 0)
+        self.draws = data.get("draws", 0)
         self.total_games = data.get("total_games", 0)
     
     def generate_report(self) -> str:
@@ -106,10 +111,12 @@ class ScoreTracker:
         
         team_a_rate = (self.team_a_wins / self.total_games) * 100
         team_b_rate = (self.team_b_wins / self.total_games) * 100
+        draw_rate = (self.draws / self.total_games) * 100
         
         report = f"""战绩报告:
   总场数: {self.total_games}
   Team A: {self.team_a_wins}胜 ({team_a_rate:.2f}%)
-  Team B: {self.team_b_wins}胜 ({team_b_rate:.2f}%)"""
+  Team B: {self.team_b_wins}胜 ({team_b_rate:.2f}%)
+  平局: {self.draws}场 ({draw_rate:.2f}%)"""
         
         return report

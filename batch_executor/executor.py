@@ -17,7 +17,7 @@ import time
 import threading
 import queue
 from pathlib import Path
-from typing import Callable, List, Optional, Set
+from typing import Callable, List, Optional, Set, Tuple
 import logging
 
 try:
@@ -41,6 +41,9 @@ class GameRecordsStats:
     paired_game_id: int = 0
     paired_match_key: int = 0
     legacy_round_only_pairs: int = 0
+    # V8 完成检测主用：新增文件总数（不依赖 match_key，不会因 (opponent,round,level)
+    # 碰撞而失效）。每副牌都产生新文件，total_new_files 只增不减。
+    total_new_files: int = 0
 
 
 def _scan_game_records_stats(
@@ -57,10 +60,12 @@ def _scan_game_records_stats(
     by_round_p1: Set[str] = set()
     by_round_p2: Set[str] = set()
     match_sides: dict = {}
+    total_new = 0
     try:
         for p in records_dir.glob("*.json"):
             if p.name in baseline_files:
                 continue
+            total_new += 1
             m = _GAME_RECORD_PAIR_PATTERN.match(p.name)
             if m:
                 gid, tag = m.group(1), m.group(2)
@@ -90,6 +95,7 @@ def _scan_game_records_stats(
         paired_game_id=len(by_id_p1 & by_id_p2),
         paired_match_key=paired_match_key,
         legacy_round_only_pairs=len(by_round_p1 & by_round_p2),
+        total_new_files=total_new,
     )
 
 
@@ -371,6 +377,10 @@ class BatchExecutor:
         # 本 Run 开始时 game_records 文件名快照（用于统计新增成对局）
         self._game_records_files_baseline: Optional[Set[str]] = None
         self._run_lock_path: Optional[Path] = None
+        # V8: 已从 game_records 计入 tracker 的局数，用于增量统计
+        self._v8_counted_games_a: int = 0
+        self._v8_counted_games_b: int = 0
+        self._v8_counted_games_d: int = 0
         
         # 初始化信号处理器（仅在主线程中）
         self.signal_handler = None
@@ -676,6 +686,101 @@ class BatchExecutor:
         except (json.JSONDecodeError, TypeError, ValueError, OSError) as e:
             self.logger.warning("读取 latest_victory_num.json 失败: %s", e)
             return None
+
+    # ─────────────────────────── V8：game_records 直接统计 ───────────────────────────
+
+    def _compute_v8_game_wins_from_records(self) -> Tuple[int, int, int]:
+        """V8 fallback: 从 game_records_v8 直接计算全部局胜负，返回（本批新增的）(team_a, team_b, draw) 胜场数。
+
+        逻辑：
+        1. 读取 yf1_v8 牌谱，按文件名排序+game_count 检测局边界
+        2. game_count 重置（gc ≤ 前局末值）→ 新局开始
+        3. 每局内累计各席位头游次数，队胜 = 队总头游副数多者；相等为平局
+        4. 总胜场减去 self._v8_counted_games_{a,b,d} → 返回本批净增胜场
+
+        Returns:
+            (本批新增 team_a_wins, 本批新增 team_b_wins, 本批新增 draws)
+        """
+        records_dir = self.project_root / "game_records_v8"
+        if not records_dir.is_dir():
+            self.logger.warning("game_records_v8 目录不存在，无法从牌谱统计局胜")
+            return (0, 0, 0)
+
+        # 收集 yf1_v8 文件，按文件名排序（文件名前缀即创建时间戳，保证时序）
+        # 注意：mtime 在批跑中不可靠（文件刷新/缓冲时序可能与对局顺序不一致），
+        # 会导致 gc 递减频繁触发虚假局边界，使局数膨胀（如 10→33）。
+        try:
+            files = sorted(records_dir.glob("*yf1_v8*.json"))
+        except OSError:
+            self.logger.warning("读取 game_records_v8 文件列表失败")
+            return (0, 0, 0)
+
+        if not files:
+            return (0, 0, 0)
+
+        total_a = 0   # 全部局 team_a 胜数
+        total_b = 0   # 全部局 team_b 胜数
+        total_d = 0   # 全部局 平局数
+        prev_gc = -1
+        game_vn = [0, 0, 0, 0]  # 当前局各席位头游副数
+
+        for fp in files:
+            try:
+                rec = json.loads(fp.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            result = rec.get("result") or {}
+            gc = result.get("game_count", 0)
+            order = result.get("order") or rec.get("order") or []
+
+            if not isinstance(order, list) or len(order) == 0:
+                continue
+
+            # 检测局边界：game_count 回退或首次文件
+            if gc <= prev_gc and game_vn != [0, 0, 0, 0]:
+                # 结上一局
+                a_heads = game_vn[0] + game_vn[2]
+                b_heads = game_vn[1] + game_vn[3]
+                if a_heads > b_heads:
+                    total_a += 1
+                elif b_heads > a_heads:
+                    total_b += 1
+                else:
+                    total_d += 1
+                game_vn = [0, 0, 0, 0]
+
+            prev_gc = gc
+            head_pos = int(order[0])
+            if 0 <= head_pos < 4:
+                game_vn[head_pos] += 1
+
+        # 结最后一局
+        if game_vn != [0, 0, 0, 0]:
+            a_heads = game_vn[0] + game_vn[2]
+            b_heads = game_vn[1] + game_vn[3]
+            if a_heads > b_heads:
+                total_a += 1
+            elif b_heads > a_heads:
+                total_b += 1
+            else:
+                total_d += 1
+
+        # 增量：本批新增
+        net_a = max(0, total_a - self._v8_counted_games_a)
+        net_b = max(0, total_b - self._v8_counted_games_b)
+        net_d = max(0, total_d - self._v8_counted_games_d)
+        self._v8_counted_games_a = total_a
+        self._v8_counted_games_b = total_b
+        self._v8_counted_games_d = total_d
+
+        self.logger.info(
+            "V8 牌谱统计局胜: 累计 TeamA=%d TeamB=%d Draw=%d | 本批新增 TeamA=%d TeamB=%d Draw=%d",
+            total_a, total_b, total_d, net_a, net_b, net_d,
+        )
+        return (net_a, net_b, net_d)
+
+    # ──────────────────────────────────────────────────────────────────────────────────
 
     def _sync_state_before_persist(self) -> None:
         """供信号处理 / stop 前调用：刷新诊断日志，不改动 completed_games。"""
@@ -993,6 +1098,11 @@ class BatchExecutor:
                 server_terminated_by_kill = False  # 超时强杀则不计入 completed_games（见下方）
                 low_client_strikes = 0
                 batch_start_stats = self._get_game_records_stats()
+                # 清理上一批的完成检测状态，避免跨批泄漏导致误判
+                if hasattr(self, '_v8_done_since'):
+                    del self._v8_done_since
+                if hasattr(self, '_v8_last_file_count'):
+                    del self._v8_last_file_count
                 
                 try:
                     # 使用混合方式：同时读取stdout和监控进程状态
@@ -1068,15 +1178,18 @@ class BatchExecutor:
                                 low_client_strikes = 0
                         
                         # V8 死循环检测：openguandan guandan.exe 残局可能无限 loop
+                        # 用 total_new_files（不依赖 match_key，不会因碰撞失效）。
+                        # 超时从 5min 降到 2min，减少卡顿损失（regroup 重试成本低）。
                         if self.platform == "openguandan":
-                            _v8_deadline = start_time + 5 * 60  # 5分钟无产出视为死循环
+                            _v8_deadline = start_time + 2 * 60  # 2分钟无产出视为死循环
                             if time.time() > _v8_deadline:
                                 _v8_current_stats = self._get_game_records_stats()
-                                if _v8_current_stats.paired_match_key == batch_start_stats.paired_match_key:
+                                if _v8_current_stats.total_new_files == batch_start_stats.total_new_files:
                                     self.logger.warning(
-                                        "V8 死循环检测：%d 秒内无新 game_record，"
+                                        "V8 死循环检测：%d 秒内无新 game_record（files=%d），"
                                         "疑似 guandan.exe 残局死循环，终止服务器",
                                         int(time.time() - start_time),
+                                        _v8_current_stats.total_new_files,
                                     )
                                     server_terminated_by_kill = True
                                     try:
@@ -1086,17 +1199,28 @@ class BatchExecutor:
                                     break
                         
                         # V8: OpenGuanDan 服务器不会自动退出，通过 game_records 检测完成
+                        # 用 total_new_files 替代 paired_match_key：后者基于 (opponent,round,level)
+                        # 当两局 gc 范围相同时会碰撞（如都是 1-6），导致 paired_match_key 不增，
+                        # 完成检测失效，服务器卡死 5min 才被死循环检测兜底。
+                        #
+                        # 检测逻辑：total_new_files 持续增长时重置计时器；停止增长 5s 后判定完成。
                         if self.platform == "openguandan" and time.time() - start_time > 15:
                             _v8_now_stats = self._get_game_records_stats()
-                            if _v8_now_stats.paired_match_key > batch_start_stats.paired_match_key:
-                                # 有新牌谱落盘 → 平稳 3s 确认后 kill 服务器
+                            _v8_now_files = _v8_now_stats.total_new_files
+                            if _v8_now_files > batch_start_stats.total_new_files:
+                                # 有新牌谱落盘
                                 if not hasattr(self, '_v8_done_since'):
                                     self._v8_done_since = time.time()
-                                elif time.time() - self._v8_done_since >= 1:
+                                    self._v8_last_file_count = _v8_now_files
+                                elif _v8_now_files != self._v8_last_file_count:
+                                    # 文件数仍在增长 → 重置计时器
+                                    self._v8_done_since = time.time()
+                                    self._v8_last_file_count = _v8_now_files
+                                elif time.time() - self._v8_done_since >= 5:
+                                    # 5 秒内文件数未变 → 判定游戏完成
                                     self.logger.info(
-                                        "V8 检测到新 game_record (match_key %d→%d)，服务器完成，主动终止",
-                                        batch_start_stats.paired_match_key,
-                                        _v8_now_stats.paired_match_key,
+                                        "V8 game_record 停止增长 (files=%d，5s 无增量)，服务器完成，主动终止",
+                                        _v8_now_files,
                                     )
                                     try:
                                         server_process.kill()
@@ -1106,6 +1230,8 @@ class BatchExecutor:
                                     break
                             elif hasattr(self, '_v8_done_since'):
                                 del self._v8_done_since
+                                if hasattr(self, '_v8_last_file_count'):
+                                    del self._v8_last_file_count
                         
                         # 检查进程是否已结束
                         return_code = server_process.poll()
@@ -1151,7 +1277,7 @@ class BatchExecutor:
                             if server_process.poll() is None:
                                 self.logger.warning("服务器进程仍在运行，可能卡住")
                                 # 检查是否有游戏记录生成（作为完成标志；与项目根一致，避免 cwd 不一致漏检）
-                                game_records_dir = self.project_root / "game_records"
+                                game_records_dir = self.project_root / ("game_records_v8" if self.platform == "openguandan" else "game_records")
                                 if game_records_dir.exists():
                                     recent_records = list(game_records_dir.glob("*.json"))
                                     if recent_records:
@@ -1235,14 +1361,27 @@ class BatchExecutor:
                             team_a = vn[0] + vn[2]
                             team_b = vn[1] + vn[3]
                             if v_rank and isinstance(v_rank, list) and len(v_rank) >= 2:
-                                winner = "team_a" if v_rank[0] == "A" else "team_b" if v_rank[1] == "A" else None
+                                if v_rank[0] == "A":
+                                    winner = "team_a"
+                                elif v_rank[1] == "A":
+                                    winner = "team_b"
+                                else:
+                                    winner = "draw"
                             else:
-                                winner = "team_a" if team_a > team_b else "team_b" if team_b > team_a else None
-                            if winner:
-                                self.tracker.record_game(winner)
+                                winner = "team_a" if team_a > team_b else "team_b" if team_b > team_a else "draw"
+                            self.tracker.record_game(winner)
+                            # 同步递增 fallback 累加器，防止 fallback 路径重复计数
+                            # （victoryNum 路径和 fallback 路径可能混用：latest_victory_num.json
+                            # 有时存在有时不存在，导致部分批次走 victoryNum、部分走 fallback）
+                            if winner == "team_a":
+                                self._v8_counted_games_a += 1
+                            elif winner == "team_b":
+                                self._v8_counted_games_b += 1
+                            else:
+                                self._v8_counted_games_d += 1
                             self.logger.info(
                                 "本批战绩(V8): Team A %d副胜, Team B %d副胜, 局胜者=%s",
-                                team_a, team_b, winner or "未知",
+                                team_a, team_b, winner,
                             )
                         else:
                             # V7: vn[0]/[1] = 本局升级数
@@ -1254,11 +1393,26 @@ class BatchExecutor:
                                 "本批战绩(来自victoryNum): Team A +%d, Team B +%d",
                                 vn[0], vn[1],
                             )
-                        self.logger.info(
-                            "累计战绩: Team A %d胜, Team B %d胜",
-                            self.tracker.team_a_wins,
-                            self.tracker.team_b_wins,
-                        )
+                    elif self.platform == "openguandan":
+                        # V8 fallback: latest_victory_num.json 不存在时从 game_records_v8 直接统计局胜
+                        net_a, net_b, net_d = self._compute_v8_game_wins_from_records()
+                        for _ in range(net_a):
+                            self.tracker.record_game("team_a")
+                        for _ in range(net_b):
+                            self.tracker.record_game("team_b")
+                        for _ in range(net_d):
+                            self.tracker.record_game("draw")
+                        if net_a or net_b or net_d:
+                            self.logger.info(
+                                "本批战绩(V8/牌谱fallback): Team A +%d局胜, Team B +%d局胜, 平局 +%d",
+                                net_a, net_b, net_d,
+                            )
+                    self.logger.info(
+                        "累计战绩: Team A %d胜, Team B %d胜, 平局 %d场",
+                        self.tracker.team_a_wins,
+                        self.tracker.team_b_wins,
+                        self.tracker.draws,
+                    )
                 
                 # 保存战绩和状态
                 try:
