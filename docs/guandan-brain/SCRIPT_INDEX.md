@@ -125,7 +125,7 @@
 
 | 脚本 | 用途 |
 |------|------|
-| `analyze_v7_rounds.py` | **V7 批跑 KPI 主工具（WF-04 Step 2）**；`--all` 会话/局胜/副胜 |
+| `analyze_v7_rounds.py` | **V7/V8 批跑 KPI 主工具（WF-04 Step 2）**；`--all` 会话/局胜/副胜；`--dir game_records_v8` 自动检测 V8 平台（gc 重置检测+yf1 过滤+双上率/末游率） |
 | `analyze_game_rounds.py` | 对局副级分析 |
 | `analyze_game_record_format.py` | 游戏记录格式分析 |
 | `analyze_loss_calculation.py` | Loss 计算分析 |
@@ -164,6 +164,7 @@
 | `probe_exe_argv_ws.py` | 探测 exe 命令行参数（含 WebSocket） |
 | `run_t9_direct.py` | T9 直接运行 |
 | `sync_lalala_reference.py` | 同步 Lalala 参考 |
+| `kaggle_sync_v8.py` | **V8 Kaggle 数据集同步**；`game_records_v8/` → `game_records_v8_kaggle/`（去 `[]` 重命名）；`--upload` 自动上传 |
 | `sync_github_mirror.ps1` | 同步 GitHub 镜像 |
 | `gua033_run_matrix.ps1` | GUA-033 跑矩阵脚本 |
 | `feishu_gateway_auth.py` | 飞书网关认证 |
@@ -306,7 +307,7 @@
 | **V7 批跑（GUI）** | `python batch_executor_gui_v7.py` |
 | **V7 批跑（命令行）** | `python scripts/launchers/v7/run_v7_vs_lalala_games.py --games 3` |
 | **V8 批跑（命令行）** | `.\RUN_V8_VS_LALALA.bat`（当前未冒烟） |
-| **WF-04 批跑解读（主）** | `python scripts/analysis/analyze_v7_rounds.py --all` |
+| **WF-04 批跑解读（主）** | `python scripts/analysis/analyze_v7_rounds.py --all`（V7）/ `--dir game_records_v8 --all`（V8） |
 | **WF-04 批跑解读（副级 curRank，可选）** | `python scripts/tools/analyze_v7_round_levels.py` |
 | **WF-04 L1/L3 对账文件** | `<repo_root>/batch_executor/latest_victory_num.json` · `<repo_root>/v7_vs_lalala_scores.json` · `<repo_root>/v7_vs_lalala_state.json`（**均在仓库根**，勿找 `batch_executor/v7_vs_lalala_scores.json`） |
 | **WF-04 L2 日志** | `<repo_root>/logs/v7_vs_lalala_*.log` + `yf1_v7_*.log` + `yf2_v7_*.log`（**Shell 列目录**；`.cursorignore` 屏蔽 IDE 读） |
