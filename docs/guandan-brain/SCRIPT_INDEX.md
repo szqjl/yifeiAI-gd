@@ -85,6 +85,7 @@
 | `wiki.py` | **LLM Wiki 管理**：`status` / `ingest` / `query` / `config` |
 | `batch_executor.py` | 批跑执行器（Python 模块入口） |
 | `train_bc_v7.py` | V7 BC 行为克隆训练入口 |
+| `train_bc_v8.py` | V8 BC 行为克隆训练入口（`game_records_v8/`） |
 | `analyze_decisions.py` | M3 决策分析 |
 | `check_github_auth.ps1` | GitHub 认证检查 |
 
