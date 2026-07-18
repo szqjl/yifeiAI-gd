@@ -380,19 +380,33 @@ def load_samples(
         if my_decisions and isinstance(my_decisions, list):
             # GUA-061: 从 initial_hand 重建每步手牌（旧编码 BJ→SB, RJ→HR）
             initial_hand = _normalize_cards(game_data.get("initial_hand", []) or [])
-            played_cards: set = set()
+            # GUA-076 fix: 用 Counter 替代 set 追踪已出牌，正确处理重复牌
+            # （set 无法区分两张相同的牌，导致 current_hand 少算）
+            from collections import Counter
+            played_cards: Counter = Counter()
             for dec in my_decisions:
-                # 当前手牌 = initial_hand - 之前所有决策的出牌
-                current_hand = [c for c in initial_hand if c not in played_cards]
+                ctx = dec.get("context") or {}
+
+                # 优先用 ctx.handCards（平台每步记录的准确手牌）
+                ctx_hand = ctx.get("handCards")
+                if ctx_hand and isinstance(ctx_hand, list) and len(ctx_hand) > 0:
+                    current_hand = _normalize_cards(ctx_hand)
+                else:
+                    # Fallback: 从 initial_hand 减去已出牌（Counter 正确处理重复）
+                    current_hand = []
+                    for c in initial_hand:
+                        if played_cards.get(c, 0) > 0:
+                            played_cards[c] -= 1
+                        else:
+                            current_hand.append(c)
 
                 # 只保留 play 阶段
-                ctx = dec.get("context") or {}
                 if ctx.get("stage") not in (None, "", "play"):
                     # 非 play 阶段也要更新 played_cards（如 gang）
                     action = dec.get("action") or []
                     if len(action) >= 3 and isinstance(action[2], list):
                         for c in _normalize_cards(action[2]):
-                            played_cards.add(c)
+                            played_cards[c] += 1
                     continue
                 action_index = dec.get("action_index")
                 if action_index is None or action_index >= TARGET_ACTION_DIM:
@@ -418,7 +432,7 @@ def load_samples(
                     action = dec.get("action") or []
                     if len(action) >= 3 and isinstance(action[2], list):
                         for c in _normalize_cards(action[2]):
-                            played_cards.add(c)
+                            played_cards[c] += 1
                     continue
 
                 samples.append(BCSample(
@@ -432,7 +446,7 @@ def load_samples(
                 action = dec.get("action") or []
                 if len(action) >= 3 and isinstance(action[2], list):
                     for c in _normalize_cards(action[2]):
-                        played_cards.add(c)
+                        played_cards[c] += 1
             loaded += 1
             continue
 

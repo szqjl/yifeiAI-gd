@@ -2205,31 +2205,42 @@ def enumerate_groupings(
     for i, p in enumerate(plans):
         actual = _count_all_cards_in_plan(p)
         if actual != expected:
-            # 收集各组件牌张以诊断丢牌根因
-            plan_cards = set()
+            # GUA-076 fix: 用 Counter 替代 set 检测重复牌数量差异
+            from collections import Counter
+            plan_counter = Counter()
             for s in p.singles:
-                plan_cards.add(s)
+                plan_counter[s] += 1
             for pr in p.pairs:
-                plan_cards.update(pr)
+                for c in pr:
+                    plan_counter[c] += 1
             for t in p.trips:
-                plan_cards.update(t)
+                for c in t:
+                    plan_counter[c] += 1
             for b in p.bombs:
-                plan_cards.update(b)
+                for c in b:
+                    plan_counter[c] += 1
             for s in p.straights:
-                plan_cards.update(s)
+                for c in s:
+                    plan_counter[c] += 1
             for sf in p.straight_flushes:
-                plan_cards.update(sf)
+                for c in sf:
+                    plan_counter[c] += 1
             for tp in p.three_pairs:
                 for pr in tp:
-                    plan_cards.update(pr)
+                    for c in pr:
+                        plan_counter[c] += 1
             for twt in p.three_with_twos:
-                plan_cards.update(twt[0])
-                plan_cards.update(twt[1])
+                for c in twt[0]:
+                    plan_counter[c] += 1
+                for c in twt[1]:
+                    plan_counter[c] += 1
             for sp in p.steel_plates:
                 for t in sp:
-                    plan_cards.update(t)
-            missing = sorted(set(hand_cards) - plan_cards)
-            extra = sorted(plan_cards - set(hand_cards))
+                    for c in t:
+                        plan_counter[c] += 1
+            hand_counter = Counter(hand_cards)
+            missing = sorted((hand_counter - plan_counter).elements())
+            extra = sorted((plan_counter - hand_counter).elements())
             warnings.warn(
                 f"GUA-076: Plan {i} ({p.strategy}) card count mismatch: "
                 f"expected={expected} actual={actual} "
