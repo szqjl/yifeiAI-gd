@@ -1369,18 +1369,11 @@ class BatchExecutor:
                                     winner = "draw"
                             else:
                                 winner = "team_a" if team_a > team_b else "team_b" if team_b > team_a else "draw"
-                            self.tracker.record_game(winner)
-                            # 同步递增 fallback 累加器，防止 fallback 路径重复计数
-                            # （victoryNum 路径和 fallback 路径可能混用：latest_victory_num.json
-                            # 有时存在有时不存在，导致部分批次走 victoryNum、部分走 fallback）
-                            if winner == "team_a":
-                                self._v8_counted_games_a += 1
-                            elif winner == "team_b":
-                                self._v8_counted_games_b += 1
-                            else:
-                                self._v8_counted_games_d += 1
+                            # V8 统一计分路径：victoryNum 仅做校验，不调 record_game
+                            # 实际计分统一走下方 fallback（_compute_v8_game_wins_from_records）
+                            # 避免双路径混用导致重复计数（GUA-153 根因消除）
                             self.logger.info(
-                                "本批战绩(V8): Team A %d副胜, Team B %d副胜, 局胜者=%s",
+                                "本批战绩(V8/校验): Team A %d副胜, Team B %d副胜, 局胜者=%s (仅校验，计分走fallback)",
                                 team_a, team_b, winner,
                             )
                         else:
@@ -1393,8 +1386,9 @@ class BatchExecutor:
                                 "本批战绩(来自victoryNum): Team A +%d, Team B +%d",
                                 vn[0], vn[1],
                             )
-                    elif self.platform == "openguandan":
-                        # V8 fallback: latest_victory_num.json 不存在时从 game_records_v8 直接统计局胜
+                    if self.platform == "openguandan":
+                        # V8 统一计分：始终走 fallback（_compute_v8_game_wins_from_records）
+                        # victoryNum 路径仅做校验（上方），不调 record_game，消除双路径混用风险
                         net_a, net_b, net_d = self._compute_v8_game_wins_from_records()
                         for _ in range(net_a):
                             self.tracker.record_game("team_a")
