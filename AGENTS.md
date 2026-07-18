@@ -135,3 +135,26 @@ python scripts/wiki.py query "关键词"
 ```
 
 改了 `docs/` 后按需：`python scripts/wiki.py ingest`
+
+---
+
+## Kaggle 发布
+
+批跑结束后将牌谱同步到 Kaggle 数据集（对比修复前后 KPI）。
+
+**同步脚本**：`scripts/kaggle/sync_v8.py`
+
+```powershell
+# 1. 同步 + 打包 zip（推荐手动上传）
+python scripts\kaggle\sync_v8.py --zip --title "Guandan V8 Records (Post-Fix 73eps)"
+
+# 2. 打开 https://www.kaggle.com/datasets/new，上传 _kaggle_data.zip
+```
+
+**文件名转换**：`[yf1_v8]-[opponent_1_3]-[1]-[2]` → `yf1_v8_opponent_1_3_1_2`（Kaggle 禁止 `[]`）
+
+**数据集区分**：文件名时间戳前缀（`20260716` = 修复前，`20260718` = 修复后）
+
+**Kaggle 凭证**：`%USERPROFILE%\.kaggle\access_token`（API Token，非旧版 kaggle.json）
+
+**注意**：kaggle CLI 2.x `datasets create` 有 `KaggleObject.from_dict()` bug，推荐 `--zip` 手动上传。

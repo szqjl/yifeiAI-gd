@@ -164,7 +164,7 @@
 | `probe_exe_argv_ws.py` | 探测 exe 命令行参数（含 WebSocket） |
 | `run_t9_direct.py` | T9 直接运行 |
 | `sync_lalala_reference.py` | 同步 Lalala 参考 |
-| `kaggle_sync_v8.py` | **V8 Kaggle 数据集同步**；`game_records_v8/` → `game_records_v8_kaggle/`（去 `[]` 重命名）；`--upload` 自动上传 |
+| `kaggle/sync_v8.py` | **V8 Kaggle 数据集同步**（`scripts/kaggle/`）；`--zip` 打包供手动上传；`--upload` CLI 上传（有 bug 风险） |
 | `sync_github_mirror.ps1` | 同步 GitHub 镜像 |
 | `gua033_run_matrix.ps1` | GUA-033 跑矩阵脚本 |
 | `feishu_gateway_auth.py` | 飞书网关认证 |

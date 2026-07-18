@@ -28,6 +28,7 @@
 |------|---------|---------|---------|------|----------|------|----------|--------|------|
 | 2026-07-18 | **GUA-150** | GUA-150 self_sprint 让道误判修复（endgame_decide.py intent比较）+ GUA-149 PASS僵死修复（同事提交） | `python scripts\launchers\v8\run_v8_vs_lalala_games.py --games 6` | 6 | **4/6（66.7%）** | 33 | 60.6%（40/66） | 36.4%（24/66） | ⚠️ scores.json追踪失效（全0）；服务器stdout无输出（V8 OpenGuanDan不写stdout gameResult）；次数6非推荐档位3/9/12；末游率yf1=24.2% yf2=18.2%；日志：`logs\v8_vs_lalala_20260718_155001.log` |
 | 2026-07-18 | **GUA-151/152/153** | V8 完成检测 match_key 碰撞修复 + 平局计数 + 双重计数修复 | `python scripts\launchers\v8\run_v8_vs_lalala_games.py --games 6` | 6 | **4/6（66.7%）** | 73 | 63.0%（46/73） | 24.7%（18/73） | ✅ scores.json 正常 `{"team_a_wins":4,"team_b_wins":1,"draws":1,"total_games":6}`；零卡顿零regroup（GUA-151修复生效）；1日志文件；末游率yf1=28.8% yf2=28.8%；平局1场（GUA-152修复生效）；日志：`logs\v8_vs_lalala_20260718_174828.log` |
+| 2026-07-18 | **GUA-151/152/153** | 三项修复后扩大样本验证 | `--games 9` | 9 | **9/9（100%）** | 60 | 71.7%（43/60） | 28.3%（17/60） | ✅ scores.json `{"team_a_wins":9,"team_b_wins":0,"draws":0,"total_games":9}`；零卡顿零regroup；末游率yf1=20.0% yf2=31.7%；Kaggle: philsz/guandan-v8-records-9-games-post-fix；日志：`logs\v8_vs_lalala_20260718_200417.log` |
 
 ---
 
