@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 GUA-NEW 实战级记忆模块 v2
 
@@ -28,3 +28,5 @@ __all__ = [
     "RoleEstimate",
     "SprintWindow",
 ]
+
+from .adapter import MemoryV2Adapter

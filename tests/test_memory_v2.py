@@ -270,3 +270,18 @@ def test_check_my_action_safety_via_memory_v2():
     assert "suppression_prob" in safety
     assert "recommendation" in safety
     assert "partner_can_suppress" in safety
+
+class TestMemoryV2Adapter:
+    def test_syncs_tracker_history_and_scores_action(self):
+        from src.v.nn.features.memory_v2 import MemoryV2Adapter
+
+        class Tracker:
+            hand_counts = {0: 10, 1: 8, 2: 2, 3: 12}
+            play_history = [{"seat": 1, "action_type": "Pair", "cards": ["S3", "H3"]}]
+
+        adapter = MemoryV2Adapter(my_seat=0, cur_rank="2")
+        state = {"myPos": 0, "greaterPos": 1, "handCards": ["S4"], "publicInfo": []}
+        memory = adapter.sync(state, Tracker())
+        assert memory.hand_counts[2] == 2
+        assert memory.play_history[0]["cur_pos"] == 1
+        assert isinstance(adapter.score_action(["Single", "", ["S4"]], state, Tracker()), int)

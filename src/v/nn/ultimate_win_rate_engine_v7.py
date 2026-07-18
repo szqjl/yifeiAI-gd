@@ -2611,6 +2611,14 @@ class UltimateWinRateEngineV7:
             score = 0.0
 
             # ① 组局一致性：最高优先级（PASS 不参与组局，不加此项）
+            # MemoryV2 soft risk/send signal; hard rules remain authoritative
+            try:
+                from src.v.nn.features.memory_v2 import MemoryV2Adapter
+                if not hasattr(self, "_memory_v2_adapter") or self._memory_v2_adapter is None:
+                    self._memory_v2_adapter = MemoryV2Adapter(my_seat=int(game_state.get("myPos", self.player_id)), cur_rank=cur_rank)
+                score += self._memory_v2_adapter.score_action(action, game_state, self._tracker)
+            except Exception as memory_v2_err:
+                self.logger.debug("MemoryV2 soft scoring skipped: %s", memory_v2_err)
             if not is_pass:
                 if grp_consistent:
                     score += 10000
