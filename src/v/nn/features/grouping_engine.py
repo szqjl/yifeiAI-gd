@@ -522,10 +522,11 @@ def _remainder_pools_after_sf(
     rem_ct: Counter = Counter(hand_cards)
     wild_ct = Counter(wilds_used)
     for card in sf_cards:
+        # GUA-076 fix: wild 用于 SF 时必须从 rem_ct 扣减（此前仅扣 wild_ct，
+        # 导致 rem_ct 仍含已消耗的 wild → leftover 多算 → plan 双计）
+        rem_ct[card] -= 1
         if wild_ct.get(card, 0) > 0:
             wild_ct[card] -= 1
-        else:
-            rem_ct[card] -= 1
 
     bomb_ct: Counter = Counter()
     for bomb in bombs:
@@ -588,7 +589,9 @@ def _enumerate_sf_hand_candidates(
                 else:
                     nat_sf = [sf_cards]
                     wild_sf = []
-                rem_w_full = rem_w + [w for w in wilds_all if w not in wilds_used]
+                # GUA-076 fix: rem_w 已含未用于 SF 的 wild（_remainder_pools_after_sf 正确扣减），
+                # 不再重复添加 wilds_all（此前 L591 把 wild 加了两遍 → plan 双计）
+                rem_w_full = rem_w
                 entry: SfPlanEntry = (
                     nat_sf, wild_sf, rem_s, rem_p, rem_t, rem_w_full, bombs_after
                 )
