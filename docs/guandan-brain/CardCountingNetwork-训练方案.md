@@ -16,7 +16,7 @@
 >   6. **§8 加 Phase 0**——1 周数据 + 形式化验证（5 项硬门槛产出）；Phase 1 改 LSTM baseline
 >   7. **§11.1 验收补充**——新增 ECE/MCE/Brier 校准 + 大王小王/Bomb recall@0.5（漏报代价大于误报）
 >   8. **核心赌注措辞校准**——Phase 1-3 失败 ≠ NN 路线失败，仅证"用 7700 样本 + Transformer 监督学习"失败
-
+> - **v3（2026-07-18 傍晚）**：GUA-072 实际状态审计更新。pytest 39/39 全绿 → GUA-072 代码实施 100%，仅关单条件 ④ 批跑验证未达。与 GUA-079 三层根因层①②互锁。**Phase 1 LSTM baseline 启动不依赖 GUA-072 关单**。
 ---
 
 ## 零、一句话定位
@@ -131,7 +131,7 @@ NN 记牌不是替代 MemoryTracker，而是给它提供**概率信念向量**�
 | `context.restCards` | actions[].context | ❌ 空数组 | 平台未填充，不可用 |
 
 **关键发现**：`all_players_hands` 单条记录只有自己（键 "0"），但文件名成对出现（yf1+yf2 同局），recorder 已有 `_merge_same_game_records()` 合并逻辑。合并后可拿到 2 家（队友对）完整初始手牌。
-**前置依赖现况警告（2026-07-18 评审）**：本方案 §三 写「前置条件 GUA-072 closed」——但 ISSUES GUA-072 当前状态 open P0 🔴（规则记牌引擎子项 A 已实施 ✅、子项 B 部分实施、子项 C 未完成），GUA-071 heuristic 副胜率待观测。**依赖未满足，本方案 Phase 1 启动需同步推进 GUA-072 子项 C**（否则 ground truth 构造逻辑与规则记牌输出不一致）。
+**前置依赖现况警告（2026-07-18 评审）**：本方案 §三 写「前置条件 GUA-072 closed」——但 ISSUES GUA-072 当前状态 `open P0 🔴`。**2026-07-18 状态审计更新**：`rule_card_counter.py`（725 行）+ `memory_tracker.py` 贡牌/抗贡算王 + `tests/test_gua072_*`（含 `test_memory_tracker_tribute_joker.py`）**pytest 39/39 全绿**（实测 v8-dev 当前状态）。代码层已就绪：**关单条件 ①②③ ✅**；**关单条件 ④ 批跑副胜率环比**——v7-dev 历史累计 1/33 队胜（3.0%）远低于 ≥10% 阈值，与 GUA-079 三层根因（单牌倒置+拆炸凑压+残局静默）互锁：层③已修，层①②（`_heuristic_select` 缺最小压制规则 + 组牌引擎临时借调 API）仍未修复。**结论**：GUA-072 在 v7-dev 代码实施 100%，**唯一开放**是关单条件 ④ 的跑批验证。**对 GUA-057 的实际意义**：Phase 1 LSTM baseline 启动**不依赖 GUA-072 关单**（可独立训练 NN 记牌模块，ground truth 构建与 RuleCardCounter 输出无耦合），仅在 Phase 3 集成（heuristic_select 消费 belief 向量）时需 GUA-072 同步推进。**GUA-071 heuristic 副胜率**仍待观测，与 GUA-072 一样是集成阶段的瓶颈。
 
 
 ### 3.2 文件配对与合并
