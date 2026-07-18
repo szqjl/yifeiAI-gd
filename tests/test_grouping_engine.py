@@ -309,6 +309,34 @@ class TestPerformance:
         assert avg < 10.0, f"平均延迟 {avg:.2f}ms 超过 10ms 限制"
         print(f"\n  平均延迟: {avg:.2f}ms (max: {max(times):.2f}ms)")
 
+    def test_parse_rank_lru_cache_hits(self):
+        """lru_cache 生效：同一 card 多次调用应返回缓存（hits > 0）。"""
+        # 清空其他测试可能污染的缓存
+        _parse_rank.cache_clear()
+        # 重复调用同一张牌
+        for _ in range(100):
+            _parse_rank("S5")
+            _parse_rank("HR")
+            _parse_rank("C10")
+        info = _parse_rank.cache_info()
+        assert info.hits >= 297, f"lru_cache 应至少 297 hits，实际 {info.hits}"
+        assert info.misses == 3, f"unique cards 应仅 3 misses，实际 {info.misses}"
+
+    def test_extract_grouping_features_uses_lru_cache(self):
+        """extract_grouping_features 调用后 _parse_rank cache 应有累积 hits。"""
+        _parse_rank.cache_clear()
+        hand = ["S2", "H2", "C3", "D3", "S3", "H4", "C4", "S5", "H5", "D5", "C5",
+                "S6", "H6", "D6", "S7", "H7", "C8", "D8", "S9", "H9", "C9",
+                "ST", "HT", "SJ", "HQ", "SK", "DA"]
+        # 第一次调用填 cache
+        extract_grouping_features(hand, "2")
+        info_before = _parse_rank.cache_info()
+        # 第二次调用应大量命中缓存
+        extract_grouping_features(hand, "2")
+        info_after = _parse_rank.cache_info()
+        hits_delta = info_after.hits - info_before.hits
+        assert hits_delta >= 100, f"第二次调用 cache hits 增量应 ≥100，实际 {hits_delta}"
+
 
 class TestEdgeCases:
     """Case 9: 边界情况。"""

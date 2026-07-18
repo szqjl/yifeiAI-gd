@@ -1,67 +1,64 @@
 ---
 type: source-summary
-title: "V7/V8 Agent 启动指南"
+title: "AGENT_BOOTSTRAP 摘要"
 sources:
   - docs/guandan-brain/AGENT_BOOTSTRAP.md
 tags:
   - source-summary
+  - bootstrap
   - agent
   - workflow
-  - bootstrap
 status: current
 related_gua:
-  - GUA-033
-date: 2026-07-15
+  - GUA-091
+date: 2026-07-19
 ---
 
-# V7/V8 Agent 启动指南
+# AGENT_BOOTSTRAP 摘要
 
-## 资料元信息
+> 来源：`docs/guandan-brain/AGENT_BOOTSTRAP.md`（约 11.6K 字符）
 
-| 字段 | 值 |
-|------|-----|
-| 路径 | `docs/guandan-brain/AGENT_BOOTSTRAP.md` |
-| 字符数 | 9,943 |
-| 类型 | Agent 工作流真源 |
-| 状态 | 与 [[AGENT_FIRST_MESSAGE]] / [[AGENT_PUSH_CHECKLIST]] 配套使用 |
+## 用途
 
-## 章节结构
+yf1_m3 / yf2_m3 两个 Agent 会话的**冷启动手册**。所有新会话第一步必须读此文档。
 
-### §1 项目身份与边界
-掼蛋 AI 项目定位、计分规则、双上计分王定义。
+## 协作模式
 
-### §2 V7 引擎配置（详见 [[engine-v7]]）
-- `ultimate_win_rate_engine_v7.py`
-- 客户端：`yf1_v7` / `yf2_v7`
-- 批跑命令模板
+| 角色 | 职责 |
+|------|------|
+| yf1_m3 | 主 Agent：编码、批跑、修复 |
+| yf2_m3 | 副 Agent：评审、根因诊断、批跑观察 |
 
-### §3 关键定音（详见 [[recursion-game-round]]）
-- §3.1 局 vs 副区别（[[gua-033]] 定音）
-- §3.2 出牌顺序 0→1→2→3 顺时针
-- §3.3 队胜分布 `[0,3,0,3]` 解释
-- §3.4 四层 victoryNum 写入
-- §3.5 LLM Wiki 已初始化并摄入 107 个源文件
+## 关键工作流
 
-### §4 V8 平台迁移（详见 [[v8-openguandan-protocol]]）
-- OpenGuanDan 新平台
-- WebSocket `ws://127.0.0.1:8181`
-- v8-dev 分支开发
+### 5 问准入审查
+对每个 GUA / Patch 进入实施前必过：
 
-### §5 引擎对照表
-M 系列 vs V 系列，共用层与差异层。
+1. **一类局面？** — 是否覆盖一类典型场景
+2. **可沉意图层？** — 能否下沉到 _stage_mid_dispatch intent 体系
+3. **P0 止血？** — 是否堵住 R-D 根因
+4. **pytest + trace + 批跑闭环？** — 单元测试 + 日志追踪 + 离线验证
+5. **迁移出口？** — 是否指向 BC 训练 / Self-play RL / GUA-091 intent 体系
 
-### §7 批跑命令（详见 [[batch-evaluation]]）
-- M3 批跑命令
-- V7 批跑命令
-- game_records vs game_records_v7 目录分离
-- `--target-games` 须为 3 的倍数
+### 局 ≠ 副口径
+- **1 局 = 多副**（通常 4 副左右）
+- `exe N = N 局 ≠ N 副`
+- `victoryNum[0] + victoryNum[1] = batch_games`（双上累计）
 
-## 工作流编号
+## 关键 Patch 类型
 
-文档定义 12 个 Agent 工作流（WF-01 ~ WF-12），覆盖从开发到批跑到复核的全流程。
+| 类型 | 典型 GUA |
+|------|----------|
+| 让道修复 | GUA-135, GUA-150 |
+| 记牌增强 | GUA-057, GUA-072 |
+| 残局分类 | GUA-079 三层根因 |
 
-## 关联页面
+## 跨 Agent 数据传递
 
-- [[agent-bootstrap-workflow]] —— Agent 工作流概念
-- [[batch-evaluation]] —— 批跑评测
-- [[engine-v7]] / [[engine-m3]] —— 引擎实体
+通过 `docs/guandan-brain/handoffs/` 下时间戳文件。
+
+## 交叉引用
+
+- [[gua-091]] — intent 体系（迁移出口主目标）
+- [[concept-three-layer-decision-pipeline]] — L0/L1/L2
+- [[concept-batch-evaluation]] — 批跑流程

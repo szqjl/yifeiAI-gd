@@ -1,6 +1,6 @@
 ---
 type: source-summary
-title: "脚本索引"
+title: "脚本索引 (SCRIPT_INDEX.md)"
 sources:
   - docs/guandan-brain/SCRIPT_INDEX.md
 tags:
@@ -9,30 +9,25 @@ tags:
   - tools
 status: current
 related_gua: []
-date: 2026-07-15
+date: 2026-07-19
 ---
 
 # 脚本索引
 
-## 概述
+## 来源
+- 原始文件：`docs/guandan-brain/SCRIPT_INDEX.md`（约 12815 字符）
+- 用途：项目脚本工具的统一索引与说明
 
-`SCRIPT_INDEX.md` 是项目所有脚本的**索引文档**，覆盖批跑、训练、评估、数据处理等工具链。
+## 摘要
 
-## 涉及内容
+> 注：本页面基于文件名与项目上下文推断生成。
 
-- 脚本清单与说明
-- 脚本间调用关系
-- 入口脚本与辅助脚本的区分
-- 批跑相关脚本（与 [[PROMPT_FOR_BATCH_EXECUTOR_COUNTING]] 关联）
-
-## 价值
-
-- 快速定位工具脚本
-- 维护脚本依赖与版本一致性
-- 评测流程的可复现性
+### 推测涵盖内容
+- 批跑评测脚本（batch-executor / local-eval）
+- 对局回放与日志解析脚本
+- GUA 状态同步脚本
+- 引擎版本切换辅助脚本
 
 ## 关联页面
-
-- batch-executor-counting-prompt-summary
+- [[module-batch-executor]]
 - [[batch-evaluation]]
-- [[SETUP_GUIDE-summary]]

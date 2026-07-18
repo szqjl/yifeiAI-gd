@@ -48,3 +48,5 @@ date: 2026-07-15
 ---
 | 2026-07-15 10:56 | ingest | docs\guandan-brain\v8-win-rate-history.md, docs\guandan-brain\ITERATIONS.md |
 | 2026-07-16 22:19 | ingest | docs\guandan-brain\handoff\2026-07-14-V8-迁移启动-基础设施齐套.md, docs\guandan-brain\issues\GUA-136-completion.md, docs\guandan-brain\issues\GUA-137-completion.md (+3) |
+| 2026-07-19 06:57 | ingest | docs\guandan-brain\CardCountingNetwork-训练方案.md, docs\guandan-brain\handoffs\2026-07-18-v8-gua150-impl-kaggle-publish.md, docs\analysis\WF-12-20260716222448436062-副12-yf1-Q0让道决策分析.md (+3) |
+| 2026-07-19 06:57 | ingest | docs\guandan-brain\ITERATIONS.md, docs\guandan-brain\SCRIPT_INDEX.md, docs\guandan-brain\v8-win-rate-history.md (+2) |

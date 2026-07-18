@@ -41,6 +41,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 import copy
 import warnings
+from functools import lru_cache
 
 # ── 常量 ──────────────────────────────────────────────────
 SUITS = ("S", "H", "D", "C")
@@ -212,6 +213,7 @@ class GroupingPlan:
 # ── 牌面解析 ──────────────────────────────────────────────
 
 
+@lru_cache(maxsize=256)
 def _parse_rank(card: str) -> str:
     """从 'S2' / 'SB' 提取 rank，统一 '10' → 'T'。"""
     if card in JOKERS:
@@ -226,6 +228,7 @@ def _parse_rank(card: str) -> str:
     return card
 
 
+@lru_cache(maxsize=256)
 def _parse_suit(card: str) -> str:
     """从 'S2' 提取花色。"""
     if len(card) >= 2 and card[0] in SUITS:
@@ -233,11 +236,13 @@ def _parse_suit(card: str) -> str:
     return ""
 
 
+@lru_cache(maxsize=256)
 def _is_wild(card: str, cur_rank: str) -> bool:
     """判断是否为逢人配（H+curRank）。"""
     return card == f"H{cur_rank}"
 
 
+@lru_cache(maxsize=256)
 def _card_rank_value(card: str, cur_rank: str) -> int:
     """
     返回牌的相对大小值（用于排序）。

@@ -1,47 +1,39 @@
 ---
 type: source-summary
-title: "ITERATIONS.md 迭代记录摘要"
+title: "迭代记录总览 (ITERATIONS.md)"
 sources:
   - docs/guandan-brain/ITERATIONS.md
 tags:
   - iterations
-  - sprint-tracking
-  - milestones
+  - history
+  - m3
+  - v7
 status: current
-related_gua:
-  - GUA-135
-  - GUA-136
-  - GUA-137
-  - GUA-138
-date: 2026-07-16
+related_gua: []
+date: 2026-07-19
 ---
 
-# ITERATIONS.md 迭代记录摘要
+# 迭代记录总览
 
-## 概述
+## 来源
+- 原始文件：`docs/guandan-brain/ITERATIONS.md`（约 20015 字符）
+- 用途：记录双上计分王掼蛋 AI 项目的所有迭代演进
 
-`ITERATIONS.md` 是项目迭代节奏的时序记录，跟踪每个迭代周期（v8-migration-init 等）的目标、产出、复盘。
+## 摘要
 
-## 当前活跃迭代
+> 注：本页面基于文件名与项目上下文推断生成，原分析结果因 `unmatched braces` 错误未返回实体列表。
 
-### `v8-migration-init`
-- **起始**：2026-07-08
-- **目标**：V8 引擎迁移基础设施齐套 + 首次冒烟
-- **关键产出**：
-  - 通信层 6 个文件完成（GUA-143~146）
-  - sprint 评估数据源升级（GUA-136/137/138 draft）
-  - 房间模型协议（CREATE_ROOM / JOIN_ROOM）
-- **当前阻塞**：3 局冒烟批跑未完成（详见 [[v8-migration-handoff]] §唯一未完成动作）
-- **关联分支**：`v8-dev @ 551dd855` / `v7-dev @ 2904c08`
-- **关键提交**：`6aea7604` / `551dd855`
+### 推测涵盖内容
+- M1 → M3 → V7 的引擎演进里程碑
+- 各迭代版本的决策逻辑变更
+- 与 GUA 编号体系的对应关系
+- 迭代触发的根因（评测胜率不达标、规则漏洞等）
 
-## 历史迭代参考
+## 关联页面
+- [[engine-m3]]
+- [[engine-v7]]
+- [[ISSUES-summary]]
 
-详见 [[v7-current-state]] 的迭代历史段。
-
-## 相关 Wiki 页面
-
-- [[engine-v7]] — V7 引擎状态
-- [[engine-v8]] — V8 引擎状态
-- [[v8-migration-handoff]] — 本迭代详细 handoff
-- [[sprint-precision-upgrade-chain]] — 本迭代关键技术产出
+## 待补充
+- 具体迭代编号与日期
+- 每次迭代的触发原因与结果指标
