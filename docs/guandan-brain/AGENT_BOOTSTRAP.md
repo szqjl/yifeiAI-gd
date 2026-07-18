@@ -28,12 +28,12 @@
 | **项目** | YiFeiAI-GD（掼蛋 AI 客户端），南京邮电大学掼蛋 AI 算法对抗平台 v1006 |
 | **工作目录** | `d:\guandanscore\YiFeiAI-GD` |
 | **Python** | 项目自带 venv（Windows Python 3.13） |
-| **离线平台** | `guandan_offline_v1006.exe N`（N = 局数，非副数） |
-| **WebSocket** | `ws://127.0.0.1:23456/game/{user_info}` |
-| **当前分支** | `v7-dev`（V7 回退基线）/ **`v8-dev`**（OpenGuanDan 新版迁移） |
-| **引擎** | 深度学习胜率引擎 `src/decision/ultimate_win_rate_engine_v7.py` |
-| **客户端** | `yf1_v7.py` / `yf2_v7.py` |
-| **新旧平台** | v7-dev 对接 `guandan_offline_v1006.exe`（TCP Socket）；v8-dev 对接 `guandan.exe`（WebSocket `ws://127.0.0.1:8181`） |
+| **离线平台** | v7-dev：`guandan_offline_v1006.exe N`（N = 局数，非副数）；v8-dev：`guandan.exe`（OpenGuanDan 新版） |
+| **WebSocket** | v7-dev：`ws://127.0.0.1:23456/game/{user_info}`；v8-dev：`ws://127.0.0.1:8181`（统一端点） |
+| **当前分支** | `v7-dev`（V7 回退基线）/ **`v8-dev`**（OpenGuanDan 新版，已可实战批跑 5/5 局胜） |
+| **引擎** | 深度学习胜率引擎 `src/decision/ultimate_win_rate_engine_v7.py`（V7/V8 共用引擎核心） |
+| **客户端** | v7-dev：`yf1_v7.py` / `yf2_v7.py`；v8-dev：`yf1_v8.py` / `yf2_v8.py`（WebSocket CREATE_ROOM/JOIN_ROOM 协议） |
+| **新旧平台** | v7-dev 对接 `guandan_offline_v1006.exe`（TCP Socket）；v8-dev 对接 `guandan.exe`（WebSocket `ws://127.0.0.1:8181`），通信层独立（`src/communication/` 下 `*_v8*` 文件） |
 
 > **V7 是实验线**，`v8-dev` 从 `v7-dev`（commit `2904c08`）复制，迁移新版 OpenGuanDan 服务器。V7/V8 与 `m-dev`（M 系列硬编码规则引擎）独立开发。  
 > 提交必须推 `git push origin v7-dev` 或 `git push origin v8-dev`，**绝不混推 m-dev**。
@@ -212,7 +212,7 @@ replay / 异常扫描 / 批跑结果
 ## 7. 常用命令
 
 > **⚠️ Python 环境**：本机**无 venv**，直接用 `python` 命令（系统 Python 3.14.4）。
-> **⚠️ 分支**：M3 / V7 批跑**均可在 v7-dev 和 v8-dev 直接跑**（M3 客户端/引擎 import 测试通过）。v8-dev 代码与 v7-dev 一致，仅文档有差异。
+> **⚠️ 分支**：M3 / V7 批跑**均可在 v7-dev 和 v8-dev 直接跑**（M3 客户端/引擎 import 测试通过）。v8-dev 从 v7-dev 复制，**引擎核心一致**，但通信层已独立（`src/communication/` 下 `*_v8*` 文件适配 OpenGuanDan WebSocket 协议）。
 > **⚠️ 数据目录分离**：M3 批跑 → `game_records/`，V7 批跑 → `game_records_v7/`（训练只读 V7 数据）。
 
 ```bash
@@ -238,6 +238,12 @@ python scripts\launchers\m\run_m3_vs_lalala_games.py --games 3
 python scripts\launchers\m\run_m3_vs_lalala_games.py --games 12
 # 战绩文件：m3_vs_lalala_scores.json
 
+# V8 vs lalala 批跑（仅在 v8-dev 可用；OpenGuanDan WebSocket）
+python scripts\launchers\v8\run_v8_vs_lalala_games.py --games 3
+python scripts\launchers\v8\run_v8_vs_lalala_games.py --games 12
+# 战绩文件：v8_vs_lalala_scores.json
+# 牌谱目录：game_records_v8/
+
 # 牌谱回放
 YF_REPLAY.bat
 python scripts/tools/yf_replay.py
@@ -250,7 +256,7 @@ python tests/test_v7_engine_load.py
 
 ## 8. 批跑数据恢复（game_records 丢失/被清时）
 
-> **前提**：`game_records/*.json` 或 `game_records_v7/*.json` 全部丢失，但日志文件还在。**不要重新跑局**，日志足够恢复全部 victoryNum。
+> **前提**：`game_records/*.json` 或 `game_records_v7/*.json` 或 `game_records_v8/*.json` 全部丢失，但日志文件还在。**不要重新跑局**，日志足够恢复全部 victoryNum。
 
 ### 数据目录分离策略
 
@@ -258,10 +264,11 @@ python tests/test_v7_engine_load.py
 |------|------------------|------|
 | M3 | `game_records/` | M3 批跑数据（BC训练数据源） |
 | V7 | `game_records_v7/` | V7 批跑数据 + V7 BC训练 |
+| V8 | `game_records_v8/` | V8 批跑数据（OpenGuanDan 新平台） |
 
-> **注意**：两个目录**完全隔离**，避免数据混杂。M3 批跑存入 `game_records/`，V7 批跑存入 `game_records_v7/`。训练脚本 `train_bc_v7.py` 默认读取 `game_records_v7/`。
+> **注意**：三个目录**完全隔离**，避免数据混杂。M3 批跑存入 `game_records/`，V7 批跑存入 `game_records_v7/`，V8 批跑存入 `game_records_v8/`。训练脚本 `train_bc_v7.py` 默认读取 `game_records_v7/`。
 
-### 为什么能恢复——双重数据通道
+### V7 双重数据通道（v1006 旧平台）
 
 ```
 掼蛋服务器 v1006.exe
@@ -272,20 +279,38 @@ python tests/test_v7_engine_load.py
                                               v7_vs_lalala_scores.json (score tracker)
 ```
 
-**通道 B（stdout → 日志）与 game_records 生命周期完全解耦**：日志由 `logging.basicConfig` 在进程入口一次性绑定 FileHandler，`executor.py` 后台线程 `read_stdout()` 把服务端 stdout 每一行经 `self.logger.info("[服务器] {line}")` 写入同一个日志文件。清了 `game_records` 不影响日志。
+### V8 数据通道（OpenGuanDan 新平台）
+
+```
+guandan.exe (OpenGuanDan)
+├─ WebSocket ws://127.0.0.1:8181
+│  ├─ yf1_v8.py ──→ game_records_v8/*.json
+│  └─ yf2_v8.py ──→ game_records_v8/*.json
+│
+├─ stdout ──→ executor.py ──→ logs/v8_vs_lalala_*.log
+│                             v8_vs_lalala_scores.json (score tracker)
+│
+└─ gameResult ──→ victory (单值写入，非 victoryNum[4])
+```
+
+> **通道 B（stdout → 日志）与 game_records 生命周期完全解耦**：日志由 `logging.basicConfig` 在进程入口一次性绑定 FileHandler，`executor.py` 后台线程 `read_stdout()` 把服务端 stdout 每一行经 `self.logger.info("[服务器] {line}")` 写入同一个日志文件。清了 `game_records` 不影响日志。
 
 ### 三步恢复法
 
 | 步骤 | 操作 | 命令/文件 |
 |------|------|-----------|
 | 1 | 读最后一批快照 | `Get-Content batch_executor/latest_victory_num.json` |
-| 2 | 搜日志中全部批末 vn | `Select-String -Path "logs/v7_vs_lalala_*.log" -Pattern "vn_source\|server_vn\|批末\|victoryNum"` |
-| 3 | 交叉计算队胜率 | 合计各批 `victoryNum[0]+[2]` vs `[1]+[3]` |
+| 2 | 搜日志中全部批末 vn | `Select-String -Path "logs/v7_vs_lalala_*.log" -Pattern "vn_source\|server_vn\|批末\|victoryNum"`（V7/M3）；或 `Select-String -Path "logs/v8_vs_lalala_*.log" -Pattern "victory\|gameResult\|批末"`（V8） |
+| 3 | 交叉计算队胜率 | V7/M3：合计各批 `victoryNum[0]+[2]` vs `[1]+[3]`；V8：合计各批 `victory` 字段 |
 
-**日志关键字**：
+**日志关键字**（V7/M3）：
 - `批末 victoryNum 校验通过:` — executor 每批末对账输出
 - `批末对账：采用 vn=` — 含 vn_source + server_vn_raw
 - `达到设定场次` — 服务端 stdout 原文（含各位置胜利次数）
+
+**日志关键字**（V8）：
+- `gameResult` — OpenGuanDan 服务端推送（含 `victory` + `victoryRank`）
+- `批末对账` — executor 每批末对账输出（含 scores.json 汇总）
 
 ### 四层 victoryNum 写入清单
 
@@ -293,8 +318,14 @@ python tests/test_v7_engine_load.py
 |------|--------|--------|------|-----------|
 | 1 | `latest_victory_num.json` | `yf1_v7.py`（Player 0） | 最后一批 | **覆盖** |
 | 2 | `logs/v7_vs_lalala_*.log` | `executor.py`（stdout 镜像） | 全部批次 | **追加** |
+| 2v8 | `logs/v8_vs_lalala_*.log` | `executor.py`（stdout 镜像） | 全部批次 | **追加** |
 | 3 | `v7_vs_lalala_scores.json` | `executor.py`（score tracker） | 全部批次 | **覆盖** |
-| 4 | `game_records_v7/*.json`（V7）或 `game_records/*.json`（M3） | `v7_game_recorder.py` / `game_recorder.py` | 每副 | **追加** |
+| 3v8 | `v8_vs_lalala_scores.json` | `executor.py`（score tracker） | 全部批次 | **覆盖** |
+| 4 | `game_records_v7/*.json`（V7） | `v7_game_recorder.py` | 每副 | **追加** |
+| 4m3 | `game_records/*.json`（M3） | `game_recorder.py` | 每副 | **追加** |
+| 4v8 | `game_records_v8/*.json`（V8） | yf1_v8 / yf2_v8 | 每副 | **追加** |
+
+> **V8 注意**：OpenGuanDan 新平台 `gameResult` 使用单值 `victory`（非 v1006 的 `victoryNum[4]`），scores.json 中 `victory`=0/1 表示队伍胜负，`victoryRank` 用于判定 A 级降级场景。
 
 **结论**：只要 2 或 3 还在，victoryNum 永不会丢。即使 1+4 全丢，从 2 搜关键行即可完整恢复。
 

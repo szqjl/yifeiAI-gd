@@ -83,3 +83,35 @@ batch_executor/current_batch.json
 .cursor/hooks/         # Cursor IDE 钩子状态（continual-learning 等），按 M-V 治理 §5.5 不入仓
 .cursor/hooks/**
 tmp_*.py
+
+# V8 game records + decision traces (Layer 2 runtime artifacts, 治理 §6 禁 commit)
+game_records_v8/
+game_records_v8_kaggle/
+game_decision_traces/
+_kaggle_*.zip
+_kaggle_*.txt
+kaggle_upload.zip
+
+# batch_executor runtime state (Layer 2, 与 game_records 同性质)
+batch_executor/clients_ready.json
+batch_executor/game_ready.json
+batch_executor/latest_victory_num.json
+
+# 仓库根 误输入残留 / 调试脚本
+/2]
+/extra
+/_schema.py
+
+# V8 战绩文件（Layer 2 runtime state）
+v8_vs_lalala_scores.json
+v8_vs_lalala_state.json
+
+# 平台日志（V8 OpenGuanDan 服务器输出）
+offline_platform/openguandan_latest/log.txt
+
+# 命令误输入残留（仓库根 临时调试文件）
+/2min -m -
+/if使fallback始终执行
+
+# Wiki 子工作树缓存产物
+wiki/wiki/queries/

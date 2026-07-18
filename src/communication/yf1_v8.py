@@ -26,6 +26,7 @@ from communication.v8_game_recorder import (
     normalize_act_message_fields,
     decision_context_from_act,
     is_ws_debug_enabled,
+    clear_victory_num_shared,
 )
 from communication.v8_websocket_manager import WebSocketManager
 from communication.new_platform_adapter import OpenGuanDanAdapter
@@ -216,6 +217,7 @@ class YF1_V8_Client:
     def handle_game_start(self, data: dict):
         """Handle game start notification"""
         try:
+            clear_victory_num_shared()  # V8: 新局重置累计 victoryNum
             self.game_count += 1
             self.hand_cards = normalize_cards_to_string_list(data.get("handCards", []))
             my_pos = ensure_my_pos_int(data, self.player_id)

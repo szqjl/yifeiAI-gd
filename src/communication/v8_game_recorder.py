@@ -336,6 +336,17 @@ def save_victory_num_shared(
         return False
 
 
+def clear_victory_num_shared() -> bool:
+    """删除 latest_victory_num.json，在新局开始时调用以重置累计。"""
+    try:
+        shared_file = get_latest_victory_num_path()
+        if shared_file.exists():
+            shared_file.unlink()
+        return True
+    except Exception:
+        return False
+
+
 def process_platform_game_end_notify(
     data: dict,
     game_recorder: "GameRecorder",
@@ -403,6 +414,31 @@ def process_platform_game_end_notify(
             if winner:
                 logger.info("🥇 局胜者: %s", winner)
             logger.info("=" * 50)
+
+    elif kind == "episode":
+        # V8: OpenGuanDan 只发 episodeOver 不发送 gameResult
+        # → 从每副的 result.order 累计各席头游次数，写出 latest_victory_num.json
+        order = result.get("order") or data.get("order") or []
+        gc = result.get("game_count", 0)
+        if isinstance(order, list) and len(order) >= 1:
+            # 读已有累计（同一局上一副已写）
+            existing = [0, 0, 0, 0]
+            try:
+                shared_file = get_latest_victory_num_path()
+                if shared_file.exists():
+                    old = json.loads(shared_file.read_text(encoding="utf-8"))
+                    old_vn = old.get("victoryNum", [])
+                    if isinstance(old_vn, list) and len(old_vn) >= 4:
+                        existing = [int(v) for v in old_vn[:4]]
+            except Exception:
+                pass
+            head_pos = int(order[0])
+            if 0 <= head_pos < 4:
+                existing[head_pos] += 1
+            save_victory_num_shared(
+                existing, player_tag, logger,
+                vn_source="episodeOver_gc{}_headPos{}".format(gc, head_pos),
+            )
 
 
 def sync_pass_counters(
