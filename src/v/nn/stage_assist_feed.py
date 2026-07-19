@@ -141,6 +141,7 @@ def _feed_stage1_open(
         str(card) for card in engine._scatter_singles(card_mask)
         if not _single_breaks_protected_core(str(card))
         and not _is_level_pip(str(card))
+        and get_card_rank(str(card)) not in ("HR", "SB")
     ]
     mid_singles = [
         c for c in scatter_singles

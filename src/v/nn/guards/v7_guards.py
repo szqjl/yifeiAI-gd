@@ -182,14 +182,17 @@ def get_action_rank(action: List[str]) -> Optional[str]:
     """获取一手牌的比较等级（如 Pair 'S2','H2' → '2'；Bomb 取牌面）。"""
     if not action or action[0] == "PASS":
         return None
-    # GUA-071：检测平台格式 [type, rank, [cards]]，提取实际牌列表后递归
+    # GUA-071：平台格式 [type, rank, [cards]] → 直接用声明 rank，不再递归重算
     if isinstance(action, list) and len(action) >= 3 and isinstance(action[2], list):
+        declared = str(action[1]).upper() if action[1] else None
+        if declared:
+            return declared
         return get_action_rank(action[2])
     ranks = [get_card_rank(c) for c in action]
-    # 取出现最多的 rank（炸弹/三带二等取主牌）
+    # 取出现最多的 rank（炸弹/三带二等取主牌）；平票取 rank 值最大者
     from collections import Counter
     cnt = Counter(ranks)
-    return cnt.most_common(1)[0][0]
+    return max(cnt.most_common(), key=lambda x: (x[1], CARD_RANK_ORDER.get(x[0], -1)))[0]
 
 
 def is_bomb(action: List[str]) -> bool:
@@ -1236,6 +1239,22 @@ def _filter_action_list_impl(
     action_list: List[List[str]],
 ) -> Tuple[List[List[str]], List[int]]:
     """filter_action_list 实际逻辑（被外层 try/except 包裹）。"""
+    guard_trace = game_state.get("_replay_guard_trace")
+    if not isinstance(guard_trace, list):
+        guard_trace = None
+    traced_excluded = set()
+
+    def _capture_guard_step(rule_id: str) -> None:
+        if guard_trace is None:
+            return
+        removed = sorted(excluded - traced_excluded)
+        guard_trace.append({
+            "rule_id": rule_id,
+            "removed_indices": removed,
+            "removed_count": len(removed),
+        })
+        traced_excluded.update(removed)
+
     my_pos = game_state.get("myPos", game_state.get("player_id", 0))
     greater_pos = game_state.get("greaterPos", -1)
     greater_action = game_state.get("greaterAction", [])
@@ -1263,6 +1282,7 @@ def _filter_action_list_impl(
     # 0) R10: 自己领出不炸（greaterPos == myPos 或 -1 → 新轮领出 → 炸自己）
     r10_kept = _rule_r10_no_lead_bomb(action_list, greater_pos, my_pos)
     excluded |= {i for i in range(len(action_list)) if i not in set(r10_kept)}
+    _capture_guard_step("R10")
 
     # 0.5) R15: 炸后相克 — 炸了上家的牌型后，自己领出时禁出该牌型（GUA-071）
     if greater_pos in (my_pos, -1) and (not greater_action or greater_action[0] == "PASS"):
@@ -1278,44 +1298,53 @@ def _filter_action_list_impl(
                     "R15 炸后相克：禁出%s（炸了上家该牌型，%d个动作被过滤）",
                     block_type, len(blocked),
                 )
+    _capture_guard_step("R15")
 
     # 1) R05: 队友领出不炸
     r05_kept = _rule_r05_teammate_no_bomb(
         action_list, greater_action, greater_pos, my_pos)
     excluded |= {i for i in range(len(action_list)) if i not in set(r05_kept)}
+    _capture_guard_step("R05")
 
     # 1.5) R11: 对手出不可压牌 → 全局抑制牌检查 + 节流（GUA-068）
     r11_kept = _rule_r11_unbeatable_card_throttle(
         action_list, greater_action, greater_pos, my_pos, cur_rank, game_state)
     excluded |= {i for i in range(len(action_list)) if i not in set(r11_kept)}
+    _capture_guard_step("R11")
 
     # 2) R01: 压单不用炸
     r01_kept = _rule_r01_no_bomb_for_single(
         action_list, greater_action, cur_rank)
     excluded |= {i for i in range(len(action_list)) if i not in set(r01_kept)}
+    _capture_guard_step("R01")
 
     # 3) R02: 最小炸弹
     r02_kept = _rule_r02_minimal_bomb(action_list, cur_rank)
     excluded |= {i for i in range(len(action_list)) if i not in set(r02_kept)}
+    _capture_guard_step("R02")
 
     # 4) R06: 不拆结构对子
     r06_kept = _rule_r06_no_break_structure_pair(action_list, hand_cards)
     excluded |= {i for i in range(len(action_list)) if i not in set(r06_kept)}
+    _capture_guard_step("R06")
 
     # 4.5) R12: 三带二最小带对（同一三张 rank 多个变体 → 保留最小对子）
     r12_kept = _rule_r12_min_pair_in_three_with_two(action_list)
     excluded |= {i for i in range(len(action_list)) if i not in set(r12_kept)}
+    _capture_guard_step("R12")
 
     # 4.6) R14: 领出不拆天然牌型（有天然对子/三张时 → 剔除拆散动作）
     r14_kept = _rule_r14_no_break_pattern_when_lead(
         action_list, hand_cards, greater_pos, my_pos, numofplayers)
     excluded |= {i for i in range(len(action_list)) if i not in set(r14_kept)}
+    _capture_guard_step("R14")
 
     # 5) GUA-065 R07: 队友控牌且非残局 → 按牌型阈值让道（决议 9 细化）
     if numofplayers:
         r07_kept = _rule_r07_teammate_yield(
             action_list, greater_pos, my_pos, numofplayers, greater_action, cur_rank)
         excluded |= {i for i in range(len(action_list)) if i not in set(r07_kept)}
+    _capture_guard_step("R07")
 
     # 6) GUA-117 Layer0：助攻/超弱 B1–B6 + 让权（117-2a … 117-2g）
     try:
@@ -1323,6 +1352,7 @@ def _filter_action_list_impl(
         apply_assist_layer0_exclusions(action_list, game_state, excluded)
     except Exception as e:
         logger.warning("GUA-117 assist Layer0 异常: %s", e)
+    _capture_guard_step("GUA-117")
 
     # 5.5) GUA-071 R13: 平台炸弹合法性校验
     # 平台可能将非炸弹（如 3 Aces+单张）标为 Bomb，但 V7 get_action_type 正确识别为非炸弹。
@@ -1340,6 +1370,7 @@ def _filter_action_list_impl(
             "R13 平台炸弹校验: 剔除 %d 个假炸弹/同花顺 (平台标记为 Bomb 但实际牌型不符)",
             len(forbidden),
         )
+    _capture_guard_step("R13")
 
     # R03/R04 重排（不真正剔除，影响后续模型选择顺序）
     # 这些规则不剔除元素，只返回排序
@@ -1362,6 +1393,13 @@ def _filter_action_list_impl(
     if not kept:
         # 全被过滤了 → 保留全部
         kept = list(range(len(action_list)))
+        if guard_trace is not None:
+            guard_trace.append({
+                "rule_id": "safety_fallback",
+                "removed_indices": [],
+                "removed_count": 0,
+                "reason": "all candidates filtered; restore actionList",
+            })
 
     # 应用重排（R03/R04/R08/R09 同时适用时，取交集顺序）
     final_order = kept[:]
@@ -1369,6 +1407,15 @@ def _filter_action_list_impl(
         filtered_order = [i for i in ordering if i in set(kept)]
         if filtered_order and filtered_order != final_order:
             final_order = filtered_order
+
+    if guard_trace is not None:
+        guard_trace.append({
+            "rule_id": "final_order",
+            "removed_indices": [],
+            "removed_count": 0,
+            "kept_indices": kept,
+            "order_indices": final_order,
+        })
 
     filtered = [action_list[i] for i in final_order]
 

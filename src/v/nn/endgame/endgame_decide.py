@@ -1023,7 +1023,8 @@ class EndgameDecider:
                 non_bombs.append((i, a))
 
         if not bombs:
-            # 没有炸弹 → 按非炸弹最佳出牌
+            if not is_my_turn:
+                return None
             if non_bombs:
                 return self._select_best_index(non_bombs, action_list, game_state)
             return None
@@ -1095,10 +1096,8 @@ class EndgameDecider:
                     return self._select_best_bomb(bombs, action_list)
                 return None
             else:
-                # 不急于炸，让对手出
-                if non_bombs:
-                    return self._select_best_index(non_bombs, action_list, game_state)
-                return None  # 只有炸，但没有合适时机
+                # 不急于炸，让对手出 → 残局管线不越权，fall through 到 GUA-075
+                return None
 
     def _select_q0_whole_structure_lead(
         self,
