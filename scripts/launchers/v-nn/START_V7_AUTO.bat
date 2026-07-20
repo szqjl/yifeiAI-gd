@@ -17,18 +17,15 @@ if not exist "models\bc_model_ultimate_win_rate.pth" (
 
 REM Check if server is running
 echo Checking server status...
-netstat -an | findstr "23456" > nul
-if errorlevel 1 (
+netstat -an | findstr 23456 > nul
+if %errorlevel% neq 0 (
     echo [START] Server not running, starting server...
     echo.
-    
-    REM Start server (relative to REPO_ROOT or env SERVER_EXE)
     if defined SERVER_EXE (
         start "Guandan Server" cmd /k ""%SERVER_EXE%" 10"
     ) else (
-        start "Guandan Server" cmd /k "cd /d "%REPO_ROOT%\offline_platform\guandan_offline_v1006\windows" && guandan_offline_v1006.exe 10"
+        start "Guandan Server" cmd /k "cd /d %REPO_ROOT%\offline_platform\guandan_offline_v1006\windows && guandan_offline_v1006.exe 10"
     )
-    
     echo Waiting for server startup (15 seconds)...
     timeout /t 15 /nobreak > nul
     echo.
