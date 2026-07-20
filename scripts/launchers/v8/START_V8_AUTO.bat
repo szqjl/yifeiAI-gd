@@ -26,37 +26,9 @@ if %errorlevel% neq 0 (
     echo.
 )
 
-REM Start clients (room-based startup)
+REM Start clients
 echo Starting V8 clients (room-based)...
-echo.
-echo Startup Order:
-echo   1. yf1_v8     (CREATE_ROOM, seat 0)
-echo   2. yf2_v8     (JOIN_ROOM,  seat 2)
-echo   3. client3    (JOIN_ROOM,  seat 1)
-echo   4. client4    (JOIN_ROOM,  seat 3)
-echo.
-
-REM 1. yf1_v8 (CREATE_ROOM, seat 0)
-echo [1/4] Starting yf1_v8 (CREATE_ROOM, seat 0)...
-start "yf1_v8 (Seat 0)" cmd /k "cd /d %REPO_ROOT% && python src/communication/yf1_v8.py --platform openguandan --role creator --games 10"
-echo   Waiting 5s for room creation...
-timeout /t 5 /nobreak > nul
-
-REM 2. yf2_v8 (JOIN_ROOM, seat 2)
-echo [2/4] Starting yf2_v8 (JOIN_ROOM, seat 2)...
-start "yf2_v8 (Seat 2)" cmd /k "cd /d %REPO_ROOT% && python src/communication/yf2_v8.py --platform openguandan --role joiner"
-echo   Waiting 3s...
-timeout /t 3 /nobreak > nul
-
-REM 3. lalala client3 (JOIN_ROOM, seat 1)
-echo [3/4] Starting lalala client3 (JOIN_ROOM, seat 1)...
-start "lalala_client3 (Seat 1)" cmd /k "cd /d %REPO_ROOT% && python src/communication/v8_lalala_adapter.py client3 --platform openguandan --role joiner"
-echo   Waiting 3s...
-timeout /t 3 /nobreak > nul
-
-REM 4. lalala client4 (JOIN_ROOM, seat 3)
-echo [4/4] Starting lalala client4 (JOIN_ROOM, seat 3)...
-start "lalala_client4 (Seat 3)" cmd /k "cd /d %REPO_ROOT% && python src/communication/v8_lalala_adapter.py client4 --platform openguandan --role joiner"
+call "%~dp0START_V8_CLIENTS.bat"
 
 echo.
 echo ========================================
