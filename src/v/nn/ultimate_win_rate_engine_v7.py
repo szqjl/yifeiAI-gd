@@ -123,6 +123,9 @@ class UltimateWinRateEngineV7:
         self._last_decision_layer: Optional[str] = None
         self._last_decision_score: Optional[float] = None
         self._last_decision_candidates: int = 0
+        self._last_heuristic_scores: List[Tuple[int, float]] = []
+        self._last_model_scores: List[Tuple[int, float]] = []
+        self._active_replay_trace: Optional[Dict[str, Any]] = None
         self._dispatch_stage_count: int = 0  # GUA-089 阶段调度次数计数
         self._last_nn_confidence: Optional[float] = None  # _model_decision 内部写入
         # GUA-063 Phase 3: 中局重分组触发追踪
@@ -165,6 +168,9 @@ class UltimateWinRateEngineV7:
         self._tracker_initialized = False
         self._tracker_history_replayed = 0
         self._last_stage_intent = None
+        self._last_heuristic_scores = []
+        self._last_model_scores = []
+        self._active_replay_trace = None
         self._trace_game_id = game_id
         self._last_trace_path = None
         self._decision_tracer = None
@@ -200,7 +206,7 @@ class UltimateWinRateEngineV7:
 
     @staticmethod
     def _is_decision_trace_enabled() -> bool:
-        return os.environ.get("V7_ENABLE_DECISION_TRACE", "1").strip().lower() not in (
+        return os.environ.get("V7_ENABLE_DECISION_TRACE", "0").strip().lower() not in (
             "0",
             "false",
             "no",
@@ -291,6 +297,21 @@ class UltimateWinRateEngineV7:
             self.logger.debug("decision trace begin skip: %s", e)
 
     def _trace_finalize(self, act_index: int, action_list: List) -> int:
+        chosen_action = (
+            action_list[act_index]
+            if 0 <= act_index < len(action_list)
+            else []
+        )
+        self._replay_record(
+            "final",
+            {
+                "actIndex": act_index,
+                "chosen_action": chosen_action,
+                "layer": self._last_decision_layer,
+                "score": self._last_decision_score,
+                "intent": self._last_stage_intent,
+            },
+        )
         tracer = self._decision_tracer
         if tracer is not None:
             try:
@@ -302,15 +323,17 @@ class UltimateWinRateEngineV7:
                             "trace_game_id": self._trace_game_id,
                         },
                     )
-                chosen_action = (
-                    action_list[act_index]
-                    if 0 <= act_index < len(action_list)
-                    else []
-                )
                 tracer.end_step(actIndex=act_index, chosen_action=chosen_action)
             except Exception as e:
                 self.logger.debug("decision trace finalize skip: %s", e)
         return act_index
+
+    def _replay_record(self, stage: str, payload: Dict[str, Any]) -> None:
+        """仅供 YF_REPLAY 离线分析；实战未注入 trace 时为 no-op。"""
+        trace = getattr(self, "_active_replay_trace", None)
+        if trace is None:
+            return
+        trace.setdefault("pipeline", []).append({"stage": stage, **payload})
 
     def _load_model(self):
         """加载终极胜率导向模型（当前停用：不挂 bc_model_v3/v2）。
@@ -372,13 +395,29 @@ class UltimateWinRateEngineV7:
         """
         self.decision_count += 1
         self._last_stage_intent = None
+        self._last_heuristic_scores = []
+        self._last_model_scores = []
+        replay_trace = game_state.get("_replay_trace")
+        self._active_replay_trace = replay_trace if isinstance(replay_trace, dict) else None
+        if self._active_replay_trace is not None:
+            self._active_replay_trace.clear()
+            self._active_replay_trace["pipeline"] = []
 
         action_list = game_state.get("actionList", [])
+        self._replay_record("input", {"candidate_count": len(action_list)})
         if not action_list:
             return self._trace_finalize(0, action_list)
 
         # ── ① 组牌引擎 ──
         self._run_grouping_engine(game_state)
+        self._replay_record(
+            "grouping",
+            {
+                "gua_id": "GUA-063",
+                "role": self._current_role,
+                "group_type_map": dict(self._group_type_map or {}),
+            },
+        )
 
         # ── ①b MemoryTracker（GUA-078：残局 numofplayers 须在注入前就绪）──
         self._ensure_memory_tracker_for_decide(game_state)
@@ -391,6 +430,16 @@ class UltimateWinRateEngineV7:
 
         # ── ②c GUA-094 规则版推断层（供 stage_2 / trace 后续消费）──
         self._inject_phase_relation(game_state)
+        if self._active_replay_trace is not None:
+            self._replay_record(
+                "memory",
+                {
+                    "gua_ids": ["GUA-072", "GUA-094"],
+                    "belief": game_state.get("_belief") or {},
+                    "phase_relation": game_state.get("_phase_relation") or {},
+                    "hand_counts": list(getattr(self._tracker, "hand_counts", []) or []),
+                },
+            )
 
         # ── ②d GUA-089 阶段调度（§7.4 伪代码落地）──
         # 按当前手牌张数切 4 阶段，存入 game_state['_current_stage']
@@ -448,6 +497,10 @@ class UltimateWinRateEngineV7:
             from src.v.nn.endgame.endgame_decide import EndgameDecider
             EndgamePreprocessor().preprocess(game_state)
             ec = game_state.get("_endgame_context", {})
+            self._replay_record(
+                "endgame",
+                {"active": bool(ec.get("is_active")), "context": ec},
+            )
             if ec.get("is_active"):
                 try:
                     from src.v.nn.endgame.endgame_decide import (
@@ -508,6 +561,10 @@ class UltimateWinRateEngineV7:
                             self._last_decision_score = None
                             self._last_decision_candidates = len(original_action_list)
                             self._last_stage_intent = "endgame_pipeline"
+                            self._replay_record(
+                                "endgame_hit",
+                                {"actIndex": orig_i, "action": endgame_act},
+                            )
                             return self._trace_finalize(orig_i, original_action_list)
                     else:
                         self.logger.warning("残局决策未在原始 actionList 中匹配到: %s", endgame_act[:3] if len(endgame_act) >= 3 else endgame_act)
@@ -518,13 +575,25 @@ class UltimateWinRateEngineV7:
         # ══════════════ ⑤-⑦ GUA-075 主路径：推荐 + 匹配 + 校验 ══════════════
         try:
             recommendation = self._recommend_play(game_state, action_list)
+            self._replay_record(
+                "recommendation",
+                {"gua_id": "GUA-075", "recommendation": recommendation},
+            )
             if recommendation:
                 self.recommend_count += 1
                 act_index = self._match_actionList(recommendation, action_list)
                 if act_index >= 0:
+                    self._replay_record(
+                        "recommendation_match",
+                        {"gua_id": "GUA-075", "actIndex": act_index},
+                    )
                     self.recommend_hit_count += 1
                     # ── ⑦ Guard 硬规则快速校验 ──
                     if self._quick_guard_validate(act_index, action_list, game_state):
+                        self._replay_record(
+                            "recommendation_guard",
+                            {"gua_id": "GUA-075", "passed": True},
+                        )
                         # GUA-075 fix: card_mask 组牌一致性保护
                         # 原路径跳过了 _group_consistency_filter，必须在此补检
                         # 推荐动作拆炸弹/同花顺 → 拦截回退
@@ -547,6 +616,14 @@ class UltimateWinRateEngineV7:
                                         "GUA-075 推荐被组牌保护拦截: %s/%s 拆 %s → 回退",
                                         recommendation.get("type"), recommendation.get("rank"), broken)
                                     blocked_by_mask = True
+                                    self._replay_record(
+                                        "recommendation_mask",
+                                        {
+                                            "gua_id": "GUA-075",
+                                            "blocked": True,
+                                            "broken_type": broken,
+                                        },
+                                    )
                         if not blocked_by_mask:
                             self.recommend_valid_count += 1
                             self.logger.info(
@@ -558,6 +635,10 @@ class UltimateWinRateEngineV7:
                             return self._trace_finalize(act_index, action_list)
                         # 被拦截时继续往下走到回退路径
                     else:
+                        self._replay_record(
+                            "recommendation_guard",
+                            {"gua_id": "GUA-075", "passed": False},
+                        )
                         self.logger.info(
                             "GUA-075 推荐校验不通过: %s/%s → 回退",
                             recommendation.get("type"), recommendation.get("rank"))
@@ -603,6 +684,14 @@ class UltimateWinRateEngineV7:
         if GUARD_IMPORT_OK:
             try:
                 filtered_actions, action_map = filter_action_list(game_state)
+                self._replay_record(
+                    "guard_filter",
+                    {
+                        "input_count": len(action_list),
+                        "output_count": len(filtered_actions),
+                        "original_indices": list(action_map),
+                    },
+                )
                 if len(filtered_actions) < len(action_list):
                     self.guard_filtered_count += 1
             except Exception as e:
@@ -618,6 +707,14 @@ class UltimateWinRateEngineV7:
             group_actions, flt_map = self._group_consistency_filter(
                 filtered_actions, game_state)
             group_filter_map = flt_map
+            self._replay_record(
+                "group_filter",
+                {
+                    "input_count": len(filtered_actions),
+                    "output_count": len(group_actions),
+                    "filter_map": list(group_filter_map),
+                },
+            )
         except Exception as e:
             self.logger.warning(f"_group_consistency_filter 失败: {e}")
 
@@ -630,6 +727,10 @@ class UltimateWinRateEngineV7:
             group_actions = self._apply_wind_catch_anchor(group_actions, game_state)
             # 投喂策略（重排 PASS 到末尾或投喂动作提前，不硬删）
             group_actions = self._try_teammate_feeding(group_actions, game_state)
+            self._replay_record(
+                "candidate_order",
+                {"actions": list(group_actions)},
+            )
         except Exception as e:
             self.logger.warning(f"接风/投喂处理失败: {e}")
 
@@ -1229,12 +1330,20 @@ class UltimateWinRateEngineV7:
 
         # GUA-079 回退增强：从 publicInfo 读取各玩家剩张数（平台实时推送）
         # publicInfo[i] = {"rest": N, ...}，比盲猜 27 准确，使残局管线能看见对手真实剩余
+        # OpenGuanDan: publicInfo has 4 items (including self at curPos)
+        # v1006: publicInfo has 3 items (others only, relative to curPos)
         public_info = game_state.get("publicInfo", [])
         numofplayers = [27, 27, 27, 27]
-        if isinstance(public_info, list):
-            for i in range(min(4, len(public_info))):
+        if isinstance(public_info, list) and len(public_info) >= 4:
+            for i in range(4):
                 if isinstance(public_info[i], dict):
                     numofplayers[i] = public_info[i].get("rest", 27)
+        elif isinstance(public_info, list) and len(public_info) == 3:
+            cur_pos = game_state.get("curPos", my_pos)
+            for j, pi in enumerate(public_info):
+                seat = (cur_pos + 1 + j) % 4
+                if isinstance(pi, dict):
+                    numofplayers[seat] = pi.get("rest", 27)
         # 纠偏：myPos 以 handCards 为准
         numofplayers[my_pos] = len(hand_cards)
         game_state["numofplayers"] = numofplayers
@@ -2308,6 +2417,14 @@ class UltimateWinRateEngineV7:
 
             # 选择最佳动作
             action_probs = probabilities[0][:len(action_list)]
+            self._last_model_scores = [
+                (i, float(action_probs[i].item()))
+                for i in range(len(action_list))
+            ]
+            self._replay_record(
+                "model_scores",
+                {"scores": list(self._last_model_scores)},
+            )
             best_action_idx = torch.argmax(action_probs).item()
 
             # 验证动作索引
@@ -2725,6 +2842,11 @@ class UltimateWinRateEngineV7:
 
         scored = [(i, _score(i, act)) for i, act in enumerate(action_list)]
         scored.sort(key=lambda x: -x[1])  # 降序
+        self._last_heuristic_scores = list(scored)
+        self._replay_record(
+            "heuristic_scores",
+            {"scores": list(scored)},
+        )
 
         if self.logger.isEnabledFor(logging.DEBUG):
             top3 = scored[:min(3, len(scored))]

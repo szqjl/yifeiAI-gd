@@ -61,6 +61,27 @@ def normalize_action_list(action_list: List) -> List:
 ACTION_LIST_CONTEXT_SAMPLE_MAX = 8
 ACTION_LIST_CONTEXT_ITEM_MAX = 8
 
+REPLAY_DECISION_SCHEMA = "yf-replay-decision-v1"
+REPLAY_STATE_KEYS = (
+    "actionList",
+    "stage",
+    "handCards",
+    "myPos",
+    "curPos",
+    "curAction",
+    "greaterPos",
+    "greaterAction",
+    "publicInfo",
+    "selfRank",
+    "oppoRank",
+    "curRank",
+    "tributeResult",
+    "antiPos",
+    "backResult",
+    "history",
+    "recentPlays",
+)
+
 
 def summarize_action_list_for_context(
     action_list: List,
@@ -80,6 +101,16 @@ def summarize_action_list_for_context(
         cards = normalize_cards_to_string_list(cards_raw) if cards_raw else []
         sample.append({"type": str(a_type), "rank": str(a_rank), "cards": cards})
     return sample
+
+
+def replay_state_from_act(data: dict, player_id: int) -> Dict[str, Any]:
+    """保存离线 A/B/C 决策复算所需的平台原始输入。"""
+    state = {key: data.get(key) for key in REPLAY_STATE_KEYS if key in data}
+    state["myPos"] = data.get("myPos", player_id)
+    state["actionList"] = data.get("actionList") or []
+    state["handCards"] = data.get("handCards") or []
+    state["stage"] = data.get("stage", "")
+    return state
 
 
 # ---------- 队友/对手识别（掼蛋规则：0与2一队，1与3一队） ----------
@@ -206,6 +237,21 @@ def decision_context_from_act(
     size = len(action_list) if isinstance(action_list, list) else 0
     # 序列化了 handCards（已由 normalize_act_message_fields 标准化为字符串列表）
     hand_cards = data.get("handCards") or []
+    # numofplayers: 各家剩牌数（从 publicInfo 推算）
+    _public_info = data.get("publicInfo") or []
+    _numofplayers = None
+    if _public_info and hand_cards is not None:
+        my_remaining = len(hand_cards)
+        _rests = [p.get("rest", -1) for p in _public_info]
+        if len(_rests) >= 4:
+            # OpenGuanDan: publicInfo has 4 items (including self at curPos)
+            _numofplayers = list(_rests)
+            _cur_pos = data.get("curPos", data.get("myPos", 0))
+            if 0 <= _cur_pos < 4:
+                _numofplayers[_cur_pos] = my_remaining
+        else:
+            # v1006: publicInfo has 3 items (others only)
+            _numofplayers = [my_remaining] + _rests
     ctx: Dict[str, Any] = {
         "myPos": data.get("myPos", player_id),
         "curPos": data.get("curPos", -1),
@@ -216,10 +262,17 @@ def decision_context_from_act(
         "selfRank": data.get("selfRank"),
         "oppoRank": data.get("oppoRank"),
         "curRank": data.get("curRank"),
+        "publicInfo": data.get("publicInfo", []),
+        "greaterAction": data.get("greaterAction"),
+        "actionList": action_list if size <= ACTION_LIST_CONTEXT_SAMPLE_MAX else None,
+        "restCards": data.get("restCards", []),
+        "numofplayers": _numofplayers,
         "version": version,
         "series": series,
         "source": "act",
         "stage": data.get("stage", ""),
+        "replay_schema": REPLAY_DECISION_SCHEMA,
+        "replay_state": replay_state_from_act(data, player_id),
     }
     # GUA-078: YF_DEBUG_WS=1 时始终保存 greaterAction 和完整 actionList_sample
     _debug_ws = is_ws_debug_enabled()

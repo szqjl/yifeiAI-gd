@@ -166,3 +166,20 @@ def test_m3_act_corrects_greater_before_passive_dispatch():
     assert data["greaterPos"] == 0
     assert data["greaterAction"][1] == "A"
     assert data["_beat_action"][1] == "A"
+
+
+@pytest.mark.unit
+def test_threewithtwo_7_beats_2_when_cur_rank_3():
+    """Regression: GUA fix for RANK_VAL['2'].
+
+    When curRank=3 (tribute round), ThreeWithTwo/7 (rank value 7)
+    must beat ThreeWithTwo/2 (rank value 2) since 2 is NOT the level card.
+    Previously RANK_VAL['2']=15 hardcoded caused wrong PASS.
+    """
+    action_7 = ["ThreeWithTwo", "7", ["S6", "S6", "H7", "S7", "D7"]]
+    action_2 = ["ThreeWithTwo", "2", ["H2", "C2", "D2", "HQ", "DQ"]]
+
+    # curRank=3: 2 is not level, 7 > 2
+    assert action_beats(action_7, action_2, "3") is True
+    # curRank=2: 2 is level (value 15.5), 7 < 15.5
+    assert action_beats(action_7, action_2, "2") is False
