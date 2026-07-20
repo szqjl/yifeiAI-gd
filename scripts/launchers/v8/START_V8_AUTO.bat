@@ -9,14 +9,14 @@ echo.
 
 REM Check if server is running
 echo Checking server status...
-netstat -an | findstr "8181" > nul
-if errorlevel 1 (
+netstat -an | findstr 8181 > nul
+if %errorlevel% neq 0 (
     echo [START] Server not running, starting server...
     echo.
     if defined SERVER_EXE (
         start "Guandan Server (V8)" cmd /k ""%SERVER_EXE%""
     ) else (
-        start "Guandan Server (V8)" cmd /k "cd /d "%REPO_ROOT%\offline_platform\openguandan_latest" && guandan.exe"
+        start "Guandan Server (V8)" cmd /k "cd /d %REPO_ROOT%\offline_platform\openguandan_latest && guandan.exe"
     )
     echo Waiting for server to listen on port 8181 (15 seconds)...
     timeout /t 15 /nobreak > nul
