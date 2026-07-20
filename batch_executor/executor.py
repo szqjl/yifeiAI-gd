@@ -127,6 +127,23 @@ def _increment_completed_after_batch(
     return added
 
 
+def _count_v8_actual_episodes(
+    records_dir: Path,
+    baseline_files: Set[str],
+) -> int:
+    """V8: 从 game_records_v8 统计 baseline 之后新增的副数。
+
+    每个 yf1_v8 JSON 文件 = 一副（单座视角），直接数新增文件数。
+    """
+    if not records_dir.is_dir():
+        return 0
+    count = 0
+    for fp in records_dir.glob("*yf1_v8*.json"):
+        if fp.name not in baseline_files:
+            count += 1
+    return count
+
+
 def _count_new_paired_m1_games(
     records_dir: Path,
     baseline_files: Set[str],
@@ -373,7 +390,7 @@ class BatchExecutor:
         self.process_monitor = ProcessMonitor()
         self.tracker = ScoreTracker(score_file)
         self.restart_manager = RestartManager(self.process_monitor, self.project_root)
-        self.validator = InputValidator()
+        self.validator = InputValidator(platform=platform)
         # 本 Run 开始时 game_records 文件名快照（用于统计新增成对局）
         self._game_records_files_baseline: Optional[Set[str]] = None
         self._run_lock_path: Optional[Path] = None
@@ -951,9 +968,6 @@ class BatchExecutor:
                 # 计算本批次要执行的场数
                 remaining = state.target_games - state.completed_games
                 batch_games = min(remaining, self.validator.single_run_limit)
-                if self.platform == "openguandan":
-                    # 规避 OpenGuanDan 服务端 bug：round>1 时残局可能触发死循环
-                    batch_games = 1
                 
                 self.logger.info(f"开始批次 {state.current_batch}，执行 {batch_games} 场游戏")
                 self._write_current_batch_context(state, batch_games)
@@ -1325,6 +1339,29 @@ class BatchExecutor:
                 if server_terminated_by_kill:
                     self.logger.warning(
                         "本批次因超时强杀或客户端异常结束，不增加 completed_games。"
+                    )
+                elif self.platform == "openguandan":
+                    # V8: 从 game_records_v8 的 result.game_count 统计实际完成的副数
+                    # 而非盲目加 batch_games（batch_games 是 CREATE_ROOM round 参数，
+                    # 服务器可能未打满就超时/断连）
+                    records_dir_v8 = self.project_root / "game_records_v8"
+                    actual_episodes = _count_v8_actual_episodes(
+                        records_dir_v8, self._game_records_files_baseline or set()
+                    )
+                    prev_completed = state.completed_games
+                    state.completed_games = min(
+                        actual_episodes, state.target_games
+                    )
+                    added = state.completed_games - prev_completed
+                    state.last_update = datetime.now()
+                    self.logger.info(
+                        "V8 台账：batch_games=%d，实际副数=%d（yf1文件计数），"
+                        "本批计入=%d，completed_games=%d/%d",
+                        batch_games,
+                        actual_episodes,
+                        added,
+                        state.completed_games,
+                        state.target_games,
                     )
                 else:
                     added = _increment_completed_after_batch(
