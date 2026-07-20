@@ -16,9 +16,9 @@ echo.
 
 REM Check model status
 if exist "models\bc_model_ultimate_win_rate.pth" (
-    echo ✓ Ultimate Win Rate Model: LOADED
+    echo ? Ultimate Win Rate Model: LOADED
 ) else (
-    echo ✗ Ultimate Win Rate Model: NOT FOUND - Will use rule engine
+    echo ? Ultimate Win Rate Model: NOT FOUND - Will use rule engine
 )
 echo.
 
@@ -35,14 +35,14 @@ if errorlevel 1 (
 )
 echo.
 
-REM lalala 路径：请设置环境变量 LALALA_DIR（含 client3.py / client4.py），或改用 run_lalala_client*.py
+REM lalala ?????????? LALALA_DIR?? client3.py / client4.py????? run_lalala_client*.py
 if defined LALALA_DIR (
     echo Configuring lalala clients for port 23456 in %LALALA_DIR%...
     powershell -Command "(Get-Content '%LALALA_DIR%\client3.py') -replace 'ws://127.0.0.1:9618/game/gd/client1', 'ws://127.0.0.1:23456/game/client3' | Set-Content '%LALALA_DIR%\client3.py'"
     powershell -Command "(Get-Content '%LALALA_DIR%\client4.py') -replace 'ws://127.0.0.1:9618/game/gd/client4', 'ws://127.0.0.1:23456/game/client4' | Set-Content '%LALALA_DIR%\client4.py'"
     echo Clients configured.
 ) else (
-    echo [SKIP] 未设置 LALALA_DIR，跳过改端口；请使用 src/communication/run_lalala_client3.py 等
+    echo [SKIP] ??? LALALA_DIR?????????? src/communication/run_lalala_client3.py ?
 )
 echo.
 
