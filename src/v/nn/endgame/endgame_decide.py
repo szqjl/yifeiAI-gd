@@ -965,6 +965,15 @@ class EndgameDecider:
                 logger.info("Q0 自己冲刺: idx=%d type=%s", idx, get_action_type(action) if GUARD_TOOLS_OK else "?")
                 return idx, action
 
+        # ── Q0.5: 一手清（finish_now）────
+        # GUA-112: 无论敌人/队友状态，只要 actionList 含一手清候选 → 立即出完
+        # 原嵌套在 Q1 内，敌人不进残局区时 finish_now 被跳过
+        finish_now = self._q1_finish_now_candidate(game_state, action_list)
+        if finish_now is not None:
+            idx, action = finish_now
+            logger.info("Q0.5 一手清: idx=%d type=%s", idx, get_action_type(action) if GUARD_TOOLS_OK else "?")
+            return idx, action
+
         # ── Q1: 封锁敌方 ──
         if enemies:
             result = self._q1_block_enemy(game_state, action_list, ec)
