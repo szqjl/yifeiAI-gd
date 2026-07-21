@@ -2950,6 +2950,18 @@ class UltimateWinRateEngineV7:
         # 早期出王压牌的最大允许级差
         JOKER_MAX_GAP = 6
 
+        # ── GUA-150: 中局冲刺潜力预检测（只算一次，供 _score 消费）──
+        # 只在领出 + 非早期 + 手牌≥6 张场景检测（跟压/被压不涉及整结构保炸选择）
+        cur_pos_val = game_state.get("curPos", -1)
+        _is_lead_heuristic = (cur_pos_val == -1) or (
+            greater_pos in (-1, my_pos) and 0 <= my_pos <= 3
+        )
+        _sprint_potential: Dict[str, Any] = {}
+        if _is_lead_heuristic and not is_early_game and my_hand_size >= 6:
+            _sprint_potential = self._midgame_sprint_potential_check(
+                hand_cards, is_lead=True,
+            )
+
         def _score(i: int, action) -> float:
             atype = get_action_type(action)
             is_pass = (atype == ACTION_TYPE_PASS)
@@ -3069,6 +3081,20 @@ class UltimateWinRateEngineV7:
             if is_single and not is_pass:
                 if self._single_breaks_pair_under_r12(action, hand_cards, cur_rank):
                     score -= 20000
+
+            # GUA-150: 中局冲刺潜力评分（领出场景）
+            # 手牌含「炸弹 + 可出整结构」时：
+            #   · 出整结构后剩余具备冲刺能力 → +800（保留冲刺路径）
+            #   · 拆散炸弹组（部分使用 Bomb 组牌但非炸弹动作） → -600
+            if not is_pass and not is_bomb and _sprint_potential.get("has_potential"):
+                if self._action_creates_sprint(
+                    action, hand_cards, is_lead=_is_lead_heuristic,
+                ):
+                    score += 800
+                elif self._action_breaks_bomb_core(
+                    action, mask, self._group_type_map or {},
+                ):
+                    score -= 600
 
             return score
 
@@ -3593,6 +3619,159 @@ class UltimateWinRateEngineV7:
 
         return None
 
+    # ═══════════════════════════════════════════════════════════════
+    # GUA-150：中局冲刺潜力检测
+    # ═══════════════════════════════════════════════════════════════
+
+    def _midgame_sprint_potential_check(
+        self,
+        hand_cards: List[str],
+        *,
+        is_lead: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        GUA-150：中局冲刺潜力检测。
+
+        冲刺能力（_hand_has_sprint_capability, GUA-135）要求「炸 + 一手整牌」。
+        中局手牌常不满足此严格条件（如 炸+顺+散单），但「出完一手整结构后
+        剩余手牌即具备冲刺能力」——这条路径应被感知并优先选择。
+
+        检测逻辑：
+          1. 手牌中是否含炸弹族（≥4 同点）
+          2. 是否至少存在一个非炸弹整组，出完后剩余手牌满足 GUA-135 冲刺能力
+
+        典型场景：
+          handCards=10: Bomb(4Q) + Straight(5) + 散牌(CJ)
+          → 出 Straight 后剩 Bomb+CJ (5张=1手) → 进入冲刺态 ✅
+          → 出 Trips Q（拆 Bomb）后丧失冲刺路径 ❌
+
+        Returns:
+            {"has_potential": bool, "preferred_gids": [int], "bomb_gids": [int]}
+        """
+        result: Dict[str, Any] = {"has_potential": False, "preferred_gids": [], "bomb_gids": []}
+        if not is_lead or not hand_cards or len(hand_cards) < 6:
+            return result
+
+        from collections import Counter
+
+        hand_ranks = Counter(get_card_rank(c) for c in hand_cards)
+        has_bomb = any(cnt >= 4 for cnt in hand_ranks.values())
+        if not has_bomb:
+            return result
+
+        group_members = self._group_members or {}
+        group_type_map = self._group_type_map or {}
+
+        # 收集炸弹组 gid（用于后续拆弹检测）
+        bomb_gids = [
+            gid for gid, gtype in group_type_map.items()
+            if gtype in ("Bomb", "StraightFlush")
+        ]
+        result["bomb_gids"] = bomb_gids
+
+        try:
+            from src.v.nn.endgame.endgame_decide import EndgameDecider
+        except Exception:
+            return result
+
+        preferred_gids = []
+        for gid, members in group_members.items():
+            gtype = group_type_map.get(gid, "")
+            # 跳过炸弹 / 同花顺 — 我们希望保留它们作为冲刺武器
+            if gtype in ("Bomb", "StraightFlush"):
+                continue
+            # 跳过非整结构（散牌 scatter、拆出子组如 pair_in_xxx）
+            if gtype in ("scatter", "straight_flush") or gid < 0:
+                continue
+
+            # 模拟出完这个组后剩余手牌是否具备冲刺能力
+            member_set = set(str(m) for m in members)
+            remaining = [c for c in hand_cards if str(c) not in member_set]
+            if not remaining or len(remaining) < 5:
+                continue  # 剩余太少，无冲刺讨论意义
+
+            if EndgameDecider._hand_has_sprint_capability(remaining):
+                preferred_gids.append(gid)
+
+        result["has_potential"] = len(preferred_gids) > 0
+        result["preferred_gids"] = preferred_gids
+        return result
+
+    @staticmethod
+    def _action_breaks_bomb_core(
+        action,
+        card_mask: Dict[str, tuple],
+        group_type_map: Dict[int, str],
+    ) -> bool:
+        """
+        GUA-150 helper：动作是否拆散炸弹组。
+
+        判断标准：动作使用了炸弹组（Bomb/StraightFlush）中的牌，
+        但自身不是炸弹动作（即部分使用 = 拆散）。
+        """
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+        )
+        atype = get_action_type(action)
+        if atype in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH, "PASS"):
+            return False
+
+        action_cards = (
+            action[2] if isinstance(action, list) and len(action) >= 3 and isinstance(action[2], list)
+            else (action if isinstance(action, list) and len(action) > 0 else [])
+        )
+        if not action_cards:
+            return False
+
+        if not card_mask or not group_type_map:
+            return False
+
+        for c in action_cards:
+            info = card_mask.get(str(c))
+            if info:
+                gid, is_core, _ = info
+                if gid >= 0 and is_core >= 1.0:
+                    if group_type_map.get(gid) in ("Bomb", "StraightFlush"):
+                        return True
+        return False
+
+    @staticmethod
+    def _action_creates_sprint(
+        action,
+        hand_cards: List[str],
+        is_lead: bool = True,
+    ) -> bool:
+        """
+        GUA-150 helper：出完此动作后剩余手牌是否具备冲刺能力。
+        """
+        if not is_lead:
+            return False
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, ACTION_TYPE_PASS,
+            ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+        )
+        atype = get_action_type(action)
+        if atype in (ACTION_TYPE_PASS, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+            return False
+
+        action_cards = (
+            action[2] if isinstance(action, list) and len(action) >= 3 and isinstance(action[2], list)
+            else (action if isinstance(action, list) and len(action) > 0 else [])
+        )
+        if not action_cards:
+            return False
+
+        action_set = set(str(c) for c in action_cards)
+        remaining = [c for c in hand_cards if str(c) not in action_set]
+        if len(remaining) < 5:
+            return False
+
+        try:
+            from src.v.nn.endgame.endgame_decide import EndgameDecider
+            return EndgameDecider._hand_has_sprint_capability(remaining)
+        except Exception:
+            return False
+
     def _stage_mid_dispatch(
         self,
         game_state: Dict[str, Any],
@@ -3701,12 +3880,19 @@ class UltimateWinRateEngineV7:
             )
             if not rec:
                 return None
+            # GUA-150：中局冲刺潜力感知 — 手牌含「炸 + 可出整结构」时标记意图
+            sprint_check = self._midgame_sprint_potential_check(
+                hand_cards, is_lead=True,
+            )
+            has_sprint_potential = sprint_check.get("has_potential", False)
             if critical_enemy_remaining <= 4:
                 return _with_intent(rec, "mid_probe_critical_enemy")
             if hr_with_opponents >= 2:
                 return _with_intent(rec, "mid_safe_structure_probe")
             if enemy_shape_hint == "structured" and enemy_bomb_risk_max >= 0.5:
                 return _with_intent(rec, "mid_safe_structure_probe")
+            if has_sprint_potential:
+                return _with_intent(rec, rec.get("intent") or "mid_sprint_structure_lead")
             return _with_intent(rec, rec.get("intent") or "mid_balance_lead")
 
         if not greater_action or greater_action[0] == "PASS":

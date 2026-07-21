@@ -2032,6 +2032,14 @@ def _enumerate_plans(
     return plans
 
 
+@lru_cache(maxsize=128)
+def _enumerate_plans_cached(
+    hand_cards: Tuple[str, ...], cur_rank: str,
+) -> Tuple[GroupingPlan, ...]:
+    """Cache the pure default plan enumeration for repeated decision features."""
+    return tuple(_enumerate_plans(list(hand_cards), cur_rank))
+
+
 # ── 特征提取 ──────────────────────────────────────────────
 
 def _extract_features(
@@ -2204,7 +2212,7 @@ def enumerate_groupings(
         empty = GroupingPlan(cur_rank=cur_rank, strategy="empty")
         return empty, [empty]
 
-    plans = _enumerate_plans(hand_cards, cur_rank)
+    plans = copy.deepcopy(_enumerate_plans_cached(tuple(hand_cards), cur_rank))
 
     # GUA-076：方案完整性校验 — 每个方案必须覆盖全部手牌
     # 2026-06-21 修复：不完整方案用 warning 记录并剔除，不崩溃
