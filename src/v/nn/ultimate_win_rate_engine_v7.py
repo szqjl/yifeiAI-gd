@@ -3082,6 +3082,34 @@ class UltimateWinRateEngineV7:
                 if self._single_breaks_pair_under_r12(action, hand_cards, cur_rank):
                     score -= 20000
 
+            # ⑩ GUA-157: 助攻拆对拦单 — 无散单 + 对手出单 5-10 + 助攻角色 → 拆最小可拆对出单拦
+            if (
+                is_single
+                and not is_pass
+                and not teammate_controls
+                and self._current_role == "助攻"
+                and greater_val > 0
+                and 3 <= greater_val <= 8  # 5-10 in rank value (5=3, 10=8)
+            ):
+                # 检查是否有自然单张（无散单才拆对）
+                if not self._has_any_natural_single(hand_cards, cur_rank):
+                    # 检查动作是否来自拆对（单张来自 pair group，非 core）
+                    cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else action
+                    card = cards[0] if cards else None
+                    if card:
+                        card_info = mask.get(str(card))
+                        if card_info:
+                            gid, is_core, gsize = card_info
+                            # 来自 pair group（gsize=2）且非 core → 拆对
+                            if gsize == 2 and is_core <= 0:
+                                # 拆对加分（比拆炸弹/三张优先）
+                                score += 500
+                                # 拆最小可拆对（99/TT/JJ）额外加分
+                                from src.v.nn.guards.v7_guards import CARD_RANK_ORDER
+                                card_pip = CARD_RANK_ORDER.get(get_card_rank(str(card)), 99)
+                                if 7 <= card_pip <= 9:  # 9/T/J
+                                    score += 200  # 优先拆9-J对
+
             # GUA-150: 中局冲刺潜力评分（领出场景）
             # 手牌含「炸弹 + 可出整结构」时：
             #   · 出整结构后剩余具备冲刺能力 → +800（保留冲刺路径）
