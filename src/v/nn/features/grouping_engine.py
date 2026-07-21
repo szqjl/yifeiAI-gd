@@ -804,6 +804,8 @@ def _detect_three_with_two(
 
     # 贪心：按 rank 排序三张（从小到大优先让小 trip 吃小对，保留大对作独立跟牌）
     sorted_trips = sorted(remaining_trips, key=lambda t: _card_rank_value(t[0], cur_rank))
+    # GUA-156: pairs 也按 rank 排序，保证小 trip 吃小对（原按发牌序，大对被误消耗）
+    remaining_pairs.sort(key=lambda p: _card_rank_value(p[0], cur_rank))
     for trip in sorted_trips:
         rank_counts = _pool_rank_counts(pool_s, remaining_pairs, remaining_trips)
         pair_idx = None
