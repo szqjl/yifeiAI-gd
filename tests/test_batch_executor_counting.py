@@ -1,16 +1,20 @@
 # -*- coding: utf-8
 """batch_executor 台账计数（方案 A + C）回归。"""
 
+import json
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from batch_executor.executor import (
+    BatchExecutor,
     ExecutionState,
     GameRecordsStats,
+    _calculate_batch_games,
     _count_new_paired_games,
     _increment_completed_after_batch,
+    _increment_v8_completed_after_batch,
     _scan_game_records_stats,
 )
 
@@ -30,6 +34,27 @@ def _m3_pair(
 ) -> None:
     _touch(records_dir, f"{ts1} [yf1_m3]-[{opponent}]-[{round_num}]-[{level}].json")
     _touch(records_dir, f"{ts2} [yf2_m3]-[{opponent}]-[{round_num}]-[{level}].json")
+
+
+def _v8_record(
+    records_dir: Path,
+    *,
+    timestamp: str,
+    round_num: int,
+    game_count: int,
+    head_pos: int,
+) -> None:
+    name = (
+        f"{timestamp} [yf1_v8]-[opponent_1_3]-"
+        f"[{round_num}]-[2].json"
+    )
+    payload = {
+        "result": {
+            "game_count": game_count,
+            "order": [head_pos] + [pos for pos in range(4) if pos != head_pos],
+        }
+    }
+    (records_dir / name).write_text(json.dumps(payload), encoding="utf-8")
 
 
 @pytest.mark.unit
@@ -112,3 +137,76 @@ def test_increment_respects_target_cap():
     added = _increment_completed_after_batch(state, batch_games=3, server_terminated_by_kill=False)
     assert added == 1
     assert state.completed_games == 12
+
+
+@pytest.mark.unit
+def test_v8_progress_uses_actual_game_results_not_requested_batch_size():
+    state = ExecutionState(
+        target_games=3,
+        completed_games=0,
+        restart_count=0,
+        current_batch=1,
+        start_time=datetime.now(),
+        last_update=datetime.now(),
+    )
+
+    added = _increment_v8_completed_after_batch(
+        state,
+        (1, 0, 0),
+        server_terminated_by_kill=False,
+    )
+
+    assert added == 1
+    assert state.completed_games == 1
+
+
+@pytest.mark.unit
+def test_v8_server_session_runs_exactly_one_game():
+    assert _calculate_batch_games(3, 3, "openguandan") == 1
+    assert _calculate_batch_games(2, 3, "openguandan") == 1
+    assert _calculate_batch_games(3, 3, "v1006") == 3
+
+
+@pytest.mark.unit
+def test_v8_game_result_rebuild_is_incremental_and_ignores_baseline(tmp_path):
+    records_dir = tmp_path / "game_records_v8"
+    records_dir.mkdir()
+    baseline_name = "20260721080000000000 [yf1_v8]-[opponent_1_3]-[1]-[2].json"
+    _touch(records_dir, baseline_name)
+
+    executor = BatchExecutor(
+        target_games=3,
+        server_path=str(tmp_path / "guandan.exe"),
+        client_scripts=[],
+        platform="openguandan",
+        state_file=str(tmp_path / "state.json"),
+        score_file=str(tmp_path / "scores.json"),
+        enable_signal_handler=False,
+    )
+    executor.project_root = tmp_path
+    executor._game_records_files_baseline = {baseline_name}
+
+    _v8_record(
+        records_dir,
+        timestamp="20260721090000000001",
+        round_num=1,
+        game_count=1,
+        head_pos=0,
+    )
+    _v8_record(
+        records_dir,
+        timestamp="20260721090000000002",
+        round_num=2,
+        game_count=2,
+        head_pos=2,
+    )
+    assert executor._compute_v8_game_wins_from_records() == (1, 0, 0)
+
+    _v8_record(
+        records_dir,
+        timestamp="20260721090100000001",
+        round_num=1,
+        game_count=1,
+        head_pos=1,
+    )
+    assert executor._compute_v8_game_wins_from_records() == (0, 1, 0)

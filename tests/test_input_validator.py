@@ -65,6 +65,40 @@ class TestTargetGamesValidation:
         assert validator.validate_target_games(9) == 9
         assert validator.validate_target_games(12) == 12
 
+    def test_openguandan_platform_uses_same_batch_validation(self):
+        """V8 构造须接受 platform，且仍遵循 3 的倍数口径。"""
+        validator = InputValidator(platform="openguandan")
+
+        assert validator.platform == "openguandan"
+        assert validator.validate_target_games(3) == 3
+        with pytest.raises(ValueError) as exc_info:
+            validator.validate_target_games(4)
+        assert "OpenGuanDan" in str(exc_info.value)
+
+    def test_unknown_platform_is_rejected(self):
+        """平台拼写错误不得静默回落到 v1006。"""
+        with pytest.raises(ValueError) as exc_info:
+            InputValidator(platform="open-guandan")
+        assert "不支持的平台" in str(exc_info.value)
+
+    def test_batch_executor_constructs_with_openguandan(self, tmp_path):
+        """回归：RUN_V8 构造 BatchExecutor 时不得因 platform 参数崩溃。"""
+        from batch_executor.executor import BatchExecutor
+
+        executor = BatchExecutor(
+            target_games=3,
+            server_path=str(tmp_path / "guandan.exe"),
+            client_scripts=[],
+            platform="openguandan",
+            state_file=str(tmp_path / "state.json"),
+            score_file=str(tmp_path / "scores.json"),
+            enable_signal_handler=False,
+        )
+
+        assert executor.platform == "openguandan"
+        assert executor.validator.platform == "openguandan"
+        assert executor.validator.target_games == 3
+
 
 class TestInvalidInputRejection:
     """测试无效输入拒绝功能"""
