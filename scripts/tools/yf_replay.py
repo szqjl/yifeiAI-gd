@@ -743,7 +743,13 @@ class YiFeiReplayGUI:
             ("Pair", "对子"),
         ]:
             for group in plan.get(group_type, []):
-                cards_in_group = [c for c in group if c in cards and c not in used]
+                if isinstance(group, str):
+                    flat = [group]
+                elif group and isinstance(group[0], list):
+                    flat = [c for sub in group for c in sub]
+                else:
+                    flat = group
+                cards_in_group = [c for c in flat if c in cards and c not in used]
                 if cards_in_group:
                     result.append((label, cards_in_group))
                     used.update(cards_in_group)
