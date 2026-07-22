@@ -302,6 +302,47 @@ class UltimateWinRateEngineV7:
             if 0 <= act_index < len(action_list)
             else []
         )
+        if (
+            isinstance(chosen_action, list)
+            and len(chosen_action) >= 3
+            and isinstance(chosen_action[2], list)
+            and self._group_members
+        ):
+            chosen_cards = [str(card) for card in chosen_action[2]]
+            memberships = self._build_card_memberships(self._group_members)
+            multi_memberships = {
+                card: memberships[card]
+                for card in sorted(set(chosen_cards))
+                if card in memberships
+                and (
+                    len(memberships[card]) > 1
+                    or sum(memberships[card].values()) > 1
+                )
+            }
+            if multi_memberships:
+                allocation, broken_group_ids = self._best_group_allocation(
+                    chosen_cards,
+                    self._card_mask or {},
+                    self._group_type_map or {},
+                    self._group_members,
+                )
+                trace_payload = {
+                    "action": chosen_action,
+                    "memberships": multi_memberships,
+                    "allocation": allocation,
+                    "broken_types": [
+                        (self._group_type_map or {}).get(group_id, "unknown")
+                        for group_id in broken_group_ids
+                    ],
+                }
+                self.logger.info(
+                    "GUA-154 多实例分配: action=%s memberships=%s allocation=%s broken=%s",
+                    chosen_action[:3],
+                    multi_memberships,
+                    allocation,
+                    trace_payload["broken_types"],
+                )
+                self._replay_record("gua154_memberships", trace_payload)
         self._replay_record(
             "final",
             {
@@ -1612,6 +1653,147 @@ class UltimateWinRateEngineV7:
         return sum(min(action_c[c], group_c[c]) for c in group_c)
 
     @staticmethod
+    def _build_card_memberships(
+        group_members: Optional[Dict[int, List[str]]],
+    ) -> Dict[str, Dict[int, int]]:
+        """按牌串保留全部实例归属，值为 group_id → 实例数。"""
+        memberships: Dict[str, Dict[int, int]] = {}
+        for group_id, cards in (group_members or {}).items():
+            for card in cards:
+                card_key = str(card)
+                group_counts = memberships.setdefault(card_key, {})
+                group_counts[group_id] = group_counts.get(group_id, 0) + 1
+        return memberships
+
+    @staticmethod
+    def _group_type_is_core(group_type: str) -> bool:
+        """`pair` 是可重配普通对子，其余已登记组型按 core 处理。"""
+        return bool(group_type) and group_type != "pair"
+
+    @staticmethod
+    def _group_break_cost(group_type: str) -> int:
+        """实例分配时优先保留炸弹/同花顺，再保留复合结构。"""
+        if group_type in ("Bomb", "StraightFlush"):
+            return 1000
+        if group_type in (
+            "pair_in_three_pair",
+            "trip_in_steel_plate",
+            "trip_in_three_with_two",
+            "pair_in_three_with_two",
+        ):
+            return 600
+        if group_type in ("straight", "trips"):
+            return 500
+        return 700
+
+    @staticmethod
+    def _best_group_allocation(
+        action_cards: List[str],
+        card_mask: Dict[str, tuple],
+        group_type_map: Dict[int, str],
+        group_members: Dict[int, List[str]],
+    ) -> Tuple[Dict[int, int], List[int]]:
+        """为同名牌实例选择组归属，返回最小拆核分配及被拆 core gids。"""
+        from collections import Counter as _Counter
+
+        action_counts = _Counter(str(card) for card in action_cards)
+        memberships = UltimateWinRateEngineV7._build_card_memberships(group_members)
+        options_by_card: List[List[Dict[int, int]]] = []
+
+        for card, required_count in action_counts.items():
+            capacities = dict(memberships.get(card, {}))
+            available_count = sum(capacities.values())
+            if available_count < required_count:
+                fallback_info = card_mask.get(card)
+                fallback_group_id = fallback_info[0] if fallback_info else -2
+                capacities[fallback_group_id] = (
+                    capacities.get(fallback_group_id, 0)
+                    + required_count - available_count
+                )
+
+            capacity_items = list(capacities.items())
+            card_options: List[Dict[int, int]] = []
+
+            def _enumerate_card_allocations(
+                item_index: int,
+                remaining_count: int,
+                current: Dict[int, int],
+            ) -> None:
+                if item_index >= len(capacity_items):
+                    if remaining_count == 0:
+                        card_options.append(dict(current))
+                    return
+                group_id, capacity = capacity_items[item_index]
+                max_take = min(capacity, remaining_count)
+                for take_count in range(max_take + 1):
+                    if take_count:
+                        current[group_id] = take_count
+                    else:
+                        current.pop(group_id, None)
+                    _enumerate_card_allocations(
+                        item_index + 1,
+                        remaining_count - take_count,
+                        current,
+                    )
+                current.pop(group_id, None)
+
+            _enumerate_card_allocations(0, required_count, {})
+            if not card_options:
+                card_options = [{-2: required_count}]
+            options_by_card.append(card_options)
+
+        allocations: List[Dict[int, int]] = [{}]
+        for card_options in options_by_card:
+            next_allocations: List[Dict[int, int]] = []
+            for base_allocation in allocations:
+                for card_allocation in card_options:
+                    combined = dict(base_allocation)
+                    for group_id, used_count in card_allocation.items():
+                        combined[group_id] = combined.get(group_id, 0) + used_count
+                    next_allocations.append(combined)
+            allocations = next_allocations
+
+        best_allocation: Dict[int, int] = {}
+        best_broken: List[int] = []
+        best_key: Optional[Tuple[int, int, int, int]] = None
+
+        for allocation in allocations:
+            broken_group_ids: List[int] = []
+            full_core_cards = 0
+            touched_group_count = 0
+            for group_id, used_count in allocation.items():
+                if group_id < 0 or used_count <= 0:
+                    continue
+                touched_group_count += 1
+                total_count = len(group_members.get(group_id, []))
+                group_type = group_type_map.get(group_id, "unknown")
+                if not UltimateWinRateEngineV7._group_type_is_core(group_type):
+                    continue
+                if 0 < used_count < total_count:
+                    broken_group_ids.append(group_id)
+                elif total_count > 0 and used_count == total_count:
+                    full_core_cards += total_count
+
+            break_cost = sum(
+                UltimateWinRateEngineV7._group_break_cost(
+                    group_type_map.get(group_id, "unknown")
+                )
+                for group_id in broken_group_ids
+            )
+            allocation_key = (
+                break_cost,
+                len(broken_group_ids),
+                -full_core_cards,
+                touched_group_count,
+            )
+            if best_key is None or allocation_key < best_key:
+                best_key = allocation_key
+                best_allocation = allocation
+                best_broken = broken_group_ids
+
+        return best_allocation, best_broken
+
+    @staticmethod
     def _group_total_size(
         gid: int,
         card_mask: Dict[str, tuple],
@@ -1637,23 +1819,37 @@ class UltimateWinRateEngineV7:
         if not action_cards or self._card_mask is None:
             return False
 
-        touched_types = set()
-        for card in action_cards:
-            info = self._card_mask.get(card)
-            if info is None:
-                continue
-            gid, is_core, _ = info
-            if gid < 0 or not is_core:
-                continue
-            gtype = (self._group_type_map or {}).get(gid)
-            if gtype:
-                touched_types.add(gtype)
+        if self._group_members:
+            allocation, _ = self._best_group_allocation(
+                action_cards,
+                self._card_mask,
+                self._group_type_map or {},
+                self._group_members,
+            )
+            touched_types = {
+                (self._group_type_map or {}).get(group_id)
+                for group_id, used_count in allocation.items()
+                if group_id >= 0 and used_count > 0
+            }
+            touched_types.discard(None)
+        else:
+            touched_types = set()
+            for card in action_cards:
+                info = self._card_mask.get(card)
+                if info is None:
+                    continue
+                gid, is_core, _ = info
+                if gid < 0 or not is_core:
+                    continue
+                gtype = (self._group_type_map or {}).get(gid)
+                if gtype:
+                    touched_types.add(gtype)
 
-        if declared == "Trips" and "trip_in_steel_plate" in touched_types:
+        if declared != "TwoTrips" and "trip_in_steel_plate" in touched_types:
             return True
-        if declared == "Pair" and "pair_in_three_pair" in touched_types:
+        if declared != "ThreePair" and "pair_in_three_pair" in touched_types:
             return True
-        if declared in ("Trips", "Pair") and (
+        if declared != "ThreeWithTwo" and (
             "trip_in_three_with_two" in touched_types
             or "pair_in_three_with_two" in touched_types
         ):
@@ -1684,7 +1880,23 @@ class UltimateWinRateEngineV7:
         if not action_cards:
             return None
 
-        from collections import Counter as _Counter
+        if group_members:
+            _, broken_group_ids = UltimateWinRateEngineV7._best_group_allocation(
+                action_cards,
+                card_mask,
+                group_type_map,
+                group_members,
+            )
+            if broken_group_ids:
+                protected_group_id = max(
+                    broken_group_ids,
+                    key=lambda group_id: UltimateWinRateEngineV7._group_break_cost(
+                        group_type_map.get(group_id, "unknown")
+                    ),
+                )
+                return group_type_map.get(protected_group_id, "unknown")
+            return None
+
         touched_gids: set[int] = set()
         for card in action_cards:
             info = card_mask.get(card)
@@ -1695,17 +1907,11 @@ class UltimateWinRateEngineV7:
                 touched_gids.add(gid)
 
         for gid in touched_gids:
-            if group_members and gid in group_members:
-                total = len(group_members[gid])
-                used = UltimateWinRateEngineV7._multiset_overlap_used(
-                    action_cards, group_members[gid]
-                )
-            else:
-                total = UltimateWinRateEngineV7._group_total_size(gid, card_mask, group_members)
-                used = sum(
-                    1 for c in action_cards
-                    if card_mask.get(c) and card_mask.get(c)[0] == gid
-                )
+            total = UltimateWinRateEngineV7._group_total_size(gid, card_mask, group_members)
+            used = sum(
+                1 for card in action_cards
+                if card_mask.get(card) and card_mask.get(card)[0] == gid
+            )
             if 0 < used < total:
                 return group_type_map.get(gid, "unknown")
 
@@ -2669,13 +2875,31 @@ class UltimateWinRateEngineV7:
             cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else action
             if not cards:
                 return False
-            # GUA-082: 单张出自 gsize>1 的组 = 拆对/拆三张，不算组局一致
             if len(cards) == 1:
-                entry = mask.get(str(cards[0]))
-                if entry:
-                    gid, _, gsize = entry
-                    if gid >= 0 and gsize > 1:
-                        return False
+                return False
+            if self._group_members:
+                allocation, broken_group_ids = self._best_group_allocation(
+                    [str(card) for card in cards],
+                    mask,
+                    self._group_type_map or {},
+                    self._group_members,
+                )
+                if broken_group_ids:
+                    return False
+                allocated_group_ids = {
+                    group_id
+                    for group_id, used_count in allocation.items()
+                    if group_id >= 0 and used_count > 0
+                }
+                allocated_core_cards = sum(
+                    used_count
+                    for group_id, used_count in allocation.items()
+                    if group_id >= 0
+                )
+                return (
+                    len(allocated_group_ids) == 1
+                    and allocated_core_cards == len(cards)
+                )
             group_ids = set()
             for c in cards:
                 c = str(c)
@@ -2695,6 +2919,14 @@ class UltimateWinRateEngineV7:
             cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else action
             if not cards:
                 return -500
+            if self._group_members:
+                _, broken_group_ids = self._best_group_allocation(
+                    [str(card) for card in cards],
+                    mask,
+                    self._group_type_map or {},
+                    self._group_members,
+                )
+                return -300 * len(broken_group_ids)
             group_ids = set()
             for c in cards:
                 c = str(c)
@@ -2717,6 +2949,18 @@ class UltimateWinRateEngineV7:
         }
         # 早期出王压牌的最大允许级差
         JOKER_MAX_GAP = 6
+
+        # ── GUA-150: 中局冲刺潜力预检测（只算一次，供 _score 消费）──
+        # 只在领出 + 非早期 + 手牌≥6 张场景检测（跟压/被压不涉及整结构保炸选择）
+        cur_pos_val = game_state.get("curPos", -1)
+        _is_lead_heuristic = (cur_pos_val == -1) or (
+            greater_pos in (-1, my_pos) and 0 <= my_pos <= 3
+        )
+        _sprint_potential: Dict[str, Any] = {}
+        if _is_lead_heuristic and not is_early_game and my_hand_size >= 6:
+            _sprint_potential = self._midgame_sprint_potential_check(
+                hand_cards, is_lead=True,
+            )
 
         def _score(i: int, action) -> float:
             atype = get_action_type(action)
@@ -2837,6 +3081,48 @@ class UltimateWinRateEngineV7:
             if is_single and not is_pass:
                 if self._single_breaks_pair_under_r12(action, hand_cards, cur_rank):
                     score -= 20000
+
+            # ⑩ GUA-157: 助攻拆对拦单 — 无散单 + 对手出单 5-10 + 助攻角色 → 拆最小可拆对出单拦
+            if (
+                is_single
+                and not is_pass
+                and not teammate_controls
+                and self._current_role == "助攻"
+                and greater_val > 0
+                and 3 <= greater_val <= 8  # 5-10 in rank value (5=3, 10=8)
+            ):
+                # 检查是否有自然单张（无散单才拆对）
+                if not self._has_any_natural_single(hand_cards, cur_rank):
+                    # 检查动作是否来自拆对（单张来自 pair group，非 core）
+                    cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else action
+                    card = cards[0] if cards else None
+                    if card:
+                        card_info = mask.get(str(card))
+                        if card_info:
+                            gid, is_core, gsize = card_info
+                            # 来自 pair group（gsize=2）且非 core → 拆对
+                            if gsize == 2 and is_core <= 0:
+                                # 拆对加分（比拆炸弹/三张优先）
+                                score += 500
+                                # 拆最小可拆对（99/TT/JJ）额外加分
+                                from src.v.nn.guards.v7_guards import CARD_RANK_ORDER
+                                card_pip = CARD_RANK_ORDER.get(get_card_rank(str(card)), 99)
+                                if 7 <= card_pip <= 9:  # 9/T/J
+                                    score += 200  # 优先拆9-J对
+
+            # GUA-150: 中局冲刺潜力评分（领出场景）
+            # 手牌含「炸弹 + 可出整结构」时：
+            #   · 出整结构后剩余具备冲刺能力 → +800（保留冲刺路径）
+            #   · 拆散炸弹组（部分使用 Bomb 组牌但非炸弹动作） → -600
+            if not is_pass and not is_bomb and _sprint_potential.get("has_potential"):
+                if self._action_creates_sprint(
+                    action, hand_cards, is_lead=_is_lead_heuristic,
+                ):
+                    score += 800
+                elif self._action_breaks_bomb_core(
+                    action, mask, self._group_type_map or {},
+                ):
+                    score -= 600
 
             return score
 
@@ -3361,6 +3647,159 @@ class UltimateWinRateEngineV7:
 
         return None
 
+    # ═══════════════════════════════════════════════════════════════
+    # GUA-150：中局冲刺潜力检测
+    # ═══════════════════════════════════════════════════════════════
+
+    def _midgame_sprint_potential_check(
+        self,
+        hand_cards: List[str],
+        *,
+        is_lead: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        GUA-150：中局冲刺潜力检测。
+
+        冲刺能力（_hand_has_sprint_capability, GUA-135）要求「炸 + 一手整牌」。
+        中局手牌常不满足此严格条件（如 炸+顺+散单），但「出完一手整结构后
+        剩余手牌即具备冲刺能力」——这条路径应被感知并优先选择。
+
+        检测逻辑：
+          1. 手牌中是否含炸弹族（≥4 同点）
+          2. 是否至少存在一个非炸弹整组，出完后剩余手牌满足 GUA-135 冲刺能力
+
+        典型场景：
+          handCards=10: Bomb(4Q) + Straight(5) + 散牌(CJ)
+          → 出 Straight 后剩 Bomb+CJ (5张=1手) → 进入冲刺态 ✅
+          → 出 Trips Q（拆 Bomb）后丧失冲刺路径 ❌
+
+        Returns:
+            {"has_potential": bool, "preferred_gids": [int], "bomb_gids": [int]}
+        """
+        result: Dict[str, Any] = {"has_potential": False, "preferred_gids": [], "bomb_gids": []}
+        if not is_lead or not hand_cards or len(hand_cards) < 6:
+            return result
+
+        from collections import Counter
+
+        hand_ranks = Counter(get_card_rank(c) for c in hand_cards)
+        has_bomb = any(cnt >= 4 for cnt in hand_ranks.values())
+        if not has_bomb:
+            return result
+
+        group_members = self._group_members or {}
+        group_type_map = self._group_type_map or {}
+
+        # 收集炸弹组 gid（用于后续拆弹检测）
+        bomb_gids = [
+            gid for gid, gtype in group_type_map.items()
+            if gtype in ("Bomb", "StraightFlush")
+        ]
+        result["bomb_gids"] = bomb_gids
+
+        try:
+            from src.v.nn.endgame.endgame_decide import EndgameDecider
+        except Exception:
+            return result
+
+        preferred_gids = []
+        for gid, members in group_members.items():
+            gtype = group_type_map.get(gid, "")
+            # 跳过炸弹 / 同花顺 — 我们希望保留它们作为冲刺武器
+            if gtype in ("Bomb", "StraightFlush"):
+                continue
+            # 跳过非整结构（散牌 scatter、拆出子组如 pair_in_xxx）
+            if gtype in ("scatter", "straight_flush") or gid < 0:
+                continue
+
+            # 模拟出完这个组后剩余手牌是否具备冲刺能力
+            member_set = set(str(m) for m in members)
+            remaining = [c for c in hand_cards if str(c) not in member_set]
+            if not remaining or len(remaining) < 5:
+                continue  # 剩余太少，无冲刺讨论意义
+
+            if EndgameDecider._hand_has_sprint_capability(remaining):
+                preferred_gids.append(gid)
+
+        result["has_potential"] = len(preferred_gids) > 0
+        result["preferred_gids"] = preferred_gids
+        return result
+
+    @staticmethod
+    def _action_breaks_bomb_core(
+        action,
+        card_mask: Dict[str, tuple],
+        group_type_map: Dict[int, str],
+    ) -> bool:
+        """
+        GUA-150 helper：动作是否拆散炸弹组。
+
+        判断标准：动作使用了炸弹组（Bomb/StraightFlush）中的牌，
+        但自身不是炸弹动作（即部分使用 = 拆散）。
+        """
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+        )
+        atype = get_action_type(action)
+        if atype in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH, "PASS"):
+            return False
+
+        action_cards = (
+            action[2] if isinstance(action, list) and len(action) >= 3 and isinstance(action[2], list)
+            else (action if isinstance(action, list) and len(action) > 0 else [])
+        )
+        if not action_cards:
+            return False
+
+        if not card_mask or not group_type_map:
+            return False
+
+        for c in action_cards:
+            info = card_mask.get(str(c))
+            if info:
+                gid, is_core, _ = info
+                if gid >= 0 and is_core >= 1.0:
+                    if group_type_map.get(gid) in ("Bomb", "StraightFlush"):
+                        return True
+        return False
+
+    @staticmethod
+    def _action_creates_sprint(
+        action,
+        hand_cards: List[str],
+        is_lead: bool = True,
+    ) -> bool:
+        """
+        GUA-150 helper：出完此动作后剩余手牌是否具备冲刺能力。
+        """
+        if not is_lead:
+            return False
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, ACTION_TYPE_PASS,
+            ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+        )
+        atype = get_action_type(action)
+        if atype in (ACTION_TYPE_PASS, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+            return False
+
+        action_cards = (
+            action[2] if isinstance(action, list) and len(action) >= 3 and isinstance(action[2], list)
+            else (action if isinstance(action, list) and len(action) > 0 else [])
+        )
+        if not action_cards:
+            return False
+
+        action_set = set(str(c) for c in action_cards)
+        remaining = [c for c in hand_cards if str(c) not in action_set]
+        if len(remaining) < 5:
+            return False
+
+        try:
+            from src.v.nn.endgame.endgame_decide import EndgameDecider
+            return EndgameDecider._hand_has_sprint_capability(remaining)
+        except Exception:
+            return False
+
     def _stage_mid_dispatch(
         self,
         game_state: Dict[str, Any],
@@ -3469,12 +3908,19 @@ class UltimateWinRateEngineV7:
             )
             if not rec:
                 return None
+            # GUA-150：中局冲刺潜力感知 — 手牌含「炸 + 可出整结构」时标记意图
+            sprint_check = self._midgame_sprint_potential_check(
+                hand_cards, is_lead=True,
+            )
+            has_sprint_potential = sprint_check.get("has_potential", False)
             if critical_enemy_remaining <= 4:
                 return _with_intent(rec, "mid_probe_critical_enemy")
             if hr_with_opponents >= 2:
                 return _with_intent(rec, "mid_safe_structure_probe")
             if enemy_shape_hint == "structured" and enemy_bomb_risk_max >= 0.5:
                 return _with_intent(rec, "mid_safe_structure_probe")
+            if has_sprint_potential:
+                return _with_intent(rec, rec.get("intent") or "mid_sprint_structure_lead")
             return _with_intent(rec, rec.get("intent") or "mid_balance_lead")
 
         if not greater_action or greater_action[0] == "PASS":

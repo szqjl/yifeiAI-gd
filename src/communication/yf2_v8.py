@@ -388,6 +388,14 @@ class YF2_V8_Client:
                     ctx["card_mask"] = {k: list(v) for k, v in cm.items()}
                     ctx["role"] = self.decision_engine._current_role
                     ctx["group_type_map"] = {str(k): v for k, v in (self.decision_engine._group_type_map or {}).items()}
+                # 录制组牌方案（Plan B）
+                bp = self.decision_engine._best_plan
+                if bp:
+                    ctx["grouping_plan"] = bp.to_dict()
+                    ctx["grouping_strategy"] = bp.strategy
+                    ctx["grouping_score"] = round(bp.score, 4)
+                    ctx["grouping_power"] = bp.power_score
+                    ctx["grouping_role"] = bp.role
             except Exception:
                 pass
             # GUA-075 记录增强: 从引擎读取管线追踪信息

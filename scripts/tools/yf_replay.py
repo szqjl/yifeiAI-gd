@@ -267,6 +267,10 @@ class YiFeiReplayGUI:
 
         # 牌面贴图缓存（PhotoImage 须保持引用，防 GC）
         self._card_image_cache = {}
+
+        # 组牌方案时间线（Plan B）
+        self.grouping_timeline = {}  # {action_step: plan_dict}
+        self.current_grouping_plan = None  # 当前步骤的组牌方案
         
         # 初始化界面
         self._setup_ui()
@@ -509,6 +513,10 @@ class YiFeiReplayGUI:
         self.total_steps = len(self.actions)
         self.teammate_record_data = None
         
+        # 构建组牌方案时间线（Plan B）
+        self.grouping_timeline = {}
+        self._build_grouping_timeline()
+        
         # 保存初始手牌（所有玩家）
         self.initial_hands = {}
 
@@ -570,6 +578,24 @@ class YiFeiReplayGUI:
         # 7. 计算当前所有玩家的手牌
         self.player_hands = self._calculate_current_hands()
         self.status_bar.config(text=f"游戏数据加载完成，共 {self.total_steps} 个动作，初始手牌: {len(self.initial_hands)} 个玩家")
+    
+    def _build_grouping_timeline(self):
+        """从 my_decisions 提取组牌方案，构建 {action_step: plan_dict} 时间线。"""
+        self.grouping_timeline = {}
+        for md in self.my_decisions:
+            ctx = md.get("context") or {}
+            plan = ctx.get("grouping_plan")
+            if not plan:
+                continue
+            # 匹配 decision 到 actions[] 的 step index
+            dec_ts = md.get("timestamp", "")
+            dec_action = md.get("action", [])
+            for i, action in enumerate(self.actions):
+                if action.get("cur_pos") == self.player_id:
+                    act_ts = action.get("timestamp", "")
+                    if act_ts == dec_ts:
+                        self.grouping_timeline[i] = plan
+                        break
     
     def _resolve_player_labels(self):
         """从 JSON player_name + 文件名 opponent_* 解析 4 个玩家的显示名。"""
@@ -706,6 +732,55 @@ class YiFeiReplayGUI:
         for rank in sorted(by_rank.keys() - set(display_order)):
             cols.append((rank, by_rank[rank]))
         return cols
+
+    def _organize_hand_by_grouping(self, cards, plan):
+        """按组牌方案排序手牌，返回 [(label, [cards])]。
+        
+        若 plan 为空或不含 grouping_plan，退化为 _organize_hand_columns。
+        """
+        if not plan:
+            return self._organize_hand_columns(cards)
+        
+        result = []
+        used = set()
+        
+        # 按组牌类型顺序：同花顺 > 炸弹 > 顺子 > 三带二 > 三连对 > 钢板 > 对子 > 散牌
+        for group_type, label in [
+            ("StraightFlush", "同花顺"), ("Bomb", "炸弹"), ("Straight", "顺子"),
+            ("ThreeWithTwo", "三带二"), ("ThreePair", "三连对"), ("SteelPlate", "钢板"),
+            ("Pair", "对子"),
+        ]:
+            for group in plan.get(group_type, []):
+                if isinstance(group, str):
+                    flat = [group]
+                elif group and isinstance(group[0], list):
+                    flat = [c for sub in group for c in sub]
+                else:
+                    flat = group
+                cards_in_group = [c for c in flat if c in cards and c not in used]
+                if cards_in_group:
+                    result.append((label, cards_in_group))
+                    used.update(cards_in_group)
+        
+        # 散牌
+        remaining = [card for card in cards if card not in used]
+        if remaining:
+            by_rank = {}
+            for card in remaining:
+                rank = card[1:] if len(card) >= 2 else card
+                if rank == '1':
+                    rank = 'A'
+                by_rank.setdefault(rank, []).append(card)
+            rank_order = self._hand_column_rank_order()
+            rank_pos = {rank: index for index, rank in enumerate(rank_order)}
+            for rank in sorted(by_rank, key=lambda item: rank_pos.get(item, 99)):
+                rank_cards = sorted(
+                    by_rank[rank],
+                    key=lambda card: SUIT_ORDER_IDX.get(card[0], 99),
+                )
+                result.append((rank, rank_cards))
+
+        return result
 
     def _apply_tribute_back_to_initial_hands(self):
         """贡前 initial_hand 按 my_decisions 调整为出牌前有效手牌（本家 + 队友 JSON）。"""
@@ -1106,6 +1181,16 @@ class YiFeiReplayGUI:
                                           font=("Arial", 14), anchor=tk.CENTER)
             return
 
+        # 更新当前组牌方案（从 timeline 中查找最近的 plan）
+        self.current_grouping_plan = None
+        if self.current_step > 0:
+            step_idx = self.current_step - 1
+            # 查找当前步骤或之前最近的组牌方案
+            for s in range(step_idx, -1, -1):
+                if s in self.grouping_timeline:
+                    self.current_grouping_plan = self.grouping_timeline[s]
+                    break
+
         # 4 个玩家手牌 + 名字 + 剩余张数
         cur_action_pos = self._current_acting_pos()
         for pos in range(4):
@@ -1194,7 +1279,9 @@ class YiFeiReplayGUI:
         else:
             remaining = max(0, 27 - self._played_count(pos))
 
-        self._draw_hand_stacked(cards, layout)
+        # 只有当前玩家使用组牌方案排序
+        plan = self.current_grouping_plan if pos == self.player_id else None
+        self._draw_hand_stacked(cards, layout, plan=plan)
 
         labels = self._build_player_labels()
         self._draw_player_name_label(seat, layout, labels[pos], remaining, highlight)
@@ -1213,9 +1300,12 @@ class YiFeiReplayGUI:
                                       font=("Microsoft YaHei", 11, "bold"),
                                       anchor=tk.CENTER, justify=tk.CENTER)
 
-    def _draw_hand_stacked(self, cards, layout):
-        """按 rank 分组堆叠：横排（top/bottom）列内纵向叠；竖排（left/right）行内横向叠。"""
-        cols = self._organize_hand_columns(cards)
+    def _draw_hand_stacked(self, cards, layout, plan=None):
+        """按组牌方案或 rank 分组堆叠：横排（top/bottom）列内纵向叠；竖排（left/right）行内横向叠。"""
+        if plan:
+            cols = self._organize_hand_by_grouping(cards, plan)
+        else:
+            cols = self._organize_hand_columns(cards)
         if not cols:
             return
         cw, ch = 54, 77            # 牌张尺寸：再加 ~1/5（45×64 → 54×77）

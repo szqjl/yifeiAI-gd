@@ -23,7 +23,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RECORDS_DIR = PROJECT_ROOT / "game_records_v7"
-GAMES_PER_SESSION = 3  # v1006 固定每会话 3 局；V8 OpenGuanDan batch_games=1
+GAMES_PER_SESSION = 3  # v1006 固定每会话 3 局；V8 OpenGuanDan 每会话 1 局
 
 # 平台标签：V7 → "V7"，V8 → "V8"（从 --dir 自动推断）
 _PLATFORM_TAG = "V7"
@@ -235,6 +235,36 @@ def print_victory_table(vn: list, games: int):
     print(f"  victoryNum: {vn}")
 
 
+def v8_game_result_from_head_dist(head_dist: list[int]) -> tuple[int, int, int]:
+    """按一个 OpenGuanDan 会话内的头游副数判定真实局胜。"""
+    team_a_heads = head_dist[0] + head_dist[2]
+    team_b_heads = head_dist[1] + head_dist[3]
+    if team_a_heads > team_b_heads:
+        return (1, 0, 0)
+    if team_b_heads > team_a_heads:
+        return (0, 1, 0)
+    return (0, 0, 1)
+
+
+def print_v8_victory_table(
+    vn: list,
+    head_dist: list[int],
+    game_result: tuple[int, int, int],
+) -> None:
+    """打印 V8 真实局胜，并保留 victoryNum 作为升级值诊断。"""
+    team_a_wins, team_b_wins, draws = game_result
+    print(
+        f"  局级: V8 {team_a_wins}/1局胜  Lalala {team_b_wins}/1局胜  "
+        f"平局 {draws}/1"
+    )
+    print(
+        "  局胜判定: 头游副数 "
+        f"TeamA={head_dist[0] + head_dist[2]} "
+        f"TeamB={head_dist[1] + head_dist[3]}"
+    )
+    print(f"  victoryNum（升级值，仅诊断）: {vn}")
+
+
 def print_round_summary(total_rounds: int, v7_won: int, v7_dist: dict,
                         v7_pos_dist: dict, lalala_achieved_a: int,
                         v7_final_level_dist: dict = None):
@@ -270,10 +300,9 @@ def analyze_session(session_records: list[dict], sess_idx: int, raw_json_count: 
     """分析一个会话。"""
     print_session_header(sess_idx, session_records, raw_json_count)
 
-    # 局级：vn 从任意一副取（会话内不变）
+    # 局级：vn 从末副取；V8 的 vn 是升级值，真实局胜稍后按会话头游副数判定。
     vn_raw = session_records[-1].get("result", {}).get("victoryNum", [0, 0, 0, 0])
     vn = list(vn_raw) + [0, 0, 0, 0] if len(vn_raw) < 4 else list(vn_raw)
-    print_victory_table(vn[:4], GAMES_PER_SESSION)
 
     # 副级
     total_rounds = len(session_records)
@@ -307,6 +336,17 @@ def analyze_session(session_records: list[dict], sess_idx: int, raw_json_count: 
             if 0 <= head_pos < 4:
                 head_dist[head_pos] += 1
 
+    if _PLATFORM_TAG == "V8":
+        game_result = v8_game_result_from_head_dist(head_dist)
+        print_v8_victory_table(vn[:4], head_dist, game_result)
+    else:
+        game_result = (
+            vn[0] if len(vn) > 0 else 0,
+            vn[1] if len(vn) > 1 else 0,
+            max(0, GAMES_PER_SESSION - sum(vn[:2])),
+        )
+        print_victory_table(vn[:4], GAMES_PER_SESSION)
+
     print_round_summary(total_rounds, v7_won, dict(v7_dist),
                         dict(v7_pos_dist), lalala_achieved_a,
                         v7_final_level_dist=dict(v7_final_level_dist))
@@ -333,6 +373,9 @@ def analyze_session(session_records: list[dict], sess_idx: int, raw_json_count: 
         "games": GAMES_PER_SESSION,
         "rounds": total_rounds,
         "vn": vn,
+        "v7_game_wins": game_result[0],
+        "lalala_game_wins": game_result[1],
+        "draws": game_result[2],
         "v7_rounds_won": v7_won,
         "v7_dist": dict(v7_dist),
         "v7_pos_dist": dict(v7_pos_dist),
@@ -427,6 +470,7 @@ def main():
     total_v7_won = 0
     total_v7_game_wins = 0
     total_lalala_game_wins = 0
+    total_draws = 0
     total_v7_dist = defaultdict(int)
     total_v7_pos_dist = defaultdict(int)
     total_lalala_a = 0
@@ -436,8 +480,9 @@ def main():
         vn = r["vn"]
         for i in range(4):
             total_vn[i] += vn[i]
-        total_v7_game_wins += vn[0] if len(vn) > 0 else 0
-        total_lalala_game_wins += vn[1] if len(vn) > 1 else 0
+        total_v7_game_wins += r["v7_game_wins"]
+        total_lalala_game_wins += r["lalala_game_wins"]
+        total_draws += r["draws"]
         total_v7_won += r["v7_rounds_won"]
         total_lalala_a += r["lalala_achieved_a"]
         for k, v in r["v7_dist"].items():
@@ -453,7 +498,8 @@ def main():
     v7_ttl = total_v7_game_wins
     lalala_ttl = total_lalala_game_wins
     print(f"  队胜: {_PLATFORM_TAG} {v7_ttl}/{total_games} ({v7_ttl/max(1,total_games)*100:.1f}%)  "
-          f"Lalala {lalala_ttl}/{total_games} ({lalala_ttl/max(1,total_games)*100:.1f}%)")
+          f"Lalala {lalala_ttl}/{total_games} ({lalala_ttl/max(1,total_games)*100:.1f}%)  "
+          f"平局 {total_draws}/{total_games} ({total_draws/max(1,total_games)*100:.1f}%)")
     print(f"  victoryNum 累加: {total_vn}")
     print(f"  副级: {_PLATFORM_TAG} 赢 {total_v7_won}/{total_rounds} ({total_v7_won/max(1,total_rounds)*100:.1f}%)")
     print(f"  {_PLATFORM_TAG} 级牌分布: {format_dist(dict(total_v7_dist), sort_by_key=rank_sort_key)}")
@@ -472,6 +518,7 @@ def main():
             "victoryNum": total_vn,
             "v7_games_won": v7_ttl,
             "lalala_games_won": lalala_ttl,
+            "draws": total_draws,
             "v7_rounds_won": total_v7_won,
             "v7_round_win_rate": round(total_v7_won / max(1, total_rounds) * 100, 1),
             "v7_rank_dist": {k: total_v7_dist[k] for k in sorted(total_v7_dist, key=rank_sort_key)},
@@ -485,6 +532,9 @@ def main():
                     "games": r["games"],
                     "rounds": r["rounds"],
                     "vn": r["vn"],
+                    "v7_game_wins": r["v7_game_wins"],
+                    "lalala_game_wins": r["lalala_game_wins"],
+                    "draws": r["draws"],
                     "v7_rounds_won": r["v7_rounds_won"],
                     "v7_dist": {k: r["v7_dist"][k] for k in sorted(r["v7_dist"], key=rank_sort_key)},
                     "v7_pos_dist": r["v7_pos_dist"],

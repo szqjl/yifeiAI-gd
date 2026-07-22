@@ -33,6 +33,7 @@ from src.v.nn.features.grouping_engine import (
     _detect_straights,
     _detect_straight_flushes,
     _enumerate_plans,
+    _enumerate_plans_cached,
     _extract_features,
     _parse_rank,
     _is_wild,
@@ -325,13 +326,15 @@ class TestPerformance:
     def test_extract_grouping_features_uses_lru_cache(self):
         """extract_grouping_features 调用后 _parse_rank cache 应有累积 hits。"""
         _parse_rank.cache_clear()
+        _enumerate_plans_cached.cache_clear()
         hand = ["S2", "H2", "C3", "D3", "S3", "H4", "C4", "S5", "H5", "D5", "C5",
                 "S6", "H6", "D6", "S7", "H7", "C8", "D8", "S9", "H9", "C9",
                 "ST", "HT", "SJ", "HQ", "SK", "DA"]
         # 第一次调用填 cache
         extract_grouping_features(hand, "2")
         info_before = _parse_rank.cache_info()
-        # 第二次调用应大量命中缓存
+        # 清空更高层方案缓存，单独验证解析缓存仍生效
+        _enumerate_plans_cached.cache_clear()
         extract_grouping_features(hand, "2")
         info_after = _parse_rank.cache_info()
         hits_delta = info_after.hits - info_before.hits

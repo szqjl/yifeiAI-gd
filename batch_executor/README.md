@@ -262,8 +262,8 @@ python -m batch_executor ^
 **与 `game_records/` 的一致性（M1 / GUA-022 口径）**：
 
 - 一次完整执行 `--target-games N` 结束后，文件中的 **`target_games` 应等于本次传入的 N**（进程启动后即写入，不再沿用磁盘旧值）。
-- **`completed_games` = 平台局数累计**（每批正常结束 `+= batch_games`），与离线 exe 参数 `N`（每批 ≤3）同口径：**N 局 ≠ N 副**。副数看 `game_records` match_key 或 `game_scores.total_rounds`。
-- **胜率 / 队胜负**：读每批末 `gameResult.victoryNum`（**`[0]` vs `[1]`** = 各队本批 **赢局数**；平台整局结束计胜；同队只取一席）。**不是**副数。全文 → [docs/knowledge/platform-data-interpretation.md](../docs/knowledge/platform-data-interpretation.md)。
+- **`completed_games` = 平台局数累计**：v1006 正常批次按 `batch_games` 累加；OpenGuanDan 每个服务器会话固定承载 1 局，按新增牌谱重建出的真实局结果累加。**N 局 ≠ N 副**，副数看 `game_records` match key 或 `game_scores.total_rounds`。
+- **胜率 / 队胜负**：v1006 读批末 `gameResult.victoryNum` 的 `[0]` vs `[1]`；OpenGuanDan 的 `victoryNum` 是升级值，仅用于诊断，真实局胜按一个会话内 TeamA/TeamB 头游副数判定。全文 → [docs/knowledge/platform-data-interpretation.md](../docs/knowledge/platform-data-interpretation.md)。
 - **副数 / PASS**：`game_records` **每条 JSON = 一副**；成对 match_key 或 `total_rounds`。
 - 若某批次被超时强杀或客户端异常退出，该批不计入 `completed_games`。
 

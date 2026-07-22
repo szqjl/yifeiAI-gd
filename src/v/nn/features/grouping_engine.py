@@ -804,6 +804,8 @@ def _detect_three_with_two(
 
     # 贪心：按 rank 排序三张（从小到大优先让小 trip 吃小对，保留大对作独立跟牌）
     sorted_trips = sorted(remaining_trips, key=lambda t: _card_rank_value(t[0], cur_rank))
+    # GUA-156: pairs 也按 rank 排序，保证小 trip 吃小对（原按发牌序，大对被误消耗）
+    remaining_pairs.sort(key=lambda p: _card_rank_value(p[0], cur_rank))
     for trip in sorted_trips:
         rank_counts = _pool_rank_counts(pool_s, remaining_pairs, remaining_trips)
         pair_idx = None
@@ -2032,6 +2034,14 @@ def _enumerate_plans(
     return plans
 
 
+@lru_cache(maxsize=128)
+def _enumerate_plans_cached(
+    hand_cards: Tuple[str, ...], cur_rank: str,
+) -> Tuple[GroupingPlan, ...]:
+    """Cache the pure default plan enumeration for repeated decision features."""
+    return tuple(_enumerate_plans(list(hand_cards), cur_rank))
+
+
 # ── 特征提取 ──────────────────────────────────────────────
 
 def _extract_features(
@@ -2204,7 +2214,7 @@ def enumerate_groupings(
         empty = GroupingPlan(cur_rank=cur_rank, strategy="empty")
         return empty, [empty]
 
-    plans = _enumerate_plans(hand_cards, cur_rank)
+    plans = copy.deepcopy(_enumerate_plans_cached(tuple(hand_cards), cur_rank))
 
     # GUA-076：方案完整性校验 — 每个方案必须覆盖全部手牌
     # 2026-06-21 修复：不完整方案用 warning 记录并剔除，不崩溃

@@ -27,7 +27,7 @@ except ImportError:
 
 
 # game_records 文件名示例：「<game_id> [yf1_m3]-[opponent]-[round]-[level].json」
-# 台账 completed_games = 平台批次数累计（每批 += batch_games）；落盘副数见 match_key 诊断。
+# v1006 台账按 batch_games 累加；OpenGuanDan 台账按新增牌谱重建的真实局结果累加。
 # match key 与 GUA-025 / game_recorder.parse_record_filename 一致：(opponent, round, level)。
 _GAME_RECORD_PAIR_PATTERN = re.compile(r"^(\d+) \[(yf[12]_(m[123]|v[4-7]))\]")
 _GAME_RECORD_MATCH_KEY_RE = re.compile(
@@ -125,6 +125,35 @@ def _increment_completed_after_batch(
     state.completed_games += added
     state.last_update = datetime.now()
     return added
+
+
+def _increment_v8_completed_after_batch(
+    state: "ExecutionState",
+    game_results: Tuple[int, int, int],
+    *,
+    server_terminated_by_kill: bool,
+) -> int:
+    """OpenGuanDan 按本批牌谱重建出的真实局数推进台账。"""
+    if server_terminated_by_kill:
+        return 0
+    actual_games = sum(max(0, int(count)) for count in game_results)
+    added = min(actual_games, state.target_games - state.completed_games)
+    state.completed_games += added
+    state.last_update = datetime.now()
+    return added
+
+
+def _calculate_batch_games(
+    remaining: int,
+    single_run_limit: int,
+    platform: str,
+) -> int:
+    """计算本次服务器会话承载的真实局数。"""
+    if remaining <= 0:
+        return 0
+    if platform == "openguandan":
+        return 1
+    return min(remaining, single_run_limit)
 
 
 def _count_v8_actual_episodes(
@@ -727,7 +756,12 @@ class BatchExecutor:
         # 注意：mtime 在批跑中不可靠（文件刷新/缓冲时序可能与对局顺序不一致），
         # 会导致 gc 递减频繁触发虚假局边界，使局数膨胀（如 10→33）。
         try:
-            files = sorted(records_dir.glob("*yf1_v8*.json"))
+            baseline_files = self._game_records_files_baseline or set()
+            files = sorted(
+                fp
+                for fp in records_dir.glob("*yf1_v8*.json")
+                if fp.name not in baseline_files
+            )
         except OSError:
             self.logger.warning("读取 game_records_v8 文件列表失败")
             return (0, 0, 0)
@@ -912,7 +946,11 @@ class BatchExecutor:
             self.logger.warning(f"加载战绩失败: {e}")
         
         # 计算需要的重启次数
-        restart_count = self.validator.calculate_restart_count(self.target_games)
+        restart_count = (
+            max(0, self.target_games - 1)
+            if self.platform == "openguandan"
+            else self.validator.calculate_restart_count(self.target_games)
+        )
         self.logger.info(f"预计需要重启 {restart_count} 次")
         
         # 清空之前的战绩，开始新的对战
@@ -967,7 +1005,11 @@ class BatchExecutor:
                 
                 # 计算本批次要执行的场数
                 remaining = state.target_games - state.completed_games
-                batch_games = min(remaining, self.validator.single_run_limit)
+                batch_games = _calculate_batch_games(
+                    remaining,
+                    self.validator.single_run_limit,
+                    self.platform,
+                )
                 
                 self.logger.info(f"开始批次 {state.current_batch}，执行 {batch_games} 场游戏")
                 self._write_current_batch_context(state, batch_games)
@@ -1335,30 +1377,28 @@ class BatchExecutor:
                     import traceback
                     traceback.print_exc()
                 
-                # 方案 A：按平台批次累加台账；强杀批次不加
+                v8_game_results = (0, 0, 0)
                 if server_terminated_by_kill:
                     self.logger.warning(
                         "本批次因超时强杀或客户端异常结束，不增加 completed_games。"
                     )
                 elif self.platform == "openguandan":
-                    # V8: 从 game_records_v8 的 result.game_count 统计实际完成的副数
-                    # 而非盲目加 batch_games（batch_games 是 CREATE_ROOM round 参数，
-                    # 服务器可能未打满就超时/断连）
                     records_dir_v8 = self.project_root / "game_records_v8"
                     actual_episodes = _count_v8_actual_episodes(
                         records_dir_v8, self._game_records_files_baseline or set()
                     )
-                    prev_completed = state.completed_games
-                    state.completed_games = min(
-                        actual_episodes, state.target_games
+                    v8_game_results = self._compute_v8_game_wins_from_records()
+                    added = _increment_v8_completed_after_batch(
+                        state,
+                        v8_game_results,
+                        server_terminated_by_kill=False,
                     )
-                    added = state.completed_games - prev_completed
-                    state.last_update = datetime.now()
                     self.logger.info(
                         "V8 台账：batch_games=%d，实际副数=%d（yf1文件计数），"
-                        "本批计入=%d，completed_games=%d/%d",
+                        "真实新增局=%d，本批计入=%d，completed_games=%d/%d",
                         batch_games,
                         actual_episodes,
+                        sum(v8_game_results),
                         added,
                         state.completed_games,
                         state.target_games,
@@ -1424,9 +1464,7 @@ class BatchExecutor:
                                 vn[0], vn[1],
                             )
                     if self.platform == "openguandan":
-                        # V8 统一计分：始终走 fallback（_compute_v8_game_wins_from_records）
-                        # victoryNum 路径仅做校验（上方），不调 record_game，消除双路径混用风险
-                        net_a, net_b, net_d = self._compute_v8_game_wins_from_records()
+                        net_a, net_b, net_d = v8_game_results
                         for _ in range(net_a):
                             self.tracker.record_game("team_a")
                         for _ in range(net_b):
