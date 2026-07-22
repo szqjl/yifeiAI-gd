@@ -10,11 +10,11 @@ from typing import Optional
 
 class InputValidator:
     """输入验证和目标管理类"""
-    
+
     DEFAULT_TARGET_GAMES = 12
     DEFAULT_SINGLE_RUN_LIMIT = 3
     SUPPORTED_PLATFORMS = frozenset({"v1006", "openguandan"})
-    
+
     def __init__(
         self,
         single_run_limit: int = DEFAULT_SINGLE_RUN_LIMIT,
@@ -33,71 +33,36 @@ class InputValidator:
                 f"{', '.join(sorted(self.SUPPORTED_PLATFORMS))}"
             )
         self.platform = platform
-        if platform == "openguandan":
-            self.single_run_limit = 10**6
-        else:
-            self.single_run_limit = single_run_limit
-        """
-        初始化输入验证器
-        
-        Args:
-        # OpenGuanDan 新平台无此限制：CREATE_ROOM round 参数任意指定。
-        if self.platform != "openguandan" and target_games % self.single_run_limit != 0:
-            platform_label = "v1006 离线 exe"
+        self.single_run_limit = (
+            10**6 if platform == "openguandan" else single_run_limit
+        )
         self._target_games: Optional[int] = None
-    
+
     def validate_target_games(self, target_games: Optional[int] = None) -> int:
-        """
-        验证目标场数输入
-        
-        验证输入为正整数，如果未提供则使用默认值。
-        
-        Args:
-            target_games: 目标游戏场数，如果为None则使用默认值
-            
-        Returns:
-            验证后的目标场数
-            
-        Raises:
-            ValueError: 如果输入不是正整数
-        """
-        # 处理默认值
+        """验证并存储目标场数。"""
         if target_games is None:
             self._target_games = self.DEFAULT_TARGET_GAMES
             return self._target_games
-        
-        # 验证输入类型
+
         if not isinstance(target_games, int):
             raise ValueError(f"目标场数必须是整数，但得到 {type(target_games).__name__}")
-        
-        # 验证输入为正整数
         if target_games <= 0:
             raise ValueError(f"目标场数必须是正整数，但得到 {target_games}")
 
-        # V7/V8 批跑统一使用 single_run_limit（默认 3）分批；台账按批累计。
-        # 非 3 的倍数会留下末批 batch_games=1 等尾批，易触发 GUA-033 fallback，队胜口径难读。
-<<<<<<< HEAD
-        # OpenGuanDan 新平台无此限制：CREATE_ROOM round 参数任意指定。
-        if self.platform != "openguandan" and target_games % self.single_run_limit != 0:
-=======
-        if target_games % self.single_run_limit != 0:
-            platform_label = (
-                "OpenGuanDan"
-                if self.platform == "openguandan"
-                else "v1006 离线 exe"
-            )
->>>>>>> 843e18515fcadce173dd657e48a36e24c3d36649
+        if (
+            self.platform != "openguandan"
+            and target_games % self.single_run_limit != 0
+        ):
             raise ValueError(
                 f"目标场数须为 {self.single_run_limit} 的倍数"
-                f"（{platform_label} 每批 {self.single_run_limit} 局），"
+                f"（v1006 离线 exe 每批 {self.single_run_limit} 局），"
                 f"但得到 {target_games}。推荐：3（小批）、9（中批）、12（大批）；"
                 f"见 docs/guandan-brain/EVAL.md「批跑局数档位」。"
             )
-        
-        # 存储目标场数
+
         self._target_games = target_games
         return self._target_games
-    
+
     @property
     def target_games(self) -> Optional[int]:
         """获取当前存储的目标场数"""
