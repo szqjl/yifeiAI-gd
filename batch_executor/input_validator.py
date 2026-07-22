@@ -33,9 +33,7 @@ class InputValidator:
                 f"{', '.join(sorted(self.SUPPORTED_PLATFORMS))}"
             )
         self.platform = platform
-        self.single_run_limit = (
-            10**6 if platform == "openguandan" else single_run_limit
-        )
+        self.single_run_limit = single_run_limit
         self._target_games: Optional[int] = None
 
     def validate_target_games(self, target_games: Optional[int] = None) -> int:
@@ -49,13 +47,15 @@ class InputValidator:
         if target_games <= 0:
             raise ValueError(f"目标场数必须是正整数，但得到 {target_games}")
 
-        if (
-            self.platform != "openguandan"
-            and target_games % self.single_run_limit != 0
-        ):
+        if target_games % self.single_run_limit != 0:
+            platform_label = (
+                "OpenGuanDan"
+                if self.platform == "openguandan"
+                else "v1006 离线 exe"
+            )
             raise ValueError(
                 f"目标场数须为 {self.single_run_limit} 的倍数"
-                f"（v1006 离线 exe 每批 {self.single_run_limit} 局），"
+                f"（{platform_label} 每批 {self.single_run_limit} 局），"
                 f"但得到 {target_games}。推荐：3（小批）、9（中批）、12（大批）；"
                 f"见 docs/guandan-brain/EVAL.md「批跑局数档位」。"
             )
