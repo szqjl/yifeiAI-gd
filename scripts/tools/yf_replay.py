@@ -755,10 +755,23 @@ class YiFeiReplayGUI:
                     used.update(cards_in_group)
         
         # 散牌
-        remaining = [c for c in cards if c not in used]
+        remaining = [card for card in cards if card not in used]
         if remaining:
-            result.append(("散牌", remaining))
-        
+            by_rank = {}
+            for card in remaining:
+                rank = card[1:] if len(card) >= 2 else card
+                if rank == '1':
+                    rank = 'A'
+                by_rank.setdefault(rank, []).append(card)
+            rank_order = self._hand_column_rank_order()
+            rank_pos = {rank: index for index, rank in enumerate(rank_order)}
+            for rank in sorted(by_rank, key=lambda item: rank_pos.get(item, 99)):
+                rank_cards = sorted(
+                    by_rank[rank],
+                    key=lambda card: SUIT_ORDER_IDX.get(card[0], 99),
+                )
+                result.append((rank, rank_cards))
+
         return result
 
     def _apply_tribute_back_to_initial_hands(self):
