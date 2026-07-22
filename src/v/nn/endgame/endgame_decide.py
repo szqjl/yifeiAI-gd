@@ -935,6 +935,118 @@ class EndgameDecider:
         )
         return special is not None and get_action_type(special[1]) == ACTION_TYPE_SINGLE
 
+    def pick_teammate_sprint_small_single(
+        self, game_state: Dict[str, Any], action_list: List,
+    ) -> Tuple[Optional[int], Optional[List]]:
+        """GUA-160：队友恰剩 6 张时，主攻自由领最小自然小散单。"""
+        if not GUARD_TOOLS_OK:
+            return None, None
+        if game_state.get("_role") not in ("主攻", "超强主攻"):
+            return None, None
+
+        my_pos = int(game_state.get("myPos", 0))
+        greater_pos = int(game_state.get("greaterPos", -1) or -1)
+        greater_action = game_state.get("greaterAction")
+        if greater_pos not in (-1, my_pos):
+            return None, None
+        if greater_action and get_action_type(greater_action) not in (
+            ACTION_TYPE_PASS, ACTION_TYPE_FREE,
+        ):
+            return None, None
+
+        ec = game_state.get("_endgame_context", {}) or {}
+        teammate_pos = (my_pos + 2) % 4
+        teammate_remaining = self._estimate_player_remaining(
+            teammate_pos, ec, game_state,
+        )
+        if teammate_remaining != 6:
+            return None, None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+        card_mask = game_state.get("_card_mask") or {}
+        scatter_cards = {
+            str(card)
+            for card, info in card_mask.items()
+            if info and int(info[0]) == -1
+        }
+        candidates = []
+        for index, action in enumerate(action_list):
+            if get_action_type(action) != ACTION_TYPE_SINGLE:
+                continue
+            cards = _get_cards(action)
+            if len(cards) != 1 or str(cards[0]) not in scatter_cards:
+                continue
+            rank = get_card_rank(str(cards[0]))
+            pip = CARD_RANK_ORDER.get(rank, 99)
+            if rank == cur_rank or not CARD_RANK_ORDER["3"] <= pip <= CARD_RANK_ORDER["9"]:
+                continue
+            candidates.append((pip, str(cards[0]), index, action))
+
+        if not candidates:
+            return None, None
+        _, _, index, action = min(candidates)
+        logger.info(
+            "GUA-160 队友冲刺送单: teammate=%d remaining=%d idx=%d card=%s",
+            teammate_pos, teammate_remaining, index, _get_cards(action),
+        )
+        return index, action
+
+    def pick_double_second_small_single(
+        self, game_state: Dict[str, Any], action_list: List,
+    ) -> Tuple[Optional[int], Optional[List]]:
+        """GUA-161：队友已头游时，主攻自由领最小自然小散单争双上。"""
+        if not GUARD_TOOLS_OK:
+            return None, None
+        if game_state.get("_role") not in ("主攻", "超强主攻"):
+            return None, None
+
+        my_pos = int(game_state.get("myPos", 0))
+        greater_pos = int(game_state.get("greaterPos", -1) or -1)
+        greater_action = game_state.get("greaterAction")
+        if greater_pos not in (-1, my_pos):
+            return None, None
+        if greater_action and get_action_type(greater_action) not in (
+            ACTION_TYPE_PASS, ACTION_TYPE_FREE,
+        ):
+            return None, None
+
+        ec = game_state.get("_endgame_context", {}) or {}
+        teammate_pos = (my_pos + 2) % 4
+        teammate_remaining = self._estimate_player_remaining(
+            teammate_pos, ec, game_state,
+        )
+        if teammate_remaining != 0:
+            return None, None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+        card_mask = game_state.get("_card_mask") or {}
+        scatter_cards = {
+            str(card)
+            for card, info in card_mask.items()
+            if info and int(info[0]) == -1
+        }
+        candidates = []
+        for index, action in enumerate(action_list):
+            if get_action_type(action) != ACTION_TYPE_SINGLE:
+                continue
+            cards = _get_cards(action)
+            if len(cards) != 1 or str(cards[0]) not in scatter_cards:
+                continue
+            rank = get_card_rank(str(cards[0]))
+            pip = CARD_RANK_ORDER.get(rank, 99)
+            if rank == cur_rank or not CARD_RANK_ORDER["3"] <= pip <= CARD_RANK_ORDER["9"]:
+                continue
+            candidates.append((pip, str(cards[0]), index, action))
+
+        if not candidates:
+            return None, None
+        _, _, index, action = min(candidates)
+        logger.info(
+            "GUA-161 双上清散单: teammate=%d idx=%d card=%s",
+            teammate_pos, index, _get_cards(action),
+        )
+        return index, action
+
     # ── 主决策入口 ──
 
     def decide(

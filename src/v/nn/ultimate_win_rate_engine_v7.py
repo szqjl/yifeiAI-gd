@@ -296,7 +296,40 @@ class UltimateWinRateEngineV7:
         except Exception as e:
             self.logger.debug("decision trace begin skip: %s", e)
 
+    def _prefer_stronger_same_cards_action(
+        self, act_index: int, action_list: List,
+    ) -> int:
+        """GUA-161：同牌同时可声明 StraightFlush 时禁止选择 Straight。"""
+        if not 0 <= act_index < len(action_list):
+            return act_index
+        chosen = action_list[act_index]
+        if not isinstance(chosen, list) or len(chosen) < 3:
+            return act_index
+        if chosen[0] != "Straight" or not isinstance(chosen[2], list):
+            return act_index
+
+        from collections import Counter
+
+        chosen_cards = Counter(str(card) for card in chosen[2])
+        for index, action in enumerate(action_list):
+            if not isinstance(action, list) or len(action) < 3:
+                continue
+            if action[0] != "StraightFlush" or not isinstance(action[2], list):
+                continue
+            if Counter(str(card) for card in action[2]) != chosen_cards:
+                continue
+            self.logger.info(
+                "GUA-161 同牌强声明升级: Straight idx=%d → StraightFlush idx=%d cards=%s",
+                act_index, index, list(chosen_cards.elements()),
+            )
+            self._replay_record(
+                "gua161_stronger_declaration",
+                {"from_index": act_index, "to_index": index, "cards": list(chosen_cards.elements())},
+            )
+            return index
+        return act_index
     def _trace_finalize(self, act_index: int, action_list: List) -> int:
+        act_index = self._prefer_stronger_same_cards_action(act_index, action_list)
         chosen_action = (
             action_list[act_index]
             if 0 <= act_index < len(action_list)
@@ -566,14 +599,21 @@ class UltimateWinRateEngineV7:
                 decider = EndgameDecider()
                 # 保存原始 action_list 用于索引映射
                 original_action_list = list(action_list)
-                # Step A: banned_types 硬排除
-                action_list, banned_empty = decider.apply_banned_filter(action_list, game_state)
-                if banned_empty:
-                    # 全被禁 → 用原始 actionList 走降级（L3 放回 banned 但保留 baoshu.never_play）
-                    endgame_idx, endgame_act = decider.decide(game_state, original_action_list)
+                team_small_single = decider.pick_double_second_small_single(
+                    game_state, original_action_list,
+                )
+                if team_small_single[0] is None:
+                    team_small_single = decider.pick_teammate_sprint_small_single(
+                        game_state, original_action_list,
+                    )
+                if team_small_single[0] is not None:
+                    endgame_idx, endgame_act = team_small_single
                 else:
-                    # Step B: Q0→Q3 残局决策（在过滤后的 action_list 上）
-                    endgame_idx, endgame_act = decider.decide(game_state, action_list)
+                    action_list, banned_empty = decider.apply_banned_filter(action_list, game_state)
+                    if banned_empty:
+                        endgame_idx, endgame_act = decider.decide(game_state, original_action_list)
+                    else:
+                        endgame_idx, endgame_act = decider.decide(game_state, action_list)
                 # 命中 → 找原始 actionList 中的下标
                 if endgame_idx is not None and endgame_act is not None:
                     for orig_i, a in enumerate(original_action_list):
@@ -2780,6 +2820,7 @@ class UltimateWinRateEngineV7:
         ③ 对手急眼（剩牌≤4）时炸弹优先（+800），PASS 降权（-100）
         ④ 非 PASS > PASS（+50）
         ⑤ 同分时取起始 rank 最小的（节约牌力）
+        ⑧ 存在合法同型非炸可压时，Bomb/StraightFlush 不进入评分
         ⑨ GUA-082 R12：有自然单张时拆普通对出单重罚并跳过（回退路径兜底）
 
         Args:
@@ -3088,11 +3129,6 @@ class UltimateWinRateEngineV7:
             ):
                 score += 350
 
-            # ⑧ GUA-071: 有同型非炸弹可压时不该炸
-            # 对手出三张/顺子/钢板等，自己有同型牌能压，却选炸弹 → 浪费炸弹
-            if is_bomb and has_same_type_nonbomb:
-                score -= 600  # 有同型可压却用炸，严重惩罚
-
             # ⑨ GUA-082/GUA-070 R12: 有自然单张时禁止拆普通对出单（heuristic 兜底）
             if is_single and not is_pass:
                 if self._single_breaks_pair_under_r12(action, hand_cards, cur_rank):
@@ -3142,12 +3178,24 @@ class UltimateWinRateEngineV7:
 
             return score
 
-        scored = [(i, _score(i, act)) for i, act in enumerate(action_list)]
+        hard_blocked_bomb_indices = [
+            i
+            for i, act in enumerate(action_list)
+            if has_same_type_nonbomb and get_action_type(act) in _BOMB_TYPES
+        ]
+        scored = [
+            (i, _score(i, act))
+            for i, act in enumerate(action_list)
+            if i not in hard_blocked_bomb_indices
+        ]
         scored.sort(key=lambda x: -x[1])  # 降序
         self._last_heuristic_scores = list(scored)
         self._replay_record(
             "heuristic_scores",
-            {"scores": list(scored)},
+            {
+                "scores": list(scored),
+                "hard_blocked_bombs": hard_blocked_bomb_indices,
+            },
         )
 
         if self.logger.isEnabledFor(logging.DEBUG):

@@ -304,10 +304,11 @@ def _pick_smallest_straight(
     for gid, ginfo in groups.items():
         if ginfo["type"] != "straight":
             continue
-        cards = sorted(str(c) for c in ginfo["cards"])
+        sequence_cards = [str(c) for c in ginfo["cards"]]
+        cards = sorted(sequence_cards)
         if len(cards) < 5:
             continue
-        pr = _prank(get_card_rank(cards[0]))
+        pr = _prank(get_card_rank(sequence_cards[0]))
         key = (_pip_order(cards[0], cur_rank), cards)
         if best is None or key < best[0]:
             best = (key, gid, "Straight", pr, cards[:5])
