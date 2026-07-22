@@ -18,6 +18,7 @@ import sys
 import os
 import re
 import json
+import threading
 import traceback
 from collections import Counter
 from pathlib import Path
@@ -39,6 +40,7 @@ RANK_DISPLAY = {'T': '10', 'J': 'J', 'Q': 'Q', 'K': 'K', 'A': 'A',
 REPO_ROOT = Path(__file__).resolve().parents[2]
 JOKER_SMALL_IMG = REPO_ROOT / "assets" / "replay" / "joker_small.png"
 JOKER_BIG_IMG = REPO_ROOT / "assets" / "replay" / "joker_big.png"
+sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 os.environ['PYTHONPATH'] = str(REPO_ROOT / "src")
 
@@ -294,6 +296,12 @@ class YiFeiReplayGUI:
         
         # 加载按钮
         ttk.Button(toolbar_frame, text="加载文件", command=self._load_file).pack(side=tk.LEFT, padx=(0, 10))
+        self.analysis_btn = ttk.Button(
+            toolbar_frame,
+            text="A/B/C 决策链路",
+            command=self._open_decision_analysis,
+        )
+        self.analysis_btn.pack(side=tk.LEFT, padx=(0, 10))
         
         # 2. 中间播放控制区
         control_frame = ttk.Frame(main_frame)
@@ -972,6 +980,115 @@ class YiFeiReplayGUI:
         self.step_copy_text.delete("1.0", tk.END)
         self.step_copy_text.insert("1.0", text)
         self.step_copy_text.config(state=tk.NORMAL)
+
+    def _find_sibling_player_file(self, target_player_name):
+        """同一局中找到指定玩家（yf1↔yf2）的牌谱文件，返回 (Path, game_data) 或 (None, None)。"""
+        if not self.current_game:
+            return None, None
+        m = RECORD_NAME_RE.match(self.current_game.name)
+        if not m:
+            return None, None
+        round_num = m.group(4)
+        suffix = m.group(5)
+        my_ts = int(self.current_game.name.split(' ', 1)[0])
+        candidates = []
+        for sibling in self.current_game.parent.iterdir():
+            if not sibling.is_file() or sibling.suffix != '.json':
+                continue
+            sm = RECORD_NAME_RE.match(sibling.name)
+            if not sm:
+                continue
+            if sm.group(2) == target_player_name and sm.group(4) == round_num and sm.group(5) == suffix:
+                candidates.append(sibling)
+        if not candidates:
+            return None, None
+        best = min(candidates, key=lambda p: abs(int(p.name.split(' ', 1)[0]) - my_ts))
+        try:
+            data = GameRecorder.load_game(best)
+            return best, data
+        except Exception:
+            return None, None
+
+    def _open_decision_analysis(self):
+        """按需离线分析当前 YF 出牌步，并展示 A/B/C 三颗粒度。"""
+        if not self.current_game_data or self.current_step <= 0:
+            messagebox.showinfo("决策链路", "请先选择一个 YF 出牌步骤。")
+            return
+        game_data = self.current_game_data
+        step_num = self.current_step
+
+        play = self.actions[step_num - 1]
+        cur_pos = play.get("cur_pos")
+        if cur_pos is not None and cur_pos != self.player_id and self.actions:
+            my_name = self.current_game_data.get("player_name", "")
+            if 'yf1' in my_name:
+                target = my_name.replace('yf1', 'yf2', 1)
+            elif 'yf2' in my_name:
+                target = my_name.replace('yf2', 'yf1', 1)
+            else:
+                target = None
+            if target:
+                sib_path, sib_data = self._find_sibling_player_file(target)
+                if sib_data is not None:
+                    game_data = sib_data
+                    step_num = step_num
+
+        window = tk.Toplevel(self.root)
+        window.title(f"A/B/C 决策链路 - 步骤 {self.current_step}/{self.total_steps}")
+        window.geometry("1180x820")
+        window.minsize(900, 620)
+
+        status_var = tk.StringVar(value="正在离线重建决策链路，请稍候……")
+        ttk.Label(window, textvariable=status_var, anchor=tk.W).pack(
+            fill=tk.X, padx=10, pady=(10, 6)
+        )
+        notebook = ttk.Notebook(window)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+
+        text_widgets = {}
+        for title in ("A 实战事实", "B 决策路径", "C 深度分析"):
+            frame = ttk.Frame(notebook)
+            notebook.add(frame, text=title)
+            text = tk.Text(frame, wrap=tk.NONE, font=("Consolas", 10))
+            y_scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=text.yview)
+            x_scroll = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=text.xview)
+            text.configure(yscrollcommand=y_scroll.set, xscrollcommand=x_scroll.set)
+            y_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+            x_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+            text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            text.insert("1.0", "等待分析……")
+            text_widgets[title] = text
+
+        def render_sections(sections):
+            for title, content in sections.items():
+                text = text_widgets[title]
+                text.delete("1.0", tk.END)
+                text.insert("1.0", content)
+            status_var.set("分析完成；文本可选择复制。")
+
+        def render_error(error):
+            message = f"无法分析当前步骤：{error}"
+            status_var.set(message)
+            for text in text_widgets.values():
+                text.delete("1.0", tk.END)
+                text.insert("1.0", message)
+
+        def worker():
+            try:
+                from src.v.nn.tracing.replay_analysis import (
+                    ReplayDecisionAnalyzer,
+                    format_analysis_sections,
+                )
+
+                analyzer = ReplayDecisionAnalyzer(repo_root=REPO_ROOT)
+                result = analyzer.analyze(game_data, step_num)
+                sections = format_analysis_sections(result)
+                self.root.after(0, lambda s=sections: render_sections(s))
+            except Exception as exc:
+                error_msg = str(exc)
+                self.root.after(0, lambda m=error_msg: render_error(m))
+
+        threading.Thread(target=worker, daemon=True).start()
     
     def _draw_current_step(self):
         """绘制当前步骤的牌面（1312 大牌风格：按 rank 堆叠 + 顶部级数标签）。"""

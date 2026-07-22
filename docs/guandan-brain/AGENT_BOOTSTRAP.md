@@ -211,7 +211,7 @@ replay / 异常扫描 / 批跑结果
 
 ## 7. 常用命令
 
-> **⚠️ Python 环境**：本机**无 venv**，直接用 `python` 命令（系统 Python 3.14.4）。
+> **⚠️ Python 环境**：本机已建 venv `.venv`（Python 3.14.4）；激活 `.venv\Scripts\Activate.ps1`，或直接调用 `.venv\Scripts\python.exe`。
 > **⚠️ 分支**：M3 / V7 批跑**均可在 v7-dev 和 v8-dev 直接跑**（M3 客户端/引擎 import 测试通过）。v8-dev 从 v7-dev 复制，**引擎核心一致**，但通信层已独立（`src/communication/` 下 `*_v8*` 文件适配 OpenGuanDan WebSocket 协议）。
 > **⚠️ 数据目录分离**：M3 批跑 → `game_records/`，V7 批跑 → `game_records_v7/`（训练只读 V7 数据）。
 

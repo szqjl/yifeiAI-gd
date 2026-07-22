@@ -325,7 +325,7 @@ rg "GUA-075|残局管线|组牌保护|handCards=|actIndex=" logs/yf2_v7_*.log
 | 文件 | 用途 |
 |------|------|
 | [`SCRIPT_INDEX.md`](../SCRIPT_INDEX.md) §三 | WF-12 入口与脚本索引 |
-| `scripts/tools/yf_replay.py` | 回放 + **yf1↔yf2 配对**（`RECORD_NAME_RE`、`_try_load_teammate_record`） |
+| `scripts/tools/yf_replay.py` | 回放 + **yf1↔yf2 配对**；新牌谱支持 A/B/C 离线决策链路（A 实战事实、B Layer/Guard/Intent、C 候选/Memory/GUA） |
 | `scripts/tools/wf12_find_decision_at_step.py` | §2.2 **`find_decision_at_step`** 可运行副本 + 金样例回归 |
 | `src/v/nn/ultimate_win_rate_engine_v7.py` | V7 `decide()` / `_heuristic_select` / GUA-075 |
 | `src/v/nn/guards/v7_guards.py` | Guard R01～R12 |

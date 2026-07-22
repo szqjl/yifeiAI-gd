@@ -14,14 +14,22 @@ class InputValidator:
     DEFAULT_TARGET_GAMES = 12
     DEFAULT_SINGLE_RUN_LIMIT = 3
     
-    def __init__(self, single_run_limit: int = DEFAULT_SINGLE_RUN_LIMIT):
+    def __init__(self, single_run_limit: int = DEFAULT_SINGLE_RUN_LIMIT, platform: str = "v1006"):
         """
         初始化输入验证器
         
         Args:
-            single_run_limit: 服务器单次运行的游戏场数限制（默认3场）
+            single_run_limit: 服务器单次运行的游戏场数限制（默认3场，v1006平台）
+            platform: 平台类型 "v1006" 或 "openguandan"
+                      openguandan 平台无单次会话局数限制，CREATE_ROOM round 参数任意指定
         """
-        self.single_run_limit = single_run_limit
+        self.platform = platform
+        if platform == "openguandan":
+            # OpenGuanDan 新平台：单次会话可跑任意局数（通过 CREATE_ROOM round 参数）
+            # 设为大数值，让执行器一次批次跑完目标局数
+            self.single_run_limit = 10**6
+        else:
+            self.single_run_limit = single_run_limit
         self._target_games: Optional[int] = None
     
     def validate_target_games(self, target_games: Optional[int] = None) -> int:
@@ -54,7 +62,8 @@ class InputValidator:
 
         # v1006 离线 exe 单次会话固定 single_run_limit 局（默认 3）；台账按批累计。
         # 非 3 的倍数会留下末批 batch_games=1 等尾批，易触发 GUA-033 fallback，队胜口径难读。
-        if target_games % self.single_run_limit != 0:
+        # OpenGuanDan 新平台无此限制：CREATE_ROOM round 参数任意指定。
+        if self.platform != "openguandan" and target_games % self.single_run_limit != 0:
             raise ValueError(
                 f"目标场数须为 {self.single_run_limit} 的倍数（本包 exe 每会话 {self.single_run_limit} 局），"
                 f"但得到 {target_games}。推荐：3（小批）、9（中批）、12（大批）；"

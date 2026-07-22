@@ -3,7 +3,7 @@
 > **下次接续入口**：读完本文件即可直接进入 C 粒度实施，无需重读上下文
 > **生成时间**：2026-07-19（周日）
 > **会话主线**：WF-01 → C 粒度缺口梳理 → 挂载点定位 → 接口对齐（待确认）→ 写 handoff + commit（无代码）
-> **状态**：⚠️ **设计阶段，未改代码**；用户明确要求先出 handoff + commit，再继续实施。
+> **状态更新（2026-07-19）**：✅ 用户定音改为 `YF_REPLAY` 离线 A/B/C 完整分析；实时只保存平台原始输入，C 粒度不再放入实战模型计算。§4 的三问已由离线架构取代。
 
 ---
 
@@ -60,7 +60,7 @@
 
 ---
 
-## 4. 接口对齐提议（待用户拍板）
+## 4. 原接口提议（已被 YF_REPLAY 离线架构取代）
 
 ### 4.1 C1 候选评分
 
@@ -177,4 +177,4 @@ Q1 candidates 数据形态；Q2 opponent_sprint_capable 真源；Q3 旧 record_l
 
 ## 8. 一次一句
 
-只 stage handoff 文档；不动决策代码；不动 Layer 2 状态；等用户拍 § 4 三问后下一会话实施。
+已实施 `YF_REPLAY` A/B/C：A=平台输入与实际动作；B=Layer/Guard/Intent；C=候选逐层去留、Memory/信念、GUA。新牌谱通过 `my_decisions.context.replay_state` 保存完整 `actionList` 等平台输入；旧牌谱自动降级。实时 `DecisionTracer` 默认关闭，显式 `V7_ENABLE_DECISION_TRACE=1` 才开启。

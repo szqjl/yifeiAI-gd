@@ -143,7 +143,7 @@
 
 | 脚本 | 用途 |
 |------|------|
-| `yf_replay.py` | **回放工具**（YF_REPLAY.bat 的真源） |
+| `yf_replay.py` | **回放工具**（YF_REPLAY.bat 的真源）；YF 出牌步支持 A/B/C 决策链路离线分析 |
 | `replay.py` | 通用回放 |
 | `gen_replay_word.py` | 生成 replay_word.md 文字记录 |
 | `_gen_replay_word.py` | 内部辅助生成 replay_word |

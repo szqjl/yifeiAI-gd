@@ -4,8 +4,8 @@
 V8 vs lalala 批跑（BatchExecutor）— OpenGuanDan 新平台。
 从 run_v7_vs_lalala_games.py 复制而来，适配新平台。
 
-默认 3 局；可用 --games 指定目标局数（须为 3 的倍数，推荐 3 / 9 / 12）。
-新增 --platform v1006|openguandan 切换新旧平台。
+默认 3 局；可用 --games 指定目标局数（新平台 openguandan 无 3 倍数限制，CREATE_ROOM round 参数任意指定；
+旧平台 v1006 仍须 3 的倍数）。新增 --platform v1006|openguandan 切换新旧平台。
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--games",
         type=int,
         default=DEFAULT_GAMES,
-        help=f"目标局数，须为 3 的倍数（推荐 {', '.join(map(str, RECOMMENDED_GAMES))}）",
+        help=f"目标局数（OpenGuanDan 新平台：CREATE_ROOM round 参数任意指定；旧平台 v1006 仍须 3 的倍数）",
     )
     parser.add_argument(
         "--platform",
@@ -98,10 +98,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def validate_games(games: int) -> int:
     if games <= 0:
         raise SystemExit(f"错误: --games 须为正整数，得到 {games}")
-    if games % 3 != 0:
-        raise SystemExit(
-            f"错误: --games 须为 3 的倍数（exe 每会话 3 局），得到 {games}"
-        )
+    # OpenGuanDan 新平台：CREATE_ROOM 的 round 参数可任意指定，不再受限于 3 的倍数
+    # 旧平台 v1006 仍须 3 的倍数（单次会话固定 3 局，GUA-033）
     return games
 
 
@@ -154,12 +152,16 @@ def main(argv: list[str] | None = None) -> None:
     logger.info("=" * 60)
     logger.info("🎮 V8 vs lalala - %d 局对战 (platform=%s)", games, platform)
     logger.info("=" * 60)
-    if games not in RECOMMENDED_GAMES:
-        logger.warning(
-            "局数 %d 不在推荐档位 %s；尾批 batch_games=1 时 victoryNum 可能对账困难",
-            games,
-            RECOMMENDED_GAMES,
-        )
+    if platform == "openguandan":
+        if games <= 0:
+            logger.warning("局数 %d 必须为正整数", games)
+    else:
+        if games not in RECOMMENDED_GAMES:
+            logger.warning(
+                "局数 %d 不在推荐档位 %s（旧平台 v1006 须 3 的倍数）；尾批 batch_games=1 时 victoryNum 可能对账困难",
+                games,
+                RECOMMENDED_GAMES,
+            )
 
     visible_server = args.visible_server
     if visible_server:
