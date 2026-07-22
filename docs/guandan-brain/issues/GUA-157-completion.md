@@ -82,3 +82,18 @@ def _assist_break_pair_to_block(
 - [ ] pytest `tests/test_gua114_three_with_two_kicker_orphan.py` 全绿（回归）
 - [ ] pytest 新增 GUA-157 测试项（4 项）
 - [ ] 锚点回放验证
+## 2026-07-22 主路径补修
+
+新锚点：`20260722202530907864 [yf1_v8]-[opponent_1_3]-[11]-[2].json` 步 4。
+
+- 圈况：助攻跟对手 `Single/9`；自然散牌 `D5/S7` 均无法压住。
+- 旧路径：GUA-075 的 R12 排除普通对子，却特许对子中的王/级牌，直接推荐 `HR`；因此 `_heuristic_select` 的 GUA-157 加分没有执行机会。
+- 修复：在 `_recommend_min_press_impl` 主路径增加窄窗口。仅当助攻跟对手 `Single/5-T` 且无自然可压单时，允许借调非 core `99/TT/JJ`，候选按实际牌力排序，确保小对子借调牌先于级牌和王。
+- 反例保持：自然单能压则不拆对；主攻不借调；对手高于 `T` 不借调。
+
+验证：
+
+- GUA-157/GUA-075/GUA-072 定向测试：15 passed。
+- `test_grouping_engine.py` + GUA-114：65 passed。
+- 新锚点决策快照重放：推荐 `Single/T ['ST']`，不再推荐 `HR`。
+- 状态：代码与构造态完成，待净盘 V8 批跑验收后关单。

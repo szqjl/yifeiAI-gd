@@ -917,16 +917,23 @@ class UltimateWinRateEngineV7:
             )
 
         except Exception as e:
-            self.logger.error(f"✗ 决策失败: {e}")
+            self.logger.error(f"? ????: {e}")
             self.fallback_decisions += 1
-            self._last_decision_layer = "规则回退"
+            self._last_decision_layer = "????"
             self._last_decision_score = None
-            self._last_decision_candidates = len(action_list) if action_list else 0
-            return self._trace_finalize(
-                self._rule_based_decision(game_state, action_list),
-                action_list,
+            safe_actions = group_actions or filtered_actions or action_list
+            self._last_decision_candidates = len(safe_actions)
+            safe_idx = self._rule_based_decision(game_state, safe_actions)
+            chosen = (
+                safe_actions[safe_idx]
+                if 0 <= safe_idx < len(safe_actions)
+                else (safe_actions[0] if safe_actions else None)
             )
-    
+            original_idx = self._match_chosen_to_original_action_list(
+                chosen, action_list
+            )
+            return self._trace_finalize(original_idx, action_list)
+
     def _inject_belief_vector(self, game_state: Dict[str, Any]) -> None:
         """GUA-072：从 MemoryTracker 注入规则记牌信念到 game_state['_belief']。"""
         if self._tracker is None:
@@ -1971,30 +1978,39 @@ class UltimateWinRateEngineV7:
         groups: Dict[int, dict],
         hand_cards: List[str],
         cur_rank: str,
+        *,
+        allow_assist_pair_borrow: bool = False,
     ) -> List[str]:
-        """跟单牌候选池。GUA-070 R12：有自然单张时不并入非 core 对子（主路径 GUA-075 同步）。"""
+        """Build single-follow candidates with an assist-only 99/TT/JJ borrow window."""
         from src.v.nn.guards.v7_guards import get_card_rank
 
         singles = list(self._scatter_singles(card_mask))
         pair_gtypes = ("pair", "pair_in_three_with_two", "pair_in_three_pair")
         respect_r12 = self._has_any_natural_single(hand_cards, cur_rank)
+        assist_borrow_ranks = {"9", "T", "J"}
 
         for _gid, ginfo in groups.items():
             if ginfo["type"] not in pair_gtypes:
                 continue
             if respect_r12:
-                for c in ginfo["cards"]:
-                    r = get_card_rank(str(c))
-                    if r in ("HR", "SB") or r == cur_rank:
-                        singles.append(c)
+                for card in ginfo["cards"]:
+                    rank = get_card_rank(str(card))
+                    if rank in ("HR", "SB") or rank == cur_rank:
+                        singles.append(card)
+                    elif (
+                        allow_assist_pair_borrow
+                        and ginfo["is_core"] <= 0
+                        and rank in assist_borrow_ranks
+                    ):
+                        singles.append(card)
                 continue
             if ginfo["is_core"] <= 0:
                 singles.extend(ginfo["cards"])
                 continue
-            for c in ginfo["cards"]:
-                r = get_card_rank(str(c))
-                if r in ("HR", "SB") or r == cur_rank:
-                    singles.append(c)
+            for card in ginfo["cards"]:
+                rank = get_card_rank(str(card))
+                if rank in ("HR", "SB") or rank == cur_rank:
+                    singles.append(card)
         return singles
 
     def _single_breaks_pair_under_r12(
@@ -3681,6 +3697,7 @@ class UltimateWinRateEngineV7:
             return result
 
         from collections import Counter
+        from src.v.nn.guards.v7_guards import get_card_rank
 
         hand_ranks = Counter(get_card_rank(c) for c in hand_cards)
         has_bomb = any(cnt >= 4 for cnt in hand_ranks.values())
@@ -4215,8 +4232,23 @@ class UltimateWinRateEngineV7:
 
         # ── 单张处理 ──
         if greater_type == "Single":
+            natural_singles = list(self._scatter_singles(card_mask))
+            natural_can_press = any(
+                get_card_value(str(card), cur_rank) > greater_val
+                for card in natural_singles
+            )
+            allow_assist_pair_borrow = (
+                self._current_role == "助攻"
+                and greater_rank in {"5", "6", "7", "8", "9", "T"}
+                and not natural_can_press
+            )
             singles = self._collect_single_follow_candidates(
-                card_mask, groups, hand_cards, cur_rank)
+                card_mask,
+                groups,
+                hand_cards,
+                cur_rank,
+                allow_assist_pair_borrow=allow_assist_pair_borrow,
+            )
             if singles:
                 candidates = []
                 for c in singles:
