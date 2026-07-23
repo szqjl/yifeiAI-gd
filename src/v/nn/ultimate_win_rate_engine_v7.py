@@ -3089,6 +3089,14 @@ class UltimateWinRateEngineV7:
                     rank_key = RANK_KEY.get(rank_str, 99)
             score -= rank_key  # rank 越小 → 负扣越少 → 分越高
 
+            # ⑤b GUA-167: 领出时优先继续出同类型组合（对子/顺子/三带二），避免切换单张
+            # 原理：领出后切换单张 = 送对手小牌上手；继续出组合 = 维持压制 + 清手牌效率高
+            if _is_lead_heuristic and not is_pass and atype in (ACTION_TYPE_PAIR, ACTION_TYPE_STRAIGHT, ACTION_TYPE_THREE_WITH_TWO):
+                # 统计 action_list 中同类型非炸弹候选数量
+                same_type_count = sum(1 for a in action_list if get_action_type(a) == atype)
+                if same_type_count >= 2:
+                    score += 40  # 多个同类型可选 → 领出继续清组合
+
             # ⑥ GUA-071: 早期不出王压小牌（级差 > 6 且手牌 > 12）
             if is_single and greater_val > 0 and not is_pass:
                 cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else action
