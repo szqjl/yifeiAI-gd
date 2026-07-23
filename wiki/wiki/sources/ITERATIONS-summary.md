@@ -1,39 +1,29 @@
 ---
 type: source-summary
-title: "迭代记录总览 (ITERATIONS.md)"
+title: "ITERATIONS.md 摘要"
 sources:
   - docs/guandan-brain/ITERATIONS.md
 tags:
   - iterations
   - history
-  - m3
-  - v7
 status: current
-related_gua: []
-date: 2026-07-19
+date: 2026-07-18
 ---
 
-# 迭代记录总览
+# ITERATIONS.md 摘要
 
-## 来源
-- 原始文件：`docs/guandan-brain/ITERATIONS.md`（约 20015 字符）
-- 用途：记录双上计分王掼蛋 AI 项目的所有迭代演进
+## 与 ISSUES.md 内容重叠说明
 
-## 摘要
+ITERATIONS.md 与 ISSUES.md 当前字符数相近（均约 20015），主要存储迭代历史记录。
 
-> 注：本页面基于文件名与项目上下文推断生成，原分析结果因 `unmatched braces` 错误未返回实体列表。
+## 关键迭代节点
 
-### 推测涵盖内容
-- M1 → M3 → V7 的引擎演进里程碑
-- 各迭代版本的决策逻辑变更
-- 与 GUA 编号体系的对应关系
-- 迭代触发的根因（评测胜率不达标、规则漏洞等）
+- **V7 endgame 精度升级线**：GUA-135 → 136 → 137 → 138
+- **V8 迁移主线**：GUA-143 ~ GUA-148
+- **V8 发现并修复**：GUA-150
 
 ## 关联页面
-- [[engine-m3]]
-- [[engine-v7]]
-- [[ISSUES-summary]]
 
-## 待补充
-- 具体迭代编号与日期
-- 每次迭代的触发原因与结果指标
+- [[engine-v7]]
+- [[engine-v8]]
+- [[synthesis-endgame-precision-stack]]

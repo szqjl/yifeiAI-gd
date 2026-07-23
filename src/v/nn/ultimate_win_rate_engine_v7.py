@@ -3134,14 +3134,18 @@ class UltimateWinRateEngineV7:
                 if self._single_breaks_pair_under_r12(action, hand_cards, cur_rank):
                     score -= 20000
 
-            # ⑩ GUA-157: 助攻拆对拦单 — 无散单 + 对手出单 5-10 + 助攻角色 → 拆最小可拆对出单拦
+            # ⑩ GUA-157 + GUA-166: 助攻 5-T + 主攻 5-9 严一档 拆对拦单
+            # 主攻阈值严一档：对手 ≥T（rank value 8）不借调
+            borrow_window_ok = False
+            if self._current_role in ("助攻", "超强主攻") and 3 <= greater_val <= 8:
+                borrow_window_ok = True  # 5-T
+            elif self._current_role == "主攻" and 3 <= greater_val <= 7:
+                borrow_window_ok = True  # 5-9
             if (
                 is_single
                 and not is_pass
                 and not teammate_controls
-                and self._current_role == "助攻"
-                and greater_val > 0
-                and 3 <= greater_val <= 8  # 5-10 in rank value (5=3, 10=8)
+                and borrow_window_ok
             ):
                 # 检查是否有自然单张（无散单才拆对）
                 if not self._has_any_natural_single(hand_cards, cur_rank):
@@ -4237,6 +4241,32 @@ class UltimateWinRateEngineV7:
             act, "mid_counter_enemy_bomb",
         )
 
+
+    def _is_in_endgame_state(self, hand_cards, game_state):
+        """GUA-165: 手牌 ≤ 10 张或命中 endgame Q1 → 放行百搭作单张。"""
+        if len(hand_cards) <= 10:
+            return True
+        if game_state.get("_endgame_q1_hit"):
+            return True
+        if game_state.get("_endgame_in_progress"):
+            return True
+        return False
+
+    def _has_non_wild_single_press(
+        self, hand_cards, greater_val, cur_rank, wild_card
+    ):
+        """GUA-165: 是否存在非百搭 natural 单张能压对手单张。"""
+        from src.v.nn.guards.v7_guards import get_card_value
+        for c in hand_cards:
+            if c == wild_card:
+                continue
+            try:
+                if get_card_value(str(c), cur_rank) > greater_val:
+                    return True
+            except Exception:
+                continue
+        return False
+
     def _recommend_min_press_impl(
         self, game_state, card_mask, greater_action, greater_type,
         hand_cards, cur_rank
@@ -4281,14 +4311,51 @@ class UltimateWinRateEngineV7:
         # ── 单张处理 ──
         if greater_type == "Single":
             natural_singles = list(self._scatter_singles(card_mask))
+            # GUA-165: natural_can_press 排除百搭 HA（wild 不算 natural）
             natural_can_press = any(
                 get_card_value(str(card), cur_rank) > greater_val
-                for card in natural_singles
+                for card in natural_singles if card != f"H{cur_rank}"
+            )
+            # GUA-165 wild-guard: 散张里无非百搭 natural 可压、但百搭能压对手 5-T 单时
+            wild_card_gua165 = f"H{cur_rank}"
+            wild_can_press = (
+                wild_card_gua165 in hand_cards
+                and wild_card_gua165 in natural_singles
+                and get_card_value(str(wild_card_gua165), cur_rank) > greater_val
+            )
+            if (
+                wild_can_press
+                and not natural_can_press
+                and greater_rank in {"5", "6", "7", "8", "9", "T"}
+                and self._current_role in ("主攻", "助攻", "超强主攻")
+                and len(hand_cards) > 10
+                and not self._is_in_endgame_state(hand_cards, game_state)
+            ):
+                from src.v.nn.guards.v7_guards import get_card_rank as _gua165_gr
+                has_borrowable_pair = any(
+                    ginfo["type"] in ("pair", "pair_in_three_with_two", "pair_in_three_pair")
+                    and ginfo["is_core"] <= 0
+                    and any(_gua165_gr(str(c)) in ("9", "T", "J") for c in ginfo["cards"])
+                    for ginfo in groups.values()
+                )
+                if not has_borrowable_pair:
+                    return None  # GUA-165 让出
+            # GUA-157 + GUA-166: role 扩到主攻（5-9 严一档），助攻/超强主攻 5-T
+            if self._current_role == "主攻":
+                borrow_window = {"5", "6", "7", "8", "9"}
+            else:
+                borrow_window = {"5", "6", "7", "8", "9", "T"}
+            # GUA-166: small_natural_can_press 排除大小王 + 百搭
+            from src.v.nn.guards.v7_guards import get_card_rank as _gua166_gr
+            small_natural_can_press = any(
+                get_card_value(str(c), cur_rank) > greater_val
+                for c in natural_singles
+                if _gua166_gr(str(c)) not in ("HR", "SB") and c != f"H{cur_rank}"
             )
             allow_assist_pair_borrow = (
-                self._current_role == "助攻"
-                and greater_rank in {"5", "6", "7", "8", "9", "T"}
-                and not natural_can_press
+                self._current_role in ("主攻", "助攻", "超强主攻")
+                and greater_rank in borrow_window
+                and not small_natural_can_press
             )
             singles = self._collect_single_follow_candidates(
                 card_mask,
@@ -4307,7 +4374,9 @@ class UltimateWinRateEngineV7:
                     candidates = self._filter_joker_press_single_candidates(
                         candidates, game_state
                     )
-                    candidates.sort(key=lambda x: x[0])
+                    # GUA-165: 百搭（curRank H 花色）排最后
+                    wild_card_sort = f"H{cur_rank}"
+                    candidates.sort(key=lambda x: (1 if x[1] == wild_card_sort else 0, x[0]))
                     _, best, best_rank = candidates[0]
                     return {
                         "type": "Single",
@@ -4580,6 +4649,34 @@ class UltimateWinRateEngineV7:
 
         # 单张处理
         if greater_type == "Single":
+            natural_singles = list(self._scatter_singles(card_mask))
+            wild_card_gua165 = f"H{cur_rank}"
+            natural_can_press = any(
+                get_card_value(str(c), cur_rank) > greater_val
+                for c in natural_singles if c != wild_card_gua165
+            )
+            wild_can_press = (
+                wild_card_gua165 in hand_cards
+                and wild_card_gua165 in natural_singles
+                and get_card_value(str(wild_card_gua165), cur_rank) > greater_val
+            )
+            if (
+                wild_can_press
+                and not natural_can_press
+                and greater_rank in {"5", "6", "7", "8", "9", "T"}
+                and self._current_role in ("主攻", "助攻", "超强主攻")
+                and len(hand_cards) > 10
+                and not self._is_in_endgame_state(hand_cards, game_state)
+            ):
+                from src.v.nn.guards.v7_guards import get_card_rank as _gua165_gr_max
+                has_borrowable_pair = any(
+                    ginfo["type"] in ("pair", "pair_in_three_with_two", "pair_in_three_pair")
+                    and ginfo["is_core"] <= 0
+                    and any(_gua165_gr_max(str(c)) in ("9", "T", "J") for c in ginfo["cards"])
+                    for ginfo in groups.values()
+                )
+                if not has_borrowable_pair:
+                    return None  # GUA-165 让出
             singles = self._collect_single_follow_candidates(
                 card_mask, groups, hand_cards, cur_rank)
             if singles:
@@ -4590,7 +4687,8 @@ class UltimateWinRateEngineV7:
                     if c_val > greater_val:
                         candidates.append((c_val, c, c_rank))
                 if candidates:
-                    candidates.sort(key=lambda x: -x[0])  # 最大值优先（卡下家）
+                    # GUA-165: 百搭排最后
+                    candidates.sort(key=lambda x: (1 if x[1] == wild_card_gua165 else 0, -x[0]))
                     _, best, best_rank = candidates[0]
                     return {
                         "type": "Single",

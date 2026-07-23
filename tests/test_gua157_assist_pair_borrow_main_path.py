@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""GUA-157 main-path regression tests for assist pair borrowing."""
+"""GUA-157 main-path regression tests for assist pair borrowing.
+
+GUA-166 扩展：主攻也能借调（仅 5-9 窗口，严一档）。
+GUA-165 修复：min_press_impl candidates 排序把百搭（curRank H 花色）排最后，
+优先出非 wild natural。test 4 原期望 ["HA"] 在 GUA-165 改排序后变成 ["SA"]
+（SA=15 排在前，HA=15 排后；SA 是级牌 A，HA 是 wild）。
+"""
 
 from src.v.nn.ultimate_win_rate_engine_v7 import UltimateWinRateEngineV7
 
@@ -66,14 +72,29 @@ def test_natural_press_single_stays_ahead_of_pair_borrow():
 
 
 def test_main_attack_does_not_borrow_pair_when_natural_single_cannot_press():
+    """GUA-166 改：主攻 + 对手 9 + TT/JJ 对 → 拆 TT/JJ 出单（不再走 HA/SA）。
+
+    GUA-157 修复前主攻不借调 → 走 HA/SA。GUA-166 把 GUA-157 的 `role=="助攻"`
+    扩到 `role in {主攻,助攻,超强主攻}`，所以主攻现在也能拆 9/TT/JJ 对。
+    """
     engine, hand = _engine(role=MAIN_ROLE)
     rec = _recommend(engine, hand, "9", "D9")
     assert rec is not None
-    assert rec["cards"] == ["HA"]
+    assert rec["cards"][0] in ("ST", "CT", "HJ", "SJ"), (
+        f"GUA-166 主攻借调：应拆 TT 或 JJ 对出单；实际 {rec}"
+    )
 
 
 def test_assist_does_not_borrow_pair_above_t_window():
+    """GUA-165 改：min_press_impl 排序把百搭 HA 排最后，SA/HR 优先。
+
+    GUA-157 时代期望 ["HA"]——candidates 选最小 c_val=15（HA 在前）。
+    GUA-165 后百搭排最后 → candidates 选 SA (False 优先级, c_val=15)。
+    """
     engine, hand = _engine()
     rec = _recommend(engine, hand, "J", "DJ")
     assert rec is not None
-    assert rec["cards"] == ["HA"]
+    # 优先 SA/HR（非百搭），不再出 HA
+    assert rec["cards"][0] in ("SA", "HR"), (
+        f"GUA-165：min_press 候选百搭排最后；实际 {rec}"
+    )
