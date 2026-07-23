@@ -148,6 +148,51 @@ class TestStraightDetection:
         assert len(straights) >= 1
         assert len(rem_s) + sum(len(pp) for pp in rem_p) + sum(len(tt) for tt in rem_t) > 0, "应有余牌"
 
+    def test_forward_wrap_a_as_1_with_wild(self):
+        """GUA-164: curRank=A, HA是百搭, 组 A(=1)-2-3(百搭)-4-5 顺子。"""
+        hand = ["SA", "C2", "HA", "C4", "H5"]
+        groups = _rank_groups(hand, "A")
+        wilds = groups.get("__wild__", [])
+        s, p, t, b = _basic_classify(groups)
+        straights, rem_s, rem_p, rem_t, _ = _detect_straights(s, p, t, "A", wilds)
+        assert len(straights) >= 1, f"应检测到 A-2-3-4-5 顺子, got {straights}"
+        flat = [c for st in straights for c in st]
+        assert "SA" in flat, "SA 应在顺子中(作为自然A)"
+        assert "HA" in flat, "HA 应在顺子中(百搭填3)"
+
+    def test_forward_wrap_real_game(self):
+        """GUA-164: 实战手牌 curRank=A, 27张应检出 A-2-3(百搭)-4-5。"""
+        f = 'game_records_v8/20260721160656059092 [yf1_v8]-[opponent_1_3]-[12]-[2].json'
+        import json
+        with open(f, 'r', encoding='utf-8') as fp:
+            data = json.load(fp)
+        hand = data['initial_hand']
+        groups = _rank_groups(hand, "A")
+        wilds = groups.get("__wild__", [])
+        s, p, t, b = _basic_classify(groups)
+        straights, _, _, _, _ = _detect_straights(s, p, t, "A", wilds)
+        assert len(straights) >= 1, "实战手牌 curRank=A 应检出顺子"
+        flat = [c for st in straights for c in st]
+        assert "HA" in flat, "HA(百搭)应被消耗在顺子中"
+
+    def test_no_forward_wrap_without_wild(self):
+        """curRank=2 (无百搭), 缺3和6, 不应检出顺子。"""
+        hand = ["C2", "C4", "H5", "H7", "S7", "C8", "S8"]
+        groups = _rank_groups(hand, "2")
+        wilds = groups.get("__wild__", [])
+        s, p, t, b = _basic_classify(groups)
+        straights, _, _, _, _ = _detect_straights(s, p, t, "2", wilds)
+        assert len(straights) == 0, f"无百搭不应检出顺子, got {straights}"
+
+    def test_forward_wrap_multi_wild(self):
+        """curRank=A, 2张百搭(2×HA), 可补3和6组 4-5-6-7-8。"""
+        hand = ["SA", "CA", "HA", "HA", "C4", "H5", "H7", "S8"]
+        groups = _rank_groups(hand, "A")
+        wilds = groups.get("__wild__", [])
+        s, p, t, b = _basic_classify(groups)
+        straights, _, _, _, _ = _detect_straights(s, p, t, "A", wilds)
+        assert len(straights) >= 1, f"2张百搭应检出顺子, got {straights}"
+
 
 class TestPlanEnumeration:
     """Case 4: 多策略方案枚举。"""

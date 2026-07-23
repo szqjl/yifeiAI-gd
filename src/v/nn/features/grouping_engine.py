@@ -894,7 +894,7 @@ def _detect_straights(
     cur_rank: str, wilds: List[str],
 ) -> Tuple[List[List[str]], List[str], List[List[str]], List[List[str]], List[str]]:
     """
-    从剩余牌中检测顺子（支持逢人配填补缺口）。
+    从剩余牌中检测顺子（支持百搭（含百搭）填补缺口）。
     返回 (straights, remaining_singles, remaining_pairs, remaining_trips, remaining_wilds)。
     贪心策略：找最长连续 rank 段 → 5 张窗口扫描 → 缺口用 wilds 填补。
 
@@ -904,6 +904,11 @@ def _detect_straights(
         如手牌 2-7 六连张，优先组 2-6 而非 3-7，把大单 7 留给其他组合（对子/三带二）。
       ② 大顺子的压制力在动态出牌中体现（逼炸/盖牌），初始组牌不应为此牺牲去小单化。
       ③ 单牌有灵活性——大单（8-K-A）比小单（2-3-4）更容易找到搭档形成对子或三条。
+
+    GUA-164（2026-07-23）：A→2 wrap 包接段允许 1 个 RANKS-gap 用 1 张百搭填充。
+    原版只数 strict RANKS-consecutive；现在允许 gap=1 时插入 `__WILD_<rank>_SLOT__` 标记，
+    后续窗扫描遇到标记位直接消费 1 张百搭。这让 A-2-3(百搭)-4-5 这种含 wild 槽的
+    包接顺子能被枚举出来。
     """
     # 构建 rank 计数（不含 wild）
     card_by_rank: Dict[str, List[str]] = {}
@@ -927,10 +932,11 @@ def _detect_straights(
     if len(rank_indices) + available_wilds < 5:
         return [], singles[:], pairs[:], trips[:], list(wilds)
 
-    # 找最长连续 rank 段
+    # 找最长连续 rank 段（strict consecutive，no wild slot in seg_ranks）
     best_start = 0
     best_len = 0
-    best_is_wrap = False  # A→2 包接标志
+    best_is_wrap = False
+    best_wrap_seg_ranks = None  # 含 __WILD_*_SLOT__ 标记
     i = 0
     while i < len(rank_indices):
         j = i
@@ -948,49 +954,103 @@ def _detect_straights(
         i = j + 1
 
     # A→2 包接：A 可作为 1，连接 A→2→3→... 的段
-    # rank_indices 按 RANKS 顺序 (2...A)，如果尾有 A 且首有 2，则包接段 = 尾段 + 首段
-    wrap_tail_len = 0  # 从 A 往前数连续 rank 数
-    wrap_head_len = 0  # 从 2 往后数连续 rank 数
+    # GUA-164：允许「gap=1 + 1 wild 填洞」，把 wild 槽插入 seg_ranks。
+    wrap_seg_backward = None
+    wrap_seg_forward = None
+
+    # (a) Backward wrap：A → K → Q → ...（A 在末尾，A=14）— 需要自然 A 在高位 + 2 在低位
     if (len(rank_indices) > 1 and rank_indices[-1] == 'A' and rank_indices[0] == '2'
             and 'A' in card_by_rank and '2' in card_by_rank):
-        # 尾段：从 A 往前（A, K, Q, ...）
-        wrap_tail_len = 1
+        wrap_tail_ranks = ['A']
+        wrap_tail_wilds = 0
         for ti in range(len(rank_indices) - 2, -1, -1):
-            if RANKS.index(rank_indices[ti]) == RANKS.index(rank_indices[ti + 1]) - 1:
-                wrap_tail_len += 1
+            gap = RANKS.index(rank_indices[ti + 1]) - RANKS.index(rank_indices[ti]) - 1
+            if gap == 0:
+                wrap_tail_ranks.append(rank_indices[ti])
+            elif gap == 1 and wrap_tail_wilds < available_wilds:
+                missing_rank = RANKS[RANKS.index(rank_indices[ti + 1]) - 1]
+                wrap_tail_ranks.append(f'__WILD_{missing_rank}_SLOT__')
+                wrap_tail_wilds += 1
+                wrap_tail_ranks.append(rank_indices[ti])
             else:
                 break
-        # 首段：从 2 往后（2, 3, 4, ...）
-        wrap_head_len = 1
+        wrap_head_ranks = ['2']
+        wrap_head_wilds = 0
         for hi in range(1, len(rank_indices)):
-            if RANKS.index(rank_indices[hi]) == RANKS.index(rank_indices[hi - 1]) + 1:
-                wrap_head_len += 1
+            gap = RANKS.index(rank_indices[hi]) - RANKS.index(rank_indices[hi - 1]) - 1
+            if gap == 0:
+                wrap_head_ranks.append(rank_indices[hi])
+            elif gap == 1 and (wrap_tail_wilds + wrap_head_wilds) < available_wilds:
+                missing_rank = RANKS[RANKS.index(rank_indices[hi - 1]) + 1]
+                wrap_head_ranks.append(f'__WILD_{missing_rank}_SLOT__')
+                wrap_head_wilds += 1
+                wrap_head_ranks.append(rank_indices[hi])
             else:
                 break
-        wrap_len = wrap_tail_len + wrap_head_len
-        if wrap_len > best_len:
-            best_len = wrap_len
-            best_is_wrap = True
+        wrap_seg_backward = wrap_tail_ranks + wrap_head_ranks[1:]
 
-    # 若最长段 + wilds 都不够 5，无顺子
-    if best_len + available_wilds < 5:
+    # (b) Forward wrap：A 当 1 起头 → 2 → 3(wild) → 4 → 5 → ...（GUA-164 新增）
+    # 不要求 A 是自然牌（A 可以是级牌/百搭），只要有自然牌可续接即可。
+    # 例：curRank=A 时 HA 是百搭，仍可组 A(=1)-2-C2-3(SB百搭)-4-C4-5-H5。
+    if len(rank_indices) > 0:
+        wrap_seg_forward = ['A']
+        wrap_fwd_wilds = 0
+        cur_pos = RANKS.index('2')
+        while len(wrap_seg_forward) < 6 and cur_pos < len(RANKS):
+            next_rank = RANKS[cur_pos]
+            if next_rank == 'A':
+                break
+            if next_rank in rank_indices:
+                wrap_seg_forward.append(next_rank)
+            elif wrap_fwd_wilds < available_wilds:
+                wrap_seg_forward.append(f'__WILD_{next_rank}_SLOT__')
+                wrap_fwd_wilds += 1
+            else:
+                break
+            cur_pos += 1
+        if len(wrap_seg_forward) < 5:
+            wrap_seg_forward = None
+
+    # GUA-164：选 wrap 段 — 同长度时优先 forward（A 当 1 起头）。
+    # forward 适配用户特定诉求（A-2-3(百搭)-4-5），且通常使用松散单张而非拆组对；
+    # 若用户希望枚举两个方向，需在更上层评分函数上做（_score_decompose 自然会给多 straights 加分）。
+    # 顺序先 forward 后 backward 同长度时先用 forward。
+    candidate_segs = [seg for seg in (wrap_seg_forward, wrap_seg_backward) if seg]
+    chosen_seg = None
+    for seg in candidate_segs:
+        if len(seg) > best_len:
+            chosen_seg = seg
+            best_len = len(seg)
+    if chosen_seg is None and candidate_segs:
+        # 同长度：取 forward（已在列表首位）
+        chosen_seg = candidate_segs[0]
+        if len(chosen_seg) > best_len or best_is_wrap is False:
+            # 严格大于才换 best；== 不再覆盖 best_len，但要换 seg
+            if len(chosen_seg) >= best_len:
+                best_len = len(chosen_seg)
+                best_is_wrap = True
+                best_wrap_seg_ranks = chosen_seg
+    elif chosen_seg is not None:
+        best_is_wrap = True
+        best_wrap_seg_ranks = chosen_seg
+
+    # 若最长段 < 5，无顺子（wrap 的 wild 槽已纳入长度统计）
+    if best_len < 5:
         return [], singles[:], pairs[:], trips[:], list(wilds)
 
     # 统计每种牌面出现次数
-    total_available: Counter[str] = Counter()
+    total_available = Counter()
     for r in rank_indices:
         for c in card_by_rank[r]:
             total_available[c] += 1
 
-    straights: List[List[str]] = []
-    used_cards: Counter[str] = Counter()
+    straights = []
+    used_cards = Counter()
     wilds_consumed = 0
 
-    # 从最长段取顺子（从低到高，去小单化：优先吸收小牌组顺子，剩大单更易处理）
+    # 从最长段取顺子
     if best_is_wrap:
-        # 包接段：尾段 (....A) + 首段 (2,3,...)
-        tail_start = len(rank_indices) - wrap_tail_len
-        seg_ranks = rank_indices[tail_start:] + rank_indices[:wrap_head_len]
+        seg_ranks = best_wrap_seg_ranks  # 可能含 __WILD_*_SLOT__ 标记
     else:
         seg_ranks = rank_indices[best_start:best_start + best_len]
     pos = 0
@@ -1002,11 +1062,20 @@ def _detect_straights(
             pos += 1
             continue
         straight_cards = []
-        tentative: Counter[str] = Counter()
+        tentative = Counter()
         tent_wilds_used = 0
         success = True
 
         for r in window_ranks:
+            # GUA-164：显式 wild 槽位 —— 必须消费 1 张百搭
+            if isinstance(r, str) and r.startswith('__WILD_') and r.endswith('_SLOT__'):
+                if wilds_consumed + tent_wilds_used < available_wilds:
+                    straight_cards.append(wilds[wilds_consumed + tent_wilds_used])
+                    tent_wilds_used += 1
+                else:
+                    success = False
+                    break
+                continue
             if r in card_by_rank:
                 found = False
                 for c in card_by_rank[r]:
