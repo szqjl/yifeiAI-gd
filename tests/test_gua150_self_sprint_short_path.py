@@ -117,6 +117,8 @@ class TestGua150SelfSprintPriority:
         # mock num_rounds 比较
         d._estimate_self_num_rounds = lambda _gs: 2
         d._estimate_player_num_rounds = lambda pos, _gs: 3 if pos == 2 else 0
+        # GUA-150 可靠性检查 mock：视 teammate 手数估计为可靠
+        d._check_teammate_estimate_reliable = lambda pos, _gs: pos == 2
 
         result = d._q1_double_second_priority(
             gs, gs["actionList"], ec, 1, ec["enemies"][1],
@@ -136,6 +138,7 @@ class TestGua150SelfSprintPriority:
         d._has_teammate_bomb_family = lambda *a, **kw: False
         d._estimate_self_num_rounds = lambda _gs: 5
         d._estimate_player_num_rounds = lambda pos, _gs: 2 if pos == 2 else 0
+        d._check_teammate_estimate_reliable = lambda pos, _gs: pos == 2
 
         result = d._q1_double_second_priority(
             gs, gs["actionList"], ec, 1, ec["enemies"][1],
@@ -144,8 +147,8 @@ class TestGua150SelfSprintPriority:
         idx, act = result
         assert act[0] == "PASS", f"self 路径更长时应 PASS，实际 {act[0]}"
 
-    def test_teammate_unknown_passes_conservative(self):
-        """teammate_hands=0（未知）→ 保守 PASS（保持原 hard if 行为）"""
+    def test_teammate_unreliable_falls_through(self):
+        """teammate_hands 推断不可靠（MemoryTracker 无数据）→ 降级出牌夺权；无 TWT 时返回 None"""
         gs = _build_state()
         gs = _preprocess(gs)
         ec = gs["_endgame_context"]
@@ -154,13 +157,13 @@ class TestGua150SelfSprintPriority:
         d._has_teammate_bomb_family = lambda *a, **kw: False
         d._estimate_self_num_rounds = lambda _gs: 2
         d._estimate_player_num_rounds = lambda pos, _gs: 0  # 未知
+        # 不 mock _check_teammate_estimate_reliable → 走真实实现（无 MemoryTracker → False）
 
         result = d._q1_double_second_priority(
             gs, gs["actionList"], ec, 1, ec["enemies"][1],
         )
-        assert result is not None
-        idx, act = result
-        assert act[0] == "PASS", "teammate 未知时应保守 PASS"
+        # actionList 无 TWT → 返回 None（不 PASS 让道）
+        assert result is None, "teammate 推断不可靠且无 TWT 时应返回 None（不 PASS）"
 
     def test_no_non_bomb_candidate_passes(self):
         """actionList 仅含 PASS + Bomb → PASS 保留炸弹（无 lead 候选）"""
@@ -172,6 +175,7 @@ class TestGua150SelfSprintPriority:
         d._has_teammate_bomb_family = lambda *a, **kw: False
         d._estimate_self_num_rounds = lambda _gs: 2
         d._estimate_player_num_rounds = lambda pos, _gs: 3 if pos == 2 else 0
+        d._check_teammate_estimate_reliable = lambda pos, _gs: pos == 2
 
         result = d._q1_double_second_priority(
             gs, gs["actionList"], ec, 1, ec["enemies"][1],
@@ -190,6 +194,7 @@ class TestGua150SelfSprintPriority:
         d._has_teammate_bomb_family = lambda *a, **kw: False
         d._estimate_self_num_rounds = lambda _gs: 3
         d._estimate_player_num_rounds = lambda pos, _gs: 3 if pos == 2 else 0
+        d._check_teammate_estimate_reliable = lambda pos, _gs: pos == 2
 
         result = d._q1_double_second_priority(
             gs, gs["actionList"], ec, 1, ec["enemies"][1],

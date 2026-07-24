@@ -3595,7 +3595,10 @@ class EndgameDecider:
                 self_hands = self._estimate_self_num_rounds(game_state)
                 teammate_hands = self._estimate_player_num_rounds(teammate_pos, game_state)
 
-                if self_hands > 0 and teammate_hands > 0 and self_hands <= teammate_hands:
+                # GUA-150 可靠性检查：MemoryTracker 推断的牌数是否覆盖 teammate 大部分实际剩牌
+                _reliable = self._check_teammate_estimate_reliable(teammate_pos, game_state)
+
+                if _reliable and self_hands > 0 and teammate_hands > 0 and self_hands <= teammate_hands:
                     logger.info(
                         "GUA-150 self_sprint_priority: self_hands=%d ≤ teammate_hands=%d → self 出牌夺权",
                         self_hands, teammate_hands,
@@ -3615,21 +3618,30 @@ class EndgameDecider:
                     logger.info(
                         "GUA-150 self_sprint_priority: 无 TWT/非炸候选，仍 PASS 让道",
                     )
-                else:
+                    pass_act = self._find_pass_action(action_list)
+                    if pass_act is not None:
+                        return pass_act
+                elif _reliable:
                     logger.info(
-                        "GUA-150 self_sprint_priority: self_hands=%d > teammate_hands=%d（或未知）→ self PASS 让 teammate 拿第二",
+                        "GUA-150 self_sprint_priority: self_hands=%d > teammate_hands=%d（或可靠未知）→ self PASS 让 teammate 拿第二",
                         self_hands, teammate_hands,
                     )
-                pass_act = self._find_pass_action(action_list)
-                if pass_act is not None:
-                    return pass_act
-            else:
-                twt = self._find_twt_min_point(action_list, cur_rank)
-                if twt is not None:
+                    pass_act = self._find_pass_action(action_list)
+                    if pass_act is not None:
+                        return pass_act
+                else:
                     logger.info(
-                        "GUA-135 self_sprint: 跟 min TWT 夺权",
+                        "GUA-150 self_sprint_priority: teammate_hands=%d 推断不可靠（inferred <%d）→ 降级为出牌夺权",
+                        teammate_hands, self._min_reliable_inferred(teammate_pos, game_state),
                     )
-                    return twt
+
+            # 当 teammate_sprint=False 或 GUA-150 估计不可靠时：跟 min TWT 夺权
+            twt = self._find_twt_min_point(action_list, cur_rank)
+            if twt is not None:
+                logger.info(
+                    "GUA-135 self_sprint: 跟 min TWT 夺权",
+                )
+                return twt
 
         # 情形 3：teammate_sprint — 仅队友真已出完才让道 PASS
         if trigger == "teammate_sprint":
@@ -3707,6 +3719,41 @@ class EndgameDecider:
             return result
         except Exception:
             return []
+
+    def _check_teammate_estimate_reliable(
+        self, teammate_pos: int, game_state: Dict[str, Any],
+    ) -> bool:
+        """
+        GUA-150：队友手数估计是否可靠。
+
+        MemoryTracker 禁用排除法时，对 teammate 的手牌几乎无知（只有王归属推断），
+        此时 _estimate_player_num_rounds 结果不可靠，不应作为让道依据。
+
+        可靠判定：MemoryTracker 推断的牌数 ≥ teammate 实际剩牌 × 50%。
+        否则返回 False（不可靠 → 降级为出牌夺权）。
+        """
+        inferred = self._estimate_player_hand_cards(teammate_pos, game_state)
+        if not inferred:
+            return False
+        numofplayers = game_state.get("numofplayers", [])
+        if not isinstance(numofplayers, (list, tuple)) or not (0 <= teammate_pos < len(numofplayers)):
+            return True
+        actual_remaining = numofplayers[teammate_pos]
+        if isinstance(actual_remaining, int) and actual_remaining > 0:
+            if len(inferred) < actual_remaining * 0.5:
+                return False
+        return True
+
+    def _min_reliable_inferred(
+        self, teammate_pos: int, game_state: Dict[str, Any],
+    ) -> int:
+        """GUA-150：日志辅助——可靠性阈值下限."""
+        numofplayers = game_state.get("numofplayers", [])
+        if isinstance(numofplayers, (list, tuple)) and 0 <= teammate_pos < len(numofplayers):
+            rem = numofplayers[teammate_pos]
+            if isinstance(rem, int) and rem > 0:
+                return int(rem * 0.5)
+        return 0
 
     def _estimate_player_sprint_capability(
         self, position: int, game_state: Dict[str, Any],
