@@ -2145,10 +2145,14 @@ class EndgameDecider:
                     else 2
                 )
             else:
-                # 默认：StraightFlush 优于临时星炸（保留第二手整牌结构）
+                # 被动跟压：若余手是炸（Bomb/StraightFlush），结构首发与炸首发同级，炸留作防御回手
+                residue_bomb_like = False
+                if residue_item is not None:
+                    residue_declared = _get_declared_action_type(residue_item[1])
+                    residue_bomb_like = residue_declared in ("Bomb", "StraightFlush")
                 bomb_sprint_rank = (
                     0 if declared == "StraightFlush"
-                    else 1 if declared == "Bomb"
+                    else 1 if declared == "Bomb" or residue_bomb_like
                     else 2
                 )
             sprint_candidates.append((
