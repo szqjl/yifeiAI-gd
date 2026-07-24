@@ -3002,8 +3002,11 @@ class UltimateWinRateEngineV7:
         RANK_KEY: Dict[str, int] = {
             "2": 0, "3": 1, "4": 2, "5": 3, "6": 4, "7": 5,
             "8": 6, "9": 7, "T": 8, "J": 9, "Q": 10, "K": 11, "A": 12,
-            "SB": 13, "HR": 14,  # GUA-071: joker 也入 rank key
+            "SB": 16, "HR": 17,  # GUA-071: joker 也入 rank key
         }
+        # 级牌(curRank)的 rank 应高于 A(12)；对齐 get_card_value curRank=15
+        if cur_rank and cur_rank not in ("SB", "HR", "R", "B"):
+            RANK_KEY[cur_rank] = 15
         # 早期出王压牌的最大允许级差
         JOKER_MAX_GAP = 6
 
