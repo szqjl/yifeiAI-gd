@@ -3095,7 +3095,15 @@ class UltimateWinRateEngineV7:
                 # 统计 action_list 中同类型非炸弹候选数量
                 same_type_count = sum(1 for a in action_list if get_action_type(a) == atype)
                 if same_type_count >= 2:
-                    score += 40  # 多个同类型可选 → 领出继续清组合
+                    # 保留最高同类型不当领出（避免 AAA 等高牌力组合被浪费）
+                    same_ranks = {
+                        RANK_KEY.get(get_action_rank(a), 99) for a in action_list
+                        if get_action_type(a) == atype and get_action_rank(a)
+                    }
+                    if len(same_ranks) == 1:
+                        score += 40  # 全等 rank → 全加（原始行为）
+                    elif rank_key < max(same_ranks):
+                        score += 40  # 非最高同类型 → 领出继续清组合
 
             # ⑥ GUA-071: 早期不出王压小牌（级差 > 6 且手牌 > 12）
             if is_single and greater_val > 0 and not is_pass:

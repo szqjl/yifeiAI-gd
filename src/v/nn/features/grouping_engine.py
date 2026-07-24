@@ -249,9 +249,9 @@ def _card_rank_value(card: str, cur_rank: str) -> int:
     cur_rank → 15, B → 16, R → 17, 其余按 2..A → 2..14
     """
     r = _parse_rank(card)
-    if r == "B":
+    if r in ("SB", "B"):
         return 16
-    if r == "R":
+    if r in ("HR", "R"):
         return 17
     if r == cur_rank:
         return 15
