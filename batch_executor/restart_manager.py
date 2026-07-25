@@ -504,6 +504,20 @@ class RestartManager:
         # V8: 统计 v8_lalala_adapter.py 出现次数，用于区分 client3/client4
         _lalala_seen = 0
 
+        # 构建 seat_players 映射（seat 0-3 对应的玩家名）
+        _seat_name_map = {
+            "yf1_v8.py": "yf1_v8",
+            "yf2_v8.py": "yf2_v8",
+            "yf3_v8.py": "yf3_v8",
+            "yf4_v8.py": "yf4_v8",
+            "v8_lalala_adapter.py": "lalala",
+        }
+        seat_player_names = []
+        for sp in client_scripts:
+            bn = os.path.basename(sp.strip())
+            seat_player_names.append(_seat_name_map.get(bn, bn.replace(".py", "")))
+        seat_players_str = ",".join(seat_player_names)
+
         for i, script_path in enumerate(client_scripts):
             try:
                 script_path = script_path.strip()  # 去除前后空格
@@ -541,9 +555,9 @@ class RestartManager:
                     if script_basename == "yf1_v8.py":
                         # 席位 0 = creator（建房间）；席位 1/2/3 = joiner（加入房间）
                         role = "creator" if i == 0 else "joiner"
-                        platform_args = ["--platform", "openguandan", "--role", role, "--games", str(games)]
-                    elif script_basename == "yf2_v8.py":
-                        platform_args = ["--platform", "openguandan", "--role", "joiner"]
+                        platform_args = ["--platform", "openguandan", "--role", role, "--games", str(games), "--seat-players", seat_players_str]
+                    elif script_basename in ("yf2_v8.py", "yf3_v8.py", "yf4_v8.py"):
+                        platform_args = ["--platform", "openguandan", "--role", "joiner", "--seat-players", seat_players_str]
                     elif script_basename == "v8_lalala_adapter.py":
                         _lalala_seen += 1
                         client_name = "client3" if _lalala_seen == 1 else "client4"

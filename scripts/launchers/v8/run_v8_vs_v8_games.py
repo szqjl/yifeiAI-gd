@@ -80,10 +80,10 @@ def main(argv: list[str] | None = None) -> None:
     _v8_client_dir = project_root / "src" / "communication"
 
     client_scripts = [
-        str(_v8_client_dir / "yf1_v8.py"),   # 席位 0: V8 Team A (creator)
-        str(_v8_client_dir / "yf1_v8.py"),   # 席位 1: V8 Team B (joiner)
-        str(_v8_client_dir / "yf2_v8.py"),   # 席位 2: V8 Team A (joiner)
-        str(_v8_client_dir / "yf2_v8.py"),   # 席位 3: V8 Team B (joiner)
+        str(_v8_client_dir / "yf1_v8.py"),   # 席位 0: V8 Team A seat 0 (creator)
+        str(_v8_client_dir / "yf3_v8.py"),   # 席位 1: V8 Team B seat 1 (joiner)
+        str(_v8_client_dir / "yf2_v8.py"),   # 席位 2: V8 Team A seat 2 (joiner)
+        str(_v8_client_dir / "yf4_v8.py"),   # 席位 3: V8 Team B seat 3 (joiner)
     ]
 
     state_file = str(project_root / "v8_vs_v8_state.json")

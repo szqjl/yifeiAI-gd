@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-yf1_v8 - YiFei AI V8 Client (Player 0) — OpenGuanDan 新平台适配版
-从 yf1_v7.py 复制而来，在新平台上替代 v1006 WebSocket 协议。
+yf4_v8 - YiFei AI V8 Client (Player 3 / Team B seat 3) — OpenGuanDan
+V8 vs V8 自对弈用，joiner 模式连入席位 3。
 """
-
 import asyncio
 import json
 import sys
@@ -39,7 +38,7 @@ log_dir = Path(__file__).parent.parent.parent / "logs"
 log_dir.mkdir(exist_ok=True)
 
 from datetime import datetime
-log_filename = log_dir / f"yf1_v8_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+log_filename = log_dir / f"yf4_v8_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,30 +51,28 @@ logging.basicConfig(
 )
 
 # Connection delay to ensure proper position assignment
-DELAY_BEFORE_CONNECT = 2  # seconds — 批跑 restart_manager 已按序间隔启动
+DELAY_BEFORE_CONNECT = 5  # seconds — 最晚连接，确保第四个位置（seat 3）
 
 
-class YF1_V8_Client:
+class YF4_V8_Client:
     """
-    YiFei AI V8 Client - Player 0 (OpenGuanDan 新平台)
+    YiFei AI V8 Client - Player 2 (OpenGuanDan 新平台)
     Ultimate Win Rate Oriented Version
     """
     
-    def __init__(self, player_id=0, use_local_websocket=True,
+    def __init__(self, player_id=3, use_local_websocket=True,
                  platform: str = "v1006",
                  v8_role: str = None, v8_round_count: int = 1,
                  seat_players: Optional[list[str]] = None):
         self.player_id = player_id
-        self.user_info = "yf1_v8"
-        self.logger = logging.getLogger(f"yf1_v8")
-        self.platform = platform  # V8: "v1006" 或 "openguandan"
+        self.user_info = "yf4_v8"
+        self.logger = logging.getLogger(f"yf4_v8")
+        self.platform = platform
         
-        # V8: 协议适配器（仅 openguandan 平台）
         self.adapter = None
         if platform == "openguandan":
             self.adapter = OpenGuanDanAdapter(user_id=self.user_info, seat_num=player_id)
         
-        # Initialize WebSocket manager (V8: 用 v8_websocket_manager)
         self.ws_manager = WebSocketManager(
             self.user_info, use_local=use_local_websocket,
             platform=platform,
@@ -95,16 +92,15 @@ class YF1_V8_Client:
         self.decision_count = 0
         self.game_count = 0
         
-        # Initialize game recorder (V8: 用 v8_game_recorder)
-        self.game_recorder = GameRecorder(player_id, "yf1_v8", seat_players=seat_players)
+        # Initialize game recorder
+        self.game_recorder = GameRecorder(player_id, "yf4_v8", seat_players=seat_players)
 
-        # V8: actionList/tribute 缓存（新平台 send_action 需要完整 action 三元组）
+        # V8: actionList/tribute 缓存
         self.last_action_list = []
         self.last_stage = ""
         self.last_tribute_pos = None
         self.last_tribute_card = None
 
-        # 本副贡牌/抗贡 notify（供 MemoryTracker 算王）
         self._episode_tribute_result = None
         self._episode_anti_pos = None
         self._episode_back_result = None
@@ -114,7 +110,7 @@ class YF1_V8_Client:
         )
         self.ws_debug = is_ws_debug_enabled()
         
-        self.logger.info(f"✓ yf1_v8 initialized (Player {player_id}, platform={platform})")
+        self.logger.info(f"✓ yf4_v8 initialized (Player {player_id}, platform={platform})")
         self.logger.info(f"  - Ultimate Win Rate Engine V7: Loaded")
 
     def _reset_episode_tribute_state(self) -> None:
@@ -125,10 +121,10 @@ class YF1_V8_Client:
     async def connect(self):
         """Connect to game server"""
         try:
-            self.logger.info(f"[yf1_v8] 等待连接延迟 {DELAY_BEFORE_CONNECT} 秒，确保第一个位置...")
+            self.logger.info(f"[yf4_v8] 等待连接延迟 {DELAY_BEFORE_CONNECT} 秒，确保第四个位置（seat 3）...")
             time.sleep(DELAY_BEFORE_CONNECT)
             port = "8181" if self.platform == "openguandan" else "23456"
-            self.logger.info(f"[yf1_v8] 开始连接 ws://127.0.0.1:{port}/game/yf1_v8")
+            self.logger.info(f"[yf4_v8] 开始连接 ws://127.0.0.1:{port}/game/yf4_v8")
             
             connected = await self.ws_manager.connect()
             if not connected:
@@ -137,7 +133,7 @@ class YF1_V8_Client:
             
             self.websocket = self.ws_manager.websocket
             
-            print(f"[yf1_v8] 连接成功！期望位置：{self.player_id}号位")
+            print(f"[yf4_v8] 连接成功！期望位置：{self.player_id}号位")
             self.logger.info(f"✓ Connected to server. Expected position: {self.player_id}")
             
             self.ws_manager.set_message_handler(self.process_message)
@@ -208,7 +204,7 @@ class YF1_V8_Client:
             self.logger.error(f"✗ Notification handling error: {e}", exc_info=True)
     
     def _handle_act_notification(self, data: dict):
-        """出牌 notify → actions（契约对齐 M3 yf1_m3._handle_act_notification）。"""
+        """出牌 notify → actions（契约对齐 M3 yf2_m3._handle_act_notification）。"""
         hand_cards = data.get("handCards", [])
         if hand_cards:
             valid_cards = normalize_cards_to_string_list(hand_cards)
@@ -227,7 +223,7 @@ class YF1_V8_Client:
                 self.logger.info(f"Position updated: {self.player_id} -> {my_pos} (server myPos)")
                 self.player_id = my_pos
             self.logger.info(
-                "[座位排查] 来源=yf1_v8.handle_game_start, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
+                "[座位排查] 来源=yf4_v8.handle_game_start, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
                 data.get("myPos"), data.get("playerPosition"), self.player_id
             )
 
@@ -307,12 +303,12 @@ class YF1_V8_Client:
 
         action_data = unwrap_platform_payload(data)
         
-        # V8: 缓存 actionList 和 stage（新平台 send_action 需要完整三元组）
+        # V8: 缓存 actionList 和 stage
         action_list = action_data.get("actionList", [])
         self.last_action_list = action_list
         self.last_stage = action_data.get("stage", "")
         
-        # V8: 还贡阶段缓存 tributePos/tribute（回传 PAUTRIBUTE 时需要）
+        # V8: 还贡阶段缓存 tributePos/tribute
         if self.last_stage == "back":
             self.last_tribute_pos = action_data.get("tributePos")
             self.last_tribute_card = action_data.get("tribute")
@@ -356,7 +352,7 @@ class YF1_V8_Client:
             action_data["antiPos"] = self._episode_anti_pos
             action_data["backResult"] = self._episode_back_result
             self.logger.info(
-                "[座位排查] 来源=yf1_v8.handle_action_request, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
+                "[座位排查] 来源=yf4_v8.handle_action_request, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
                 action_data.get("myPos"), action_data.get("playerPosition"), self.player_id
             )
             normalize_act_message_fields(action_data)
@@ -381,7 +377,7 @@ class YF1_V8_Client:
                 elapsed = time.perf_counter() - t0
                 if elapsed > 1.0:
                     self.logger.warning("决策偏慢 %.2fs myPos=%s actionList=%s", elapsed, my_pos, len(action_list))
-            print(f"[yf1_v8] 选择动作: {act_index}")
+            print(f"[yf4_v8] 选择动作: {act_index}")
             self.logger.info(f"选择动作: {act_index}")
 
             selected_action = action_list[act_index] if act_index < len(action_list) else []
@@ -428,9 +424,7 @@ class YF1_V8_Client:
     def _extract_tribute_back_card(self, selected):
         """
         GUA-086: 从平台 act 消息的 actionList 项 ["tribute"|"back", "tribute"|"back", [card_str,...]]
-        提取送出的单张牌字符串。原代码把整个三元组传给 adjust_initial_hand_for_tribute_back，
-        内部 _normalize_tribute_back_card 对 list 走 f"{c[0]}{c[1]}" 拼接 → "TRIBUTETRIBUTE" 永远不匹配。
-        参考 scripts/tools/yf_replay.py:59 _cards_from_tribute_back_action 的解析方式。
+        提取送出的单张牌字符串。参考 scripts/tools/yf_replay.py:59 _cards_from_tribute_back_action。
         """
         if not isinstance(selected, list) or len(selected) < 3:
             return None
@@ -505,17 +499,15 @@ class YF1_V8_Client:
                 act_tuple = self.last_action_list[action_index] if action_index < len(self.last_action_list) else ["PASS", "PASS", ["PASS"]]
                 if self.last_stage == "tribute":
                     message = self.adapter.tribute_action(act_tuple)
-                    self.logger.info(f"发送动作: TRIBUTE act={act_tuple}")
                 elif self.last_stage == "back":
                     message = self.adapter.pay_tribute_action(
                         act_tuple,
                         self.last_tribute_pos or 0,
                         self.last_tribute_card or "",
                     )
-                    self.logger.info(f"发送动作: PAYTRIBUTE act={act_tuple} tributePos={self.last_tribute_pos} tribute={self.last_tribute_card}")
                 else:
                     message = self.adapter.play_action(act_tuple)
-                    self.logger.info(f"发送动作: PLAY act={act_tuple}")
+                self.logger.info(f"发送动作: {self.last_stage} act={act_tuple}")
             else:
                 message = {"actIndex": action_index}
                 self.logger.info(f"发送动作: actIndex={action_index}")
@@ -529,18 +521,18 @@ class YF1_V8_Client:
 async def main():
     """Main function — V8 支持 --platform / --role / --games 参数"""
     import argparse
-    parser = argparse.ArgumentParser(description="yf1_v8 client (OpenGuanDan)")
+    parser = argparse.ArgumentParser(description="yf4_v8 client (OpenGuanDan)")
     parser.add_argument("--platform", choices=["v1006", "openguandan"], default="v1006")
     parser.add_argument("--role", choices=["creator", "joiner"], default=None)
-    parser.add_argument("--games", type=int, default=1, help="局数（仅 creator 有效）")
+    parser.add_argument("--games", type=int, default=1)
     parser.add_argument("--seat-players", type=str, default=None)
     args = parser.parse_args()
     
     v8_role = args.role if args.platform == "openguandan" else None
     seat_players = args.seat_players.split(",") if args.seat_players else None
-    client = YF1_V8_Client(
+    client = YF4_V8_Client(
         platform=args.platform,
-        v8_role=v8_role or "creator",
+        v8_role=v8_role or "joiner",
         v8_round_count=args.games,
         seat_players=seat_players,
     )

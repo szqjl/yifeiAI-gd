@@ -442,28 +442,36 @@ def process_platform_game_end_notify(
             vn = [int(v) for v in victory_num[:4]]
             v_rank = result.get("victoryRank") or data.get("victoryRank")
             vict = result.get("victory") if result.get("victory") is not None else data.get("victory")
+            # 用 seat_players 构建队伍标签（降级 fallback 到 V8/LALALA）
+            sp = game_recorder.seat_players if game_recorder.seat_players else []
+            if len(sp) >= 4:
+                team_a_label = f"{sp[0]}+{sp[2]}"
+                team_b_label = f"{sp[1]}+{sp[3]}"
+            else:
+                team_a_label = "V8(座0+2)"
+                team_b_label = "LALALA(座1+3)"
             # 判定胜负：victoryRank 优先（含 "A" 的队胜），否则用 victory
             # GUA-148：双方都到 A（victoryRank=["A","A"]）→ fallback 到服务器 victory 字段
             if v_rank and isinstance(v_rank, list) and len(v_rank) >= 2:
                 if v_rank[0] == "A" and v_rank[1] == "A":
-                    # 双方都到 A → 以服务器 victory 字段为准
                     if vict is not None:
-                        winner = "V8 队(座0+2)" if int(vict) == 0 else "LALALA(座1+3)"
+                        winner = team_a_label if int(vict) == 0 else team_b_label
                     else:
                         winner = None
                 elif v_rank[0] == "A":
-                    winner = "V8 队(座0+2)"
+                    winner = team_a_label
                 elif v_rank[1] == "A":
-                    winner = "LALALA(座1+3)"
+                    winner = team_b_label
                 else:
                     winner = None
             elif vict is not None:
-                winner = "V8 队(座0+2)" if int(vict) == 0 else "LALALA(座1+3)"
+                winner = team_a_label if int(vict) == 0 else team_b_label
             else:
                 winner = None
             logger.info("=" * 50)
-            logger.info("🏆 最终等级: V8=%s LALALA=%s | 各席副胜: 座0=%d 座1=%d 座2=%d 座3=%d",
-                        v_rank[0] if v_rank else "?", v_rank[1] if v_rank else "?", *vn)
+            logger.info("🏆 最终等级: %s=%s %s=%s | 各席副胜: 座0=%d 座1=%d 座2=%d 座3=%d",
+                        team_a_label, v_rank[0] if v_rank else "?",
+                        team_b_label, v_rank[1] if v_rank else "?", *vn)
             if winner:
                 logger.info("🥇 局胜者: %s", winner)
             logger.info("=" * 50)
@@ -618,16 +626,19 @@ def _format_cards(action_cards: Any) -> str:
 class GameRecorder:
     """游戏记录器 - 记录完整的游戏过程"""
     
-    def __init__(self, player_id: int, player_name: str = ""):
+    def __init__(self, player_id: int, player_name: str = "",
+                 seat_players: Optional[list[str]] = None):
         """
         初始化游戏记录器
         
         Args:
             player_id: 玩家位置 (0-3)
             player_name: 玩家名称
+            seat_players: 四面席位对应的玩家名称列表 [seat0, seat1, seat2, seat3]
         """
         self.player_id = player_id
         self.player_name = player_name or f"player_{player_id}"
+        self.seat_players = seat_players or []
         
         # 创建记录目录（V8专用，与V7的game_records_v7分开）
         self.record_dir = Path(__file__).parent.parent.parent / "game_records_v8"
@@ -830,6 +841,7 @@ class GameRecorder:
             "start_time": self.game_start_time.isoformat(),
             "player_id": my_pos,
             "player_name": self.player_name,
+            "seat_players": self.seat_players,  # [seat0_name, seat1_name, seat2_name, seat3_name]
             "initial_hand": hand_cards,  # 保留原有字段以兼容
             "all_players_hands": all_hands,  # 新增：所有玩家的手牌
             "game_info": game_info or {},

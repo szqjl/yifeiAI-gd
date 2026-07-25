@@ -9,6 +9,7 @@ import sys
 import logging
 from pathlib import Path
 import time
+from typing import Optional
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -61,7 +62,8 @@ class YF2_V8_Client:
     
     def __init__(self, player_id=2, use_local_websocket=True,
                  platform: str = "v1006",
-                 v8_role: str = None, v8_round_count: int = 1):
+                 v8_role: str = None, v8_round_count: int = 1,
+                 seat_players: Optional[list[str]] = None):
         self.player_id = player_id
         self.user_info = "yf2_v8"
         self.logger = logging.getLogger(f"yf2_v8")
@@ -91,7 +93,7 @@ class YF2_V8_Client:
         self.game_count = 0
         
         # Initialize game recorder
-        self.game_recorder = GameRecorder(player_id, "yf2_v8")
+        self.game_recorder = GameRecorder(player_id, "yf2_v8", seat_players=seat_players)
 
         # V8: actionList/tribute 缓存
         self.last_action_list = []
@@ -523,13 +525,16 @@ async def main():
     parser.add_argument("--platform", choices=["v1006", "openguandan"], default="v1006")
     parser.add_argument("--role", choices=["creator", "joiner"], default=None)
     parser.add_argument("--games", type=int, default=1)
+    parser.add_argument("--seat-players", type=str, default=None)
     args = parser.parse_args()
     
     v8_role = args.role if args.platform == "openguandan" else None
+    seat_players = args.seat_players.split(",") if args.seat_players else None
     client = YF2_V8_Client(
         platform=args.platform,
         v8_role=v8_role or "joiner",
         v8_round_count=args.games,
+        seat_players=seat_players,
     )
     await client.connect()
 

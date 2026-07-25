@@ -29,11 +29,13 @@ CONNECT_ORDER_INDEX: Dict[str, int] = {
     "yf1_m3": 0,
     "yf1_v8": 0,
     "client3": 1,
+    "yf3_v8": 1,
     "yf2_v7": 2,
     "yf2_m1": 2,
     "yf2_m3": 2,
     "yf2_v8": 2,
     "client4": 3,
+    "yf4_v8": 3,
 }
 
 # 末席（client4）连入前额外稳定等待（秒）；平台第 4 席 WS 连上即开局
@@ -41,6 +43,8 @@ SETTLE_BEFORE_LAST_CONNECT = 7.0
 
 YF1_CLIENT_IDS = frozenset({"yf1_v7", "yf1_m1", "yf1_m3", "yf1_v8"})
 YF2_CLIENT_IDS = frozenset({"yf2_v7", "yf2_m1", "yf2_m3", "yf2_v8"})
+YF3_CLIENT_IDS = frozenset({"yf3_v8"})
+YF4_CLIENT_IDS = frozenset({"yf4_v8"})
 
 
 def _now_iso() -> str:
@@ -177,6 +181,10 @@ def client_id_from_script(script_path: str) -> Optional[str]:
         return Path(script_path).stem
     if name.startswith("yf2_"):
         return Path(script_path).stem
+    if name.startswith("yf3_"):
+        return Path(script_path).stem
+    if name.startswith("yf4_"):
+        return Path(script_path).stem
     return None
 
 
@@ -186,13 +194,17 @@ def _peers_ready(client_id: str, ready: Dict[str, dict]) -> bool:
     if client_id == "client3":
         return bool(keys & YF1_CLIENT_IDS)
     if client_id in YF2_CLIENT_IDS:
-        return bool(keys & YF1_CLIENT_IDS) and "client3" in keys
+        return bool(keys & YF1_CLIENT_IDS) and ("client3" in keys or bool(keys & YF3_CLIENT_IDS))
     if client_id == "client4":
         return (
             bool(keys & YF1_CLIENT_IDS)
             and "client3" in keys
             and bool(keys & YF2_CLIENT_IDS)
         )
+    if client_id in YF3_CLIENT_IDS:
+        return bool(keys & YF1_CLIENT_IDS)
+    if client_id in YF4_CLIENT_IDS:
+        return bool(keys & (YF1_CLIENT_IDS | YF3_CLIENT_IDS)) and bool(keys & YF2_CLIENT_IDS)
     return True
 
 

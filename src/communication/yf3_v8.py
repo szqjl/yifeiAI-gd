@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-yf1_v8 - YiFei AI V8 Client (Player 0) — OpenGuanDan 新平台适配版
-从 yf1_v7.py 复制而来，在新平台上替代 v1006 WebSocket 协议。
+yf3_v8 - YiFei AI V8 Client (Player 1 / Team B seat 1) — OpenGuanDan
+V8 vs V8 自对弈用，joiner 模式连入席位 1。
 """
 
 import asyncio
@@ -39,7 +39,7 @@ log_dir = Path(__file__).parent.parent.parent / "logs"
 log_dir.mkdir(exist_ok=True)
 
 from datetime import datetime
-log_filename = log_dir / f"yf1_v8_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+log_filename = log_dir / f"yf3_v8_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,22 +52,22 @@ logging.basicConfig(
 )
 
 # Connection delay to ensure proper position assignment
-DELAY_BEFORE_CONNECT = 2  # seconds — 批跑 restart_manager 已按序间隔启动
+DELAY_BEFORE_CONNECT = 3  # seconds — 在 yf1 之后连接，确保第二个位置（seat 1）
 
 
-class YF1_V8_Client:
+class YF3_V8_Client:
     """
     YiFei AI V8 Client - Player 0 (OpenGuanDan 新平台)
     Ultimate Win Rate Oriented Version
     """
     
-    def __init__(self, player_id=0, use_local_websocket=True,
+    def __init__(self, player_id=1, use_local_websocket=True,
                  platform: str = "v1006",
                  v8_role: str = None, v8_round_count: int = 1,
                  seat_players: Optional[list[str]] = None):
         self.player_id = player_id
-        self.user_info = "yf1_v8"
-        self.logger = logging.getLogger(f"yf1_v8")
+        self.user_info = "yf3_v8"
+        self.logger = logging.getLogger(f"yf3_v8")
         self.platform = platform  # V8: "v1006" 或 "openguandan"
         
         # V8: 协议适配器（仅 openguandan 平台）
@@ -96,7 +96,7 @@ class YF1_V8_Client:
         self.game_count = 0
         
         # Initialize game recorder (V8: 用 v8_game_recorder)
-        self.game_recorder = GameRecorder(player_id, "yf1_v8", seat_players=seat_players)
+        self.game_recorder = GameRecorder(player_id, "yf3_v8", seat_players=seat_players)
 
         # V8: actionList/tribute 缓存（新平台 send_action 需要完整 action 三元组）
         self.last_action_list = []
@@ -114,7 +114,7 @@ class YF1_V8_Client:
         )
         self.ws_debug = is_ws_debug_enabled()
         
-        self.logger.info(f"✓ yf1_v8 initialized (Player {player_id}, platform={platform})")
+        self.logger.info(f"✓ yf3_v8 initialized (Player {player_id}, platform={platform})")
         self.logger.info(f"  - Ultimate Win Rate Engine V7: Loaded")
 
     def _reset_episode_tribute_state(self) -> None:
@@ -125,10 +125,10 @@ class YF1_V8_Client:
     async def connect(self):
         """Connect to game server"""
         try:
-            self.logger.info(f"[yf1_v8] 等待连接延迟 {DELAY_BEFORE_CONNECT} 秒，确保第一个位置...")
+            self.logger.info(f"[yf3_v8] 等待连接延迟 {DELAY_BEFORE_CONNECT} 秒，确保第二个位置（seat 1）...")
             time.sleep(DELAY_BEFORE_CONNECT)
             port = "8181" if self.platform == "openguandan" else "23456"
-            self.logger.info(f"[yf1_v8] 开始连接 ws://127.0.0.1:{port}/game/yf1_v8")
+            self.logger.info(f"[yf3_v8] 开始连接 ws://127.0.0.1:{port}/game/yf3_v8")
             
             connected = await self.ws_manager.connect()
             if not connected:
@@ -137,7 +137,7 @@ class YF1_V8_Client:
             
             self.websocket = self.ws_manager.websocket
             
-            print(f"[yf1_v8] 连接成功！期望位置：{self.player_id}号位")
+            print(f"[yf3_v8] 连接成功！期望位置：{self.player_id}号位")
             self.logger.info(f"✓ Connected to server. Expected position: {self.player_id}")
             
             self.ws_manager.set_message_handler(self.process_message)
@@ -227,7 +227,7 @@ class YF1_V8_Client:
                 self.logger.info(f"Position updated: {self.player_id} -> {my_pos} (server myPos)")
                 self.player_id = my_pos
             self.logger.info(
-                "[座位排查] 来源=yf1_v8.handle_game_start, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
+                "[座位排查] 来源=yf3_v8.handle_game_start, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
                 data.get("myPos"), data.get("playerPosition"), self.player_id
             )
 
@@ -356,7 +356,7 @@ class YF1_V8_Client:
             action_data["antiPos"] = self._episode_anti_pos
             action_data["backResult"] = self._episode_back_result
             self.logger.info(
-                "[座位排查] 来源=yf1_v8.handle_action_request, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
+                "[座位排查] 来源=yf3_v8.handle_action_request, 原始myPos=%s, 原始playerPosition=%s, 同步后player_id=%s",
                 action_data.get("myPos"), action_data.get("playerPosition"), self.player_id
             )
             normalize_act_message_fields(action_data)
@@ -381,7 +381,7 @@ class YF1_V8_Client:
                 elapsed = time.perf_counter() - t0
                 if elapsed > 1.0:
                     self.logger.warning("决策偏慢 %.2fs myPos=%s actionList=%s", elapsed, my_pos, len(action_list))
-            print(f"[yf1_v8] 选择动作: {act_index}")
+            print(f"[yf3_v8] 选择动作: {act_index}")
             self.logger.info(f"选择动作: {act_index}")
 
             selected_action = action_list[act_index] if act_index < len(action_list) else []
@@ -529,7 +529,7 @@ class YF1_V8_Client:
 async def main():
     """Main function — V8 支持 --platform / --role / --games 参数"""
     import argparse
-    parser = argparse.ArgumentParser(description="yf1_v8 client (OpenGuanDan)")
+    parser = argparse.ArgumentParser(description="yf3_v8 client (OpenGuanDan)")
     parser.add_argument("--platform", choices=["v1006", "openguandan"], default="v1006")
     parser.add_argument("--role", choices=["creator", "joiner"], default=None)
     parser.add_argument("--games", type=int, default=1, help="局数（仅 creator 有效）")
@@ -538,9 +538,9 @@ async def main():
     
     v8_role = args.role if args.platform == "openguandan" else None
     seat_players = args.seat_players.split(",") if args.seat_players else None
-    client = YF1_V8_Client(
+    client = YF3_V8_Client(
         platform=args.platform,
-        v8_role=v8_role or "creator",
+        v8_role=v8_role or "joiner",
         v8_round_count=args.games,
         seat_players=seat_players,
     )

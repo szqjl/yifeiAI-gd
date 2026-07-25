@@ -1107,9 +1107,13 @@ class BatchExecutor:
                 # 等待所有客户端处理首条游戏消息（game_ready）
                 self.logger.info("等待所有客户端处理首条游戏消息...")
                 if self.platform == "openguandan":
-                    # V8: v8_lalala_adapter.py 被 client3/client4 共用，
-                    #     client_id_from_script 无法从脚本名区分，显式指定
-                    expected_client_ids = ["yf1_v8", "client3", "yf2_v8", "client4"]
+                    # V8: 优先用 client_id_from_script（四席脚本名不同时可用）
+                    # 仅当任意脚本无法解析时回退硬编码默认值
+                    ids = [client_id_from_script(s) for s in self.client_scripts]
+                    if None not in ids:
+                        expected_client_ids = ids
+                    else:
+                        expected_client_ids = ["yf1_v8", "client3", "yf2_v8", "client4"]
                 else:
                     expected_client_ids = [
                         client_id_from_script(s) for s in self.client_scripts
