@@ -140,9 +140,11 @@ def _is_legal_beater(action: Sequence[Any], greater_action: Sequence[Any], cur_r
 
 
 def _find_record_my_pos(record: Dict[str, Any]) -> int:
+    player_id = record.get("player_id", -1)
+    if isinstance(player_id, int) and 0 <= player_id <= 3:
+        return player_id
     player_name = str(record.get("player_name", ""))
-    player_id = str(record.get("player_id", ""))
-    return 2 if ("yf2" in player_name.lower() or player_id == "2") else 0
+    return 2 if ("yf2" in player_name.lower()) else 0
 
 
 def _advance_trick_state(

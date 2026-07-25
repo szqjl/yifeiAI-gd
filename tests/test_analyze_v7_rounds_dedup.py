@@ -39,6 +39,8 @@ def test_v8_game_result_uses_team_head_counts():
 
 def test_v8_session_does_not_treat_victory_num_as_game_wins(monkeypatch, capsys):
     monkeypatch.setattr(analyzer, "_PLATFORM_TAG", "V8")
+    monkeypatch.setattr(analyzer, "_TEAM_A_LABEL", "V8")
+    monkeypatch.setattr(analyzer, "_TEAM_B_LABEL", "Lalala")
     monkeypatch.setattr(analyzer, "GAMES_PER_SESSION", 1)
     records = [
         {

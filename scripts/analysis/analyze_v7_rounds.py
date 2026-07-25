@@ -27,6 +27,8 @@ GAMES_PER_SESSION = 3  # v1006 固定每会话 3 局；V8 OpenGuanDan 每会话 
 
 # 平台标签：V7 → "V7"，V8 → "V8"（从 --dir 自动推断）
 _PLATFORM_TAG = "V7"
+_TEAM_A_LABEL = "V7"     # Team A 显示名，V8 vs V8 时改为 V8-TeamA
+_TEAM_B_LABEL = "Lalala" # Team B 显示名，V8 vs V8 时改为 V8-TeamB
 _PLAYER_PREFIX = "yf1_v7"  # 去重时优先保留的文件名前缀
 
 # 级牌→数值映射（2=1最弱, A=13最强）
@@ -231,7 +233,7 @@ def print_victory_table(vn: list, games: int):
     """打印局级战果表。队胜看 vn[0] vs vn[1]（同队 [0]=[2]、[1]=[3]）。"""
     team0_wins = vn[0] if len(vn) > 0 else 0
     team1_wins = vn[1] if len(vn) > 1 else 0
-    print(f"  局级: {_PLATFORM_TAG} {team0_wins}/{games}局胜  Lalala {team1_wins}/{games}局胜")
+    print(f"  局级: {_TEAM_A_LABEL} {team0_wins}/{games}局胜  {_TEAM_B_LABEL} {team1_wins}/{games}局胜")
     print(f"  victoryNum: {vn}")
 
 
@@ -254,7 +256,7 @@ def print_v8_victory_table(
     """打印 V8 真实局胜，并保留 victoryNum 作为升级值诊断。"""
     team_a_wins, team_b_wins, draws = game_result
     print(
-        f"  局级: V8 {team_a_wins}/1局胜  Lalala {team_b_wins}/1局胜  "
+        f"  局级: {_TEAM_A_LABEL} {team_a_wins}/1局胜  {_TEAM_B_LABEL} {team_b_wins}/1局胜  "
         f"平局 {draws}/1"
     )
     print(
@@ -269,12 +271,12 @@ def print_round_summary(total_rounds: int, v7_won: int, v7_dist: dict,
                         v7_pos_dist: dict, lalala_achieved_a: int,
                         v7_final_level_dist: dict = None):
     """打印副级汇总。"""
-    print(f"  副级: {_PLATFORM_TAG} 赢 {v7_won}/{total_rounds} ({v7_won/max(1,total_rounds)*100:.1f}%)")
-    print(f"  {_PLATFORM_TAG} 到达级牌分布: {format_dist(v7_dist, sort_by_key=rank_sort_key)}")
+    print(f"  副级: {_TEAM_A_LABEL} 赢 {v7_won}/{total_rounds} ({v7_won/max(1,total_rounds)*100:.1f}%)")
+    print(f"  {_TEAM_A_LABEL} 到达级牌分布: {format_dist(v7_dist, sort_by_key=rank_sort_key)}")
     if v7_pos_dist:
         pos_str = format_dist(v7_pos_dist, sort_by_key=lambda k: int(k) if k.isdigit() else k)
-        print(f"  {_PLATFORM_TAG} 名次分布: {pos_str}")
-    print(f"  Lalala 达A: {lalala_achieved_a}副")
+        print(f"  {_TEAM_A_LABEL} 名次分布: {pos_str}")
+    print(f"  {_TEAM_B_LABEL} 达A: {lalala_achieved_a}副")
     if v7_final_level_dist:
         group_parts = _format_final_level_groups(v7_final_level_dist)
         print(f"  末级分布: {group_parts}")
@@ -406,9 +408,11 @@ def main():
         sys.exit(1)
 
     # 平台自动推断：目录名含 v8 → V8 模式
-    global _PLATFORM_TAG, _PLAYER_PREFIX, GAMES_PER_SESSION
+    global _PLATFORM_TAG, _PLAYER_PREFIX, GAMES_PER_SESSION, _TEAM_A_LABEL, _TEAM_B_LABEL
     if "v8" in records_dir.name.lower():
         _PLATFORM_TAG = "V8"
+        _TEAM_A_LABEL = "V8"
+        _TEAM_B_LABEL = "Lalala"
         _PLAYER_PREFIX = "yf1_v8"
         GAMES_PER_SESSION = 1  # OpenGuanDan batch_games=1
         parser.description = "V8 批跑局级+副级分析"
@@ -421,6 +425,13 @@ def main():
     # V8: 会话检测前过滤为 yf1 文件（yf1/yf2 交错会干扰 gc 序列导致误切分）
     if _PLATFORM_TAG == "V8":
         records = [r for r in records if _PLAYER_PREFIX in r.get("_file", "")]
+        # 自动检测对手类型：seat_players 不含 "lalala" → V8 vs V8
+        for r in records:
+            sp = r.get("seat_players", [])
+            if sp and not any("lalala" in str(p).lower() for p in sp):
+                _TEAM_A_LABEL = "V8-TeamA"
+                _TEAM_B_LABEL = "V8-TeamB"
+                break
 
     # 时间过滤
     if not args.all:
@@ -497,15 +508,15 @@ def main():
     print(f"{'='*70}")
     v7_ttl = total_v7_game_wins
     lalala_ttl = total_lalala_game_wins
-    print(f"  队胜: {_PLATFORM_TAG} {v7_ttl}/{total_games} ({v7_ttl/max(1,total_games)*100:.1f}%)  "
-          f"Lalala {lalala_ttl}/{total_games} ({lalala_ttl/max(1,total_games)*100:.1f}%)  "
+    print(f"  队胜: {_TEAM_A_LABEL} {v7_ttl}/{total_games} ({v7_ttl/max(1,total_games)*100:.1f}%)  "
+          f"{_TEAM_B_LABEL} {lalala_ttl}/{total_games} ({lalala_ttl/max(1,total_games)*100:.1f}%)  "
           f"平局 {total_draws}/{total_games} ({total_draws/max(1,total_games)*100:.1f}%)")
     print(f"  victoryNum 累加: {total_vn}")
-    print(f"  副级: {_PLATFORM_TAG} 赢 {total_v7_won}/{total_rounds} ({total_v7_won/max(1,total_rounds)*100:.1f}%)")
-    print(f"  {_PLATFORM_TAG} 级牌分布: {format_dist(dict(total_v7_dist), sort_by_key=rank_sort_key)}")
+    print(f"  副级: {_TEAM_A_LABEL} 赢 {total_v7_won}/{total_rounds} ({total_v7_won/max(1,total_rounds)*100:.1f}%)")
+    print(f"  {_TEAM_A_LABEL} 级牌分布: {format_dist(dict(total_v7_dist), sort_by_key=rank_sort_key)}")
     if total_v7_pos_dist:
-        print(f"  {_PLATFORM_TAG} 名次分布: {format_dist(dict(total_v7_pos_dist), sort_by_key=lambda k: int(k) if k.isdigit() else k)}")
-    print(f"  Lalala 达A副数: {total_lalala_a}")
+        print(f"  {_TEAM_A_LABEL} 名次分布: {format_dist(dict(total_v7_pos_dist), sort_by_key=lambda k: int(k) if k.isdigit() else k)}")
+    print(f"  {_TEAM_B_LABEL} 达A副数: {total_lalala_a}")
     if total_v7_final_level_dist:
         print(f"  末级分布: {_format_final_level_groups(dict(total_v7_final_level_dist))}")
         print(f"  (逐级) {_format_final_level_detail(dict(total_v7_final_level_dist))}")
@@ -516,29 +527,31 @@ def main():
             "total_games": total_games,
             "total_rounds": total_rounds,
             "victoryNum": total_vn,
-            "v7_games_won": v7_ttl,
-            "lalala_games_won": lalala_ttl,
+            "team_a_label": _TEAM_A_LABEL,
+            "team_b_label": _TEAM_B_LABEL,
+            "team_a_games_won": v7_ttl,
+            "team_b_games_won": lalala_ttl,
             "draws": total_draws,
-            "v7_rounds_won": total_v7_won,
-            "v7_round_win_rate": round(total_v7_won / max(1, total_rounds) * 100, 1),
-            "v7_rank_dist": {k: total_v7_dist[k] for k in sorted(total_v7_dist, key=rank_sort_key)},
-            "v7_pos_dist": dict(sorted(total_v7_pos_dist.items(), key=lambda x: int(x[0]) if x[0].isdigit() else x[0])),
-            "lalala_achieved_a": total_lalala_a,
-            "v7_final_level_dist": dict(sorted(total_v7_final_level_dist.items(), key=lambda x: LEVEL_ORDER.get(x[0], 99))),
-            "v7_final_level_groups": {label: sum(total_v7_final_level_dist.get(LEVEL_NAME[l], 0) for l in range(lo, hi + 1)) for label, (lo, hi) in FINAL_LEVEL_GROUPS.items()},
+            "team_a_rounds_won": total_v7_won,
+            "team_a_round_win_rate": round(total_v7_won / max(1, total_rounds) * 100, 1),
+            "team_a_rank_dist": {k: total_v7_dist[k] for k in sorted(total_v7_dist, key=rank_sort_key)},
+            "team_a_pos_dist": dict(sorted(total_v7_pos_dist.items(), key=lambda x: int(x[0]) if x[0].isdigit() else x[0])),
+            "team_b_achieved_a": total_lalala_a,
+            "team_a_final_level_dist": dict(sorted(total_v7_final_level_dist.items(), key=lambda x: LEVEL_ORDER.get(x[0], 99))),
+            "team_a_final_level_groups": {label: sum(total_v7_final_level_dist.get(LEVEL_NAME[l], 0) for l in range(lo, hi + 1)) for label, (lo, hi) in FINAL_LEVEL_GROUPS.items()},
             "sessions": [
                 {
                     "idx": r["session_idx"],
                     "games": r["games"],
                     "rounds": r["rounds"],
                     "vn": r["vn"],
-                    "v7_game_wins": r["v7_game_wins"],
-                    "lalala_game_wins": r["lalala_game_wins"],
+                    "team_a_game_wins": r["v7_game_wins"],
+                    "team_b_game_wins": r["lalala_game_wins"],
                     "draws": r["draws"],
-                    "v7_rounds_won": r["v7_rounds_won"],
-                    "v7_dist": {k: r["v7_dist"][k] for k in sorted(r["v7_dist"], key=rank_sort_key)},
-                    "v7_pos_dist": r["v7_pos_dist"],
-                    "lalala_achieved_a": r["lalala_achieved_a"],
+                    "team_a_rounds_won": r["v7_rounds_won"],
+                    "team_a_dist": {k: r["v7_dist"][k] for k in sorted(r["v7_dist"], key=rank_sort_key)},
+                    "team_a_pos_dist": r["v7_pos_dist"],
+                    "team_b_achieved_a": r["lalala_achieved_a"],
                 }
                 for r in results
             ],
