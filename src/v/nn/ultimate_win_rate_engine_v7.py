@@ -1640,6 +1640,11 @@ class UltimateWinRateEngineV7:
                 # 炸弹/同花顺 → 永不放行（全角色）
                 removed_count += 1
                 continue
+            # GUA-167: Straight 花色冲突（同 rank 不同花色）→ 放行
+            elif (broken_type not in ("Bomb", "StraightFlush")
+                  and self._is_straight_suit_only_break(
+                      action, self._card_mask, self._group_type_map, self._group_members)):
+                keep_indices.append(idx)
             elif role in ("主攻", "超强主攻"):
                 # 主攻/超强主攻 → 一律过滤所有拆 core
                 removed_count += 1
@@ -1902,6 +1907,86 @@ class UltimateWinRateEngineV7:
         ):
             return True
         return False
+
+    def _is_straight_suit_only_break(
+        self,
+        action,
+        card_mask: Dict[str, tuple],
+        group_type_map: Dict[int, str],
+        group_members: Optional[Dict[int, List[str]]] = None,
+    ) -> bool:
+        """Straight 是否仅因花色冲突（同 rank 不同花色）而拆核。
+
+        GUA-167: actionList 的 Straight 使用了与 core straight 组相同的 rank 集
+        但花色不同（如 D8 版 vs H8 版），且其他被拆的子组可通过花色交换修复。
+        """
+        if not action or not isinstance(action, list) or len(action) < 3:
+            return False
+        if str(action[0]) != "Straight":
+            return False
+        action_cards = action[2]
+        if not action_cards or len(action_cards) != 5:
+            return False
+        if not group_members:
+            return False
+
+        from src.v.nn.guards.v7_guards import get_card_rank
+
+        _, broken_group_ids = UltimateWinRateEngineV7._best_group_allocation(
+            action_cards, card_mask, group_type_map, group_members,
+        )
+        if not broken_group_ids:
+            return False
+
+        for gid in broken_group_ids:
+            gtype = group_type_map.get(gid, "")
+            if gtype in ("Bomb", "StraightFlush"):
+                return False
+
+        action_ranks = set(get_card_rank(str(c)) for c in action_cards)
+        straight_fixable = False
+        for gid in broken_group_ids:
+            if group_type_map.get(gid) == "straight":
+                group_cards = group_members.get(gid, [])
+                if len(group_cards) != 5:
+                    continue
+                group_ranks = set(get_card_rank(str(c)) for c in group_cards)
+                if group_ranks == action_ranks:
+                    straight_fixable = True
+                    break
+
+        if not straight_fixable:
+            return False
+
+        memberships = UltimateWinRateEngineV7._build_card_memberships(group_members)
+        for gid in broken_group_ids:
+            if group_type_map.get(gid) == "straight":
+                continue
+
+            used_from_group = [
+                c for c in action_cards
+                if memberships.get(str(c), {}).get(gid, 0) > 0
+            ]
+            if not used_from_group:
+                continue
+
+            used_rank = get_card_rank(str(used_from_group[0]))
+            all_unused_same_rank = []
+            for _gid, _cards in group_members.items():
+                if _gid == gid:
+                    for c in _cards:
+                        if str(c) not in [str(ac) for ac in action_cards]:
+                            all_unused_same_rank.append(c)
+                elif _gid >= 0:
+                    for c in _cards:
+                        if (get_card_rank(str(c)) == used_rank
+                                and str(c) not in [str(ac) for ac in action_cards]):
+                            all_unused_same_rank.append(c)
+
+            if not all_unused_same_rank:
+                return False
+
+        return True
 
     @staticmethod
     def _get_broken_core_type(

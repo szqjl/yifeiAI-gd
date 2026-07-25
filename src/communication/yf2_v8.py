@@ -307,6 +307,7 @@ class YF2_V8_Client:
         action_list = action_data.get("actionList", [])
         self.last_action_list = action_list
         self.last_stage = action_data.get("stage", "")
+        self.logger.info("RAW actionList: %s", json.dumps(action_list[:10], ensure_ascii=False))
         
         # V8: 还贡阶段缓存 tributePos/tribute
         if self.last_stage == "back":

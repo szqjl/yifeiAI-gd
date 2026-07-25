@@ -54,4 +54,4 @@ def test_wf12_step63_leads_scatter_three_for_teammate_sprint():
 
 
 def test_teammate_seven_does_not_trigger_six_card_send_rule():
-    assert _decide(7) == ["Straight", "2", ["H2", "C3", "H4", "S5", "H6"]]
+    assert _decide(7) == ["Straight", "2", ["H2", "D3", "H4", "S5", "H6"]]
