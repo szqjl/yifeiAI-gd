@@ -30,7 +30,10 @@
 
 - **副** = `game_records` 每条 JSON；**局** = 平台整局 / `completed_games`；**局 ⊃ 多副**。
 - 队胜看 **`victoryNum[0]` vs `[1]`**（0+2 一队，1+3 一队）；禁止四席相加。
-- 批跑 `--target-games` 须 **3 的倍数**（3/9/12）；勿用 10。
+- **新服务器（OpenGuanDan）允许任意正整数**——服务器 `round` 字段无整除约束（真源：`offline_platform/openguandan_latest/README.md` 3.1 标注 round 为 integer；`openguandan_latest/log.txt` 实测 `round=1` 与 `round=3` 均完整收尾）。
+- **旧服务器（v1006）历史约束**：每会话固定 3 局，沿袭「`--target-games` 须 3 的倍数（3/9/12）；勿用 10」是**客户端 chunk 重启**口径，新平台不沿用。
+- **当前推荐档位**（OpenGuanDan）：`1`（GUA 单点冒烟）/ `3`（小批）/ `9`（中批）/ `12`（大批）；任意 `--target-games N`（正整数）都合法。详见 `docs/guandan-brain/EVAL.md`「批跑局数档位」。
+- ⚠ **过渡期告警**：`batch_executor/input_validator.py:39` `validate_target_games()` 仍写死 `target_games % 3 != 0` 报 `ValueError`，跑非 3 倍数**会被该层拦截**；待 ITERATIONS 跟进放宽后再完全放行任意整数。批跑前可用 `python -c "from batch_executor.input_validator import InputValidator; InputValidator(\"openguandan\").validate_target_games(N)"` 验证。
 
 ---
 

@@ -266,6 +266,18 @@
 | `run_m3_vs_lalala_games.py` | **M3 vs Lalala 批跑入口**（BatchExecutor，默认 3 局） |
 | `START_M3_BATCH.bat` | M3 命令行批跑 bat 入口 |
 
+### src/communication/ — V8 核心通信模块
+
+| 模块 | 用途 |
+|------|------|
+| `botzone_adapter.py` | **Botzone Local AI 适配器** — 牌编码双射（int↔str）、CardTracker（两副牌追踪）、ActionListGenerator（合法动作枚举）、BotzoneAdapter（HTTP 轮询 + V8 对接） |
+| `new_platform_adapter.py` | OpenGuanDan 新平台协议适配器 |
+| `yf1_v8.py` | V8 选手 0 客户端 |
+| `yf2_v8.py` | V8 选手 2 客户端 |
+| `v8_lalala_adapter.py` | Lalala 对手适配器 |
+| `v8_websocket_manager.py` | WebSocket 连接管理器 |
+| `v8_game_recorder.py` | 牌谱记录器 |
+
 ### scripts/launchers/v8/ — V8 启动脚本（OpenGuanDan）
 
 | 脚本 | 用途 |
@@ -276,6 +288,11 @@
 | `START_V8_COMPLETE.bat` | V8 完整系统一键启动 |
 | `START_V8_AUTO.bat` | V8 自动重启启动 |
 | `run_v8_test.bat` | V8 端到端测试 bat 入口 |
+| `run_v8_vs_botzone.py` | **V8 vs Botzone（Local AI 模式）** — 通过 HTTP API 与 Botzone 平台对战 DanLM 等 bot；需 Botzone 账号 + API key |
+| `test_v8_engine_load.py` | V8 引擎模型加载验证 |
+| `run_12games_test.py` | V8 端到端测试（12 局） |
+| `run_e2e_simple.py` | V8 端到端测试简化版 |
+| `run_v8_e2e_debug.py` | V8 端到端测试调试版 |
 
 ### scripts/launchers/m1/ — M1 启动器
 
