@@ -288,6 +288,7 @@
 | `START_V8_COMPLETE.bat` | V8 完整系统一键启动 |
 | `START_V8_AUTO.bat` | V8 自动重启启动 |
 | `run_v8_test.bat` | V8 端到端测试 bat 入口 |
+| `run_v8_vs_v8_games.py` | **V8 vs V8 自对弈批跑** — 用 V8 引擎替代 lalala 担任对手，最强对手压力测试 |
 | `run_v8_vs_botzone.py` | **V8 vs Botzone（Local AI 模式）** — 通过 HTTP API 与 Botzone 平台对战 DanLM 等 bot；需 Botzone 账号 + API key |
 | `test_v8_engine_load.py` | V8 引擎模型加载验证 |
 | `run_12games_test.py` | V8 端到端测试（12 局） |

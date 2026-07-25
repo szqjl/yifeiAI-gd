@@ -539,7 +539,9 @@ class RestartManager:
                 script_basename = os.path.basename(abs_script_path)
                 if platform == "openguandan":
                     if script_basename == "yf1_v8.py":
-                        platform_args = ["--platform", "openguandan", "--role", "creator", "--games", str(games)]
+                        # 席位 0 = creator（建房间）；席位 1/2/3 = joiner（加入房间）
+                        role = "creator" if i == 0 else "joiner"
+                        platform_args = ["--platform", "openguandan", "--role", role, "--games", str(games)]
                     elif script_basename == "yf2_v8.py":
                         platform_args = ["--platform", "openguandan", "--role", "joiner"]
                     elif script_basename == "v8_lalala_adapter.py":
