@@ -1178,16 +1178,35 @@ class EndgameDecider:
             # GUA-151: 领出时炸后剩牌 ≤1（一次清场或仅剩单张）→ 直接出炸抢头游
             # 避免 prefer_structure_first 把炸排在整牌后面，
             # 导致"全同点手牌可一次清场"被拆成 Trips+Pair 等错误选择。
+            # GUA-168 修正：若结构刚好是 [bomb + 单张] 且对手两家均非 1 张，
+            # 优先出单试探、炸留作回手，跳过 GUA-151 直出炸。
             if bombs:
                 hand_cards = game_state.get("handCards", []) or []
                 total = len(hand_cards)
+                enemies = ec.get("enemies", {})
+                opp_not_one = all(
+                    e.get("remaining", 27) != 1 for e in enemies.values()
+                )
+                has_single = any(
+                    _get_declared_action_type(a) == "Single"
+                    for _, a in non_bombs
+                )
+                skip_gua151 = False
                 for _idx, _act in bombs:
-                    if len(_get_cards(_act)) >= total - 1:
+                    bomb_cards = _get_cards(_act)
+                    bomb_size = len(bomb_cards)
+                    if bomb_size >= total - 1:
+                        if bomb_size == total - 1 and opp_not_one and has_single:
+                            # GUA-168: bomb+单张、对手非1张、有可出单 → 落回两手冲刺逻辑
+                            skip_gua151 = True
+                            break
                         logger.info(
                             "Q0 领出炸清场抢头游: total=%d bomb_size=%d",
-                            total, len(_get_cards(_act)),
+                            total, bomb_size,
                         )
                         return self._select_best_bomb(bombs, action_list)
+                if skip_gua151:
+                    pass  # 落回下方先整后炸逻辑
 
             # 先整后炸：两手冲刺优先整组（TwoTrips/ThreePair/TWT…），禁半组 Trips
             all_cands = [(i, a) for i, a in enumerate(action_list)]
