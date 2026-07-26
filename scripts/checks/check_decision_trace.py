@@ -255,8 +255,9 @@ def main() -> int:
     # 检查 9：报告路径合规（默认路径或指定路径）
     if args.report_path:
         report_path = Path(args.report_path)
+        # 命名规范：docs/analysis/WF-12-<game_id>-<yf1|yf2>-<主题>.md（主题可包含数字/中文/短横线）
         expected_pattern = re.compile(
-            r"^docs/analysis/WF-12-\d+-\d+-(yf1|yf2)-.+\.md$"
+            r"^docs/analysis/WF-12-.+-(yf1|yf2)-.+\.md$"
         )
         relative = str(report_path).replace("\\", "/")
         ok9 = bool(expected_pattern.match(relative))
