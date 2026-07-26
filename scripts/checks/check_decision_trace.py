@@ -173,20 +173,42 @@ def main() -> int:
     client = parsed["client"]
     is_yf1 = "yf1" in client
     is_yf2 = "yf2" in client
+    is_yf3 = "yf3" in client
+    is_yf4 = "yf4" in client
 
     # 检查 2：玩家标识对齐
+    # V8 客户端映射：yf1→座0、yf3→座1、yf2→座2、yf4→座3（来自 yf3_v8.py:「Player 1」注释）
+    # V7/M3 历史映射：yf1→座0、yf2→座2（v1006 双客户端口径）
     player_id = data.get("player_id")
-    expected_pid = 0 if is_yf1 else (2 if is_yf2 else None)
-    if expected_pid is None:
-        check("2. 玩家标识对齐", False, f"无法识别 client={client}")
+    if is_yf1:
+        expected_pid = 0
+    elif is_yf3:
+        expected_pid = 1
+    elif is_yf2:
+        expected_pid = 2
+    elif is_yf4:
+        expected_pid = 3
+    else:
+        check("2. 玩家标识对齐", False, f"无法识别 client={client}（应为 yf1_v8 / yf2_v8 / yf3_v8 / yf4_v8）")
         return 1
     ok2 = player_id == expected_pid
     if not ok2:
         all_ok = False
+    # 显示用的 client 标签（按实际命中的 is_yfX）
+    if is_yf1:
+        label = "yf1"
+    elif is_yf3:
+        label = "yf3"
+    elif is_yf2:
+        label = "yf2"
+    elif is_yf4:
+        label = "yf4"
+    else:
+        label = client
     check(
         "2. 玩家标识对齐",
         ok2,
-        f"player_id={player_id}, 期望={expected_pid} ({'yf1' if is_yf1 else 'yf2'})",
+        f"player_id={player_id}, 期望={expected_pid} ({label})",
     )
 
     # 检查 3：步号合法性
@@ -255,9 +277,9 @@ def main() -> int:
     # 检查 9：报告路径合规（默认路径或指定路径）
     if args.report_path:
         report_path = Path(args.report_path)
-        # 命名规范：docs/analysis/WF-12-<game_id>-<yf1|yf2>-<主题>.md（主题可包含数字/中文/短横线）
+        # 命名规范：docs/analysis/WF-12-<game_id>-<yf1|yf2|yf3|yf4>-<主题>.md（主题可包含数字/中文/短横线）
         expected_pattern = re.compile(
-            r"^docs/analysis/WF-12-.+-(yf1|yf2)-.+\.md$"
+            r"^docs/analysis/WF-12-.+-(yf1|yf2|yf3|yf4)-.+\.md$"
         )
         relative = str(report_path).replace("\\", "/")
         ok9 = bool(expected_pattern.match(relative))

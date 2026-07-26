@@ -26,6 +26,8 @@
 - 脚本前先查 [`SCRIPT_INDEX.md`](docs/guandan-brain/SCRIPT_INDEX.md)；新脚本须登记索引。
 - 知识检索：**Wiki 综合** → `python scripts/wiki.py query`；**实时**（ITERATIONS/ISSUES/handoff）→ 直接读原文件（工作流 **WF-09**）。
 - 掼蛋规则：`.cursor/rules/guandan-knowledge.mdc`；回放不篡改真实流水。
+- **WF-12 临时脚本**：分析结束后删除，不保留在 `scripts/analysis/archive/`。
+- **WF-12 报告**：不自动产出，仅用户明确要求时生成。
 
 ---
 

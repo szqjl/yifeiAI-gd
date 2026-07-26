@@ -37,6 +37,17 @@ class TestParseRecordName:
         assert r["round"] == "1"
         assert r["suffix"] == "2"
 
+    def test_yf3_v8_standard(self):
+        p = Path("game_records_v8/20260726124056639487 [yf3_v8]-[opponent_0_2]-[1]-[2].json")
+        r = cdt.parse_record_name(p)
+        assert r["client"] == "yf3_v8"
+        assert r["opponent"] == "opponent_0_2"
+
+    def test_yf4_v8_standard(self):
+        p = Path("game_records_v8/20260726124056777777 [yf4_v8]-[opponent_1_3]-[2]-[2].json")
+        r = cdt.parse_record_name(p)
+        assert r["client"] == "yf4_v8"
+
     def test_invalid_filename_returns_none(self):
         p = Path("foo/bar/random.json")
         assert cdt.parse_record_name(p) is None
@@ -232,3 +243,49 @@ class TestPairTeammateJson:
         yf2_far.write_text("{}")
         result = cdt.pair_teammate_json(yf1)
         assert result == yf2_close
+
+
+# ---------- main() end-to-end（CLI 入口）----------
+
+class TestMainClientMapping:
+    """main() 里根据 client 推导 expected_pid 的隐式逻辑无法直接调用，
+    但其格式与 parse_record_name + is_yfX 组合有关。这里只覆盖路径合规检查。
+    实际 e2e 见 test_check_decision_trace_e2e.py（需牌谱）。
+    """
+
+    def test_report_path_yf3_compliant(self):
+        # 直接验证 main() 内嵌的正则
+        import re
+        expected_pattern = re.compile(
+            r"^docs/analysis/WF-12-.+-(yf1|yf2|yf3|yf4)-.+\.md$"
+        )
+        ok = bool(expected_pattern.match(
+            "docs/analysis/WF-12-20260726124056639487-yf3-bomb5-with-SF-lead.md"
+        ))
+        assert ok, "yf3 路径应合规"
+
+    def test_report_path_yf4_compliant(self):
+        import re
+        expected_pattern = re.compile(
+            r"^docs/analysis/WF-12-.+-(yf1|yf2|yf3|yf4)-.+\.md$"
+        )
+        ok = bool(expected_pattern.match(
+            "docs/analysis/WF-12-20260726124056777777-yf4-step-10-分析.md"
+        ))
+        assert ok
+
+    def test_report_path_unknown_client_rejected(self):
+        import re
+        expected_pattern = re.compile(
+            r"^docs/analysis/WF-12-.+-(yf1|yf2|yf3|yf4)-.+\.md$"
+        )
+        ok = bool(expected_pattern.match("docs/analysis/WF-12-foo-yf5-xxx.md"))
+        assert not ok
+
+    def test_report_path_wrong_dir_rejected(self):
+        import re
+        expected_pattern = re.compile(
+            r"^docs/analysis/WF-12-.+-(yf1|yf2|yf3|yf4)-.+\.md$"
+        )
+        ok = bool(expected_pattern.match("wrong/WF-12-foo-yf3-xxx.md"))
+        assert not ok

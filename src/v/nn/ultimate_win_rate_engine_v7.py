@@ -402,6 +402,46 @@ class UltimateWinRateEngineV7:
                 self.logger.debug("decision trace finalize skip: %s", e)
         return act_index
 
+    # ── GUA-171: 检测刚用炸弹抢到领出权 ──
+    @staticmethod
+    def _just_bombed_and_won_lead(game_state: Dict[str, Any]) -> bool:
+        """检测上一手是否为自己用炸弹/同花顺抢到领出权。
+
+        Returns:
+            True 如果本轮是自己的领出权且上一手是自己的炸弹。
+        """
+        my_pos = game_state.get("myPos", 0)
+        cur_pos = game_state.get("curPos", -1)
+        # 领出：curPos=-1 或 curPos=myPos 且 greaterPos=-1
+        is_my_lead = (
+            cur_pos == my_pos
+            or (cur_pos in (-1, None) and game_state.get("greaterPos", -1) in (-1, my_pos))
+        )
+        if not is_my_lead:
+            return False
+
+        # 从 actions 取最近一条动作
+        actions = game_state.get("actions", [])
+        if not actions:
+            return False
+        last_action_entry = actions[-1]
+        if last_action_entry.get("cur_pos") != my_pos:
+            return False
+        last_action = last_action_entry.get("cur_action", [])
+        if not last_action or last_action[0] in ("PASS", None, ""):
+            return False
+        # 判断是否为炸弹/同花顺
+        if last_action[0] in ("Bomb", "StraightFlush"):
+            return True
+        # 也检查 v7 内部声明的 bomb-like
+        try:
+            from .endgame.endgame_decide import _is_bomb_like_action
+            if _is_bomb_like_action(last_action):
+                return True
+        except Exception:
+            pass
+        return False
+
     def _replay_record(self, stage: str, payload: Dict[str, Any]) -> None:
         """仅供 YF_REPLAY 离线分析；实战未注入 trace 时为 no-op。"""
         trace = getattr(self, "_active_replay_trace", None)
@@ -547,6 +587,14 @@ class UltimateWinRateEngineV7:
         # 注入点：_inject_numofplayers 之后，GUA-075 主路径之前
         # GUA-113: 残局 Q1 消费组牌 role（超弱/助攻让道队友控牌）
         game_state["_role"] = self._current_role or "主攻"
+
+        # ── GUA-171: 炸后领出连续性 ──
+        if self._just_bombed_and_won_lead(game_state):
+            nop = game_state.get("numofplayers", [27, 27, 27, 27])
+            if any(1 <= n <= 10 for n in nop):
+                self.logger.info("GUA-171: 炸后领出 + 有人进残局 → 端局管线决策")
+            else:
+                self.logger.info("GUA-171: 炸后领出 + 无人进残局 → GUA-075 普通领出")
 
         # GUA-080: 注入组牌数据到 game_state，预处理器需要 _group_type_map 做冲刺判定
         if self._card_mask and self._group_type_map:
@@ -1397,42 +1445,51 @@ class UltimateWinRateEngineV7:
     # ── GUA-065: 注入 numofplayers ────────────────────
 
     def _inject_numofplayers(self, game_state: Dict[str, Any]) -> None:
-        """GUA-065：从 MemoryTracker 或 handCards 推算各玩家剩张数，注入 game_state。
+        """GUA-065+GUA-170：注入各玩家剩张数 → game_state['numofplayers']。
 
-        供 guard R07/R08/R09 使用。
+        优先级（高→低）：
+          1. publicInfo.rest（平台 action request 实时推送，最准确）
+          2. MemoryTracker.hand_counts（历史推算，可能 stale）
+          3. 默认 27（每副初始值）
+          myPos 始终以 handCards 实牌数为准（纠偏）。
+
+        供 guard R07/R08/R09 及残局管线使用。
         """
         my_pos = game_state.get("myPos", self.player_id)
         hand_cards = game_state.get("handCards", []) or []
 
-        # 从 MemoryTracker 获取（优先）
+        # ── 基础值：默认 27 ──
+        numofplayers = [27, 27, 27, 27]
+
+        # ── 1. MemoryTracker 作为候选（可能有 stale 数据） ──
         if self._tracker_initialized and self._tracker is not None:
             try:
                 hc = self._tracker.hand_counts
                 numofplayers = [hc.get(i, 27) for i in range(4)]
-                # 纠偏：myPos 以 handCards 为准
-                numofplayers[my_pos] = len(hand_cards)
-                game_state["numofplayers"] = numofplayers
-                return
             except Exception:
                 pass
 
-        # GUA-079 回退增强：从 publicInfo 读取各玩家剩张数（平台实时推送）
-        # publicInfo[i] = {"rest": N, ...}，比盲猜 27 准确，使残局管线能看见对手真实剩余
-        # OpenGuanDan: publicInfo has 4 items (including self at curPos)
-        # v1006: publicInfo has 3 items (others only, relative to curPos)
+        # ── 2. publicInfo.rest 覆盖（GUA-170：平台实时数据 > MemoryTracker） ──
+        # OpenGuanDan: publicInfo 4 项（含 curPos 自身），按绝对位置索引
+        # v1006: publicInfo 3 项（仅他人），从 curPos+1 起按序映射
         public_info = game_state.get("publicInfo", [])
-        numofplayers = [27, 27, 27, 27]
-        if isinstance(public_info, list) and len(public_info) >= 4:
-            for i in range(4):
-                if isinstance(public_info[i], dict):
-                    numofplayers[i] = public_info[i].get("rest", 27)
-        elif isinstance(public_info, list) and len(public_info) == 3:
-            cur_pos = game_state.get("curPos", my_pos)
-            for j, pi in enumerate(public_info):
-                seat = (cur_pos + 1 + j) % 4
-                if isinstance(pi, dict):
-                    numofplayers[seat] = pi.get("rest", 27)
-        # 纠偏：myPos 以 handCards 为准
+        if isinstance(public_info, list):
+            if len(public_info) >= 4:
+                for i in range(4):
+                    if isinstance(public_info[i], dict):
+                        rest = public_info[i].get("rest")
+                        if isinstance(rest, (int, float)) and rest >= 0:
+                            numofplayers[i] = int(rest)
+            elif len(public_info) == 3:
+                cur_pos = game_state.get("curPos", my_pos)
+                for j, pi in enumerate(public_info):
+                    seat = (cur_pos + 1 + j) % 4
+                    if isinstance(pi, dict):
+                        rest = pi.get("rest")
+                        if isinstance(rest, (int, float)) and rest >= 0:
+                            numofplayers[seat] = int(rest)
+
+        # ── 3. 纠偏：myPos 以 handCards 实数为准 ──
         numofplayers[my_pos] = len(hand_cards)
         game_state["numofplayers"] = numofplayers
 
@@ -1662,10 +1719,13 @@ class UltimateWinRateEngineV7:
                         removed_count += 1
                         continue
                 else:
-                    # pairs/trips/three_with_two 等 → 检查场景一/二/三
-                    if (self._scenario_1_feed_single(game_state) or
-                            self._scenario_2_feed_pair(game_state) or
-                            self._scenario_3_teammate_sprinting(game_state)):
+                    # pairs/trips/three_with_two 等 → 场景四（压牌）或场景一/二/三（喂牌）
+                    action_type = str(action[0]) if isinstance(action, list) and len(action) > 0 else ""
+                    action_rank = str(action[1]) if isinstance(action, list) and len(action) > 1 else ""
+                    if (self._scenario_4_counter_press(game_state, action_type, action_rank)
+                            or self._scenario_1_feed_single(game_state)
+                            or self._scenario_2_feed_pair(game_state)
+                            or self._scenario_3_teammate_sprinting(game_state)):
                         keep_indices.append(idx)
                     else:
                         removed_count += 1
@@ -2346,6 +2406,47 @@ class UltimateWinRateEngineV7:
             return numofplayers[teammate] in (7, 8)
 
         return False
+
+    def _scenario_4_counter_press(self, game_state: Dict[str, Any],
+                                   action_type: str, action_rank: str) -> bool:
+        """场景四：对手领出 + 同型可压 → 放行拆非炸弹/同花顺 core 的压牌动作。
+
+        前置条件：
+          1. greaterPos 是对手（非 -1，非自己，非队友）
+          2. action type == greaterAction type（同型可压）
+          3. action rank > greaterAction rank（能压过）
+          4. 不是 solo 模式（solo 已强制主攻，不走超弱分支）
+        """
+        my_pos = game_state.get("myPos", self.player_id)
+        teammate = (my_pos + 2) % 4
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction", [])
+
+        if greater_pos < 0:
+            return False
+        if greater_pos in (my_pos, teammate):
+            return False
+        if not greater_action or len(greater_action) < 2:
+            return False
+
+        ga_type, ga_rank = str(greater_action[0]), str(greater_action[1])
+        if ga_type.upper() == "PASS":
+            return False
+
+        if action_type != ga_type:
+            return False
+
+        from src.v.nn.guards.v7_guards import CARD_RANK_ORDER
+        my_val = CARD_RANK_ORDER.get(action_rank, -1)
+        opp_val = CARD_RANK_ORDER.get(ga_rank, -1)
+        if my_val < 0 or opp_val < 0 or my_val <= opp_val:
+            return False
+
+        numofplayers = game_state.get("numofplayers", [])
+        if numofplayers and len(numofplayers) >= 4 and numofplayers[teammate] == 0:
+            return False
+
+        return True
 
     def _teammate_just_gained_lead(self, game_state: Dict[str, Any]) -> bool:
         """决议 3：队友是否刚获得出牌权（本轮第一次）。

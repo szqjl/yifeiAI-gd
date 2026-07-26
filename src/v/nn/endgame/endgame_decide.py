@@ -2597,6 +2597,12 @@ class EndgameDecider:
         if not GUARD_TOOLS_OK:
             return None
 
+        # 0. GUA-170-A: 优先非炸压牌（有同型合法压则不用炸）
+        cheaper = self._find_cheapest_press(game_state, action_list, cur_rank)
+        if cheaper is not None:
+            logger.info("Q3 非炸压牌(省): idx=%d", cheaper[0])
+            return cheaper
+
         # 分离炸弹
         bombs = []
         for i, a in enumerate(action_list):
@@ -2625,6 +2631,40 @@ class EndgameDecider:
 
         # 都不该炸 → 走常规牌型
         return None
+
+    # ── GUA-170-A: 最省同型压牌 ──
+
+    @staticmethod
+    def _find_cheapest_press(
+        game_state: Dict[str, Any], action_list: List, cur_rank: str,
+    ) -> Optional[Tuple[int, List]]:
+        """找最省的非炸同型压牌（压 greaterAction），若有则优先于炸弹。
+
+        Returns (index, action) or None。
+        """
+        greater_action = game_state.get("greaterAction") or game_state.get("greater_action")
+        if not greater_action or greater_action[0] in ("PASS", None, ""):
+            return None
+
+        candidates = []
+        for i, a in enumerate(action_list):
+            try:
+                if _get_declared_action_type(a) in ("PASS",):
+                    continue
+                if _is_bomb_like_action(a):
+                    continue
+                if not _action_beats_greater(a, greater_action, cur_rank):
+                    continue
+                candidates.append((i, a))
+            except Exception:
+                pass
+
+        if not candidates:
+            return None
+
+        # 同型内按 rank 值最小（最省）
+        candidates.sort(key=lambda x: _min_card_value(x[1], cur_rank))
+        return candidates[0]
 
     # ═══════════════════════════════════════════════════
     #  辅助过滤 & 选择
