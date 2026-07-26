@@ -1216,6 +1216,9 @@ class EndgameDecider:
             )
             if sprint_lead is not None:
                 return sprint_lead
+            # 两手冲刺失败 + 有炸 → 让管线落回 Q1（GUA-142 整结构保 SF/炸冲刺路径）
+            if bombs:
+                return None
             whole = self._select_q0_whole_structure_lead(non_bombs, game_state)
             if whole is not None:
                 return whole
