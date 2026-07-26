@@ -35,16 +35,17 @@
 
 ### 2.0 Agent 自检（动手前 · 不可跳）
 
-**yf1 / yf2 通用**；未完成即写结论 = 流程违规。
+**强约束（Skill §0）**：未跑 `python scripts/checks/check_decision_trace.py` 全 ✅，禁止写结论。脚本必须输出全 ✅ 才可继续。
 
 | # | 检查项 | 通过标准 |
 |---|--------|----------|
-| 1 | 读 [`SCRIPT_INDEX.md`](../SCRIPT_INDEX.md) §三「yf 单步决策链路（WF-12）」 | 确认牌谱目录、日志路径 |
-| 2 | **打开分析对象 JSON** | yf1：人类给的 `*yf1_v7*` / `*yf1_m3*` 文件；yf2：按 §2.1 **配对** yf2 文件 |
-| 3 | **对齐目标步** → `my_decisions` 条目 | 见 §2.2；已拿到 **`context.handCards`（整手）** |
-| 4 | 读 **`my_decisions.context.curRank`** | 出牌时刻级牌；**禁止**只用 JSON 根 `game_info.curRank` |
-| 5 | 对 **`logs/yf1_*.log` / `logs/yf2_*.log`**（与分析对象一致） | 用 `actions[步号-1].timestamp` ±1s 补管线证据 |
-| 6 | 再写圈况 → 管线 → R-Dxx | 证据含：**分析对象文件名** + `handCards_size` + 日志行 |
+| 1 | 跑 `check_decision_trace.py` 全 ✅ | 退出码 0 |
+| 2 | 读 [`SCRIPT_INDEX.md`](../SCRIPT_INDEX.md) §三「yf 单步决策链路（WF-12）」 | 确认牌谱目录、日志路径 |
+| 3 | **打开分析对象 JSON** | yf1：人类给的 `*yf1_v7*` / `*yf1_m3*` 文件；yf2：按 §2.1 **配对** yf2 文件 |
+| 4 | **对齐目标步** → `my_decisions` 条目 | 见 §2.2；已拿到 **`context.handCards`（整手）** |
+| 5 | 读 **`my_decisions.context.curRank`** | 出牌时刻级牌；**禁止**只用 JSON 根 `game_info.curRank` |
+| 6 | 对 **`logs/yf1_*.log` / `logs/yf2_*.log`**（与分析对象一致） | 用 `actions[步号-1].timestamp` ±1s 补管线证据 |
+| 7 | 再写圈况 → 管线 → R-Dxx | 证据含：**分析对象文件名** + `handCards_size` + 日志行 |
 
 ### 2.1 定位分析对象 JSON（yf1 / yf2）
 
