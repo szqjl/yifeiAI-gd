@@ -22,7 +22,10 @@
 
 - [ ] 当前分支：`git branch -vv` → **`m-dev`** 或 **`v7-dev`** 或 **`v8-dev`**（非 main）
 - [ ] 已 `git status` / `git diff --stat`，**未** `git add .` 盲加
-- [ ] 未纳入 Layer 2：`game_scores_m2.json`、`game_records/`、`models/*.pth`、`logs/`、大 replay
+- [ ] 未纳入 Layer 2：
+  - **M3**：`game_scores_m2.json`、`game_records/`、`models/*.pth`、`logs/`
+  - **V7**：`game_records_v7/`、`v7_vs_lalala_scores.json`
+  - **V8**：`game_records_v8/`、`v8_vs_lalala_scores.json`、`v8_vs_lalala_state.json`
 
 ### C. 推送前脚本
 
@@ -32,6 +35,9 @@
 
 - [ ] 文档 only：相关 pytest 通过（若有）
 - [ ] 改 M 行为：治理 §7.3 M 冒烟；行为变更 §7.1 30 局 regression（或说明本机未跑原因）
+- [ ] 改 V8 endgame/GUA-075 管线：`python3.14 -m pytest tests/ -k "endgame or GUA-15" --ignore=tests/test_gui_launch.py -v`（超时 60s 内完成则通过）
+- [ ] 改 V8 组牌：`python3.14 -m pytest tests/test_grouping_engine.py -v`
+- [ ] V8 全量回归：`python3.14 -m pytest tests/test_gua078.py tests/test_gua075.py tests/test_gua100.py tests/test_gua072.py tests/test_gua117.py -v`（87 项）
 
 ### E. Commit 与推送
 

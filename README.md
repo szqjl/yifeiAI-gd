@@ -28,12 +28,14 @@
 - 支持自我对弈和数据收集
 - 可扩展的架构设计
 - 平台动态信息监控
-- **V7 引擎**: 基于深度学习的终极胜率导向决策引擎
+- **V7 引擎**: 基于深度学习的终极胜率导向决策引擎（组牌+NN+残局管线）
+- **V8 引擎**: V7 引擎 + OpenGuanDan 通信层适配（WebSocket 协议）
 
 ### 平台信息
 - **平台名称**: 南京邮电大学掼蛋AI算法对抗平台
-- **平台地址**: https://gameai.njupt.edu.cn/gameaicompetition/gameGD/index.html
-- **当前版本**: v1006（内测中，可参与）
+- **离线平台版本**: v1006（`guandan_offline_v1006.exe`，TCP Socket `ws://127.0.0.1:23456`）
+- **新版平台**: OpenGuanDan（`guandan.exe`，WebSocket `ws://127.0.0.1:8181`）
+- **当前开发主线**: v8-dev（OpenGuanDan 适配）
 - **联系方式**:
   - 研究兴趣咨询: chenxg@njupt.edu.cn
   - 问题反馈: wuguduofeng@gmail.com
@@ -164,14 +166,14 @@ M2 客户端在 `yf1_m2.py` / `yf2_m2.py` 里做 **副级 + 局级** 追踪：�
 更细的判定函数、JSON 格式与注意点 → [docs/knowledge/guandan-basic-knowledge.md](docs/knowledge/guandan-basic-knowledge.md) 第三节。
 
 ### 新手建议阅读顺序
-
 1. 本节（规则 + 平台参义）
 2. [快速开始](#快速开始) → 装依赖、配 `config.yaml`
 3. [M/V 治理方案](docs/governance/M-V-Series-治理方案.md) → 分支 `m-dev`、目录约定
-4. [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md) → 改 AI 行为前必读  
-   - **新开 Agent**：复制 [AGENT_FIRST_MESSAGE.md](docs/guandan-brain/AGENT_FIRST_MESSAGE.md) 里那句话，粘贴给 Agent 第一句  
+4. [掼蛋 AI 迭代大脑](docs/guandan-brain/README.md) → 改 AI 行为前必读
+   - **新开 Agent**：读 [`AGENT_BOOTSTRAP.md`](docs/guandan-brain/AGENT_BOOTSTRAP.md)，掌握项目全貌，无需逐一点名读文档
    - **提交推送**：复制 [AGENT_PUSH_CHECKLIST.md](docs/guandan-brain/AGENT_PUSH_CHECKLIST.md) 默认第一句；本机一次性跑 `scripts/hooks/install-hooks.bat`
 5. 跑 M1：`START_M1_GUI.bat` 或 [M1 测试指南](docs/development/M1测试指南.md)
+6. 跑 V8：见 [AGENT_BOOTSTRAP.md §8](docs/guandan-brain/AGENT_BOOTSTRAP.md#8-常用命令速查)
 
 ---
 
@@ -319,15 +321,17 @@ if hour == 12:  # ❌ 错误，应该从系统时间获取
 ### 当前分支
 
 - **`main`**: 主分支，用于最终合并和发布
-- **`m-dev`**: M3 硬编码规则引擎分支（本地开发）
+- **`m-dev`**: M3 硬编码规则引擎分支（交付基线）
   - 包含：`yf1_m3.py`, `yf2_m3.py`, `rule_based_decision_engine_m3.py`
   - 特点：硬编码规则引擎，5阶段细分路由
+  - **队 KPI 以本线为准**
 - **`v7-dev`**: V7 神经网络引擎（**回退基线**）
   - 对接旧离线平台 `guandan_offline_v1006.exe`（TCP Socket 协议）
   - 包含：`ultimate_win_rate_engine_v7.py`、`dynamic_grouping_optimizer.py`
-- **`v8-dev`**: V8 分支（从 `v7-dev` 复制，commit `2904c08`）
+- **`v8-dev`**: **当前开发主线**（从 `v7-dev` commit `2904c08` 复制）
   - 对接新版 OpenGuanDan 服务器 `guandan.exe`（WebSocket `ws://127.0.0.1:8181`）
-  - 新平台资源：`offline_platform/openguandan_latest/`
+  - 决策引擎与 V7 完全共用（仅换通信层）
+  - **V8 KPI**：队胜率 10/12（83.3%），171 副（2026-07-21 实证）
 
 > V6 系列已归档（tag `archive/v6-dev-closed`），`v6-dev` 分支已删除。详见 [M/V 治理方案](docs/governance/M-V-Series-治理方案.md)。
 
@@ -792,8 +796,8 @@ A: 第1、3个连接为一队，第2、4个连接为一队。
 
 ---
 
-**最后更新**: 2026年6月  
-**文档版本**: v1.1  
-**平台版本**: v1006  
-**当前引擎**: M 系列（规则） + V7（深度学习）
+**最后更新**: 2026年7月
+**文档版本**: v1.2
+**平台版本**: v1006 + OpenGuanDan
+**当前引擎**: M 系列（规则） + V7/V8（神经网络）
 

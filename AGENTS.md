@@ -10,7 +10,10 @@
 
 ## 项目一句
 
-掼蛋 AI 客户端（南邮 v1006 / OpenGuanDan）；**改 AI 行为真源** = `docs/guandan-brain/`（ISSUES、ITERATIONS、EVAL）。当前活跃：**v8-dev**（OpenGuanDan 新版服务器迁移，从 v7-dev 复制）、**v7-dev**（V7/组牌，v1006 回退基线）与 **m-dev**（M3 交付）；**M1 frozen**；队 KPI **只看 M3 批跑**。
+掼蛋 AI 客户端（南邮 v1006 / OpenGuanDan 双平台）；**改 AI 行为真源** = `docs/guandan-brain/`（ISSUES、ITERATIONS、EVAL）。当前活跃：**v8-dev**（OpenGuanDan 新版服务器，WebSocket，`ws://127.0.0.1:8181`）；**v7-dev**（V7 NN 引擎，v1006 回退基线）；**m-dev**（M3 规则引擎交付线）；**M1 frozen**。
+
+> **V8 KPI**：队胜率 10/12（83.3%），171 副（2026-07-21 实证）。真源 `v8-win-rate-history.md`，每次批跑后强制记录。
+> **队 KPI 口径**：M3 归 M3，V8 归 V8，实验线与交付线分开统计。
 
 ---
 
@@ -32,8 +35,7 @@
 - 队胜看 **`victoryNum[0]` vs `[1]`**（0+2 一队，1+3 一队）；禁止四席相加。
 - **新服务器（OpenGuanDan）允许任意正整数**——服务器 `round` 字段无整除约束（真源：`offline_platform/openguandan_latest/README.md` 3.1 标注 round 为 integer；`openguandan_latest/log.txt` 实测 `round=1` 与 `round=3` 均完整收尾）。
 - **旧服务器（v1006）历史约束**：每会话固定 3 局，沿袭「`--target-games` 须 3 的倍数（3/9/12）；勿用 10」是**客户端 chunk 重启**口径，新平台不沿用。
-- **当前推荐档位**（OpenGuanDan）：`1`（GUA 单点冒烟）/ `3`（小批）/ `9`（中批）/ `12`（大批）；任意 `--target-games N`（正整数）都合法。详见 `docs/guandan-brain/EVAL.md`「批跑局数档位」。
-- ⚠ **过渡期告警**：`batch_executor/input_validator.py:39` `validate_target_games()` 仍写死 `target_games % 3 != 0` 报 `ValueError`，跑非 3 倍数**会被该层拦截**；待 ITERATIONS 跟进放宽后再完全放行任意整数。批跑前可用 `python -c "from batch_executor.input_validator import InputValidator; InputValidator(\"openguandan\").validate_target_games(N)"` 验证。
+- **当前推荐档位**（OpenGuanDan）：`1`（GUA 单点冒烟）/ `3`（小批）/ `9`（中批，推荐）/ `12`（大批）；任意 `--target-games N`（正整数）均合法。
 
 ---
 
@@ -87,13 +89,14 @@
 
 **何时**：关单验收、KPI 环比、多样本观测前——须清空本轮 Layer 2 产物，避免旧牌谱/旧 vn 混入统计。对应工作流 **WF-04** 跑批前一步。
 
-**目录分离**：M3 牌谱 → `game_records/`；V7 牌谱 → `game_records_v7/`（**勿混清**——只清本次批跑对应目录，除非明确做全仓净盘）。
+**目录分离**：M3 牌谱 → `game_records/`；V7 牌谱 → `game_records_v7/`；**V8 牌谱 → `game_records_v8/`**（**勿混清**——只清本次批跑对应目录，除非明确做全仓净盘）。
 
 | 线 | 必清 |
 |----|------|
 | **M3** | `game_records/*.json` |
 | **V7** | `game_records_v7/*.json` |
-| **共用** | `logs/*`（`batch_executor_*.log`、`m3_vs_lalala_*.log`、`v7_vs_lalala_*.log` 等） |
+| **V8** | `game_records_v8/*.json` + `v8_vs_lalala_scores.json` + `v8_vs_lalala_state.json` |
+| **共用** | `logs/*`（`batch_executor_*.log`、`v8_vs_lalala_*.log`、`m3_vs_lalala_*.log` 等） |
 
 **同批还应清**（否则 `completed_games`/vn 对账会串批）：`batch_executor/latest_victory_num.json`、`batch_executor/current_batch.json`、`execution_state.json`（若存在）、`tmp/.batch_executor.lock`；以及对应战绩文件 **M3** → `m3_vs_lalala_scores.json` + `m3_vs_lalala_state.json`（+ 若 GUI 用过 `game_scores.json`）；**V7** → `v7_vs_lalala_scores.json` + `v7_vs_lalala_state.json`。
 
@@ -107,6 +110,13 @@ Get-ChildItem game_records_v7 -Filter *.json -ErrorAction SilentlyContinue | Rem
 Remove-Item v7_vs_lalala_scores.json, v7_vs_lalala_state.json -ErrorAction SilentlyContinue
 Remove-Item batch_executor\latest_victory_num.json, batch_executor\current_batch.json -ErrorAction SilentlyContinue
 Remove-Item execution_state.json -ErrorAction SilentlyContinue
+Get-ChildItem logs -File -ErrorAction SilentlyContinue | Remove-Item -Force
+
+# --- V8 净盘（run_v8_vs_lalala_games 前）---
+Get-Process guandan -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Remove-Item tmp\.batch_executor.lock -ErrorAction SilentlyContinue
+Get-ChildItem game_records_v8 -Filter *.json -ErrorAction SilentlyContinue | Remove-Item -Force
+Remove-Item v8_vs_lalala_scores.json, v8_vs_lalala_state.json -ErrorAction SilentlyContinue
 Get-ChildItem logs -File -ErrorAction SilentlyContinue | Remove-Item -Force
 
 # --- M3 净盘（run_m3_vs_lalala / batch_executor M3 前）---
