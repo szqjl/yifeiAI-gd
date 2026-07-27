@@ -3,6 +3,7 @@
 GUA-116：主攻 stage_1 / stage_2 自由领出整牌型链。
 
 P1 散单 → P2 TWT → P3 顺 → P3b 钢板 → P3c 三连对 → P3d 天然三张 → P4 小对。
+GUA-174：2-hand sprint 时 P3b/P3c 优先于 P2（三连对/钢板硬先出）。
 真源：docs/guandan-brain/V7-主攻领出-阶段划分设计口径.md
 """
 
@@ -481,9 +482,20 @@ def recommend_main_attack_lead(
     twt_count = len(_enumerate_twt_units(groups))
     straight_count = _count_groups(groups, straight_types)
 
+    # ── GUA-174: 2-hand sprint detection ──
+    _tp_units = _enumerate_three_pair_units(groups)
+    _tt_units = _enumerate_two_trips_units(groups)
+    _non_bomb_structures = twt_count + len(_tt_units) + len(_tp_units) + straight_count
+    _scatter_singles = len(engine._scatter_singles(card_mask))
+    _sprint_two_hands = (
+        _non_bomb_structures == 2 and _scatter_singles == 0
+        and (len(_tp_units) > 0 or len(_tt_units) > 0)
+    )
+
     # ── P2：整组三带二（is_core 整组出 ≠ 拆核）──
+    #    GUA-174: skip TWT in 2-hand sprint when ThreePair/TwoTrips available
     twt_pick = _pick_smallest_twt(engine, groups, cur_rank)
-    if twt_pick:
+    if twt_pick and not _sprint_two_hands:
         gid, typ, pr, cards = twt_pick
         defer = twt_count == 1 and stage == "stage_1"
         if not defer and _has_structure_recapture(
@@ -565,6 +577,16 @@ def recommend_main_attack_lead(
                 "cards": cards,
                 "intent": "main_p3d_trips",
             }
+
+    # GUA-174: 2-hand sprint fallback — ThreePair/TwoTrips unmatched, use TWT
+    if _sprint_two_hands and twt_pick:
+        _, typ, pr, cards = twt_pick
+        return {
+            "type": typ,
+            "rank": pr,
+            "cards": cards,
+            "intent": "main_p2_three_with_two",
+        }
 
     # 无回手 TWT 仍可能 P2 若多手
     if twt_pick and twt_count >= 2:

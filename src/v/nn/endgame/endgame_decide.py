@@ -670,10 +670,47 @@ def _q1_structure_priority(action_type: str) -> int:
     return type_priority.get(action_type, 99)
 
 
+def _sort_q1_prefer_structure_preserving(
+    actions: List, group_members: Dict[int, List[str]], group_gid_type: Dict[int, str],
+) -> List:
+    """
+    GUA-175: 对子候选排序，结构保持优先。
+    检查每个对子候选是否从 trip_in_three_with_two 组取牌且未取完该组 → 拆三带二。
+    不拆结构（如从 pair_in_three_with_two 或自然对子取牌）排前面。
+    """
+    if not group_members or not group_gid_type:
+        return actions
+
+    def _breaks_structure(item):
+        act = item[1] if isinstance(item, tuple) and len(item) == 2 else item
+        if len(act) < 3:
+            return False
+        cards = act[2]
+        if not cards:
+            return False
+        for gid, members in group_members.items():
+            gtype = group_gid_type.get(gid, "")
+            if gtype != "trip_in_three_with_two":
+                continue
+            consumed = sum(1 for c in cards if c in members)
+            if 0 < consumed < len(members):
+                return True
+        return False
+
+    return sorted(actions, key=lambda item: _breaks_structure(item))
+
+
 def _sort_q1_block_candidates(
     actions: List, hand_cards: List[str], game_state: Dict[str, Any],
 ) -> List:
-    """Q1 候选排序：回收优先 → 牌力大优先 → 级牌单张少耗逢人配 → bomb-like 最小足够成本。"""
+    """Q1 候选排序：回收优先 → 牌力大优先 → 级牌单张少耗逢人配 → bomb-like 最小足够成本。
+    GUA-175: 结构保持优先（不拆三带二的 Pair 排前面）。"""
+    # GUA-175: 结构保持优先
+    group_members = game_state.get("_group_members")
+    group_gid_type = game_state.get("_group_gid_type_map")
+    if group_members and group_gid_type:
+        actions = _sort_q1_prefer_structure_preserving(actions, group_members, group_gid_type)
+
     cur_rank = str(game_state.get("curRank", "2"))
     ordered = _sort_by_recapture_first(actions, hand_cards, cur_rank)
     if not ordered or not GUARD_TOOLS_OK:
@@ -2950,12 +2987,14 @@ class EndgameDecider:
 
     def _find_twt_min_point(
         self, action_list: List, cur_rank: str,
+        hand_cards: Optional[List[str]] = None,
     ) -> Optional[Tuple[int, List]]:
-        """从 action_list 中找杂牌 TWT（min 牌力优先）。"""
+        """从 action_list 中找杂牌 TWT（min 牌力优先；同 rank 时优先选 pair 不产生孤张的）。"""
         if not GUARD_TOOLS_OK:
             return None
         best: Optional[Tuple[int, List]] = None
         best_value = 10**9
+        best_orphan = 1
         for i, a in enumerate(action_list):
             try:
                 if get_action_type(a) != ACTION_TYPE_THREE_WITH_TWO:
@@ -2971,8 +3010,20 @@ class EndgameDecider:
                 v = max(get_card_value(c, cur_rank) for c in cards)
             except Exception:
                 continue
-            if v < best_value:
+
+            orphan = 0
+            if hand_cards and len(cards) == 5:
+                rank_counts = Counter(get_card_rank(c) for c in cards)
+                pair_rank = next((r for r, cnt in rank_counts.items() if cnt == 2), None)
+                if pair_rank:
+                    hc_count = sum(1 for c in hand_cards if get_card_rank(c) == pair_rank)
+                    if hc_count > 2:
+                        orphan = 1
+
+            key = (v, orphan)
+            if best is None or key < (best_value, best_orphan):
                 best_value = v
+                best_orphan = orphan
                 best = (i, a)
         return best
 
@@ -3090,7 +3141,7 @@ class EndgameDecider:
         if yf1_has_bomb or yf1_has_bigger_twt:
             # 路径 A：跟 min TWT 形成冲刺能力（剩 2 手 = 6J + 单手）
             cur_rank = str(game_state.get("curRank", "2"))
-            twt = self._find_twt_min_point(action_list, cur_rank)
+            twt = self._find_twt_min_point(action_list, cur_rank, hand_cards=ctx["hand_cards"])
             if twt is not None:
                 logger.info(
                     "GUA-131 C1: 跟 min TWT 形成冲刺能力（yf1_has_bomb=%s, yf1_has_bigger_twt=%s）",
@@ -3124,7 +3175,7 @@ class EndgameDecider:
         if not ctx:
             return None
         cur_rank = str(game_state.get("curRank", "2"))
-        twt = self._find_twt_min_point(action_list, cur_rank)
+        twt = self._find_twt_min_point(action_list, cur_rank, hand_cards=ctx["hand_cards"])
         if twt is None:
             # 无 TWT 可跟 → 出 6J 圈 2 反抢 @3
             six_j = self._find_six_joker_bomb_in_actions(
@@ -3156,7 +3207,7 @@ class EndgameDecider:
             return six_j
         # 兜底：无 6+ 张炸 → 跟 min TWT 形成冲刺能力，圈 2 反抢 @3
         cur_rank = str(game_state.get("curRank", "2"))
-        twt = self._find_twt_min_point(action_list, cur_rank)
+        twt = self._find_twt_min_point(action_list, cur_rank, hand_cards=hand_cards)
         if twt is not None:
             logger.info("GUA-133 C4 兜底: 无 6J，跟 min TWT 形成冲刺能力")
             return twt
@@ -3263,7 +3314,7 @@ class EndgameDecider:
         if not ctx:
             return None
         cur_rank = str(game_state.get("curRank", "2"))
-        twt = self._find_twt_min_point(action_list, cur_rank)
+        twt = self._find_twt_min_point(action_list, cur_rank, hand_cards=ctx["hand_cards"])
         if twt is not None:
             kind = ctx.get("c356_kind", "unknown")
             logger.info(
@@ -3635,7 +3686,7 @@ class EndgameDecider:
                     )
                     if six_j is not None:
                         return six_j
-                    twt = self._find_twt_min_point(action_list, cur_rank)
+                    twt = self._find_twt_min_point(action_list, cur_rank, hand_cards=hand_cards)
                     if twt is not None:
                         return twt
                 logger.info(
@@ -3666,7 +3717,7 @@ class EndgameDecider:
                         self_hands, teammate_hands,
                     )
                     # 优先 TWT（与原 else 分支一致），其次最小非炸非 PASS 动作
-                    twt = self._find_twt_min_point(action_list, cur_rank)
+                    twt = self._find_twt_min_point(action_list, cur_rank, hand_cards=hand_cards)
                     if twt is not None:
                         logger.info("GUA-150 self_sprint_priority: 选 min TWT 夺权")
                         return twt
@@ -3698,7 +3749,7 @@ class EndgameDecider:
                     )
 
             # 当 teammate_sprint=False 或 GUA-150 估计不可靠时：跟 min TWT 夺权
-            twt = self._find_twt_min_point(action_list, cur_rank)
+            twt = self._find_twt_min_point(action_list, cur_rank, hand_cards=hand_cards)
             if twt is not None:
                 logger.info(
                     "GUA-135 self_sprint: 跟 min TWT 夺权",
@@ -3726,7 +3777,7 @@ class EndgameDecider:
                 logger.info(
                     "GUA-135 sprint_race: self 有冲刺能力，self 拿第二",
                 )
-                twt = self._find_twt_min_point(action_list, cur_rank)
+                twt = self._find_twt_min_point(action_list, cur_rank, hand_cards=hand_cards)
                 if twt is not None:
                     return twt
             elif teammate_sprint and not self_sprint:
