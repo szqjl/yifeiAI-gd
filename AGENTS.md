@@ -19,7 +19,8 @@
 
 ## 用户偏好
 
-- 简体中文；Agent **自动执行**终端命令（git/python/pytest 已 allowlist）。
+- **Agent 所有回复必须使用简体中文**（代码注释、commit message 同理；仅代码标识符/变量名、日志级别英文）。
+- Agent **自动执行**终端命令（git/python/pytest 已 allowlist）。
 - **仅明确要求时** commit / push → 工作流 **WF-08** + [`AGENT_PUSH_CHECKLIST.md`](docs/guandan-brain/AGENT_PUSH_CHECKLIST.md)。
 - 改 M3/V7 决策或解读批跑前：读 ISSUES open + ITERATIONS 最新行（`.cursor/rules/guandan-context.mdc`）。
 - 接续：「继续 / handoff / 按迭代」→ 工作流 **WF-07**。
