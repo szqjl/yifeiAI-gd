@@ -4718,8 +4718,22 @@ class UltimateWinRateEngineV7:
                 )
             return None
 
-        # ── 钢板/三连对：返回 None（暂不支持推荐，让回退路径处理）──
-        if greater_type in ("ThreePair", "TwoTrips"):
+        # ── 三连对 / 钢板：从 pair_in_three_pair / trip_in_steel_plate 重建连续结构 ──
+        if greater_type == "ThreePair":
+            rec = self._build_consecutive_structure_press(
+                groups, "pair_in_three_pair", 3, greater_val, cur_rank, "min",
+            )
+            if rec:
+                rec["rank"] = _to_platform_rank(rec["rank"])
+                return rec
+            return None
+        if greater_type == "TwoTrips":
+            rec = self._build_consecutive_structure_press(
+                groups, "trip_in_steel_plate", 2, greater_val, cur_rank, "min",
+            )
+            if rec:
+                rec["rank"] = _to_platform_rank(rec["rank"])
+                return rec
             return None
 
         # ── 普通同型匹配（Pair / Trips / Straight）──
@@ -4923,6 +4937,59 @@ class UltimateWinRateEngineV7:
             and teammate_cover_confidence < 0.5
         )
 
+    def _build_consecutive_structure_press(
+        self, groups, member_type, chain_len, greater_val, cur_rank, strategy,
+    ):
+        """
+        从组牌引擎子结构重建连续结构候选（ThreePair / TwoTrips）。
+        member_type: "pair_in_three_pair"(三连对) 或 "trip_in_steel_plate"(钢板)
+        chain_len: 三连对=3(三对), 钢板=2(两组三张)
+        strategy: "min"=跟上家节牌力, "max"=卡下家选最大
+        """
+        from src.v.nn.guards.v7_guards import get_card_rank, get_card_value
+
+        rank_groups = {}
+        for gid, ginfo in groups.items():
+            if ginfo["type"] != member_type:
+                continue
+            cards = ginfo["cards"]
+            if not cards:
+                continue
+            r = get_card_rank(str(cards[0]))
+            val = get_card_value(str(cards[0]), cur_rank)
+            rank_groups.setdefault(val, []).append((val, r, gid, ginfo))
+
+        if len(rank_groups) < chain_len:
+            return None
+
+        sorted_vals = sorted(rank_groups.keys())
+        candidates = []
+        for i in range(len(sorted_vals) - chain_len + 1):
+            window = sorted_vals[i:i + chain_len]
+            if window[-1] - window[0] != chain_len - 1:
+                continue
+            start_val = window[0]
+            if start_val <= greater_val:
+                continue
+            all_cards = []
+            for v in window:
+                all_cards.extend(rank_groups[v][0][3]["cards"])
+            platform_type = "ThreePair" if member_type == "pair_in_three_pair" else "TwoTrips"
+            start_rank = get_card_rank(str(all_cards[0]))
+            candidates.append({
+                "type": platform_type,
+                "rank": start_rank,
+                "cards": sorted(all_cards),
+            })
+
+        if not candidates:
+            return None
+        if strategy == "min":
+            candidates.sort(key=lambda c: get_card_value(c["cards"][0], cur_rank))
+        else:
+            candidates.sort(key=lambda c: -get_card_value(c["cards"][0], cur_rank))
+        return candidates[0]
+
     def _recommend_max_press_impl(
         self, game_state, card_mask, greater_action, greater_type,
         hand_cards, cur_rank
@@ -5030,8 +5097,22 @@ class UltimateWinRateEngineV7:
                 )
             return None
 
-        # ── 钢板/三连对：暂不支持 ──
-        if greater_type in ("ThreePair", "TwoTrips"):
+        # ── 三连对 / 钢板：从子结构重建连续结构 ──
+        if greater_type == "ThreePair":
+            rec = self._build_consecutive_structure_press(
+                groups, "pair_in_three_pair", 3, greater_val, cur_rank, "max",
+            )
+            if rec:
+                rec["rank"] = _to_platform_rank(rec["rank"])
+                return rec
+            return None
+        if greater_type == "TwoTrips":
+            rec = self._build_consecutive_structure_press(
+                groups, "trip_in_steel_plate", 2, greater_val, cur_rank, "max",
+            )
+            if rec:
+                rec["rank"] = _to_platform_rank(rec["rank"])
+                return rec
             return None
 
         # 同型匹配（选最大）
