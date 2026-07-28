@@ -8,3 +8,5 @@
 |------|------|-------|-------------|----------|-------------------|------|
 | 2026-06-30 | baseline | GUA-091 | stage_2 中局入口 _stage_mid_dispatch | 0/3 (0.0%) | - | GUA-097 baseline (GUA-091 off: stage_2 中局入口 _stage_mid_dispatch) |
 | 2026-06-30 | enable | GUA-091 | stage_2 中局入口 _stage_mid_dispatch | 0/3 (0.0%) | TBD | GUA-097 enable GUA-091 (stage_2 中局入口 _stage_mid_dispatch) |
+| 2026-07-28 | baseline-9 | GUA-091 | stage_2 中局入口 _stage_mid_dispatch（9局） | 7/9 (77.78%) | - | 338 副；stage_2 GUA-091 dispatch 仅 0.6% |
+| 2026-07-28 | enable-9 | GUA-091 | stage_2 中局入口 _stage_mid_dispatch（9局） | 7/9 (77.78%) | **0.0%** | 236 副；GUA-091 dispatch 覆盖 38.7% stage_2 步；top: mid_no_same_type_pass 48.7%；**结论：中性** |

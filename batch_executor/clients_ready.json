@@ -1,18 +1,18 @@
 {
-  "yf1_v7": {
+  "yf1_v8": {
     "connected": true,
-    "timestamp": "2026-07-08T23:08:33.119789"
+    "timestamp": "2026-07-28T14:18:47.156769"
   },
   "client3": {
     "connected": true,
-    "timestamp": "2026-07-08T23:08:33.256274"
+    "timestamp": "2026-07-28T14:18:47.440524"
   },
-  "yf2_v7": {
+  "yf2_v8": {
     "connected": true,
-    "timestamp": "2026-07-08T23:08:35.060807"
+    "timestamp": "2026-07-28T14:18:52.168788"
   },
   "client4": {
     "connected": true,
-    "timestamp": "2026-07-08T23:08:44.202951"
+    "timestamp": "2026-07-28T14:18:59.517516"
   }
 }
