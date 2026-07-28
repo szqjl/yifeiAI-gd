@@ -3584,10 +3584,7 @@ class UltimateWinRateEngineV7:
         opp_right = (my_pos + 3) % 4   # 上家
         xia_jia = (my_pos + 1) % 4     # 下家
 
-        is_lead = (cur_pos == -1) or (
-            greater_pos in (-1, my_pos)
-            and 0 <= my_pos <= 3
-        )
+        is_lead = (cur_pos in (-1, my_pos)) and (greater_pos in (-1, my_pos))
         is_teammate = (greater_pos == teammate_pos)
         is_upper = (greater_pos == opp_right)
         is_lower = (greater_pos == xia_jia)
