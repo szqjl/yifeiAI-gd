@@ -1106,22 +1106,25 @@ class EndgameDecider:
         self_context = ec.get("self", {})
         enemies = ec.get("enemies", {})
 
-        # ── Q0: 自己冲刺（最高优先级）────
+        # ── Q0.5: 一手清（finish_now）────  [GUA-097 fix: 提升至 Q0 之前]
+        # GUA-112: 无论敌人/队友状态，只要 actionList 含一手清候选 → 立即出完
+        # 原嵌套在 Q1 内，敌人不进残局区时 finish_now 被跳过
+        # GUA-097: Q0 self sprint 在无炸弹时会 _select_best_index 取首个动作，
+        # 可能选 Single 而非 Pair（2张同 rank），跳过 finish_now。
+        # 修复：Q0.5 提升至最高优先级，一手清永远优先于冲刺规划。
+        finish_now = self._q1_finish_now_candidate(game_state, action_list)
+        if finish_now is not None:
+            idx, action = finish_now
+            logger.info("Q0.5 一手清: idx=%d type=%s", idx, get_action_type(action) if GUARD_TOOLS_OK else "?")
+            return idx, action
+
+        # ── Q0: 自己冲刺（次高优先级）────
         if self_context.get("should_sprint"):
             result = self._q0_self_sprint(game_state, action_list, ec)
             if result is not None:
                 idx, action = result
                 logger.info("Q0 自己冲刺: idx=%d type=%s", idx, get_action_type(action) if GUARD_TOOLS_OK else "?")
                 return idx, action
-
-        # ── Q0.5: 一手清（finish_now）────
-        # GUA-112: 无论敌人/队友状态，只要 actionList 含一手清候选 → 立即出完
-        # 原嵌套在 Q1 内，敌人不进残局区时 finish_now 被跳过
-        finish_now = self._q1_finish_now_candidate(game_state, action_list)
-        if finish_now is not None:
-            idx, action = finish_now
-            logger.info("Q0.5 一手清: idx=%d type=%s", idx, get_action_type(action) if GUARD_TOOLS_OK else "?")
-            return idx, action
 
         # ── Q1: 封锁敌方 ──
         if enemies:

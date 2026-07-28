@@ -369,8 +369,11 @@ def _pair_reserved_for_twt(
     bomb_core_ranks: Set[str],
     rank_counts: Counter,
 ) -> bool:
-    """GUA-084 R-G084-1：≥4 同点 / 炸核 rank 的对子不配三带二。"""
+    """GUA-084 R-G084-1：≥4 同点 / 炸核 rank 的对子不配三带二。
+    GUA-097 follow-up：大小王对子不配三带二（王太贵，保留为天王炸/炸弹材料）。"""
     r = _parse_rank(pair[0])
+    if r in JOKERS:
+        return True  # 大小王不做三带二 kick
     if r in bomb_core_ranks:
         return True
     return rank_counts.get(r, 0) >= 4
