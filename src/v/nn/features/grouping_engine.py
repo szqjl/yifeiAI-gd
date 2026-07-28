@@ -1470,6 +1470,11 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     # 例如 888-999 钢板 = +1（防止因不记分导致 role 被低估）
     score += len(plan.steel_plates)
 
+    # 整牌型结构加分：每个顺子 +1，每个三带二 +1
+    # 抵消小牌罚分对结构强度手牌的误杀（如 SF+炸+2顺+TWT 不应因散5被打到助攻）
+    score += len(plan.straights)
+    score += len(plan.three_with_twos)
+
     # ═══════════════════════════════════
     # 减分项
     # ═══════════════════════════════════

@@ -741,18 +741,47 @@ class UltimateWinRateEngineV7:
                                 if not should_allow_counter_bomb_core_exempt(
                                     action_list[act_index], game_state,
                                 ):
-                                    self.logger.info(
-                                        "GUA-075 推荐被组牌保护拦截: %s/%s 拆 %s → 回退",
-                                        recommendation.get("type"), recommendation.get("rank"), broken)
-                                    blocked_by_mask = True
-                                    self._replay_record(
-                                        "recommendation_mask",
-                                        {
-                                            "gua_id": "GUA-075",
-                                            "blocked": True,
-                                            "broken_type": broken,
-                                        },
-                                    )
+                                    if recommendation.get("type") in ("Bomb", "StraightFlush"):
+                                        self.logger.info(
+                                            "GUA-075 推荐被组牌保护拦截: %s/%s 拆 %s → 回退",
+                                            recommendation.get("type"), recommendation.get("rank"), broken)
+                                        blocked_by_mask = True
+                                        self._replay_record(
+                                            "recommendation_mask",
+                                            {
+                                                "gua_id": "GUA-075",
+                                                "blocked": True,
+                                                "broken_type": broken,
+                                            },
+                                        )
+                                    else:
+                                        # GUA-176: 推荐非炸弹拆 Bomb/SF core → 改出其他不拆核动作
+                                        alt_idx = self._find_alternative_non_core_breaking_action(
+                                            action_list, act_index,
+                                            self._card_mask,
+                                            self._group_type_map,
+                                            self._group_members)
+                                        if alt_idx >= 0 and alt_idx != act_index:
+                                            act_index = alt_idx
+                                            rec_type = action_list[alt_idx][0] if len(action_list[alt_idx]) >= 1 else ""
+                                            rec_rank = action_list[alt_idx][1] if len(action_list[alt_idx]) >= 2 else ""
+                                            self.logger.info(
+                                                "GUA-176: 推荐 %s/%s 拆 %s → 改出 %s/%s actIndex=%d",
+                                                recommendation.get("type"), recommendation.get("rank"),
+                                                broken, rec_type, rec_rank, alt_idx)
+                                        else:
+                                            self.logger.info(
+                                                "GUA-176: 推荐 %s/%s 拆 %s → 无替代非炸不拆核动作, 回退",
+                                                recommendation.get("type"), recommendation.get("rank"), broken)
+                                            blocked_by_mask = True
+                                            self._replay_record(
+                                                "recommendation_mask",
+                                                {
+                                                    "gua_id": "GUA-176",
+                                                    "blocked": True,
+                                                    "broken_type": broken,
+                                                },
+                                            )
                         if not blocked_by_mask:
                             self.recommend_valid_count += 1
                             self.logger.info(
@@ -1269,8 +1298,15 @@ class UltimateWinRateEngineV7:
                 continue
             action = h.get("action") or h.get("curAction") or []
             ctx = h.get("context") or {}
-            if action and (not isinstance(action, list) or str(action[0]).upper() != "PASS"):
-                self._tracker.record_play(seat, action, context=ctx)
+            if action:
+                if isinstance(action, list) and str(action[0]).upper() == "PASS":
+                    ga = ctx.get("greaterAction")
+                    if isinstance(ga, list) and len(ga) >= 3:
+                        ga_type = str(ga[0])
+                        if ga_type.upper() not in ("PASS", ""):
+                            self._tracker.record_pass(seat, ga_type)
+                else:
+                    self._tracker.record_play(seat, action, context=ctx)
         self._tracker_history_replayed = len(history)
 
         cur_rank = str(game_state.get("curRank", "2"))
@@ -1387,6 +1423,18 @@ class UltimateWinRateEngineV7:
                 self._current_role = self._anchor_role
             else:
                 self._current_role = raw_role
+
+            # GUA-178: 语义手数 ≤ 2 时角色升级为「主攻」
+            # 即使 power_score 低（无炸/小牌型），两手整牌也是冲刺窗口，
+            # 应走 GUA-116 主攻领出而非 GUA-117 助攻领出
+            from src.v.nn.endgame.endgame_preprocessor import EndgamePreprocessor as _GUA178_EP
+            _gid_to_type = dict(self._group_type_map)
+            _type_counts: Dict[str, int] = {}
+            for _gid, _gtype in _gid_to_type.items():
+                _type_counts[_gtype] = _type_counts.get(_gtype, 0) + 1
+            if self._current_role in ("助攻", "超弱") and _GUA178_EP.count_semantic_hands(_type_counts) <= 2:
+                self._current_role = "主攻"
+                self.logger.info("GUA-178 冲刺角色升级: semantic_hands≤2 → 主攻")
 
             # 产出 3: 24 维组牌特征（进 NN）
             features_24 = _extract_features(all_plans, hand_cards, cur_rank)
@@ -2108,6 +2156,28 @@ class UltimateWinRateEngineV7:
                 return group_type_map.get(gid, "unknown")
 
         return None
+
+    def _find_alternative_non_core_breaking_action(
+        self,
+        action_list: list,
+        exclude_idx: int,
+        card_mask: dict,
+        group_type_map: dict,
+        group_members: Optional[dict] = None,
+    ) -> int:
+        """GUA-176: 找 actionList 中第一个非炸、不拆核、非 exclude_idx 的动作。"""
+        for i, action in enumerate(action_list):
+            if i == exclude_idx:
+                continue
+            if not action or len(action) < 2:
+                continue
+            if str(action[0]).upper() in ("PASS", "BOMB", "STRAIGHTFLUSH"):
+                continue
+            broken = self._get_broken_core_type(
+                action, card_mask, group_type_map, group_members)
+            if broken is None:
+                return i
+        return -1
 
     @staticmethod
     def _action_breaks_core(
@@ -3385,6 +3455,16 @@ class UltimateWinRateEngineV7:
                 ):
                     score -= 600
 
+            # GUA-179: 空扔炸弹罚分 — 领出有可用非炸整结构却选炸
+            if is_bomb and _is_lead_heuristic:
+                has_nonbomb_structure = any(
+                    get_action_type(a) not in (*_BOMB_TYPES, "PASS")
+                    and _is_group_consistent(a)
+                    for a in action_list
+                )
+                if has_nonbomb_structure:
+                    score -= 500
+
             return score
 
         hard_blocked_bomb_indices = [
@@ -3708,7 +3788,18 @@ class UltimateWinRateEngineV7:
             can_bomb, reason = self._r11_bomb_throttle_check(
                 game_state, greater_action, greater_rank, cur_rank)
             if can_bomb:
-                bomb_impl = self._recommend_bomb_from_mask(card_mask, cur_rank)
+                # GUA-172 PASS-priority: 单张王无自然压时不炸
+                if greater_type == "Single" and greater_rank in ("B", "R"):
+                    if not self._is_in_endgame_state(hand_cards, game_state):
+                        self.logger.info(
+                            "GUA-172 PASS-priority: 跟上家单张王(%s)无自然压 → PASS",
+                            greater_rank)
+                        return {"type": "PASS", "rank": "", "cards": []}
+                # GUA-172: 优先从 actionList 选最廉价炸
+                bomb_impl = self._recommend_cheapest_bomb_from_action_list(
+                    action_list, cur_rank)
+                if not bomb_impl:
+                    bomb_impl = self._recommend_bomb_from_mask(card_mask, cur_rank)
                 if bomb_impl:
                     bomb_rec = _ensure_valid(bomb_impl, f"跟上家改炸({reason})")
                     if bomb_rec:
@@ -3754,7 +3845,18 @@ class UltimateWinRateEngineV7:
             can_bomb, reason = self._r11_bomb_throttle_check(
                 game_state, greater_action, greater_rank, cur_rank)
             if can_bomb:
-                bomb_impl = self._recommend_bomb_from_mask(card_mask, cur_rank)
+                # GUA-172 PASS-priority: 单张王无自然压时不炸
+                if greater_type == "Single" and greater_rank in ("B", "R"):
+                    if not self._is_in_endgame_state(hand_cards, game_state):
+                        self.logger.info(
+                            "GUA-172 PASS-priority: 卡下家单张王(%s)无自然压 → PASS",
+                            greater_rank)
+                        return {"type": "PASS", "rank": "", "cards": []}
+                # GUA-172: 优先从 actionList 选最廉价炸
+                bomb_impl = self._recommend_cheapest_bomb_from_action_list(
+                    action_list, cur_rank)
+                if not bomb_impl:
+                    bomb_impl = self._recommend_bomb_from_mask(card_mask, cur_rank)
                 if bomb_impl:
                     bomb_rec = _ensure_valid(bomb_impl, f"卡下家改炸({reason})")
                     if bomb_rec:
@@ -5142,6 +5244,37 @@ class UltimateWinRateEngineV7:
             "type": best["type"],
             "rank": best["rank"],
             "cards": best["cards"],
+        }
+
+    def _recommend_cheapest_bomb_from_action_list(
+        self, action_list, cur_rank
+    ) -> Optional[Dict[str, Any]]:
+        """GUA-172: 从 actionList 选最廉价炸/同花顺。"""
+        from src.v.nn.guards.v7_guards import (
+            ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+        )
+        candidates = []
+        for action in action_list or []:
+            if not isinstance(action, list) or len(action) < 3:
+                continue
+            if action[0] not in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+                continue
+            if not isinstance(action[2], list) or len(action[2]) < 4:
+                continue
+            candidates.append(action)
+        if not candidates:
+            return None
+        def sort_key(action) -> tuple:
+            atype = action[0]
+            size = len(action[2])
+            rank_val = self.RANK_ORDER.get(str(action[1]), 0)
+            strength = 9 if atype == ACTION_TYPE_STRAIGHT_FLUSH else size
+            return (strength, rank_val, tuple(sorted(str(c) for c in action[2])))
+        best = min(candidates, key=sort_key)
+        return {
+            "type": best[0],
+            "rank": str(best[1]),
+            "cards": sorted(str(c) for c in best[2]),
         }
 
     def _recommend_vs_teammate(

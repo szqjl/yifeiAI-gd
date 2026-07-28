@@ -403,6 +403,45 @@ class RecommenderTester:
                 return (False, "抑制牌仅1张等等看")
         return (True, f"改炸(suppressors={suppressors})")
 
+    def _is_in_endgame_state(self, hand_cards, game_state):
+        """与 V7 引擎一致：≤10 张或 endgame 标记 → True。"""
+        if len(hand_cards) <= 10:
+            return True
+        if game_state.get("_endgame_q1_hit"):
+            return True
+        if game_state.get("_endgame_in_progress"):
+            return True
+        return False
+
+    def _recommend_cheapest_bomb_from_action_list(self, action_list, cur_rank):
+        """GUA-172: 从 actionList 选最廉价炸（测试桩版）。"""
+        from src.v.nn.guards.v7_guards import (
+            ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+        )
+        candidates = []
+        for action in action_list or []:
+            if not isinstance(action, list) or len(action) < 3:
+                continue
+            if action[0] not in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+                continue
+            if not isinstance(action[2], list) or len(action[2]) < 4:
+                continue
+            candidates.append(action)
+        if not candidates:
+            return None
+        def sort_key(action) -> tuple:
+            atype = action[0]
+            size = len(action[2])
+            rank_val = self.RANK_ORDER.get(str(action[1]), 0)
+            strength = 9 if atype == ACTION_TYPE_STRAIGHT_FLUSH else size
+            return (strength, rank_val, tuple(sorted(str(c) for c in action[2])))
+        best = min(candidates, key=sort_key)
+        return {
+            "type": best[0],
+            "rank": str(best[1]),
+            "cards": sorted(str(c) for c in best[2]),
+        }
+
     def _recommend_bomb_from_mask(self, card_mask, cur_rank):
         """从 card_mask 推荐最可牺牲的炸弹（测试桩版）。"""
         from src.v.nn.guards.v7_guards import (
@@ -517,7 +556,15 @@ class RecommenderTester:
             can_bomb, reason = self._r11_bomb_throttle_check(
                 game_state, greater_action, greater_rank, cur_rank)
             if can_bomb:
-                bomb_impl = self._recommend_bomb_from_mask(card_mask, cur_rank)
+                # GUA-172 PASS-priority: 单张王无自然压时不炸
+                if greater_type == "Single" and greater_rank in ("B", "R"):
+                    if not self._is_in_endgame_state(hand_cards, game_state):
+                        return {"type": "PASS", "rank": "", "cards": []}
+                # GUA-172: 优先从 actionList 选最廉价炸
+                bomb_impl = self._recommend_cheapest_bomb_from_action_list(
+                    action_list, cur_rank)
+                if not bomb_impl:
+                    bomb_impl = self._recommend_bomb_from_mask(card_mask, cur_rank)
                 if bomb_impl:
                     bomb_rec = _ensure_valid(bomb_impl, f"跟上家改炸({reason})")
                     if bomb_rec:
@@ -538,7 +585,15 @@ class RecommenderTester:
             can_bomb, reason = self._r11_bomb_throttle_check(
                 game_state, greater_action, greater_rank, cur_rank)
             if can_bomb:
-                bomb_impl = self._recommend_bomb_from_mask(card_mask, cur_rank)
+                # GUA-172 PASS-priority: 单张王无自然压时不炸
+                if greater_type == "Single" and greater_rank in ("B", "R"):
+                    if not self._is_in_endgame_state(hand_cards, game_state):
+                        return {"type": "PASS", "rank": "", "cards": []}
+                # GUA-172: 优先从 actionList 选最廉价炸
+                bomb_impl = self._recommend_cheapest_bomb_from_action_list(
+                    action_list, cur_rank)
+                if not bomb_impl:
+                    bomb_impl = self._recommend_bomb_from_mask(card_mask, cur_rank)
                 if bomb_impl:
                     bomb_rec = _ensure_valid(bomb_impl, f"卡下家改炸({reason})")
                     if bomb_rec:
@@ -928,6 +983,156 @@ def test_follow_with_actionlist_validation():
     return True
 
 
+def _reset_r11_state():
+    from src.v.nn.guards.v7_guards import _UPPER_SKIP_MEMORY, _POST_BOMB_BLOCK_TYPE
+    _UPPER_SKIP_MEMORY.clear()
+    _POST_BOMB_BLOCK_TYPE.clear()
+
+def test_gua172_cheapest_bomb():
+    """GUA-172: R11 放行改炸时选最廉价炸，而非最强行。"""
+    print("\n=== GUA-172: 廉价炸选择 ===")
+    _reset_r11_state()
+    t = RecommenderTester()
+
+    hand_cards = ["S3", "H3", "C3", "D3", "S4", "H4", "C4", "D4", "S9", "H9", "C9", "D9"]
+    card_mask = make_card_mask(hand_cards, [
+        (0, "Bomb", 1, ["S3", "H3", "C3", "D3"]),
+        (1, "Bomb", 1, ["S4", "H4", "C4", "D4"]),
+        (2, "Bomb", 1, ["S9", "H9", "C9", "D9"]),
+    ], [])
+    t._card_mask = card_mask
+    t._group_type_map = {0: "Bomb", 1: "Bomb", 2: "Bomb"}
+
+    # actionList: 3种炸弹可选，最廉价应是 Bomb/3
+    action_list = build_actionList([
+        ("Bomb", "3", sorted(["S3", "H3", "C3", "D3"])),
+        ("Bomb", "4", sorted(["S4", "H4", "C4", "D4"])),
+        ("Bomb", "9", sorted(["S9", "H9", "C9", "D9"])),
+    ])
+
+    gs = {
+        "myPos": 0, "curPos": 3, "greaterPos": 3,
+        "greaterAction": ["Single", "5", ["S5"]],
+        "handCards": hand_cards, "curRank": "2",
+        "_memory_tracker": None,
+    }
+
+    from src.v.nn.guards.v7_guards import _UPPER_SKIP_MEMORY
+    _UPPER_SKIP_MEMORY[(0, 3)] = "Single"
+
+    rec = t._recommend_play(gs, action_list)
+
+    if rec is None:
+        print(f"  {FAIL} 返回 None")
+        return False
+    if rec["type"] != "Bomb":
+        print(f"  {FAIL} 期望 Bomb, 实际 {rec['type']}")
+        return False
+    if rec["rank"] != "3":
+        print(f"  {FAIL} 期望最廉价 Bomb/3, 实际 Bomb/{rec['rank']}")
+        return False
+
+    print(f"  {PASS} → Bomb/{rec['rank']} (最廉价)")
+    return True
+
+
+def test_gua172_pass_sb_no_lb():
+    """GUA-172: 跟上家 Single SB/B 且无 LB → PASS 而非炸。"""
+    print("\n=== GUA-172: 单张王无LB → PASS ===")
+    _reset_r11_state()
+    t = RecommenderTester()
+
+    hand_cards = ["S3", "H3", "C3", "D3", "S4", "H4", "C4", "D4",
+                   "S9", "H9", "C9", "D9", "S5", "D5", "S8", "H8",
+                   "S6", "H6", "C6", "SJ", "CJ", "SQ", "CQ", "SK", "CK"]
+    card_mask = make_card_mask(hand_cards, [
+        (0, "Bomb", 1, ["S3", "H3", "C3", "D3"]),
+        (1, "Bomb", 1, ["S4", "H4", "C4", "D4"]),
+        (2, "Bomb", 1, ["S9", "H9", "C9", "D9"]),
+    ], ["S5", "D5", "S8", "H8", "S6", "H6", "C6", "SJ", "CJ", "SQ", "CQ", "SK", "CK"])
+    t._card_mask = card_mask
+    t._group_type_map = {0: "Bomb", 1: "Bomb", 2: "Bomb"}
+
+    action_list = build_actionList([
+        ("Bomb", "3", sorted(["S3", "H3", "C3", "D3"])),
+        ("Bomb", "4", sorted(["S4", "H4", "C4", "D4"])),
+        ("Bomb", "9", sorted(["S9", "H9", "C9", "D9"])),
+        ("Single", "5", ["S5"]),
+        ("Single", "8", ["S8"]),
+    ])
+
+    gs = {
+        "myPos": 0, "curPos": 3, "greaterPos": 3,
+        "greaterAction": ["Single", "B", ["SB"]],
+        "handCards": hand_cards, "curRank": "2",
+        "_memory_tracker": None,
+    }
+
+    from src.v.nn.guards.v7_guards import _UPPER_SKIP_MEMORY
+    _UPPER_SKIP_MEMORY[(0, 3)] = "Single"
+
+    rec = t._recommend_play(gs, action_list)
+
+    if rec is None:
+        print(f"  {FAIL} 返回 None")
+        return False
+    if rec["type"] != "PASS":
+        print(f"  {FAIL} 期望 PASS, 实际 {rec['type']}/{rec['rank']}")
+        return False
+
+    print(f"  {PASS} → PASS (单SB无LB不浪费炸弹)")
+    return True
+
+
+def test_gua172_endgame_bomb_sb():
+    """GUA-172: 残局 (≤10张) 仍允许炸单SB。"""
+    print("\n=== GUA-172: 残局炸单SB（允许）===")
+    _reset_r11_state()
+    t = RecommenderTester()
+
+    hand_cards = ["S3", "H3", "C3", "D3", "S4", "H4", "C4", "D4", "S9", "H9"]
+    card_mask = make_card_mask(hand_cards, [
+        (0, "Bomb", 1, ["S3", "H3", "C3", "D3"]),
+        (1, "Bomb", 1, ["S4", "H4", "C4", "D4"]),
+    ], ["S9", "H9"])
+    t._card_mask = card_mask
+    t._group_type_map = {0: "Bomb", 1: "Bomb"}
+
+    action_list = build_actionList([
+        ("Bomb", "3", sorted(["S3", "H3", "C3", "D3"])),
+        ("Bomb", "4", sorted(["S4", "H4", "C4", "D4"])),
+    ])
+
+    gs = {
+        "myPos": 0, "curPos": 3, "greaterPos": 3,
+        "greaterAction": ["Single", "B", ["SB"]],
+        "handCards": hand_cards, "curRank": "2",
+        "_memory_tracker": None,
+    }
+
+    from src.v.nn.guards.v7_guards import _UPPER_SKIP_MEMORY
+    _UPPER_SKIP_MEMORY[(0, 3)] = "Single"
+
+    rec = t._recommend_play(gs, action_list)
+
+    if rec is None:
+        print(f"  {FAIL} 残局不应返回 None")
+        return False
+    if rec["type"] == "PASS":
+        print(f"  {FAIL} 残局应允许炸, 实际 PASS")
+        return False
+    if rec["type"] != "Bomb":
+        print(f"  {FAIL} 期望 Bomb, 实际 {rec['type']}")
+        return False
+    # 残局应仍选最廉价 Bomb/3
+    if rec["rank"] != "3":
+        print(f"  {FAIL} 期望 Bomb/3, 实际 Bomb/{rec['rank']}")
+        return False
+
+    print(f"  {PASS} → Bomb/{rec['rank']} (残局放行+廉价)")
+    return True
+
+
 # ═══════════════════════════════════════════════════════════════
 # 主入口
 # ═══════════════════════════════════════════════════════════════
@@ -941,6 +1146,9 @@ if __name__ == "__main__":
     results.append(("领出→推荐小单张", test_lead_scenario()))
     results.append(("不跨牌型推荐(对子跟对子)", test_upper_not_follow_wrong_type()))
     results.append(("actionList宽松匹配", test_follow_with_actionlist_validation()))
+    results.append(("GUA-172选择最廉价炸", test_gua172_cheapest_bomb()))
+    results.append(("GUA-172单张王无LB→PASS", test_gua172_pass_sb_no_lb()))
+    results.append(("GUA-172残局仍允许炸单SB", test_gua172_endgame_bomb_sb()))
 
     print("\n" + "=" * 60)
     passed = sum(1 for _, ok in results if ok)

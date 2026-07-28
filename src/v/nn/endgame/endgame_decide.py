@@ -1245,6 +1245,27 @@ class EndgameDecider:
                 if skip_gua151:
                     pass  # 落回下方先整后炸逻辑
 
+            # GUA-179：3 手冲刺保护（1 炸 + 2 非炸结构）→ 先出弱结构存炸防反
+            if len(bombs) == 1 and len(non_bombs) == 2:
+                _nb0_type = _effective_structure_type(non_bombs[0][1])
+                _nb1_type = _effective_structure_type(non_bombs[1][1])
+                _nb0_pass = _get_declared_action_type(non_bombs[0][1]) == "PASS"
+                _nb1_pass = _get_declared_action_type(non_bombs[1][1]) == "PASS"
+                if not _nb0_pass and not _nb1_pass:
+                    _type0 = _get_declared_action_type(non_bombs[0][1])
+                    _type1 = _get_declared_action_type(non_bombs[1][1])
+                    _p0 = _q1_structure_priority(_nb0_type) if _nb0_type != "PASS" else 99
+                    _p1 = _q1_structure_priority(_nb1_type) if _nb1_type != "PASS" else 99
+                    # 选 priority 低（更弱/更安全）的结构先出
+                    weaker_idx = 0 if _p0 >= _p1 else 1
+                    weaker_item = non_bombs[weaker_idx]
+                    logger.info(
+                        "Q0 3手冲刺: 先出弱结构 %s (pri=%d) 存炸防反",
+                        _get_declared_action_type(weaker_item[1]),
+                        _p0 if weaker_idx == 0 else _p1,
+                    )
+                    return weaker_item
+
             # 先整后炸：两手冲刺优先整组（TwoTrips/ThreePair/TWT…），禁半组 Trips
             all_cands = [(i, a) for i, a in enumerate(action_list)]
             sprint_lead = self._select_two_turn_sprint_structure(

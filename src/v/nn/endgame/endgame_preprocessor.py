@@ -541,10 +541,10 @@ class EndgamePreprocessor:
     def _should_sprint(self, game_state: Dict[str, Any]) -> bool:
         """
         自己是否应该冲刺：
-          ① 两手整牌 + 有炸（语义手数 ≤2）
+          ① 语义手数 ≤2（两手整牌，无需炸弹）
           ② 或具备冲刺能力（炸(+炸*)+单手结构，GUA-135；覆盖双炸+结构）
         """
-        if self._has_two_clean_hands(game_state) and self._has_bomb(game_state):
+        if self._has_two_clean_hands(game_state):
             return True
         hand_cards = list(game_state.get("handCards") or [])
         if not hand_cards:

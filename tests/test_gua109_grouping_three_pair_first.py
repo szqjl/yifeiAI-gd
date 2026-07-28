@@ -40,9 +40,12 @@ def test_gua109_enumerates_three_pair_first_branch():
 def test_gua109_yf1_anchor_prefers_334455_over_double_twt():
     best, _plans = enumerate_groupings(GUA109_YF1_HAND, CUR_RANK)
 
-    assert best.strategy == "THREE_PAIR_FIRST"
-    assert _has_three_pair_334455(best), "最优应含 334455 三连对"
+    # _score_power 结构加分（+1/顺，+1/TWT）后 STRAIGHT_BEFORE_TWT
+    # （7 手含 2 顺 + 1 TWT + 2 炸）胜出 THREE_PAIR_FIRST（8 手含 1 三连对 + 2 TWT）
+    assert best.strategy == "STRAIGHT_BEFORE_TWT"
+    assert len(best.straights) >= 2, "最优应含至少 2 个顺子"
     assert _count_all_cards_in_plan(best) == len(GUA109_YF1_HAND)
+    assert best.num_rounds() <= 8
 
     round_opt = next(
         p for p in _enumerate_plans(GUA109_YF1_HAND, CUR_RANK)

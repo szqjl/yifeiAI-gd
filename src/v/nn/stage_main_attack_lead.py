@@ -492,6 +492,37 @@ def recommend_main_attack_lead(
         and (len(_tp_units) > 0 or len(_tt_units) > 0)
     )
 
+    # ── GUA-179：对手牌型弱点感知 → 优先出对手 PASS/被迫开炸过的牌型 ──
+    # 预计算 st_pick（原在 P3 中，为弱点检测提前）
+    st_pick = _pick_smallest_straight(engine, groups, cur_rank)
+    _weakness_promoted = None
+    tracker = game_state.get("_memory_tracker")
+    if tracker is not None and hasattr(tracker, "get_type_weakness"):
+        _my_pos = game_state.get("myPos", game_state.get("player_id", 0))
+        opps = {(_my_pos + 1) % 4, (_my_pos + 3) % 4}
+        _opp_weakness = {}
+        for opp in opps:
+            for k, v in tracker.get_type_weakness(opp).items():
+                _opp_weakness[k] = _opp_weakness.get(k, 0) + v
+        # 若顺子是对方弱点且有可用顺子 → 提前走 P3
+        if _opp_weakness.get("Straight", 0) >= 1 and st_pick:
+            gid, typ, pr, cards = st_pick
+            scatter_n = len(engine._scatter_singles(card_mask))
+            lonely_ok = scatter_n <= 2
+            if lonely_ok and _has_structure_recapture(
+                groups, lead_gid=gid, kind="straight", engine=engine, cur_rank=cur_rank,
+            ):
+                _weakness_promoted = {
+                    "type": typ,
+                    "rank": pr,
+                    "cards": cards,
+                    "intent": "main_p3_straight_via_weakness",
+                }
+
+    # GUA-179：弱点牌型优先于 P2（原"先 TWT 再顺"固序）
+    if _weakness_promoted is not None and not _sprint_two_hands:
+        return _weakness_promoted
+
     # ── P2：整组三带二（is_core 整组出 ≠ 拆核）──
     #    GUA-174: skip TWT in 2-hand sprint when ThreePair/TwoTrips available
     twt_pick = _pick_smallest_twt(engine, groups, cur_rank)

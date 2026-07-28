@@ -130,6 +130,12 @@ class MemoryTracker:
         # 推理耗时累计（ms）
         self.inference_time_ms = 0.0
 
+        # 牌型弱点追踪（GUA-179）：对手某牌型上 PASS/被迫开炸的次数
+        # type_weakness[seat][type] = 该位在该牌型上 PASS 的次数
+        self.type_weakness: Dict[int, Dict[str, int]] = {}
+        # type_bombed[seat][type] = 该位在该牌型上被迫开炸的次数
+        self.type_bombed: Dict[int, Dict[str, int]] = {}
+
         # 贡牌/抗贡（04_calculation_skills §二.1 + 06_game_flow）
         self.tribute_history: List[Dict[str, Any]] = []
         self._processed_tribute_keys: Set[str] = set()
@@ -229,6 +235,18 @@ class MemoryTracker:
             "hand_count_after": self.hand_counts[seat],
         })
 
+        # GUA-179：若用炸/同花顺压制非炸牌型 → 记为该牌型弱点
+        ga = ctx.get("greaterAction")
+        if (isinstance(ga, list) and len(ga) >= 3 and str(action[0]).upper()
+                in ("BOMB", "STRAIGHTFLUSH")):
+            ga_type = str(ga[0])
+            if ga_type.upper() not in ("PASS", "BOMB", "STRAIGHTFLUSH"):
+                if seat not in self.type_bombed:
+                    self.type_bombed[seat] = {}
+                self.type_bombed[seat][ga_type] = (
+                    self.type_bombed[seat].get(ga_type, 0) + 1
+                )
+
         # GUA-072：大小王 always-on 归属推断（不依赖 enable_inference）
         self._infer_joker_ownership(seat, cards, str(action[0]))
 
@@ -242,6 +260,23 @@ class MemoryTracker:
             if elapsed_ms > 50:
                 logger.warning("排除法推断耗时 %.0fms (seat=%d, cards=%s)",
                                elapsed_ms, seat, cards[:3])
+
+    def record_pass(self, seat: int, target_type: str) -> None:
+        """记录某席因无法压制某牌型而 PASS。"""
+        if target_type and target_type.upper() not in ("PASS", ""):
+            if seat not in self.type_weakness:
+                self.type_weakness[seat] = {}
+            self.type_weakness[seat][target_type] = (
+                self.type_weakness[seat].get(target_type, 0) + 1
+            )
+
+    def get_type_weakness(self, seat: int) -> Dict[str, int]:
+        """综合弱点：PASS 次数 + 被迫开炸次数。"""
+        result = {}
+        for d in [self.type_weakness.get(seat, {}), self.type_bombed.get(seat, {})]:
+            for k, v in d.items():
+                result[k] = result.get(k, 0) + v
+        return result
 
     def record_bomb(self, seat: int) -> None:
         """记录炸弹打出。"""
