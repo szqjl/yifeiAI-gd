@@ -3179,6 +3179,15 @@ class EndgameDecider:
             logger.info("GUA-131 C1 兜底: 出 6J 自闭合（yf1 不能接力）")
             return six_j
 
+        # 3.5 退路：yf1 不能接力且无 6J → 若有普通炸则回退常规 Q1 流程
+        has_bomb = any(
+            isinstance(a, list) and _is_bomb_like_action(a)
+            for a in action_list
+        )
+        if has_bomb:
+            logger.info("GUA-131 C1 退路: 有普通炸可反压 @1，回退到常规 Q1 封锁流程")
+            return None
+
         # 4. 路径 C：PASS 蓄力（必败，仅在无可行动作时兜底）
         pass_act = self._find_pass_action(action_list)
         if pass_act is not None:
