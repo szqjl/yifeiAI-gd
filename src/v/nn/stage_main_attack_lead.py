@@ -586,10 +586,16 @@ def recommend_main_attack_lead(
     if tt_pick:
         gid, typ, pr, cards = tt_pick
         tt_count = len(_enumerate_two_trips_units(groups))
+        # GUA-XXX: 大点钢板 defer — rank > T(J/Q/K/A) 时让 P3c 先出
+        # AAA-KKK 等既可钢板又可 TWT 还可拆防，前期出太浪费
+        _low_rank_val = CARD_RANK_ORDER.get(get_card_rank(cards[0]), 0)
+        _high_tt_defer = _low_rank_val > CARD_RANK_ORDER.get("T", 8)
+
         # 有炸回手时不 defer（炸+钢板 = 冲刺态，应整组领出）
+        # 但大点钢板有炸也 defer（灵活牌型前期不浪费）
         defer = (
             tt_count == 1 and stage == "stage_1"
-            and not _has_bomb_recapture(groups)
+            and (not _has_bomb_recapture(groups) or _high_tt_defer)
         )
         if not defer and _has_structure_recapture(
             groups, lead_gid=gid, kind="two_trips", engine=engine, cur_rank=cur_rank,
