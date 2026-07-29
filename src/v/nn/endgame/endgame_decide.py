@@ -1187,6 +1187,21 @@ class EndgameDecider:
             if not is_my_turn:
                 return None
             if non_bombs:
+                hand_cards = game_state.get("handCards", [])
+                # GUA-182: 4 张两手整对 → 对子优先（不拆 Pair 打 Single）
+                if len(hand_cards) == 4:
+                    plays = [
+                        (i, a) for i, a in non_bombs
+                        if _get_declared_action_type(a) not in (ACTION_TYPE_PASS, "PASS")
+                    ]
+                    types = {_get_declared_action_type(a) for _, a in plays}
+                    if types == {ACTION_TYPE_PAIR, ACTION_TYPE_SINGLE}:
+                        pair_acts = [
+                            (i, a) for i, a in plays
+                            if _get_declared_action_type(a) == ACTION_TYPE_PAIR
+                        ]
+                        if pair_acts:
+                            return self._select_best_index(pair_acts, action_list, game_state)
                 return self._select_best_index(non_bombs, action_list, game_state)
             return None
 
