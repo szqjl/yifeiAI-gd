@@ -674,10 +674,16 @@ def _sort_q1_prefer_structure_preserving(
     actions: List, group_members: Dict[int, List[str]], group_gid_type: Dict[int, str],
 ) -> List:
     """
-    GUA-175: 对子候选排序，结构保持优先。
-    检查每个对子候选是否从 trip_in_three_with_two 组取牌且未取完该组 → 拆三带二。
-    不拆结构（如从 pair_in_three_with_two 或自然对子取牌）排前面。
+    GUA-175: Q1 候选排序，结构保持优先。
+    检查候选是否从核心复合牌型的子组取部分牌 → 破坏牌型结构。
+    不拆结构的排前面。GUA-181: 从 trip_in_three_with_two 扩展到所有子组类型。
     """
+    _SUB_GROUP_TYPES = frozenset({
+        "trip_in_three_with_two",
+        "pair_in_three_with_two",
+        "pair_in_three_pair",
+        "trip_in_steel_plate",
+    })
     if not group_members or not group_gid_type:
         return actions
 
@@ -690,7 +696,7 @@ def _sort_q1_prefer_structure_preserving(
             return False
         for gid, members in group_members.items():
             gtype = group_gid_type.get(gid, "")
-            if gtype != "trip_in_three_with_two":
+            if gtype not in _SUB_GROUP_TYPES:
                 continue
             consumed = sum(1 for c in cards if c in members)
             if 0 < consumed < len(members):
@@ -2812,10 +2818,13 @@ class EndgameDecider:
         if not action_cards_set:
             return False
 
-        # 核心整牌类型（不包含普通对子/三张/单张/炸弹）
+        # 核心整牌类型（不包含普通对子/单张/炸弹）
+        # 注意：组牌引擎产出为小写 straight / trips，复合牌型拆为子组
+        # trip_in_three_with_two/pair_in_three_with_two/pair_in_three_pair/trip_in_steel_plate
         CORE_TYPES = frozenset({
-            "StraightFlush", "Straight", "ThreeWithTwo",
-            "TwoTrips", "ThreePair",
+            "StraightFlush", "straight", "trips",
+            "trip_in_three_with_two", "pair_in_three_with_two",
+            "pair_in_three_pair", "trip_in_steel_plate",
         })
 
         for gid, members in group_members.items():
