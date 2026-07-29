@@ -12,7 +12,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional, Set
 import sys
 
 # Add project root to path
@@ -532,6 +532,9 @@ class UltimateWinRateEngineV7:
                 "group_type_map": dict(self._group_type_map or {}),
             },
         )
+
+        # ── GUA-XXX: 重建被平台截断的组合动作 ──
+        self._reconstruct_truncated_actions(game_state, action_list)
 
         # ── ①b MemoryTracker（GUA-078：残局 numofplayers 须在注入前就绪）──
         self._ensure_memory_tracker_for_decide(game_state)
@@ -1597,6 +1600,114 @@ class UltimateWinRateEngineV7:
         # 因为可能引入误判；仅保护炸弹不受拆解。
 
         return card_mask, group_type_map, group_members
+
+    # ── GUA-XXX: 重建被平台截断的组合动作 ──────────────────────
+
+    def _reconstruct_truncated_actions(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+    ) -> None:
+        """平台 actionList 仅 10 项，优先单/对，截断 Trips/ThreeWithTwo/ThreePair/TwoTrips。
+
+        组牌引擎已运行（self._card_mask / _group_type_map / _group_members 就绪）：
+        遍历分组，查找应存在但 actionList 缺少的组合动作，就地追加。
+        """
+        if not self._group_type_map or not self._group_members or not self._card_mask:
+            return
+        hand_cards = game_state.get("handCards", [])
+        if not hand_cards:
+            return
+        from src.v.nn.guards.v7_guards import get_card_rank
+
+        existing: Set[Tuple[str, ...]] = set()
+        for a in action_list:
+            if isinstance(a, list) and len(a) >= 3 and isinstance(a[2], list):
+                existing.add((a[0], tuple(sorted(str(c) for c in a[2]))))
+
+        # 按类型收集分组 gid
+        trip_twt_gids: List[int] = []
+        pair_twt_gids: List[int] = []
+        pair_tp_gids: List[int] = []
+        trip_sp_gids: List[int] = []
+        for gid, gtype in self._group_type_map.items():
+            if gid < 0:
+                continue
+            if gtype == "trip_in_three_with_two":
+                trip_twt_gids.append(gid)
+            elif gtype == "pair_in_three_with_two":
+                pair_twt_gids.append(gid)
+            elif gtype == "pair_in_three_pair":
+                pair_tp_gids.append(gid)
+            elif gtype == "trip_in_steel_plate":
+                trip_sp_gids.append(gid)
+
+        added = 0
+
+        # 1. ThreeWithTwo = trip_in_three_with_two + pair_in_three_with_two
+        for t_gid in trip_twt_gids:
+            t_cards = self._group_members.get(t_gid, [])
+            if not t_cards:
+                continue
+            t_rank = get_card_rank(str(t_cards[0]))
+            for p_gid in pair_twt_gids:
+                p_cards = self._group_members.get(p_gid, [])
+                if not p_cards:
+                    continue
+                combined = sorted(t_cards + p_cards)
+                key = ("ThreeWithTwo", tuple(combined))
+                if key in existing:
+                    continue
+                action_list.append(["ThreeWithTwo", t_rank, combined])
+                existing.add(key)
+                added += 1
+
+        # 2. ThreePair = 3 × pair_in_three_pair
+        if len(pair_tp_gids) >= 3:
+            sorted_tp = sorted(pair_tp_gids)
+            for i in range(0, len(sorted_tp), 3):
+                if i + 2 >= len(sorted_tp):
+                    break
+                all_cards = sorted(
+                    self._group_members.get(sorted_tp[i], [])
+                    + self._group_members.get(sorted_tp[i + 1], [])
+                    + self._group_members.get(sorted_tp[i + 2], [])
+                )
+                min_rank = min(
+                    get_card_rank(str((self._group_members.get(sorted_tp[i]) or [""])[0])),
+                    get_card_rank(str((self._group_members.get(sorted_tp[i + 1]) or [""])[0])),
+                    get_card_rank(str((self._group_members.get(sorted_tp[i + 2]) or [""])[0])),
+                )
+                key = ("ThreePair", tuple(all_cards))
+                if key in existing:
+                    continue
+                action_list.append(["ThreePair", min_rank, all_cards])
+                existing.add(key)
+                added += 1
+
+        # 3. TwoTrips = 2 × trip_in_steel_plate
+        if len(trip_sp_gids) >= 2:
+            sorted_sp = sorted(trip_sp_gids)
+            for i in range(0, len(sorted_sp), 2):
+                if i + 1 >= len(sorted_sp):
+                    break
+                all_cards = sorted(
+                    self._group_members.get(sorted_sp[i], [])
+                    + self._group_members.get(sorted_sp[i + 1], [])
+                )
+                rank = get_card_rank(str((self._group_members.get(sorted_sp[i]) or [""])[0]))
+                key = ("TwoTrips", tuple(all_cards))
+                if key in existing:
+                    continue
+                action_list.append(["TwoTrips", rank, all_cards])
+                existing.add(key)
+                added += 1
+
+        if added:
+            self.logger.info(
+                "GUA-XXX: 重建 %d 个截断的组合动作 (候选 %d → %d)",
+                added, len(action_list) - added, len(action_list),
+            )
 
     # ── GUA-063 Phase 2: 角色驱动前置过滤 ────────────────────
 

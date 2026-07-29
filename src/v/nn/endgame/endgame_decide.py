@@ -1219,6 +1219,18 @@ class EndgameDecider:
                         ]
                         if pair_acts:
                             return self._select_best_index(pair_acts, action_list, game_state)
+                # GUA-XXX: 自由领出时，优先完整组合动作（TWT/ThreePair/TwoTrips）
+                # 平台 actionList 可能截断此类动作；若组牌重建后可用则优先选
+                structure_acts = [
+                    (i, a) for i, a in non_bombs
+                    if _get_declared_action_type(a) in (
+                        ACTION_TYPE_THREE_WITH_TWO,
+                        ACTION_TYPE_THREE_PAIR,
+                        ACTION_TYPE_TWO_TRIPS,
+                    )
+                ]
+                if structure_acts and is_my_turn:
+                    return structure_acts[0]
                 return self._select_best_index(non_bombs, action_list, game_state)
             return None
 
