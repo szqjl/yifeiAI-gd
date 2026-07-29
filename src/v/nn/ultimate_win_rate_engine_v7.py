@@ -4966,9 +4966,19 @@ class UltimateWinRateEngineV7:
         from src.v.nn.guards.v7_guards import get_card_rank
 
         rank_counts: Dict[str, List[str]] = {}
+        wildcard_str = f"H{cur_rank}"
         for c in hand_cards:
             r = get_card_rank(str(c))
             rank_counts.setdefault(r, []).append(c)
+        if cur_rank in rank_counts:
+            rank_counts[cur_rank].sort(key=lambda c: 1 if c == wildcard_str else 0)
+
+        # 构建 SF/Bomb 牌集（pair 选择时优先避开，避免后续 broken 拦截）
+        cards_in_sf_bomb: set = set()
+        if group_type_map and group_members:
+            for _gid, _gtype in group_type_map.items():
+                if _gtype in ("Bomb", "StraightFlush"):
+                    cards_in_sf_bomb.update(group_members.get(_gid, []))
 
         # 找能压的三张（rank > greater_val 且 ≥3 张）
         from src.v.nn.guards.v7_guards import get_card_value as _gcv
@@ -4998,6 +5008,9 @@ class UltimateWinRateEngineV7:
                     return True
             return False
 
+        def _pair_has_sf_bomb(pair_cards: List[str]) -> bool:
+            return any(c in cards_in_sf_bomb for c in pair_cards)
+
         def _find_available_pair(
             exclude_cards: List[str], prefer_large: bool = False
         ) -> Optional[Tuple[str, List[str]]]:
@@ -5024,7 +5037,10 @@ class UltimateWinRateEngineV7:
                 pool = natural_opts if natural_opts else pair_opts
             else:
                 pool = pair_opts
-            pool.sort(key=lambda x: -x[0] if prefer_large else x[0])
+            pool.sort(key=lambda x: (
+                1 if _pair_has_sf_bomb(x[2]) else 0,
+                -x[0] if prefer_large else x[0],
+            ))
             return (pool[0][1], pool[0][2])
 
         want_large = (strategy == "max")
