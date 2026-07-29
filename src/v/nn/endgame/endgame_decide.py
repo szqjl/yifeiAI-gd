@@ -1202,6 +1202,23 @@ class EndgameDecider:
                         ]
                         if pair_acts:
                             return self._select_best_index(pair_acts, action_list, game_state)
+                # GUA-183: 敌人报单（≤1 张）领出时，对子优先于单张
+                enemies = ec.get("enemies", {})
+                if enemies and is_my_turn:
+                    enemy_close = any(
+                        e.get("remaining", 27) <= 1 for e in enemies.values()
+                    )
+                    if enemy_close:
+                        non_pass = [
+                            (i, a) for i, a in non_bombs
+                            if _get_declared_action_type(a) not in (ACTION_TYPE_PASS, "PASS")
+                        ]
+                        pair_acts = [
+                            (i, a) for i, a in non_pass
+                            if _get_declared_action_type(a) == ACTION_TYPE_PAIR
+                        ]
+                        if pair_acts:
+                            return self._select_best_index(pair_acts, action_list, game_state)
                 return self._select_best_index(non_bombs, action_list, game_state)
             return None
 
