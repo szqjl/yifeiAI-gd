@@ -1381,8 +1381,9 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     GUA-062 P1：牌力计分（基于 04_card_grouping_skills.md §一 + V7 增强）。
 
     加分项：
-      - 登基牌炸弹 +3（同花顺 / 5头+炸 / 4个级牌）
-      - 普通四头炸 +2
+      - 同花顺 +3（牌面最大）
+      - 五星炸 +2
+      - 四头炸 +2
       - 6张及以上炸弹 +3
       - 四大天王（2大王+2小王） +4/组
       - 逢人配（百搭）+1/张（配成炸弹/同花顺不再重复加分）
@@ -1401,22 +1402,18 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     # 加分项
     # ═══════════════════════════════════
 
-    # 登基牌炸弹 +3：同花顺
+    # 登基牌炸弹 +3：同花顺（牌面最大）
     score += len(plan.straight_flushes) * 3
 
-    # 炸弹计分
+    # 炸弹计分：五星炸+2，四头炸+2（级牌四头不再额外加分）
     for b in plan.bombs:
         n = len(b)
         if n >= 6:
             score += 3          # 6张及以上炸弹
         elif n == 5:
-            score += 3          # 5头炸（登基牌炸弹）
+            score += 2          # 五星炸
         elif n == 4:
-            # 4头炸：区分登基炸 vs 普通炸
-            if all(_parse_rank(c) == cur_rank for c in b):
-                score += 3      # 4个级牌
-            else:
-                score += 2      # 普通四头炸
+            score += 2          # 四头炸
 
     # 四大天王 +4：2大王 + 2小王（统计方案中所有 JOKER 牌）
     def _count_jokers(plan: "GroupingPlan") -> tuple:
@@ -1478,6 +1475,11 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     score += len(plan.straights)
     score += len(plan.three_with_twos)
     score += len(plan.steel_plates)
+
+    # 多炸加分：双炸及更多时额外 +2，反映多炸防守深度优势
+    # 双炸 4+4 > 单炸 5+TWT 的结构强度，弥补小对子罚分对手数的误杀
+    if len(plan.bombs) >= 2:
+        score += 2
 
     # ═══════════════════════════════════
     # 减分项
