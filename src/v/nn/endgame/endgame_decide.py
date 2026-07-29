@@ -1131,6 +1131,17 @@ class EndgameDecider:
             result = self._q1_block_enemy(game_state, action_list, ec)
             if result is not None:
                 idx, action = result
+                if _get_declared_action_type(action) not in ("PASS",):
+                    if self._action_breaks_core_structure(action, game_state):
+                        pidx = next(
+                            (i for i, a in enumerate(action_list)
+                             if _get_declared_action_type(a) in ("PASS",)),
+                            None,
+                        )
+                        if pidx is not None:
+                            logger.info("Q1 封锁拆整牌(%s) → PASS",
+                                        _get_declared_action_type(action))
+                            return (pidx, action_list[pidx])
                 logger.info("Q1 封锁敌方: idx=%d type=%s", idx, get_action_type(action) if GUARD_TOOLS_OK else "?")
                 return idx, action
 
@@ -2705,7 +2716,19 @@ class EndgameDecider:
         # 0. GUA-170-A: 优先非炸压牌（有同型合法压则不用炸）
         cheaper = self._find_cheapest_press(game_state, action_list, cur_rank)
         if cheaper is not None:
-            logger.info("Q3 非炸压牌(省): idx=%d", cheaper[0])
+            cheaper_idx, cheaper_act = cheaper
+            # GUA-XXX: 若最省压牌拆核心整牌（顺/三带二等）且有 PASS 可选 → PASS
+            if _get_declared_action_type(cheaper_act) not in ("PASS",):
+                if self._action_breaks_core_structure(cheaper_act, game_state):
+                    pass_idx = next(
+                        (i for i, a in enumerate(action_list)
+                         if _get_declared_action_type(a) in ("PASS",)),
+                        None,
+                    )
+                    if pass_idx is not None:
+                        logger.info("Q3 最省压牌拆整牌(%s) → PASS", _get_declared_action_type(cheaper_act))
+                        return (pass_idx, action_list[pass_idx])
+            logger.info("Q3 非炸压牌(省): idx=%d", cheaper_idx)
             return cheaper
 
         # 分离炸弹
@@ -2770,6 +2793,38 @@ class EndgameDecider:
         # 同型内按 rank 值最小（最省）
         candidates.sort(key=lambda x: _min_card_value(x[1], cur_rank))
         return candidates[0]
+
+    @staticmethod
+    def _action_breaks_core_structure(
+        action: List, game_state: Dict[str, Any],
+    ) -> bool:
+        """检查出牌是否会破坏 core 整牌结构（顺/三带二/钢板/三连对）。
+
+        透过 game_state 中的 _card_mask / _group_gid_type_map / _group_members
+        （engine 在残局管线前已注入），判断 action 是否用了某 core 组的部分牌。
+        """
+        card_mask = game_state.get("_card_mask")
+        group_members = game_state.get("_group_members")
+        if not card_mask or not group_members:
+            return False
+        action_cards = _get_cards(action)
+        if not action_cards:
+            return False
+
+        touched: Dict[int, int] = {}
+        for card in action_cards:
+            info = card_mask.get(str(card))
+            if info is None:
+                continue
+            gid, is_core, _ = info
+            if is_core >= 1.0 and gid >= 0:
+                touched[gid] = touched.get(gid, 0) + 1
+
+        for gid, used in touched.items():
+            total = len(group_members.get(gid, []))
+            if 0 < used < total:
+                return True
+        return False
 
     # ═══════════════════════════════════════════════════
     #  辅助过滤 & 选择
