@@ -2798,31 +2798,35 @@ class EndgameDecider:
     def _action_breaks_core_structure(
         action: List, game_state: Dict[str, Any],
     ) -> bool:
-        """检查出牌是否会破坏 core 整牌结构（顺/三带二/钢板/三连对）。
+        """检查出牌是否会破坏 core 整牌结构。
 
-        透过 game_state 中的 _card_mask / _group_gid_type_map / _group_members
-        （engine 在残局管线前已注入），判断 action 是否用了某 core 组的部分牌。
+        用 _group_members 逐组扫描：若某 core 类型组的部分成员被 action 使用，
+        但非全部成员，则视为破坏结构。兼容 GUA-154 跨组归属（card 被分配
+        到非核心组时，仍能从 _group_members 检出真正的核心组）。
         """
-        card_mask = game_state.get("_card_mask")
         group_members = game_state.get("_group_members")
-        if not card_mask or not group_members:
+        gid_type_map = game_state.get("_group_gid_type_map", {})
+        if not group_members:
             return False
-        action_cards = _get_cards(action)
-        if not action_cards:
+        action_cards_set = set(_get_cards(action))
+        if not action_cards_set:
             return False
 
-        touched: Dict[int, int] = {}
-        for card in action_cards:
-            info = card_mask.get(str(card))
-            if info is None:
+        # 核心整牌类型（不包含普通对子/三张/单张/炸弹）
+        CORE_TYPES = frozenset({
+            "StraightFlush", "Straight", "ThreeWithTwo",
+            "TwoTrips", "ThreePair",
+        })
+
+        for gid, members in group_members.items():
+            gtype = gid_type_map.get(str(gid), "")
+            if gtype not in CORE_TYPES:
                 continue
-            gid, is_core, _ = info
-            if is_core >= 1.0 and gid >= 0:
-                touched[gid] = touched.get(gid, 0) + 1
-
-        for gid, used in touched.items():
-            total = len(group_members.get(gid, []))
-            if 0 < used < total:
+            members_set = set(members)
+            overlap = action_cards_set & members_set
+            if not overlap:
+                continue
+            if overlap != members_set:
                 return True
         return False
 
