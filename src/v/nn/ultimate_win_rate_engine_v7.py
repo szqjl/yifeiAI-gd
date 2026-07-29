@@ -3105,12 +3105,23 @@ class UltimateWinRateEngineV7:
         numofplayers = game_state.get("numofplayers", []) or [27, 27, 27, 27]
         hand_cards = game_state.get("handCards", []) or []
         my_hand_size = len(hand_cards)
+        is_early_game = (my_hand_size > 12)
+        teammate_controls = (
+            greater_pos == teammate_pos
+            and greater_action
+            and greater_action[0] != "PASS"
+        )
 
         # ── GUA-149 soft guard: 仅剩 1 个非 PASS 合法候选时禁止 PASS ──
         # R-D05: 组牌去单化后散牌极少，heuristic 打分中 PASS 靠
         # 队友控牌 +200 / 对手双HR推断 +350 叠分，远超非组局一致的非PASS动作
         # （如 Single/CJ 仅得 50-9=41），导致手牌僵死 3 轮不动。
         # 硬守卫：唯一非 PASS 候选 → 跳过所有打分，直接选中。
+        #
+        # v2 修订 (GUA-149-v2): 加入场景感知，避免早期/队友控牌时浪费炸弹。
+        #   R-D29: 主攻角色在跟牌场景下，前置过滤杀光所有 TWT 选项，
+        #   只剩 Bomb 和 PASS，GUA-149 强制选炸 → 第一轮浪费4张J。
+        #   修复：早期+非炸更大动作+队友有牌力 → 允许 PASS。
         non_pass_count = 0
         non_pass_idx = -1
         for i, act in enumerate(action_list):
@@ -3118,26 +3129,52 @@ class UltimateWinRateEngineV7:
                 non_pass_count += 1
                 non_pass_idx = i
         if non_pass_count == 1 and non_pass_idx >= 0:
-            self.logger.debug(
-                "GUA-149 soft guard: only 1 non-PASS candidate (idx=%d, type=%s), "
-                "force-selecting it over PASS to prevent hand freeze",
-                non_pass_idx, get_action_type(action_list[non_pass_idx])
-            )
-            return non_pass_idx
+            non_pass_act = action_list[non_pass_idx]
+            non_pass_type = get_action_type(non_pass_act)
 
-        # ── 场景判断 ──
-        teammate_controls = (
-            greater_pos == teammate_pos
-            and greater_action
-            and greater_action[0] != "PASS"
-        )
+            # ── 场景感知：是否允许 PASS ──
+            # 条件 A: 对手出的是非炸弹牌型（TWT/顺子/对子/单张等）
+            #         用炸弹去压非炸弹是大材小用 → 允许 PASS
+            # 条件 B: 早期游戏（手牌 > 12），炸弹应保留到关键时刻
+            # 条件 C: 队友控牌（teammate_controls），让队友继续
+            # 条件 D: 队友还有足够牌力（剩余 > 6 张），不需要帮炸
+            greater_type_for_149 = get_action_type(greater_action) if greater_action else ACTION_TYPE_PASS
+            is_wasteful_bomb = (
+                non_pass_type in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH)
+                and greater_type_for_149 not in (*_BOMB_TYPES, ACTION_TYPE_PASS)
+            )
+            teammate_rest = numofplayers[teammate_pos] if len(numofplayers) > teammate_pos else 0
+            should_allow_pass_149 = (
+                (is_wasteful_bomb and is_early_game)
+                or (teammate_controls and is_early_game)
+                or (is_wasteful_bomb and teammate_rest > 6)
+            )
+            if not should_allow_pass_149:
+                self.logger.debug(
+                    "GUA-149 soft guard: only 1 non-PASS candidate (idx=%d, type=%s), "
+                    "force-selecting it over PASS to prevent hand freeze "
+                    "(wasteful=%s early=%s teammate_rest=%d)",
+                    non_pass_idx, non_pass_type,
+                    is_wasteful_bomb, is_early_game, teammate_rest,
+                )
+                return non_pass_idx
+            else:
+                self.logger.debug(
+                    "GUA-149 soft guard: only 1 non-PASS candidate (idx=%d, type=%s), "
+                    "but context ALLOWS PASS (wasteful=%s early=%s teammate_rest=%d) "
+                    "\u2192 fall through to scoring",
+                    non_pass_idx, non_pass_type,
+                    is_wasteful_bomb, is_early_game, teammate_rest,
+                )
+                # 继续进入打分流程，不强制选非 PASS
+
+        # ── 场景判断（teammate_controls / is_early_game 已在 GUA-149 前定义）──
         opp_left = (my_pos + 1) % 4
         opp_right = (my_pos + 3) % 4
         opp_in_danger = (
             (len(numofplayers) > opp_left and 0 < numofplayers[opp_left] <= 4)
             or (len(numofplayers) > opp_right and 0 < numofplayers[opp_right] <= 4)
         )
-        is_early_game = (my_hand_size > 12)
 
         belief = game_state.get("_belief") or {}
         belief_hand_counts = belief.get("hand_counts") or numofplayers
@@ -3288,6 +3325,15 @@ class UltimateWinRateEngineV7:
             score = 0.0
 
             # ① 组局一致性：最高优先级（PASS 不参与组局，不加此项）
+            # GUA-149-v2: 跟牌浪费炸弹例外 — 早期用炸弹/同花顺压非炸牌型
+            # （如 yf2 第3步用4张J炸 TWT/4），不应享受组局一致性加分。
+            _wasteful_follow_bomb = (
+                is_bomb
+                and not _is_lead_heuristic
+                and is_early_game
+                and greater_action
+                and get_action_type(greater_action) not in (*_BOMB_TYPES, ACTION_TYPE_PASS)
+            )
             # MemoryV2 soft risk/send signal; hard rules remain authoritative
             try:
                 from src.v.nn.features.memory_v2 import MemoryV2Adapter
@@ -3297,7 +3343,7 @@ class UltimateWinRateEngineV7:
             except Exception as memory_v2_err:
                 self.logger.debug("MemoryV2 soft scoring skipped: %s", memory_v2_err)
             if not is_pass:
-                if grp_consistent:
+                if grp_consistent and not _wasteful_follow_bomb:
                     score += 10000
                 else:
                     score += _group_break_penalty(action)  # 拆局扣分
@@ -3464,6 +3510,20 @@ class UltimateWinRateEngineV7:
                 )
                 if has_nonbomb_structure:
                     score -= 500
+
+            # GUA-149-v2: 跟牌浪费炸弹罚分 — 跟非炸牌型时用炸弹/同花顺
+            # R-D29: 前置过滤杀光 TWT 后只剩 Bomb 和 PASS，
+            # 不加罚分时 Bomb/J 靠组局一致性 +10000 碾压 PASS。
+            # 但早期用炸弹压 TWT/顺子/对子是严重浪费。
+            if (
+                is_bomb
+                and not _is_lead_heuristic
+                and not is_pass
+                and is_early_game
+                and greater_action
+                and get_action_type(greater_action) not in (*_BOMB_TYPES, ACTION_TYPE_PASS)
+            ):
+                score -= 3000
 
             return score
 

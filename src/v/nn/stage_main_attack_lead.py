@@ -523,10 +523,35 @@ def recommend_main_attack_lead(
     if _weakness_promoted is not None and not _sprint_two_hands:
         return _weakness_promoted
 
+    # ── GUA-XXX: 光三检测 — 全小Trips无回收时跳过P2 ──
+    # 场景：多组小 Trips（222/333/666/888），无 QQQ+ 回收，无 <10 对子
+    # 人类俗称光三：出纯 Trips 让对手带对子更难、留下我方对子回收
+    _skip_p2_for_trips = False
+    if twt_count >= 1 and not _sprint_two_hands:
+        _twt_units = _enumerate_twt_units(groups)
+        if _twt_units:
+            _all_small_trip = all(
+                CARD_RANK_ORDER.get(get_card_rank(u["cards"][0]), 99) <= CARD_RANK_ORDER.get("J", 9)
+                for u in _twt_units
+            )
+            _all_big_pair = all(
+                CARD_RANK_ORDER.get(get_card_rank(u["cards"][3]), 0) >= CARD_RANK_ORDER.get("T", 8)
+                for u in _twt_units
+            )
+            _has_big_trip = any(
+                CARD_RANK_ORDER.get(get_card_rank(g["cards"][0]), 0) >= CARD_RANK_ORDER.get("Q", 10)
+                for g in groups.values()
+                if g["type"] in ("trips", "trip_in_three_with_two", "trip_in_steel_plate")
+            )
+            if _all_small_trip and _all_big_pair and not _has_big_trip:
+                _skip_p2_for_trips = True
+
     # ── P2：整组三带二（is_core 整组出 ≠ 拆核）──
     #    GUA-174: skip TWT in 2-hand sprint when ThreePair/TwoTrips available
     twt_pick = _pick_smallest_twt(engine, groups, cur_rank)
-    if twt_pick and not _sprint_two_hands:
+    if _skip_p2_for_trips:
+        pass
+    elif twt_pick and not _sprint_two_hands:
         gid, typ, pr, cards = twt_pick
         defer = twt_count == 1 and stage == "stage_1"
         if not defer and _has_structure_recapture(

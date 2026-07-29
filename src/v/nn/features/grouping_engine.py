@@ -1477,6 +1477,7 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     # 抵消小牌罚分对结构强度手牌的误杀（如 SF+炸+2顺+TWT 不应因散5被打到助攻）
     score += len(plan.straights)
     score += len(plan.three_with_twos)
+    score += len(plan.steel_plates)
 
     # ═══════════════════════════════════
     # 减分项
@@ -1639,26 +1640,69 @@ def _score_plan_v2(plan: "GroupingPlan", all_plans: List["GroupingPlan"]) -> Non
 # ── 方案枚举 ──────────────────────────────────────────────
 
 def _upgrade_bombs_with_wilds(
-    trips: List[List[str]], wilds: List[str],
+    trips: List[List[str]], wilds: List[str], cur_rank: str = "",
 ) -> Tuple[List[List[str]], List[List[str]], List[str]]:
     """用逢人配将三张升级为四头炸（三张+1 wild=4头炸）。
     返回 (new_bombs, remaining_trips, remaining_wilds)。
+
+    GUA-XXX: 钢板兼容 — 红桃配优先给非钢板 Trips。
+    Part A: 有其他 Trips 时红桃配不给钢板 Trips
+    Part B: 全部 Trips 仅能组成钢板时，不组钢板，红桃配+一个 Trip=炸弹
     """
     if not wilds or not trips:
         return [], trips[:], list(wilds)
 
+    # GUA-XXX: 检测钢板潜力（连续 rank 的 trip 对）
+    sp_indices: Set[int] = set()
+    if len(trips) >= 2 and cur_rank:
+        indexed = sorted(
+            enumerate(trips),
+            key=lambda x: _card_rank_value(x[1][0], cur_rank),
+        )
+        for i in range(len(indexed) - 1):
+            idx1, t1 = indexed[i]
+            idx2, t2 = indexed[i + 1]
+            r1, r2 = _parse_rank(t1[0]), _parse_rank(t2[0])
+            if r1 in RANKS and r2 in RANKS:
+                v1, v2 = RANKS.index(r1), RANKS.index(r2)
+                if v2 == v1 + 1 or (v1 == RANKS.index("A") and v2 == RANKS.index("2")):
+                    sp_indices.add(idx1)
+                    sp_indices.add(idx2)
+
     new_bombs: List[List[str]] = []
     wilds_consumed = 0
-    rem_trips = list(trips)
 
-    for trip in trips:
-        if wilds_consumed < len(wilds):
-            new_bombs.append(trip + [wilds[wilds_consumed]])
-            wilds_consumed += 1
+    if sp_indices:
+        non_sp = [(i, t) for i, t in enumerate(trips) if i not in sp_indices]
+        sp_items = [(i, t) for i, t in enumerate(trips) if i in sp_indices]
+
+        if non_sp:
+            # Part A: 有其他 Trips → wild 先给非钢板 trips
+            for _i, trip in non_sp:
+                if wilds_consumed < len(wilds):
+                    new_bombs.append(trip + [wilds[wilds_consumed]])
+                    wilds_consumed += 1
+            # 仍有剩余 wild → 给钢板 trips
+            for _i, trip in sp_items:
+                if wilds_consumed < len(wilds):
+                    new_bombs.append(trip + [wilds[wilds_consumed]])
+                    wilds_consumed += 1
         else:
-            break
+            # Part B: 全部 trips 仅能组成钢板 → 不组钢板，wild 升炸
+            for _i, trip in sp_items:
+                if wilds_consumed < len(wilds):
+                    new_bombs.append(trip + [wilds[wilds_consumed]])
+                    wilds_consumed += 1
+    else:
+        # 无钢板潜力：正常升炸
+        for trip in trips:
+            if wilds_consumed < len(wilds):
+                new_bombs.append(trip + [wilds[wilds_consumed]])
+                wilds_consumed += 1
+            else:
+                break
 
-    remaining_trips = rem_trips[len(new_bombs):]
+    remaining_trips = trips[wilds_consumed:]
     remaining_wilds = wilds[wilds_consumed:]
     return new_bombs, remaining_trips, remaining_wilds
 
@@ -1984,7 +2028,7 @@ def _enumerate_plans(
         bomb_core_ranks = _bomb_core_ranks(remaining_bombs)
 
         # Step 3: wild → 升炸（逢人配先固化，避免被顺子/三带二消耗）
-        up_bombs, pool_t, pool_w = _upgrade_bombs_with_wilds(pool_t, pool_w)
+        up_bombs, pool_t, pool_w = _upgrade_bombs_with_wilds(pool_t, pool_w, cur_rank)
         remaining_bombs = remaining_bombs + up_bombs
         bomb_core_ranks = _bomb_core_ranks(remaining_bombs)
 
