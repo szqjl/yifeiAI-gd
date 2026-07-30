@@ -3233,6 +3233,7 @@ class UltimateWinRateEngineV7:
         #   R-D29: 主攻角色在跟牌场景下，前置过滤杀光所有 TWT 选项，
         #   只剩 Bomb 和 PASS，GUA-149 强制选炸 → 第一轮浪费4张J。
         #   修复：早期+非炸更大动作+队友有牌力 → 允许 PASS。
+        _BOMB_TYPES = {ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH}
         non_pass_count = 0
         non_pass_idx = -1
         for i, act in enumerate(action_list):
@@ -3313,7 +3314,7 @@ class UltimateWinRateEngineV7:
         # ── GUA-071 预扫描：同型非炸弹计数器 ──
         # 检测 action_list 中是否有与对手同牌型的非炸弹动作
         # 用于规则⑧（有同型可压不该炸）和后置炸弹滥用覆盖
-        _BOMB_TYPES = {ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH}
+        # _BOMB_TYPES defined above inside GUA-149-v2 guard
         greater_type = ""
         if greater_action and greater_action[0] != "PASS":
             greater_type = get_action_type(greater_action)

@@ -1290,7 +1290,7 @@ class EndgameDecider:
                         ]
                         if pair_acts:
                             return self._select_best_index(pair_acts, action_list, game_state)
-                # GUA-183: 敌人报单（≤1 张）领出时，对子优先于单张
+                # GUA-183: 敌人报单（≤1 张）领出时，对子/顺子/三带二/三张/三连对/钢板优先于单张
                 enemies = ec.get("enemies", {})
                 if enemies and is_my_turn:
                     enemy_close = any(
@@ -1301,12 +1301,24 @@ class EndgameDecider:
                             (i, a) for i, a in non_bombs
                             if _get_declared_action_type(a) not in (ACTION_TYPE_PASS, "PASS")
                         ]
-                        pair_acts = [
+                        paired_types = {
+                            ACTION_TYPE_PAIR,
+                            ACTION_TYPE_STRAIGHT,
+                            ACTION_TYPE_THREE_WITH_TWO,
+                            ACTION_TYPE_TRIPS,
+                            ACTION_TYPE_THREE_PAIR,
+                            ACTION_TYPE_TWO_TRIPS,
+                        }
+                        structured_acts = [
                             (i, a) for i, a in non_pass
-                            if _get_declared_action_type(a) == ACTION_TYPE_PAIR
+                            if _get_declared_action_type(a) in paired_types
                         ]
-                        if pair_acts:
-                            return self._select_best_index(pair_acts, action_list, game_state)
+                        if structured_acts:
+                            structured_acts.sort(
+                                key=lambda x: len(_get_cards(x[1])),
+                                reverse=True,
+                            )
+                            return self._select_best_index(structured_acts, action_list, game_state)
                 # GUA-XXX: 自由领出时，优先完整组合动作（TWT/ThreePair/TwoTrips）
                 # 平台 actionList 可能截断此类动作；若组牌重建后可用则优先选
                 structure_acts = [
