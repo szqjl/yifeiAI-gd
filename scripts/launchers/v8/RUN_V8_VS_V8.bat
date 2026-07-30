@@ -9,7 +9,7 @@ if not "%~1"=="" set "GAMES=%~1"
 
 echo ========================================
 echo V8 vs V8 self-play - %GAMES% games (OpenGuanDan)
-echo TeamA: yf1_v8 + yf2_v8 ^| TeamB: yf1_v8 + yf2_v8 (same engine collision)
+echo TeamA: yf1_v8 + yf2_v8 ^| TeamB: yf3_v8 + yf4_v8 (same engine collision)
 echo Platform: openguandan (guandan.exe :8181)
 echo ========================================
 echo.
