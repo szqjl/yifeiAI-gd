@@ -1201,6 +1201,7 @@ class UltimateWinRateEngineV7:
 
         sprint_fire_ready = bool(
             role in ("主攻", "超强主攻")
+            and total_cards <= 12
             and bomb_count >= 2
             and single_residue <= 2
             and structured_turn_count >= 3

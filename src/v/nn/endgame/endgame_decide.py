@@ -364,6 +364,8 @@ def pick_assist_feed_by_prefer(
 ) -> Optional[Tuple[int, List]]:
     """
     GUA-117 / Q2 共用：按 assist_prefer 过滤合法动作 → 回收排序 → 取最优。
+    GUA-189：队友报单(1张)时单张排序规则——下家也报单则出大单防截胡，
+            否则出小单让队友接。
 
     Returns:
         (action_list 下标, action) 或 None
@@ -388,6 +390,34 @@ def pick_assist_feed_by_prefer(
         return None
 
     cur_rank = str(game_state.get("curRank", "2"))
+
+    # GUA-189：队友报单(1张)时单张排序
+    if "Single" in prefer_set and len(prefer_set) == 1:
+        ec = game_state.get("_endgame_context", {})
+        teammate = ec.get("teammate", {})
+        if teammate.get("remaining") == 1:
+            my_pos = int(game_state.get("myPos", 0))
+            teammate_pos = (my_pos + 2) % 4
+            numofplayers = game_state.get("numofplayers") or []
+            # 顺时针找第一个非队友的活跃玩家(剩余>0)
+            down_seat_rem = 99
+            for offset in range(1, 4):
+                seat = (my_pos + offset) % 4
+                if seat == teammate_pos:
+                    continue
+                if isinstance(numofplayers, list) and seat < len(numofplayers):
+                    rem = numofplayers[seat]
+                    if isinstance(rem, (int, float)) and rem > 0:
+                        down_seat_rem = int(rem)
+                        break
+            if down_seat_rem == 1:
+                # 下家也报单: 出大单防截胡(忽略 recapture, 因为目的是赢这一轮)
+                assist_actions.sort(key=lambda item: -_max_card_value(item[1], cur_rank))
+            else:
+                # 下家不报单: 出小单让队友接(忽略 recapture, 因为目的是让队友接过去)
+                assist_actions.sort(key=lambda item: _max_card_value(item[1], cur_rank))
+            return assist_actions[0]
+
     assist_actions = _sort_by_recapture_first(assist_actions, hand_cards, cur_rank)
     return assist_actions[0]
 
@@ -633,7 +663,7 @@ def should_allow_counter_bomb_core_exempt(
     if not _action_beats_greater(action, greater_action, cur_rank):
         return False
     enemy_rem = _enemy_bomb_sprint_remaining(game_state)
-    if enemy_rem is None or enemy_rem > 5 or enemy_rem < 1:
+    if enemy_rem is None or enemy_rem < 1:
         return False
     return True
 
@@ -793,12 +823,23 @@ def _sort_q1_block_candidates(
     if len(bomb_items) <= 1:
         return ordered
 
+    # GUA-188: 检测是否存在非 SF 的普通炸弹（用于 SF 延后键）
+    has_non_sf_bomb = any(
+        _get_declared_action_type(
+            item[1] if isinstance(item, tuple) and len(item) == 2 else item
+        ) not in ("StraightFlush", "STRAIGHT_FLUSH")
+        for item in bomb_items
+    )
+
     def _bomb_min_sufficient_key(item):
         act = item[1] if isinstance(item, tuple) and len(item) == 2 else item
         cards = _get_cards(act)
         wild_count = sum(1 for c in cards if isinstance(c, str) and c.startswith("H") and c[1:] == cur_rank)
         split_orphan = _bomb_splits_pure_rank_leaving_orphan(item, bomb_items, hand_cards)
+        act_type = _get_declared_action_type(act)
+        is_sf = act_type in ("StraightFlush", "STRAIGHT_FLUSH")
         return (
+            1 if (is_sf and has_non_sf_bomb) else 0,
             1 if split_orphan else 0,
             len(cards),
             wild_count,
@@ -1877,9 +1918,7 @@ class EndgameDecider:
         main_pos: int,
         main_enemy: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
-        """GUA-123：敌 sprint 出炸时，从 actionList 选最小足够反炸。"""
-        if main_enemy.get("remaining", 99) > 5:
-            return None
+        """GUA-188：敌出炸时从 actionList 选最小足够反炸（不再硬跳过 >5 张）。"""
         if not self._is_q1_following_enemy_control(game_state, ec):
             return None
         greater_action = game_state.get("greaterAction")

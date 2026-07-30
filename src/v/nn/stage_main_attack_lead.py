@@ -4,12 +4,16 @@ GUA-116：主攻 stage_1 / stage_2 自由领出整牌型链。
 
 P1 散单 → P2 TWT → P3 顺 → P3b 钢板 → P3c 三连对 → P3d 天然三张 → P4 小对。
 GUA-174：2-hand sprint 时 P3b/P3c 优先于 P2（三连对/钢板硬先出）。
+GUA-189：队友 1-5 张时按 assist_prefer 表优先喂牌（覆盖 P1-P4 管线）。
+
 真源：docs/guandan-brain/V7-主攻领出-阶段划分设计口径.md
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+from src.v.nn.assist_prefer_table import assist_prefer_for
 
 if TYPE_CHECKING:
     from src.v.nn.ultimate_win_rate_engine_v7 import UltimateWinRateEngineV7
@@ -442,6 +446,81 @@ def _pick_p4_small_pair(
     }
 
 
+def _try_feed_from_groups(
+    engine: "UltimateWinRateEngineV7",
+    groups: Dict[int, dict],
+    card_mask: Dict[str, tuple],
+    hand_cards: List[str],
+    cur_rank: str,
+    feed_prefer: List[str],
+    group_type_map: Dict[int, str],
+    group_members: Optional[Dict[int, List[str]]],
+) -> Optional[Dict[str, Any]]:
+    from src.v.nn.guards.v7_guards import CARD_RANK_ORDER, get_card_rank
+
+    def _prank(internal_rank: str) -> str:
+        return engine.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
+
+    for atype in feed_prefer:
+        if atype == "Straight":
+            result = _pick_smallest_straight(engine, groups, cur_rank)
+            if result:
+                gid, typ, pr, cards = result
+                if _has_structure_recapture(groups, lead_gid=gid, kind="straight", engine=engine, cur_rank=cur_rank):
+                    return {"type": typ, "rank": pr, "cards": cards, "intent": "main_feed_teammate_Straight"}
+
+        elif atype == "ThreeWithTwo":
+            result = _pick_smallest_twt(engine, groups, cur_rank)
+            if result:
+                gid, typ, pr, cards = result
+                if _has_structure_recapture(groups, lead_gid=gid, kind="twt", engine=engine, cur_rank=cur_rank):
+                    return {"type": typ, "rank": pr, "cards": cards, "intent": "main_feed_teammate_ThreeWithTwo"}
+
+        elif atype == "Trips":
+            result = _pick_smallest_natural_trips(engine, groups, cur_rank)
+            if result:
+                gid, typ, pr, cards = result
+                if _has_structure_recapture(groups, lead_gid=gid, kind="trips", engine=engine, cur_rank=cur_rank):
+                    return {"type": typ, "rank": pr, "cards": cards, "intent": "main_feed_teammate_Trips"}
+
+        elif atype == "Pair":
+            from src.v.nn.guards.v7_guards import CARD_RANK_ORDER, get_card_rank
+            _candidates = []
+            for _ginfo in groups.values():
+                if _ginfo["type"] != "pair":
+                    continue
+                _crds = sorted(str(c) for c in _ginfo["cards"])[:2]
+                if len(_crds) < 2:
+                    continue
+                _rk = get_card_rank(_crds[0])
+                if _rk == cur_rank:
+                    continue
+                _candidates.append((CARD_RANK_ORDER.get(_rk, 99), _crds, _rk))
+            if _candidates:
+                _, _crds, _rk = min(_candidates, key=lambda x: (x[0], x[1]))
+                return {
+                    "type": "Pair",
+                    "rank": _prank(_rk),
+                    "cards": _crds,
+                    "intent": "main_feed_teammate_Pair",
+                }
+
+        elif atype == "Single":
+            eligible = _eligible_p1_singles(
+                engine, card_mask, hand_cards, cur_rank, group_type_map, group_members,
+            )
+            if eligible:
+                card = eligible[0]
+                return {
+                    "type": "Single",
+                    "rank": _prank(get_card_rank(card)),
+                    "cards": [card],
+                    "intent": "main_feed_teammate_Single",
+                }
+
+    return None
+
+
 def recommend_main_attack_lead(
     engine: "UltimateWinRateEngineV7",
     game_state: Dict[str, Any],
@@ -452,6 +531,7 @@ def recommend_main_attack_lead(
 ) -> Optional[Dict[str, Any]]:
     """
     主攻 is_lead：P1 → P2 → P3 → P4（命中即返回）。
+    GUA-189：队友 1-5 张时按 assist_prefer 表优先喂牌（覆盖 P1-P4 管线）。
     stage_0 overlay 按 stage_1 规则；L11/L14 defer 在 stage_1 跳过唯一小 TWT/顺。
     """
     from src.v.nn.guards.v7_guards import CARD_RANK_ORDER, get_card_rank
@@ -463,6 +543,21 @@ def recommend_main_attack_lead(
     group_type_map = engine._group_type_map or {}
     group_members = engine._group_members or None
     groups = engine._build_group_index(card_mask)
+
+    # ── 送队友覆盖（before P1）：队友 1-5 张时按 assist_prefer 表喂牌 ──
+    numofplayers = game_state.get("numofplayers") or []
+    my_pos = int(game_state.get("myPos", 0))
+    if numofplayers and len(numofplayers) == 4:
+        teammate_pos = (my_pos + 2) % 4
+        teammate_rem = numofplayers[teammate_pos]
+        if isinstance(teammate_rem, (int, float)) and 1 <= int(teammate_rem) <= 5:
+            feed_prefer = assist_prefer_for(int(teammate_rem))
+            feed_action = _try_feed_from_groups(
+                engine, groups, card_mask, hand_cards, cur_rank,
+                feed_prefer, group_type_map, group_members,
+            )
+            if feed_action:
+                return feed_action
 
     # ── P1（O10）──
     p1_singles = _eligible_p1_singles(
