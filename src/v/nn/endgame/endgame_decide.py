@@ -262,14 +262,61 @@ def _is_finish_now_action(act: List, hand_counter: Counter) -> bool:
 def find_finish_now_candidate(
     game_state: Dict[str, Any], action_list: List,
 ) -> Optional[Tuple[int, List]]:
-    """在 action_list 中查找一手清牌候选（首个匹配）。"""
+    """
+    在 action_list 中查找一手清牌候选。
+    
+    优先级：
+      1. 非炸方案（ThreePair / ThreeWithTwo 等）优先于炸
+      2. 炸中选最小张数（4星 < 5星 < 6星）
+      3. 若唯一 finish_now 是含百搭的炸，且在 actionList 中存在更小炸 → 跳过 Q0.5
+    """
     hand_counter = _hand_counter_from_state(game_state)
     if not hand_counter:
         return None
+
+    candidates: List[Tuple[int, List]] = []
     for i, act in enumerate(action_list):
         if _is_finish_now_action(act, hand_counter):
-            return i, act
-    return None
+            candidates.append((i, act))
+
+    if not candidates:
+        return None
+
+    cur_rank = str(game_state.get("curRank", "2"))
+    wild = "H" + cur_rank
+
+    def _sort_key(item):
+        act = item[1]
+        atype = _get_declared_action_type(act)
+        is_bomb = atype in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH) if GUARD_TOOLS_OK else False
+        cards = _get_cards(act)
+        bomb_size = len(cards) if is_bomb and isinstance(cards, list) else 0
+        uses_wild = wild in cards if isinstance(cards, list) else False
+        return (bomb_size, 1 if uses_wild else 0, item[0])
+
+    candidates.sort(key=_sort_key)
+    best_idx, best_act = candidates[0]
+
+    # 跳过含百搭的 finish_now 大炸：若唯一候选是含百搭的炸，且存在更小非 finish_now 炸
+    if not GUARD_TOOLS_OK:
+        return best_idx, best_act
+
+    best_atype = _get_declared_action_type(best_act)
+    is_best_bomb = best_atype in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH)
+    best_cards = _get_cards(best_act)
+
+    if is_best_bomb and len(candidates) == 1 and isinstance(best_cards, list):
+        if wild in best_cards:
+            for i, act in enumerate(action_list):
+                if i == best_idx:
+                    continue
+                atype = _get_declared_action_type(act)
+                if atype in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+                    act_cards = _get_cards(act)
+                    if isinstance(act_cards, list) and len(act_cards) < len(best_cards):
+                        return None  # 跳过 Q0.5，让 Q1 选更小炸
+
+    return best_idx, best_act
 
 
 def finish_now_protected_action_types(
@@ -1111,6 +1158,30 @@ class EndgameDecider:
 
         self_context = ec.get("self", {})
         enemies = ec.get("enemies", {})
+
+        # ── GUA-XXX: 不压队友 — greaterPos 为 teammate 且 teammate 出炸型 → PASS
+        # 仅拦截 teammate 出炸/同花顺的情况（队友互炸），非炸型正常让 Q1 裁决
+        # 例外：有敌人 ≤2 张时即使队友出炸也允许轻压拦截
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction")
+        teammate_pos = (my_pos + 2) % 4
+        if greater_pos not in (-1, None) and greater_pos == teammate_pos:
+            if greater_action and _get_declared_action_type(greater_action) not in ("PASS", "pass"):
+                gt = _get_declared_action_type(greater_action)
+                is_bomb_like = _is_bomb_like_action(greater_action) if GUARD_TOOLS_OK else (
+                    gt in ("Bomb", "StraightFlush")
+                )
+                if is_bomb_like:
+                    enemy_imminent = any(
+                        e.get("remaining", 99) <= 2 for e in enemies.values()
+                    ) if enemies else False
+                    if not enemy_imminent:
+                        for i, a in enumerate(action_list):
+                            if _get_declared_action_type(a) in ("PASS", "pass"):
+                                logger.info("GUA-XXX: greaterPos=teammate(%d) 出炸型 → PASS", greater_pos)
+                                return i, a
+                        return None, None
 
         # ── Q0.5: 一手清（finish_now）────  [GUA-097 fix: 提升至 Q0 之前]
         # GUA-112: 无论敌人/队友状态，只要 actionList 含一手清候选 → 立即出完
@@ -2170,7 +2241,15 @@ class EndgameDecider:
             )
             if sprint_structure is not None:
                 return sprint_structure
-            return self._select_enemy_one_locking_structure(structured, game_state)
+            # 筛选出非炸弹自身且不拆弹的安全结构候选
+            hand_cards = list(game_state.get("handCards", []) or [])
+            safe_structured = [
+                (i, a) for i, a in structured
+                if not self._is_bomb_destroying_action(a, hand_cards)
+                and get_action_type(a) not in ("Bomb", "StraightFlush", "JokerBomb")
+            ]
+            if safe_structured:
+                return self._select_enemy_one_locking_structure(safe_structured, game_state)
 
         safe_single = self._select_enemy_one_safe_single(singles, game_state, ec)
         if safe_single is not None:
@@ -2180,6 +2259,30 @@ class EndgameDecider:
             return self._select_enemy_one_strongest_single(singles, game_state)
         return None
 
+    def _is_bomb_destroying_action(
+        self, act: List, hand_cards: List[str],
+    ) -> bool:
+        """检查非炸弹候选是否消耗了炸弹核心牌（手牌某rank≥4张时，该候选用了1-3张）。"""
+        act_cards = _get_cards(act)
+        if not act_cards:
+            return False
+        try:
+            atype = get_action_type(act)
+        except Exception:
+            return False
+        if atype in ("Bomb", "StraightFlush", "JokerBomb"):
+            return False
+        from collections import Counter
+        act_counter = Counter(act_cards)
+        hand_counter = Counter(hand_cards)
+        for rank in set(c[1] for c in hand_cards):
+            in_hand = sum(1 for c in hand_cards if c[1] == rank)
+            if in_hand >= 4:
+                in_act = sum(1 for c in act_cards if c[1] == rank)
+                if 1 <= in_act <= in_hand - 1 and in_hand - in_act < 4:
+                    return True
+        return False
+
     def _select_enemy_one_locking_structure(
         self, candidates: List[Tuple[int, List]], game_state: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
@@ -2188,12 +2291,15 @@ class EndgameDecider:
             return None
 
         cur_rank = str(game_state.get("curRank", "2"))
+        hand_cards = list(game_state.get("handCards", []) or [])
 
         def _key(item: Tuple[int, List]):
             _, act = item
             atype = get_action_type(act)
+            bomb_destroy = self._is_bomb_destroying_action(act, hand_cards)
             return (
                 _q1_structure_priority(atype),
+                0 if not bomb_destroy else 1,
                 -len(_get_cards(act)),
                 _max_card_value(act, cur_rank),
             )
