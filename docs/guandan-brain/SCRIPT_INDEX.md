@@ -31,6 +31,7 @@
 | `START_V7_COMPLETE.bat` | → `scripts/launchers/v-nn/START_V7_COMPLETE.bat` |
 | `START_V7_AUTO.bat` | → `scripts/launchers/v-nn/START_V7_AUTO.bat` |
 | `RUN_V7_VS_LALALA.bat` | → `scripts/launchers/v-nn/RUN_V7_VS_LALALA.bat` |
+| `RUN_V7DAN_VS_DANZERO.bat` | → `scripts/launchers/v-nn/RUN_V7DAN_VS_DANZERO.bat` |
 
 ### V8 专用 .bat（根目录快捷方式）
 
@@ -259,6 +260,13 @@
 | `run_v7_test.bat` | V7 端到端测试 bat 入口 |
 > **注**：`run_v7_vs_m3_games.py`、`run_v7_train_and_eval.py`、`v7_config.json`、`v7_lalala_config.json` 已移除（索引残留）。
 
+### scripts/launchers/v7dan/ — v7Dan vs DanZero 启动脚本（v1006）
+
+| 脚本 | 用途 |
+|------|------|
+| `run_v7dan_vs_danzero_games.py` | **v7Dan vs DanZero 批跑入口**（BatchExecutor；队A yf1_v7dan+yf2_v7dan，队B DanZero client3+client4） |
+| `RUN_V7DAN_VS_DANZERO.bat`（根目录） | v7Dan vs DanZero 批跑 bat 入口（stub → `scripts/launchers/v-nn/`） |
+
 ### scripts/launchers/m/ — M 系列启动器
 
 | 脚本 | 用途 |
@@ -277,6 +285,17 @@
 | `v8_lalala_adapter.py` | Lalala 对手适配器 |
 | `v8_websocket_manager.py` | WebSocket 连接管理器 |
 | `v8_game_recorder.py` | 牌谱记录器 |
+
+### src/communication/ — v7Dan vs DanZero（v1006 批跑）
+
+| 模块 | 用途 |
+|------|------|
+| `yf1_v7dan.py` | v7Dan 队A 席位0 客户端（v7 引擎，牌谱 game_records_v7dan/） |
+| `yf2_v7dan.py` | v7Dan 队A 席位2 客户端（v7 引擎，牌谱 game_records_v7dan/） |
+| `danzero_policy.py` | DanZero 决策策略（骨架恒选 0；模型接入点在 §12 契约） |
+| `danzero_adapter.py` | DanZero 队B websockets 客户端适配器 |
+| `_danzero_launcher.py` | DanZero 客户端统一启动（CONNECT_DELAY 错峰） |
+| `run_danzero_client3.py` / `run_danzero_client4.py` | DanZero 队B 席位1/3 入口 |
 
 ### scripts/launchers/v8/ — V8 启动脚本（OpenGuanDan）
 

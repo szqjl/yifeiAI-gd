@@ -92,16 +92,17 @@
 
 **何时**：关单验收、KPI 环比、多样本观测前——须清空本轮 Layer 2 产物，避免旧牌谱/旧 vn 混入统计。对应工作流 **WF-04** 跑批前一步。
 
-**目录分离**：M3 牌谱 → `game_records/`；V7 牌谱 → `game_records_v7/`；**V8 牌谱 → `game_records_v8/`**（**勿混清**——只清本次批跑对应目录，除非明确做全仓净盘）。
+**目录分离**：M3 牌谱 → `game_records/`；V7 牌谱 → `game_records_v7/`；**V7Dan 牌谱 → `game_records_v7dan/`**；**V8 牌谱 → `game_records_v8/`**（**勿混清**——只清本次批跑对应目录，除非明确做全仓净盘）。
 
 | 线 | 必清 |
 |----|------|
 | **M3** | `game_records/*.json` |
 | **V7** | `game_records_v7/*.json` |
+| **V7Dan** | `game_records_v7dan/*.json` + `v7dan_vs_danzero_scores.json` + `v7dan_vs_danzero_state.json` |
 | **V8** | `game_records_v8/*.json` + `v8_vs_lalala_scores.json` + `v8_vs_lalala_state.json` |
 | **共用** | `logs/*`（`batch_executor_*.log`、`v8_vs_lalala_*.log`、`m3_vs_lalala_*.log` 等） |
 
-**同批还应清**（否则 `completed_games`/vn 对账会串批）：`batch_executor/latest_victory_num.json`、`batch_executor/current_batch.json`、`execution_state.json`（若存在）、`tmp/.batch_executor.lock`；以及对应战绩文件 **M3** → `m3_vs_lalala_scores.json` + `m3_vs_lalala_state.json`（+ 若 GUI 用过 `game_scores.json`）；**V7** → `v7_vs_lalala_scores.json` + `v7_vs_lalala_state.json`。
+**同批还应清**（否则 `completed_games`/vn 对账会串批）：`batch_executor/latest_victory_num.json`、`batch_executor/current_batch.json`、`execution_state.json`（若存在）、`tmp/.batch_executor.lock`；以及对应战绩文件 **M3** → `m3_vs_lalala_scores.json` + `m3_vs_lalala_state.json`（+ 若 GUI 用过 `game_scores.json`）；**V7** → `v7_vs_lalala_scores.json` + `v7_vs_lalala_state.json`；**V7Dan** → `v7dan_vs_danzero_scores.json` + `v7dan_vs_danzero_state.json`。
 
 **PowerShell（仓库 Git 根目录）**：
 
@@ -111,6 +112,15 @@ Get-Process guandan_offline_v1006 -ErrorAction SilentlyContinue | Stop-Process -
 Remove-Item tmp\.batch_executor.lock -ErrorAction SilentlyContinue
 Get-ChildItem game_records_v7 -Filter *.json -ErrorAction SilentlyContinue | Remove-Item -Force
 Remove-Item v7_vs_lalala_scores.json, v7_vs_lalala_state.json -ErrorAction SilentlyContinue
+Remove-Item batch_executor\latest_victory_num.json, batch_executor\current_batch.json -ErrorAction SilentlyContinue
+Remove-Item execution_state.json -ErrorAction SilentlyContinue
+Get-ChildItem logs -File -ErrorAction SilentlyContinue | Remove-Item -Force
+
+# --- V7Dan 净盘（run_v7dan_vs_danzero_games 前）---
+Get-Process guandan_offline_v1006 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Remove-Item tmp\.batch_executor.lock -ErrorAction SilentlyContinue
+Get-ChildItem game_records_v7dan -Filter *.json -ErrorAction SilentlyContinue | Remove-Item -Force
+Remove-Item v7dan_vs_danzero_scores.json, v7dan_vs_danzero_state.json -ErrorAction SilentlyContinue
 Remove-Item batch_executor\latest_victory_num.json, batch_executor\current_batch.json -ErrorAction SilentlyContinue
 Remove-Item execution_state.json -ErrorAction SilentlyContinue
 Get-ChildItem logs -File -ErrorAction SilentlyContinue | Remove-Item -Force

@@ -25,12 +25,14 @@ GAME_READY_FILE = Path(__file__).resolve().parent / "game_ready.json"
 # 连接顺序（0=首席直连，末席连上后平台自动开局）
 CONNECT_ORDER_INDEX: Dict[str, int] = {
     "yf1_v7": 0,
+    "yf1_v7dan": 0,
     "yf1_m1": 0,
     "yf1_m3": 0,
     "yf1_v8": 0,
     "client3": 1,
     "yf3_v8": 1,
     "yf2_v7": 2,
+    "yf2_v7dan": 2,
     "yf2_m1": 2,
     "yf2_m3": 2,
     "yf2_v8": 2,
@@ -41,8 +43,8 @@ CONNECT_ORDER_INDEX: Dict[str, int] = {
 # 末席（client4）连入前额外稳定等待（秒）；平台第 4 席 WS 连上即开局
 SETTLE_BEFORE_LAST_CONNECT = 7.0
 
-YF1_CLIENT_IDS = frozenset({"yf1_v7", "yf1_m1", "yf1_m3", "yf1_v8"})
-YF2_CLIENT_IDS = frozenset({"yf2_v7", "yf2_m1", "yf2_m3", "yf2_v8"})
+YF1_CLIENT_IDS = frozenset({"yf1_v7", "yf1_v7dan", "yf1_m1", "yf1_m3", "yf1_v8"})
+YF2_CLIENT_IDS = frozenset({"yf2_v7", "yf2_v7dan", "yf2_m1", "yf2_m3", "yf2_v8"})
 YF3_CLIENT_IDS = frozenset({"yf3_v8"})
 YF4_CLIENT_IDS = frozenset({"yf4_v8"})
 
@@ -176,6 +178,10 @@ def client_id_from_script(script_path: str) -> Optional[str]:
     if name == "run_lalala_client3":
         return "client3"
     if name == "run_lalala_client4":
+        return "client4"
+    if name == "run_danzero_client3":
+        return "client3"
+    if name == "run_danzero_client4":
         return "client4"
     if name.startswith("yf1_"):
         return Path(script_path).stem

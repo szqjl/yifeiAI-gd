@@ -536,19 +536,22 @@ def _format_cards(action_cards: Any) -> str:
 class GameRecorder:
     """游戏记录器 - 记录完整的游戏过程"""
     
-    def __init__(self, player_id: int, player_name: str = ""):
+    def __init__(self, player_id: int, player_name: str = "", record_dir=None):
         """
         初始化游戏记录器
         
         Args:
             player_id: 玩家位置 (0-3)
             player_name: 玩家名称
+            record_dir: 记录目录（默认 game_records_v7；v7Dan 等变体可传入独立目录）
         """
         self.player_id = player_id
         self.player_name = player_name or f"player_{player_id}"
         
-        # 创建记录目录（V7专用，与M3的game_records分开）
-        self.record_dir = Path(__file__).parent.parent.parent / "game_records_v7"
+        # 创建记录目录（默认 V7 专用，与M3的game_records分开；变体线可独立目录）
+        if record_dir is None:
+            record_dir = Path(__file__).parent.parent.parent / "game_records_v7"
+        self.record_dir = Path(record_dir)
         self.record_dir.mkdir(exist_ok=True)
         
         # 当前游戏记录
