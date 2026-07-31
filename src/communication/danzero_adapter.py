@@ -104,6 +104,7 @@ class DanZeroWebsocketsClient:
                     action_list = data.get("actionList") or []
                     if not isinstance(action_list, list) or not action_list:
                         print(f"[{self.user_info}] actionList 缺失/空，回退 actIndex=0")
+                        self.logger.info("actionList 缺失/空，回退 actIndex=0 stage=%s", data.get("stage"))
                         act_index = 0
                     else:
                         act_index = await asyncio.to_thread(self.policy.decide, data)
@@ -111,7 +112,15 @@ class DanZeroWebsocketsClient:
                             print(f"[{self.user_info}] actIndex 越界: {act_index}，回退 0")
                             act_index = 0
 
-                    print(f"[{self.user_info}] 选择动作: {act_index}")
+                    _selected = action_list[act_index] if action_list else None
+                    self.logger.info(
+                        "选择动作: actIndex=%d action=%s stage=%s curAction=%s",
+                        act_index,
+                        _selected,
+                        data.get("stage"),
+                        data.get("curAction"),
+                    )
+                    print(f"[{self.user_info}] 选择动作: {act_index} {_selected}")
                     await self.websocket.send(json.dumps({"actIndex": act_index}))
 
                 except json.JSONDecodeError:
