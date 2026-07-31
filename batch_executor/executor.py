@@ -374,6 +374,7 @@ class BatchExecutor:
         enable_signal_handler: bool = True,
         visible_server: bool = False,
         platform: str = "v1006",  # V8: 平台类型
+        record_dir: Optional[str] = None,  # 自定义牌谱目录（如 v7Dan 的 game_records_v7dan）
     ):
         """
         初始化批量执行器
@@ -406,6 +407,9 @@ class BatchExecutor:
         self.project_root = Path(__file__).parent.parent
         self.logger.debug(f"项目根目录: {self.project_root}")
         self.logger.debug(f"当前工作目录: {os.getcwd()}")
+
+        # v7Dan 等自定义牌谱目录：不传时按平台默认（V8→game_records_v8，其余→game_records）
+        self.record_dir = Path(record_dir) if record_dir else None
         
         # 导入所需模块
         from .diagnostic import DiagnosticModule
@@ -553,10 +557,16 @@ class BatchExecutor:
         
         self.logger.info("=" * 60 + "\n")
     
+    def _records_dir(self) -> Path:
+        """批跑牌谱目录：优先 record_dir 参数（v7Dan 等），否则按平台默认。"""
+        if self.record_dir is not None:
+            return self.record_dir
+        return self.project_root / ("game_records_v8" if self.platform == "openguandan" else "game_records")
+
     def _get_game_records_stats(self) -> GameRecordsStats:
         if self._game_records_files_baseline is None:
             return GameRecordsStats()
-        records_dir = self.project_root / ("game_records_v8" if self.platform == "openguandan" else "game_records")
+        records_dir = self._records_dir()
         return _scan_game_records_stats(
             records_dir,
             self._game_records_files_baseline,
@@ -959,7 +969,7 @@ class BatchExecutor:
         self.tracker.total_games = 0
         self.logger.info("已清空之前的战绩，开始新的对战")
         
-        records_dir = self.project_root / ("game_records_v8" if self.platform == "openguandan" else "game_records")
+        records_dir = self._records_dir()
         self._game_records_files_baseline = {
             p.name for p in records_dir.glob("*.json")
         } if records_dir.is_dir() else set()
@@ -1337,7 +1347,7 @@ class BatchExecutor:
                             if server_process.poll() is None:
                                 self.logger.warning("服务器进程仍在运行，可能卡住")
                                 # 检查是否有游戏记录生成（作为完成标志；与项目根一致，避免 cwd 不一致漏检）
-                                game_records_dir = self.project_root / ("game_records_v8" if self.platform == "openguandan" else "game_records")
+                                game_records_dir = self._records_dir()
                                 if game_records_dir.exists():
                                     recent_records = list(game_records_dir.glob("*.json"))
                                     if recent_records:

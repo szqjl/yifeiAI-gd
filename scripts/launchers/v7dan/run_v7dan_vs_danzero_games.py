@@ -167,6 +167,9 @@ def main(argv: list[str] | None = None) -> None:
         score_file=str(project_root / "v7dan_vs_danzero_scores.json"),
         enable_signal_handler=True,
         visible_server=visible_server,
+        # v7Dan 牌谱目录独立（game_records_v7dan），须显式传入，
+        # 否则 executor 按 v1006 平台默认检查 game_records（M3），超时兜底会误判强杀。
+        record_dir=str(RECORD_DIR),
     )
 
     try:

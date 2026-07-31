@@ -292,7 +292,8 @@
 |------|------|
 | `yf1_v7dan.py` | v7Dan 队A 席位0 客户端（v7 引擎，牌谱 game_records_v7dan/） |
 | `yf2_v7dan.py` | v7Dan 队A 席位2 客户端（v7 引擎，牌谱 game_records_v7dan/） |
-| `danzero_policy.py` | DanZero 决策策略（骨架恒选 0；模型接入点在 §12 契约） |
+| `danzero_nn.py` | DanZero DMC Q-net 推理（`models/danzero/q_network.ckpt`，567 维 state → argmax Q 取 actIndex）+ client1 状态机 / tribute/back 移植 |
+| `danzero_policy.py` | DanZero 决策策略（play 走真实模型 argmax Q；模型未就绪时降级最小可行动作） |
 | `danzero_adapter.py` | DanZero 队B websockets 客户端适配器 |
 | `_danzero_launcher.py` | DanZero 客户端统一启动（CONNECT_DELAY 错峰） |
 | `run_danzero_client3.py` / `run_danzero_client4.py` | DanZero 队B 席位1/3 入口 |
