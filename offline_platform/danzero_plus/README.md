@@ -23,6 +23,11 @@
 
 - **`models/danzero/q_network.ckpt`**（5.4MB，gitignore 不提交）= DMC Q-net 权重，12 个 numpy 数组：
   `[567,512]→[512]→[512,512]→[512]→…→[512,1]→[1]`，6 层 Linear（MLPQNetwork.load_tf_weights 直接加载）。
+- **官方来源已校验（2026-08-02）**：与官方仓库 `submit-paper/Danzero_plus/wintest/danzero/q_network.ckpt`
+  及 `wintest/torch/q_network.ckpt`（同尺寸 5,368,401 字节）**SHA-256 逐字节一致**
+  `A6F132E5...7EA1A3` → 即论文（arXiv:2312.02561）训练 30 天的官方 DMC Q-net 权重，非 fork 自训/伪造。
+  （本地渠道虽为 `Zhixinghgd/danzero_plus` fork 拷贝，但内容=官方；官方 README 的百度网盘链接是
+  docker 运行环境镜像，权重本就在 GitHub `wintest/` 目录内。）
 - 仓库**未提供** PPO 权重（`models/ppo*.pth` 不存在）→ 本仓库加载**DMC 版 DanZero**，决策 = 对每个合法动作
   构造 567 维 state，`argmax(Q)` 取 actIndex。
 

@@ -22,7 +22,7 @@ date: 2026-06-18
 
 | 论文 | 出处 | 核心方法 | 落地状态 |
 |------|------|----------|----------|
-| DanZero | arXiv:2210.17087 (2022) | Self-play + MCTS | 学术原型 |
+| DanZero | arXiv:2210.17087 (2022) | Self-play + DMC（Deep Monte Carlo，value-based） | 学术原型 |
 | GuanZero | arXiv:2402.13582 (2024) | DanZero 改进 | 学术原型 |
 | DouZero | ICML 2021 | 纯 MC self-play | 学术原型 |
 | DouMH | IJCAI 2024 | 多头监督 | 学术原型 |

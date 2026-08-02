@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 适配器：DanZero 客户端（v1006 websockets 版，席位 client3/client4）。
-v7Dan vs DanZero 批跑中 DanZero 侧使用；决策走 danzero_policy（骨架恒选 0）。
+v7Dan vs DanZero 批跑中 DanZero 侧使用；决策走 danzero_policy（真实 DMC Q-net 推理，tribute/back 走 client1 规则）。
 """
 import asyncio
 import websockets
