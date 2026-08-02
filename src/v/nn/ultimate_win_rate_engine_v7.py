@@ -763,7 +763,8 @@ class UltimateWinRateEngineV7:
                                             action_list, act_index,
                                             self._card_mask,
                                             self._group_type_map,
-                                            self._group_members)
+                                            self._group_members,
+                                            game_state.get("greaterAction", []))
                                         if alt_idx >= 0 and alt_idx != act_index:
                                             act_index = alt_idx
                                             rec_type = action_list[alt_idx][0] if len(action_list[alt_idx]) >= 1 else ""
@@ -1613,7 +1614,16 @@ class UltimateWinRateEngineV7:
 
         组牌引擎已运行（self._card_mask / _group_type_map / _group_members 就绪）：
         遍历分组，查找应存在但 actionList 缺少的组合动作，就地追加。
+
+        仅限领出轮（无待压 greater）重建：跟牌轮 follow actionList 由
+        generate_follow_actions 保证只含能压 greater 的动作，若在此重建组合动作，
+        会把无法压 greater 的 ThreeWithTwo/ThreePair/TwoTrips 混入候选，引擎选中后
+        响应被平台判非法（-2）。
         """
+        # 跟牌轮（存在待压 greater 且非领出）不重建，避免引入非法组合动作。
+        greater = game_state.get("greaterAction")
+        if greater and greater != ["PASS", "PASS", "PASS"] and greater[0] != "PASS":
+            return
         if not self._group_type_map or not self._group_members or not self._card_mask:
             return
         hand_cards = game_state.get("handCards", [])
@@ -2276,8 +2286,23 @@ class UltimateWinRateEngineV7:
         card_mask: dict,
         group_type_map: dict,
         group_members: Optional[dict] = None,
+        greater_action: Optional[list] = None,
     ) -> int:
-        """GUA-176: 找 actionList 中第一个非炸、不拆核、非 exclude_idx 的动作。"""
+        """GUA-176: 找 actionList 中第一个非炸、不拆核、非 exclude_idx 的动作。
+
+        follow 模式（greater_action 有效且非 PASS）下，候选动作还须能合法
+        压过 greater_action（同类型且 rank 更大）——否则该响应是非法牌型，
+        Botzone 会判「1号玩家 undefined」并终止对局。
+        """
+        from src.v.nn.guards.v7_guards import CARD_RANK_ORDER
+
+        follow = bool(
+            greater_action
+            and len(greater_action) >= 2
+            and str(greater_action[0]).upper() != "PASS"
+        )
+        ga_type = str(greater_action[0]) if follow else ""
+        ga_rank = str(greater_action[1]) if follow else ""
         for i, action in enumerate(action_list):
             if i == exclude_idx:
                 continue
@@ -2287,8 +2312,17 @@ class UltimateWinRateEngineV7:
                 continue
             broken = self._get_broken_core_type(
                 action, card_mask, group_type_map, group_members)
-            if broken is None:
-                return i
+            if broken is not None:
+                continue
+            if follow:
+                if str(action[0]) != ga_type:
+                    continue
+                a_rank = str(action[1]) if len(action) >= 2 else ""
+                av = CARD_RANK_ORDER.get(a_rank, -1)
+                gv = CARD_RANK_ORDER.get(ga_rank, -1)
+                if av < 0 or gv < 0 or av <= gv:
+                    continue
+            return i
         return -1
 
     @staticmethod

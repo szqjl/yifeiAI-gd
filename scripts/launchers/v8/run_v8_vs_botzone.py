@@ -56,8 +56,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--user-id", required=True, help="Botzone 用户 ID")
     parser.add_argument("--api-key", required=True, help="Botzone API 密钥")
-    parser.add_argument("--base-url", default="https://www.botzone.org/api",
-                        help="Botzone API 基础 URL（默认 https://www.botzone.org/api）")
+    parser.add_argument("--base-url", default="https://www.botzone.org.cn/api",
+                        help="Botzone API 基础 URL（默认 https://www.botzone.org.cn/api）")
     parser.add_argument("--opponent-bot-id", default=None,
                         help="对手 Bot ID（不指定则只监听手动创建的对局）")
     parser.add_argument("--teammate-bot-id", default=None,

@@ -278,7 +278,7 @@
 
 | 模块 | 用途 |
 |------|------|
-| `botzone_adapter.py` | **Botzone Local AI 适配器** — 牌编码双射（int↔str）、CardTracker（两副牌追踪）、ActionListGenerator（合法动作枚举）、BotzoneAdapter（HTTP 轮询 + V8 对接） |
+| `botzone_adapter.py` | **Botzone Local AI 适配器** — 牌编码双射（int↔str）、CardTracker（两副牌追踪）、ActionListGenerator（合法动作枚举）、BotzoneAdapter（HTTP 轮询 + V8 对接）；默认 base_url `https://www.botzone.org.cn/api` |
 | `new_platform_adapter.py` | OpenGuanDan 新平台协议适配器 |
 | `yf1_v8.py` | V8 选手 0 客户端 |
 | `yf2_v8.py` | V8 选手 2 客户端 |
@@ -309,7 +309,7 @@
 | `START_V8_AUTO.bat` | V8 自动重启启动 |
 | `run_v8_test.bat` | V8 端到端测试 bat 入口 |
 | `run_v8_vs_v8_games.py` | **V8 vs V8 自对弈批跑** — 用 V8 引擎替代 lalala 担任对手，最强对手压力测试 |
-| `run_v8_vs_botzone.py` | **V8 vs Botzone（Local AI 模式）** — 通过 HTTP API 与 Botzone 平台对战 DanLM 等 bot；需 Botzone 账号 + API key |
+| `run_v8_vs_botzone.py` | **V8 vs Botzone（Local AI 模式）** — 通过 HTTP API 与 Botzone 平台对战 DanLM 等 bot；需 Botzone 账号 + API key；默认 base_url `https://www.botzone.org.cn/api` |
 | `test_v8_engine_load.py` | V8 引擎模型加载验证 |
 | `run_12games_test.py` | V8 端到端测试（12 局） |
 | `run_e2e_simple.py` | V8 端到端测试简化版 |

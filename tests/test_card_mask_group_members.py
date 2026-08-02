@@ -203,7 +203,61 @@ class TestRecommendBombPlatformStrength:
         assert rec["cards"] == sorted(["H2", "D2", "D3", "D5", "D6"])
         assert rec["intent"] == "mid_sprint_fire_bomb"
 
-class TestDetectThreeWithTwoPairingOrder:
+class TestGua176FollowModeLegality:
+    """GUA-176 替代动作在 follow 模式必须能合法压过 greaterAction。
+
+    修复锚点：Botzone 实测 match=6a6ecb6327e7bf01db0d7988 play#3，
+    greater=Straight/K 时 GUA-176 改出 ThreeWithTwo/8（普通牌型无法压
+    Straight）→ 平台判「1号玩家 undefined」→ 对局罚 -2。
+    """
+
+    def test_follow_skips_illegal_type(self):
+        engine = UltimateWinRateEngineV7(player_id=0)
+        action_list = [
+            ["Straight", "K", ["ST", "SJ", "SQ", "SK", "SA"]],
+            ["ThreeWithTwo", "8", ["C8", "C8", "H5", "S5", "S8"]],
+            ["Single", "A", ["SA"]],
+            ["Straight", "A", ["C8", "CA", "CT", "D9", "SQ"]],
+        ]
+        idx = engine._find_alternative_non_core_breaking_action(
+            action_list, 0, {}, {}, None,
+            greater_action=["Straight", "K", ["HK", "CK", "DK", "SK", "SK"]])
+        assert idx == 3, "应跳过类型不同的非法候选，选同类型更大的 Straight/A"
+
+    def test_follow_same_type_but_lower_rank_skipped(self):
+        engine = UltimateWinRateEngineV7(player_id=0)
+        action_list = [
+            ["Straight", "K", ["ST", "SJ", "SQ", "SK", "SA"]],
+            ["Straight", "Q", ["S9", "ST", "SJ", "SQ", "SK"]],
+            ["Straight", "A", ["C8", "CA", "CT", "D9", "SQ"]],
+        ]
+        idx = engine._find_alternative_non_core_breaking_action(
+            action_list, 0, {}, {}, None,
+            greater_action=["Straight", "K", ["HK", "CK", "DK", "SK", "SK"]])
+        assert idx == 2, "应跳过 rank 不足的 Straight/Q"
+
+    def test_follow_no_legal_returns_neg1(self):
+        engine = UltimateWinRateEngineV7(player_id=0)
+        action_list = [
+            ["Straight", "K", ["ST", "SJ", "SQ", "SK", "SA"]],
+            ["ThreeWithTwo", "8", ["C8", "C8", "H5", "S5", "S8"]],
+            ["Single", "A", ["SA"]],
+        ]
+        idx = engine._find_alternative_non_core_breaking_action(
+            action_list, 0, {}, {}, None,
+            greater_action=["Straight", "K", ["HK", "CK", "DK", "SK", "SK"]])
+        assert idx == -1, "无合法同类型更大候选时应回退而非出非法牌"
+
+    def test_lead_mode_unchanged(self):
+        engine = UltimateWinRateEngineV7(player_id=0)
+        action_list = [
+            ["Bomb", "2", ["S2", "H2", "D2", "C2"]],
+            ["ThreeWithTwo", "8", ["C8", "C8", "H5", "S5", "S8"]],
+            ["Straight", "A", ["C8", "CA", "CT", "D9", "SQ"]],
+        ]
+        idx = engine._find_alternative_non_core_breaking_action(
+            action_list, 0, {}, {}, None, greater_action=[])
+        assert idx == 1, "lead 模式保持原有行为：取第一个非炸不拆核动作"
     """`_detect_three_with_two` 应优先让小 trip 吃小对，避免浪费大对。"""
 
     @staticmethod

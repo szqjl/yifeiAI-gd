@@ -22,6 +22,7 @@ Botzone Local AI 适配器 — 让 V8 通过 HTTP API 与 Botzone 平台对战�
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import logging
 import sys
@@ -212,22 +213,25 @@ class ActionListGenerator:
             if len(cards) >= 3:
                 actions.append(self._trips_action(cards[:3]))
 
-        # Bombs (4+ same rank)
+        # Bombs (4+ same rank): 全量炸弹 + 4 张炸（小炸保留核心打法）
         for rank, cards in rank_groups.items():
             if len(cards) >= 4:
-                actions.append(self._bomb_action(cards))
+                actions.append(self._bomb_action(list(cards)))
             if len(cards) >= 5:
-                actions.append(self._bomb_action(cards[:5]))
-            if len(cards) >= 6:
-                actions.append(self._bomb_action(cards[:6]))
+                actions.append(self._bomb_action(list(cards[:4])))
 
-        # ThreeWithTwo (trips + pair)
+        # ThreeWithTwo (trips + pair)：trip × pair 全组合
         for t_rank, t_cards in rank_groups.items():
-            if len(t_cards) >= 3:
-                trips = t_cards[:3]
-                for p_rank, p_cards in rank_groups.items():
-                    if p_rank != t_rank and len(p_cards) >= 2:
-                        actions.append(self._three_with_two_action(trips, p_cards[:2]))
+            trip_combos = self._combos(t_cards, 3)
+            if not trip_combos:
+                continue
+            for p_rank, p_cards in rank_groups.items():
+                if p_rank == t_rank:
+                    continue
+                pair_combos = self._combos(p_cards, 2)
+                for trips in trip_combos:
+                    for pair in pair_combos:
+                        actions.append(self._three_with_two_action(trips, pair))
 
         # Straights
         actions.extend(self._generate_straights(rank_groups, suits))
@@ -239,21 +243,21 @@ class ActionListGenerator:
                                 key=lambda r: RANK_ORDER.get(r, 99))
                 actions.extend(self._generate_straight_flushes(s_cards, s_ranks))
 
-        # ThreePairs
+        # ThreePairs (三连对，只能 3 连)：每 rank 的 pair 全组合
         consecutive_pairs = self._find_consecutive_pairs(rank_groups, 3)
-        for ranks, pairs in consecutive_pairs:
-            cards = []
-            for r in ranks:
-                cards.extend(rank_groups[r][:2])
-            actions.append(self._three_pair_action(cards, ranks[-1]))
+        for ranks, _pairs in consecutive_pairs:
+            pair_combos = [self._combos(rank_groups[r], 2) for r in ranks]
+            for combo in itertools.product(*pair_combos):
+                cards = [c for pc in combo for c in pc]
+                actions.append(self._three_pair_action(cards, ranks[-1]))
 
-        # TwoTrips
+        # TwoTrips (钢板，只能 2 连)：每 rank 的 trip 全组合
         consecutive_trips = self._find_consecutive_trips(rank_groups, 2)
-        for ranks, trips_list in consecutive_trips:
-            cards = []
-            for r in ranks:
-                cards.extend(rank_groups[r][:3])
-            actions.append(self._two_trips_action(cards, ranks[-1]))
+        for ranks, _trips_list in consecutive_trips:
+            trip_combos = [self._combos(rank_groups[r], 3) for r in ranks]
+            for combo in itertools.product(*trip_combos):
+                cards = [c for tc in combo for c in tc]
+                actions.append(self._two_trips_action(cards, ranks[-1]))
 
         # Deduplicate by card list hash
         seen: Set[str] = set()
@@ -280,7 +284,11 @@ class ActionListGenerator:
             n = {"Single": 1, "Pair": 2, "Trips": 3}[greater_type]
             for rank, cards in rank_groups.items():
                 if len(cards) >= n and _rank_to_order(rank, self.cur_rank) > greater_order:
-                    actions.append(_make_action(greater_type, rank, cards[:n]))
+                    # 生成该 rank 的全部 n 组合，让引擎能挑到不拆核心组（炸/同花顺/顺子）的组合。
+                    # 此前仅生成 cards[:n]（手牌顺序前 n 张），可能总是拆 SF core（如 HQ），
+                    # GUA-176 拦截后 actionList 无替代 → 该压不压 PASS。
+                    for combo in itertools.combinations(cards, n):
+                        actions.append(_make_action(greater_type, rank, list(combo)))
 
         elif greater_type == "Bomb":
             for rank, cards in rank_groups.items():
@@ -293,38 +301,50 @@ class ActionListGenerator:
 
         elif greater_type == "ThreeWithTwo":
             for t_rank, t_cards in rank_groups.items():
-                if len(t_cards) >= 3 and _rank_to_order(t_rank, self.cur_rank) > greater_order:
-                    trips = t_cards[:3]
-                    for p_rank, p_cards in rank_groups.items():
-                        if p_rank != t_rank and len(p_cards) >= 2:
-                            actions.append(self._three_with_two_action(trips, p_cards[:2]))
+                if _rank_to_order(t_rank, self.cur_rank) <= greater_order:
+                    continue
+                trip_combos = self._combos(t_cards, 3)
+                if not trip_combos:
+                    continue
+                for p_rank, p_cards in rank_groups.items():
+                    if p_rank == t_rank:
+                        continue
+                    pair_combos = self._combos(p_cards, 2)
+                    for trips in trip_combos:
+                        for pair in pair_combos:
+                            actions.append(self._three_with_two_action(trips, pair))
 
         elif greater_type == "ThreePair":
             consecutive_pairs = self._find_consecutive_pairs(rank_groups, 3)
-            for ranks, pairs in consecutive_pairs:
+            for ranks, _pairs in consecutive_pairs:
                 last_rank = ranks[-1]
-                if _rank_to_order(last_rank, self.cur_rank) > greater_order:
-                    cards = []
-                    for r in ranks:
-                        cards.extend(rank_groups[r][:2])
+                if _rank_to_order(last_rank, self.cur_rank) <= greater_order:
+                    continue
+                pair_combos = [self._combos(rank_groups[r], 2) for r in ranks]
+                for combo in itertools.product(*pair_combos):
+                    cards = [c for pc in combo for c in pc]
                     actions.append(self._three_pair_action(cards, last_rank))
 
         elif greater_type == "TwoTrips":
             consecutive_trips = self._find_consecutive_trips(rank_groups, 2)
-            for ranks, trips_list in consecutive_trips:
+            for ranks, _trips_list in consecutive_trips:
                 last_rank = ranks[-1]
-                if _rank_to_order(last_rank, self.cur_rank) > greater_order:
-                    cards = []
-                    for r in ranks:
-                        cards.extend(rank_groups[r][:3])
+                if _rank_to_order(last_rank, self.cur_rank) <= greater_order:
+                    continue
+                trip_combos = [self._combos(rank_groups[r], 3) for r in ranks]
+                for combo in itertools.product(*trip_combos):
+                    cards = [c for tc in combo for c in tc]
                     actions.append(self._two_trips_action(cards, last_rank))
 
         elif greater_type == "Straight":
             rank_set = set(rank_groups.keys())
-            straights = self._find_straights_from_ranks(rank_set, greater_order)
-            for ranks in straights:
-                cards = [rank_groups[r][0] for r in ranks]
-                actions.append(self._straight_action(cards, ranks[-1]))
+            for window in self._straight_windows(rank_set):
+                high = window[-1]
+                if _rank_to_order(high, self.cur_rank) <= greater_order:
+                    continue
+                choices = [self._uniq_cards(rank_groups[r], 3) for r in window]
+                for combo in itertools.product(*choices):
+                    actions.append(self._straight_action(list(combo), high))
 
         # Also add all bombs as valid follow plays
         for rank, cards in rank_groups.items():
@@ -369,8 +389,10 @@ class ActionListGenerator:
         return _make_action("StraightFlush", high_rank, cards)
 
     def _action_key(self, action: list) -> str:
+        # 含牌型维度：Straight 与 StraightFlush 可用相同 5 张牌，不能互相去重
         cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else []
-        return "|".join(sorted(cards))
+        atype = action[0] if len(action) >= 1 else ""
+        return f"{atype}|{'|'.join(sorted(cards))}"
 
     def _group_by_rank(self, hand_cards: List[str]) -> Dict[str, List[str]]:
         groups: Dict[str, List[str]] = defaultdict(list)
@@ -383,6 +405,37 @@ class ActionListGenerator:
         for c in hand_cards:
             groups[c[0]].append(c)
         return dict(groups)
+
+    @staticmethod
+    def _uniq_cards(cards: List[str], max_cards: Optional[int] = None) -> List[str]:
+        """去重并保留顺序（两副牌可能有重复 key），可选限长。"""
+        uniq = list(dict.fromkeys(cards))
+        if max_cards is not None:
+            return uniq[:max_cards]
+        return uniq
+
+    @staticmethod
+    def _combos(cards: List[str], n: int, max_cards: int = 4) -> List[List[str]]:
+        """cards（去重后最多 max_cards 张）的所有 n 组合。"""
+        uniq = ActionListGenerator._uniq_cards(cards, max_cards)
+        if len(uniq) < n:
+            return []
+        return [list(c) for c in itertools.combinations(uniq, n)]
+
+    @staticmethod
+    def _straight_windows(rank_set: Set[str]) -> List[List[str]]:
+        """Botzone 官方顺子 rank 窗口（只能 5 张）。
+
+        A 可作 1（A2345）也可作 14（TJQKA）；JQKA2、2AKQJ 等非法。
+        返回形如 [['A','2','3','4','5'], ..., ['T','J','Q','K','A']]。
+        """
+        seq = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
+        windows = []
+        for i in range(len(seq) - 5 + 1):
+            chunk = seq[i:i + 5]
+            if all(r in rank_set for r in chunk):
+                windows.append(chunk)
+        return windows
 
     def _find_consecutive_pairs(self, rank_groups: Dict[str, List[str]],
                                 length: int) -> List[Tuple[List[str], List[List[str]]]]:
@@ -413,52 +466,41 @@ class ActionListGenerator:
 
     def _generate_straights(self, rank_groups: Dict[str, List[str]],
                             suits: Dict[str, List[str]]) -> List[list]:
-        """Generate straight actions (5+ consecutive, any suit)."""
-        rank_set = set(rank_groups.keys())
+        """Generate straight actions (官方：只能五张相连，A 可作 1 或 14）。
+
+        全组合：窗口内每个 rank 选一张（去重后前 3 张候选），笛卡尔积。
+        """
         actions = []
-        all_ranks = sorted(rank_set, key=lambda r: RANK_ORDER.get(r, 99))
-        rank_order_map = {r: RANK_ORDER.get(r, 99) for r in all_ranks}
-
-        for length in range(5, 13):
-            for i in range(len(all_ranks) - length + 1):
-                chunk = all_ranks[i:i + length]
-                expected = list(range(rank_order_map[chunk[0]],
-                                      rank_order_map[chunk[0]] + length))
-                actual = [rank_order_map[r] for r in chunk]
-                if actual == expected:
-                    cards = [rank_groups[r][0] for r in chunk]
-                    actions.append(self._straight_action(cards, chunk[-1]))
+        rank_set = set(rank_groups.keys())
+        for window in self._straight_windows(rank_set):
+            high = window[-1]
+            choices = [self._uniq_cards(rank_groups[r], 3) for r in window]
+            for combo in itertools.product(*choices):
+                actions.append(self._straight_action(list(combo), high))
         return actions
-
-    def _find_straights_from_ranks(self, rank_set: Set[str],
-                                   greater_order: int) -> List[List[str]]:
-        """Find straights with high rank > greater_order."""
-        all_ranks = sorted(rank_set, key=lambda r: RANK_ORDER.get(r, 99))
-        results = []
-        for length in range(5, 13):
-            for i in range(len(all_ranks) - length + 1):
-                chunk = all_ranks[i:i + length]
-                high = chunk[-1]
-                if _rank_to_order(high, self.cur_rank) > greater_order:
-                    results.append(list(chunk))
-        return results
 
     def _generate_straight_flushes(self, suit_cards: List[str],
                                     suit_ranks: List[str]) -> List[list]:
-        """Generate straight flush from a suit's cards."""
+        """Generate straight flush actions（官方：只能五张相连、花色相同）。
+
+        全组合：同花色窗口内每个 rank 选一张（同花色同点最多 2 张）。
+        """
         actions = []
-        rank_order_map = {r: RANK_ORDER.get(r, 99) for r in suit_ranks}
-        for length in range(5, min(len(suit_cards) + 1, 13)):
-            for i in range(len(suit_ranks) - length + 1):
-                chunk = suit_ranks[i:i + length]
-                expected = list(range(rank_order_map[chunk[0]],
-                                      rank_order_map[chunk[0]] + length))
-                actual = [rank_order_map[r] for r in chunk]
-                if actual == expected:
-                    cards = [c for c in suit_cards if _card_rank(c) in chunk]
-                    if len(cards) >= length:
-                        cards = sorted(cards, key=lambda c: RANK_ORDER.get(_card_rank(c), 99))[:length]
-                        actions.append(self._straight_flush_action(cards, chunk[-1]))
+        rank_set = set(_card_rank(c) for c in suit_cards)
+        for window in self._straight_windows(rank_set):
+            high = window[-1]
+            choices = []
+            ok = True
+            for r in window:
+                cs = self._uniq_cards([c for c in suit_cards if _card_rank(c) == r], 2)
+                if not cs:
+                    ok = False
+                    break
+                choices.append(cs)
+            if not ok:
+                continue
+            for combo in itertools.product(*choices):
+                actions.append(self._straight_flush_action(list(combo), high))
         return actions
 
     def _generate_straight_flushes_by_suit(self, suits: Dict[str, List[str]],
@@ -517,7 +559,7 @@ class BotzoneAdapter:
     Usage:
         engine = UltimateWinRateEngineV7(player_id=0)
         adapter = BotzoneAdapter(user_id="yf1_v8", api_key="your_key",
-                                 base_url="https://www.botzone.org/api",
+                                 base_url="https://www.botzone.org.cn/api",
                                  decision_engine=engine)
         asyncio.run(adapter.run())
     """
@@ -526,7 +568,7 @@ class BotzoneAdapter:
         self,
         user_id: str,
         api_key: str,
-        base_url: str = "https://www.botzone.org/api",
+        base_url: str = "https://www.botzone.org.cn/api",
         decision_engine=None,
         player_id: int = 0,
     ):
@@ -542,7 +584,7 @@ class BotzoneAdapter:
         self.games: Dict[str, BotzoneGameState] = {}
         self.action_generator = ActionListGenerator()
         self._pending_responses: Dict[str, str] = {}  # match_id -> response string
-        self._max_decision_time = 0.4
+        self._max_decision_time = 1.5
         self._default_cur_rank = "2"
 
     def set_decision_engine(self, engine) -> None:
@@ -645,6 +687,8 @@ class BotzoneAdapter:
 
         stage = req.get("stage", "")
         logger.info("收到 request: match=%s stage=%s", match_id, stage)
+        if stage == "play":
+            logger.info("play request raw: match=%s %s", match_id, request_json)
 
         if match_id not in self.games:
             self.games[match_id] = BotzoneGameState(match_id=match_id, player_id=self.player_id)
@@ -857,6 +901,40 @@ class BotzoneAdapter:
             return json.dumps([bz_cards[0]], separators=(",", ":"))
         return json.dumps([v8_to_bz_int(return_card)], separators=(",", ":"))
 
+    @staticmethod
+    def _parse_bz_play_history(history) -> list:
+        """解析 Botzone play request 的 history，兼容两种下发格式。
+
+        Botzone 掼蛋 history 存在两种格式：
+          A. 数组格式（官方 wiki 交互样例）：按玩家位置索引，元素为该玩家的
+             response（[action, claim]，PASS 为空数组 []）。
+             {"stage":"play","history":[[[26],[26]],[],[],[]],...}  # 玩家0出牌
+          B. 字典格式（官方 easyAI/ruleAI 源码）：元素为
+             {"player": id, "response": [action, claim]}。
+
+        统一归一化为 [(player, action_cards, claim_cards), ...]。
+        """
+        entries = []
+        if not isinstance(history, list):
+            return entries
+        for i, entry in enumerate(history):
+            if isinstance(entry, dict):
+                player = entry.get("player", -1)
+                resp = entry.get("response", [])
+            elif isinstance(entry, list):
+                player = i
+                resp = entry
+            else:
+                continue
+            action_cards = []
+            claim_cards = []
+            if isinstance(resp, list) and len(resp) > 0 and isinstance(resp[0], list):
+                action_cards = resp[0]
+                if len(resp) > 1 and isinstance(resp[1], list):
+                    claim_cards = resp[1]
+            entries.append((player, action_cards, claim_cards))
+        return entries
+
     async def _handle_play_decision(self, match_id: str, game: BotzoneGameState,
                                      req: dict) -> Optional[str]:
         """Convert Botzone play request -> V8 decide -> Botzone response."""
@@ -870,13 +948,11 @@ class BotzoneAdapter:
 
         # Get greaterAction from the request history
         history = req.get("history", [])
+        parsed_history = self._parse_bz_play_history(history)
         greater_action_str = None
         greater_pos = -1
         cur_pos = -1
-        for entry in history:
-            player = entry.get("player", -1)
-            resp = entry.get("response", [[], []])
-            action_cards = resp[0] if isinstance(resp, list) and len(resp) > 0 else []
+        for player, action_cards, _claim_cards in parsed_history:
             cur_pos = player
             if action_cards:
                 v8_action = self._bz_response_to_v8_action(action_cards)
@@ -884,26 +960,61 @@ class BotzoneAdapter:
                     greater_action_str = v8_action
                     greater_pos = player
 
+        # 判断本轮 V8 是否必须出牌（领出 / 接风轮，掼蛋不允许 PASS）：
+        #  - 上一圈最后出牌者是 V8 自己（赢圈），本圈由 V8 领出；
+        #  - pass_on 标记接风轮（接风者必须出牌）；
+        #  - 当前没有待压的 greater（history 全空 = 首手领出）。
+        # 此时 history 中最后一个非 PASS 是 V8 自己的牌，不能当作待压的 greater。
+        self_lead = (greater_pos == game.player_id)
+        pass_on = req.get("pass_on", -1)
+        no_greater = not (greater_action_str and greater_action_str[0] != "PASS")
+        must_play = self_lead or (pass_on == game.player_id) or no_greater
+        if no_greater:
+            logger.info(
+                "首手领出轮: match=%s history 无待压 greater，必须出牌",
+                match_id,
+            )
+        elif self_lead:
+            logger.info(
+                "领出轮: match=%s 上一手为 V8 自己(player=%s)，本圈领出，禁止 PASS",
+                match_id, game.player_id,
+            )
+        elif pass_on == game.player_id:
+            logger.info(
+                "接风轮: match=%s pass_on=%s == V8，必须出牌",
+                match_id, pass_on,
+            )
+
         # 2. Generate actionList
-        if greater_action_str and greater_action_str[0] != "PASS":
+        if must_play or not (greater_action_str and greater_action_str[0] != "PASS"):
+            self.action_generator.cur_rank = cur_rank
+            action_list = self.action_generator.generate_lead_actions(hand_cards)
+        else:
             self.action_generator.cur_rank = cur_rank
             action_list = self.action_generator.generate_follow_actions(
                 hand_cards, greater_action_str)
-        else:
-            self.action_generator.cur_rank = cur_rank
-            action_list = self.action_generator.generate_lead_actions(hand_cards)
 
         if not action_list or len(action_list) <= 1:
             # Only PASS available
-            return json.dumps([[], []], separators=(",", ":"))
+            if must_play:
+                # 领出/接风轮不允许 PASS：手牌必有可出的单张，用生成器补一个单张。
+                logger.warning(
+                    "领出/接风轮 actionList 无候选 match=%s，兜底出最小单张",
+                    match_id,
+                )
+                fallback = self.action_generator.generate_lead_actions(hand_cards)
+                non_pass = [a for a in fallback if a[0] != "PASS"]
+                if non_pass:
+                    action_list = non_pass
+                else:
+                    return json.dumps([[], []], separators=(",", ":"))
+            else:
+                return json.dumps([[], []], separators=(",", ":"))
 
         # 3. Build game_state for V8's decide()
         history_actions = []
-        for entry in history[-8:]:  # last 8 entries for context
-            player = entry.get("player", -1)
-            resp = entry.get("response", [[], []])
-            v8_action = self._bz_response_to_v8_action(
-                resp[0] if isinstance(resp, list) and len(resp) > 0 else [])
+        for player, action_cards, _claim_cards in parsed_history[-8:]:  # last 8 entries
+            v8_action = self._bz_response_to_v8_action(action_cards)
             history_actions.append({
                 "player": player,
                 "action": v8_action,
@@ -925,14 +1036,26 @@ class BotzoneAdapter:
             "numofplayers": numofplayers,
             "curPos": cur_pos,
             "greaterPos": greater_pos,
-            "greaterAction": greater_action_str or ["PASS", "PASS", "PASS"],
-            "curAction": greater_action_str or ["PASS", "PASS", "PASS"],
+            "greaterAction": (["PASS", "PASS", "PASS"]
+                              if must_play else (greater_action_str or ["PASS", "PASS", "PASS"])),
+            "curAction": (["PASS", "PASS", "PASS"]
+                          if must_play else (greater_action_str or ["PASS", "PASS", "PASS"])),
             "done": known_done,
             "_botzone_mode": True,
             "_history": history_actions,
         }
 
         # 4. Call V8's decision engine
+        from collections import Counter as _C
+        try:
+            _type_counts = _C(a[0] for a in action_list)
+            logger.info(
+                "actionList 摘要: match=%s len=%d types=%s greater=%s must_play=%s",
+                match_id, len(action_list), dict(_type_counts),
+                greater_action_str, must_play,
+            )
+        except Exception as _e:
+            logger.warning("actionList 摘要失败: %s", _e)
         try:
             t0 = time.perf_counter()
             act_index = await asyncio.wait_for(
@@ -952,6 +1075,45 @@ class BotzoneAdapter:
         if act_index is None or act_index >= len(action_list):
             act_index = 0
 
+        # 领出/接风轮兜底：即使引擎选了 PASS，也强制替换为最小可出动作
+        chosen = action_list[act_index]
+        if must_play and chosen[0] == "PASS":
+            non_pass = [a for a in action_list if a[0] != "PASS"]
+            if non_pass:
+                chosen = non_pass[0]
+                act_index = action_list.index(chosen)
+                logger.warning(
+                    "领出/接风轮引擎选 PASS，兜底改出 %s/%s/%s match=%s",
+                    chosen[0], chosen[1] if len(chosen) >= 2 else "",
+                    chosen[2] if len(chosen) >= 3 else [], match_id,
+                )
+
+        # 跟牌轮合法性防线：chosen 必须能压 greater，否则换为 actionList 中
+        # 第一个能压 greater 的动作（follow 列表只含可压 + 炸弹，理论必有）。
+        # 若 actionList 误为 lead 列表（引擎路径异常），此校验可拦截跨牌型非法响应，
+        # 防止平台 -2 罚分导致对局终止。
+        if not must_play and greater_action_str and chosen[0] != "PASS":
+            if not self._beats(chosen, greater_action_str, cur_rank):
+                replace = [a for a in action_list
+                           if a[0] != "PASS" and self._beats(a, greater_action_str, cur_rank)]
+                if replace:
+                    chosen = replace[0]
+                    act_index = action_list.index(chosen)
+                    logger.warning(
+                        "跟牌轮非法响应 %s/%s 不压 %s/%s，改出 %s/%s match=%s",
+                        chosen[0], chosen[1] if len(chosen) >= 2 else "",
+                        greater_action_str[0], greater_action_str[1] if len(greater_action_str) >= 2 else "",
+                        chosen[0], chosen[1] if len(chosen) >= 2 else "", match_id,
+                    )
+                else:
+                    chosen = ["PASS", "PASS", "PASS"]
+                    act_index = 0
+                    logger.warning(
+                        "跟牌轮无法压 %s/%s，改 PASS match=%s",
+                        greater_action_str[0], greater_action_str[1] if len(greater_action_str) >= 2 else "",
+                        match_id,
+                    )
+
         # 5. Convert chosen action to Botzone response
         chosen = action_list[act_index]
         if chosen[0] == "PASS":
@@ -961,9 +1123,11 @@ class BotzoneAdapter:
             bz_ints = game.card_tracker.remove_multi(v8_cards) if game.card_tracker else []
             if not bz_ints:
                 bz_ints = v8_to_bz_cards(v8_cards)
-            wild = f"H{game.cur_rank}"
-            has_wild = any(c == wild for c in v8_cards)
-            bz_response = [bz_ints, bz_ints] if has_wild else [bz_ints, []]
+            # Botzone 掼蛋协议：出牌 response = [action, claim]。
+            # 官方文档规定「如出牌中不包含配子，两个数组应当相同」；
+            # 官方 bot（ruleAI/easyAI）无条件 claim = action.copy()。
+            # 此前返回 [bz_ints, []]（claim 空）被平台判为非法响应，导致对局终止。
+            bz_response = [bz_ints, bz_ints]
 
         # 6. Update hand tracking
         chosen_cards = chosen[2] if len(chosen) >= 3 and isinstance(chosen[2], list) else []
