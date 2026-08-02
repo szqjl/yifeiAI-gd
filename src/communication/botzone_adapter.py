@@ -25,6 +25,7 @@ import asyncio
 import itertools
 import json
 import logging
+import socket
 import sys
 import time
 import urllib.request
@@ -571,6 +572,7 @@ class BotzoneAdapter:
         base_url: str = "https://www.botzone.org.cn/api",
         decision_engine=None,
         player_id: int = 0,
+        poll_timeout: float = 30.0,
     ):
         self.user_id = user_id
         self.api_key = api_key
@@ -586,6 +588,9 @@ class BotzoneAdapter:
         self._pending_responses: Dict[str, str] = {}  # match_id -> response string
         self._max_decision_time = 1.5
         self._default_cur_rank = "2"
+        # 轮询超时：Botzone 在无对局（含 Kicked）时可能挂起连接不返回，
+        # timeout=None 会永久阻塞导致监听停摆；默认 30s 超时后重新轮询。
+        self.poll_timeout = poll_timeout
 
     def set_decision_engine(self, engine) -> None:
         self.decision_engine = engine
@@ -629,9 +634,12 @@ class BotzoneAdapter:
             req.add_header(f"X-Match-{match_id}", resp)
 
         try:
-            with urllib.request.urlopen(req, timeout=None) as res:
+            with urllib.request.urlopen(req, timeout=self.poll_timeout) as res:
                 body = res.read().decode("utf-8")
             self._pending_responses.clear()
+        except socket.timeout:
+            logger.debug("Botzone 轮询超时（连接被挂起，重新轮询）")
+            return
         except urllib.error.HTTPError as e:
             if e.code == 504:
                 logger.debug("Botzone 超时（正常，等待新 request）")
