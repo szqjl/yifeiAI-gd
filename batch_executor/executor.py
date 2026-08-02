@@ -1151,9 +1151,11 @@ class BatchExecutor:
                 self.logger.info(f"等待服务器完成 {batch_games} 场游戏...")
                 
                 # V8 OpenGuanDan 单局约 1 分钟；按 2 分钟估算留余量
+                # v7Dan 卡死快速失败：每局估算缩短（默认 40s × 局数），
+                # 3 局约 2 分钟超时即检查进程状态，避免 6 分钟才判死拖长重跑。
                 _min_batch_seconds = int(os.environ.get("BATCH_EXECUTOR_MIN_BATCH_SECONDS", "60"))
                 _seconds_per_game_estimate = int(
-                    os.environ.get("BATCH_EXECUTOR_SECONDS_PER_GAME_ESTIMATE", str(2 * 60))
+                    os.environ.get("BATCH_EXECUTOR_SECONDS_PER_GAME_ESTIMATE", str(40))
                 )
                 estimated_timeout = max(_min_batch_seconds, batch_games * _seconds_per_game_estimate)
                 self.logger.info(
@@ -1354,10 +1356,18 @@ class BatchExecutor:
                                         # 检查最新记录的时间
                                         latest_record = max(recent_records, key=lambda p: p.stat().st_mtime)
                                         record_age = time.time() - latest_record.stat().st_mtime
-                                        # 单局很长时，记录仍在写入；放宽到 10 分钟内有新文件则延长 10 分钟
-                                        if record_age < 600:
+                                        # 单局很长时，记录仍在写入；默认 120s 内有新文件则延长 120s。
+                                        # v7Dan 卡死场景（服务器停摆、无新记录）下 120s 后即判死，
+                                        # 避免原 600s 阈值导致快速失败失效。
+                                        _record_fresh_threshold = int(
+                                            os.environ.get("BATCH_EXECUTOR_RECORD_FRESH_SECONDS", "120")
+                                        )
+                                        _record_extend_seconds = int(
+                                            os.environ.get("BATCH_EXECUTOR_RECORD_EXTEND_SECONDS", "120")
+                                        )
+                                        if record_age < _record_fresh_threshold:
                                             self.logger.info(f"检测到最近游戏记录（{record_age:.0f}秒前），继续等待...")
-                                            estimated_timeout += 600
+                                            estimated_timeout += _record_extend_seconds
                                             continue
                                 
                                 self.logger.error("服务器长时间未响应，强制终止")
