@@ -818,14 +818,42 @@ class BotzoneAdapter:
             if stage == "gameOver":
                 game.active = False
 
+    @staticmethod
+    def _extract_global(req: dict) -> dict:
+        """提取全局信息，兼容两种格式：
+        A. 官方 wiki：global 字段包裹，level 为字符串（如 "2"）；
+        B. 实测新格式：字段平铺在 request 顶层，level 为数组（如 ["2","2"]），
+           含 seed 等额外字段（Botzone 掼蛋 2v2 每阵营一个等级）。
+        """
+        g = req.get("global")
+        if isinstance(g, dict):
+            return g
+        keys = ("level", "tribute", "first", "last", "resist",
+                "tribute_cards", "return_cards")
+        return {k: v for k, v in req.items() if k in keys}
+
+    @staticmethod
+    def _resolve_level(level, player_id: int) -> str:
+        """level 兼容字符串 "2" 与数组 ["2","2"]（每阵营等级）。
+        2v2 队伍 = {0,2}（teamA）vs {1,3}（teamB）；V8 座位 0，队友 2。
+        """
+        if isinstance(level, list):
+            if not level:
+                return "2"
+            team_idx = 0 if player_id in (0, 2) else 1
+            if len(level) <= team_idx:
+                return str(level[0])
+            return str(level[team_idx])
+        return str(level or "2")
+
     def _handle_deal(self, game: BotzoneGameState, req: dict) -> None:
         """Handle deal stage: set up hand cards."""
         bz_hand = req.get("deliver", [])
         game.hand_cards = bz_to_v8_cards(bz_hand)
         game.card_tracker = CardTracker.from_bz_hand(bz_hand)
         game.player_id = req.get("your_id", game.player_id)
-        global_info = req.get("global", {})
-        level = global_info.get("level", "2")
+        global_info = self._extract_global(req)
+        level = self._resolve_level(global_info.get("level", "2"), game.player_id)
         game.cur_rank = level
         game.self_rank = level
         game.oppo_rank = level
@@ -851,9 +879,9 @@ class BotzoneAdapter:
         game.done = req.get("done", [])
         game.pass_on = req.get("pass_on", -1)
 
-        global_info = req.get("global", {})
+        global_info = self._extract_global(req)
         if "level" in global_info:
-            game.cur_rank = global_info["level"]
+            game.cur_rank = self._resolve_level(global_info["level"], game.player_id)
 
     def _accumulate_played_cards(self, game: BotzoneGameState, history: list) -> None:
         """累计各席已出的 Botzone 整数牌（set 去重，跨 request history 重叠安全）。"""
@@ -1024,7 +1052,7 @@ class BotzoneAdapter:
                                req: dict) -> str:
         """Handle return tribute: give back a card <= 10."""
         # First, add any tribute card received into hand
-        tribute_cards: dict = req.get("global", {}).get("tribute_cards", {})
+        tribute_cards: dict = self._extract_global(req).get("tribute_cards", {})
         for payer_id, bz_card in tribute_cards.items():
             if isinstance(bz_card, int) and bz_card >= 0:
                 v8_card = bz_to_v8_card(bz_card)
@@ -1108,12 +1136,32 @@ class BotzoneAdapter:
         # 判断本轮 V8 是否必须出牌（领出 / 接风轮，掼蛋不允许 PASS）：
         #  - 上一圈最后出牌者是 V8 自己（赢圈），本圈由 V8 领出；
         #  - pass_on 标记接风轮（接风者必须出牌）；
-        #  - 当前没有待压的 greater（history 全空 = 首手领出）。
+        #  - 当前没有待压的 greater（history 全空 = 首手领出）；
+        #  - 接风领出：最后出牌者已出完（done），其最后一手之后其他玩家均已 PASS，
+        #    则 V8 为下一个未出完玩家，必须领出（否则会被平台判「决策错误」中止）。
         # 此时 history 中最后一个非 PASS 是 V8 自己的牌，不能当作待压的 greater。
         self_lead = (greater_pos == game.player_id)
         pass_on = req.get("pass_on", -1)
         no_greater = not (greater_action_str and greater_action_str[0] != "PASS")
-        must_play = self_lead or (pass_on == game.player_id) or no_greater
+        # 接风领出判定：greater 出牌者已 done，且其最后一手之后仍有动作（即该手
+        # 已被其他未 done 玩家 PASS 完），则 V8 是接风者必须领出。区分场景：
+        #   request A：history=[..., P2:QQQ44]（QQQ44 是末条）→ V8 首个响应，跟牌轮可 PASS；
+        #   request B：history=[P1:[], P2:QQQ44, P0:[], P1:[]]（末条之后有 PASS）
+        #              → 该手已响应完，V8 接风领出，禁止 PASS。
+        done_set = set(req.get("done", []) or [])
+        done_greater_lead = False
+        if (greater_pos >= 0 and greater_pos in done_set
+                and greater_pos != game.player_id):
+            last_non_pass_idx = max(
+                (i for i, (_p, ac, _cc) in enumerate(parsed_history) if ac),
+                default=-1,
+            )
+            trailing = parsed_history[last_non_pass_idx + 1:]
+            done_greater_lead = bool(trailing) and all(
+                not ac for (_p, ac, _cc) in trailing
+            )
+        must_play = (self_lead or (pass_on == game.player_id)
+                     or no_greater or done_greater_lead)
         if no_greater:
             logger.info(
                 "首手领出轮: match=%s history 无待压 greater，必须出牌",
@@ -1128,6 +1176,11 @@ class BotzoneAdapter:
             logger.info(
                 "接风轮: match=%s pass_on=%s == V8，必须出牌",
                 match_id, pass_on,
+            )
+        elif done_greater_lead:
+            logger.info(
+                "接风领出轮: match=%s 最后出牌者 player=%s 已 done 且该手已 PASS 完，V8 领出，禁止 PASS",
+                match_id, greater_pos,
             )
 
         # 2. Generate actionList

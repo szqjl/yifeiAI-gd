@@ -657,6 +657,88 @@ def test_accumulate_played_cards_dedup_overlap():
     assert game.played_cards[2] == {69}, game.played_cards
 
 
+def test_extract_global_new_top_level_format():
+    """新格式：字段平铺在 request 顶层（含 seed/level 数组），无 global 包裹。"""
+    from src.communication.botzone_adapter import BotzoneAdapter
+    adapter = BotzoneAdapter("test", "test_key")
+    req = {
+        "seed": "1110065070",
+        "level": ["2", "2"],
+        "tribute": 0,
+        "first": None,
+        "last": None,
+    }
+    g = adapter._extract_global(req)
+    assert g.get("level") == ["2", "2"], g
+    assert g.get("tribute") == 0, g
+
+
+def test_extract_global_old_wrapped_format():
+    """旧格式：global 包裹，level 为字符串。"""
+    from src.communication.botzone_adapter import BotzoneAdapter
+    adapter = BotzoneAdapter("test", "test_key")
+    req = {"global": {"level": "2", "tribute": 1}, "history": []}
+    g = adapter._extract_global(req)
+    assert g == {"level": "2", "tribute": 1}, g
+
+
+def test_resolve_level_string_and_array():
+    """_resolve_level：字符串与数组（每阵营等级）都解析为 V8 所在阵营等级。"""
+    from src.communication.botzone_adapter import BotzoneAdapter
+    adapter = BotzoneAdapter("test", "test_key")
+    assert adapter._resolve_level("2", 0) == "2"
+    assert adapter._resolve_level(["2", "2"], 0) == "2"
+    assert adapter._resolve_level(["2", "3"], 0) == "2"  # V8=teamA
+    assert adapter._resolve_level(["2", "3"], 2) == "2"  # 队友=teamA
+    assert adapter._resolve_level(["2", "3"], 1) == "3"  # 对手=teamB
+    assert adapter._resolve_level(["2", "3"], 3) == "3"  # 对手=teamB
+    assert adapter._resolve_level([], 0) == "2"          # 空数组兜底
+    assert adapter._resolve_level(None, 0) == "2"        # 缺省兜底
+
+
+def test_handle_deal_new_top_level_format():
+    """新格式发牌：顶层 level 数组解析为 V8 阵营等级。"""
+    from src.communication.botzone_adapter import (
+        BotzoneAdapter, BotzoneGameState,
+    )
+    adapter = BotzoneAdapter("test", "test_key")
+    game = BotzoneGameState(match_id="m1", player_id=0)
+    game.played_cards = {0: {10}}
+    adapter._handle_deal(game, {
+        "deliver": [0, 1, 2],
+        "your_id": 0,
+        "seed": "1110065070",
+        "level": ["2", "2"],
+        "tribute": 0,
+        "first": None,
+        "last": None,
+    })
+    assert game.cur_rank == "2", game.cur_rank
+    assert game.played_cards == {}
+
+
+def test_handle_play_request_new_top_level_format():
+    """新格式 play 请求：顶层 level 数组同样更新 cur_rank。"""
+    from src.communication.botzone_adapter import (
+        BotzoneAdapter, BotzoneGameState,
+    )
+    adapter = BotzoneAdapter("test", "test_key")
+    game = BotzoneGameState(match_id="m1", player_id=0)
+    game.cur_rank = "2"
+    adapter._handle_play_request(game, {
+        "stage": "play",
+        "history": [],
+        "done": [],
+        "pass_on": -1,
+        "seed": "1110065070",
+        "level": ["2", "2"],
+        "tribute": 0,
+        "first": None,
+        "last": None,
+    })
+    assert game.cur_rank == "2", game.cur_rank
+
+
 def test_handle_play_request_updates_played_cards():
     """_handle_play_request 应累计各席已出牌（含 PASS 跳过）。"""
     from src.communication.botzone_adapter import (
@@ -690,6 +772,82 @@ def test_deal_resets_played_cards():
     adapter._handle_deal(game, {"deliver": [0, 1, 2], "your_id": 0,
                                 "global": {"level": "2"}})
     assert game.played_cards == {}
+
+
+class _StubEngine:
+    """最小 decision_engine 桩：decide 恒返回 0。"""
+
+    def decide(self, game_state) -> int:
+        return 0
+
+
+def _make_adapter_with_engine():
+    from src.communication.botzone_adapter import BotzoneAdapter
+    adapter = BotzoneAdapter("test", "test_key")
+    adapter.set_decision_engine(_StubEngine())
+    return adapter
+
+
+def _run_play_decision(adapter, game, req):
+    import asyncio
+    return asyncio.run(adapter._handle_play_decision("m1", game, req))
+
+
+def test_jiefeng_lead_must_play():
+    """接风领出轮（request B：QQQ44 之后已有 PASS）必须出牌，禁止 PASS。
+
+    复现 match=6a6ffd1327e7bf01db0ebeb8 request 22：
+    done=[3,2]，player2 末手 QQQ44，其后 P0/P1 均已 PASS → V8 是下一个未出完者，
+    必须领出；返回非法 PASS 会被平台判「1号玩家决策错误」中止。
+    """
+    from src.communication.botzone_adapter import BotzoneGameState
+    adapter = _make_adapter_with_engine()
+    game = BotzoneGameState(match_id="m1", player_id=0)
+    # V8 残局 7 张：S7, DJ, HJ, S4, C4, H4, H5
+    game.hand_cards = ["S7", "DJ", "HJ", "S4", "C4", "H4", "H5"]
+    game.cur_rank = "2"
+    req = {
+        "stage": "play",
+        "history": [
+            {"player": 1, "response": [[], []]},
+            {"player": 2, "response": [[45, 98, 46, 67, 66], [45, 98, 46, 67, 66]]},
+            {"player": 0, "response": [[], []]},
+            {"player": 1, "response": [[], []]},
+        ],
+        "done": [3, 2],
+        "pass_on": -1,
+        "global": {"level": "2"},
+    }
+    resp = _run_play_decision(adapter, game, req)
+    import json as _json
+    parsed = _json.loads(resp)
+    assert parsed != [[], []], f"接风领出轮返回 PASS: {resp}"
+
+
+def test_follow_turn_may_pass():
+    """跟牌轮（request A：QQQ44 为 history 末条，无人对之 PASS）可 PASS。
+
+    复现 match=6a6ffd1327e7bf01db0ebeb8 request 21：
+    done=[3,2]，player2 刚出 QQQ44 是末条，V8 是首个响应者，跟牌轮可 PASS。
+    """
+    from src.communication.botzone_adapter import BotzoneGameState
+    adapter = _make_adapter_with_engine()
+    game = BotzoneGameState(match_id="m1", player_id=0)
+    game.hand_cards = ["S7", "DJ", "HJ", "S4", "C4", "H4", "H5"]
+    game.cur_rank = "2"
+    req = {
+        "stage": "play",
+        "history": [
+            {"player": 2, "response": [[45, 98, 46, 67, 66], [45, 98, 46, 67, 66]]},
+        ],
+        "done": [3, 2],
+        "pass_on": 2,
+        "global": {"level": "2"},
+    }
+    resp = _run_play_decision(adapter, game, req)
+    import json as _json
+    parsed = _json.loads(resp)
+    assert parsed == [[], []], f"跟牌轮应可 PASS: {resp}"
 
 
 def test_numofplayers_and_public_info():
