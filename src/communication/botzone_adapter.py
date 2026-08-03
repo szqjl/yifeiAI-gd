@@ -309,8 +309,17 @@ class ActionListGenerator:
                         actions.append(_make_action(greater_type, rank, list(combo)))
 
         elif greater_type == "Bomb":
+            # 炸弹对炸弹：裁判先比张数（points[0]）再比牌值（points[1]），
+            # 4 张高值炸不能压 5/6 张炸（G5）。
+            greater_cnt = len(greater_cards) if greater_cards else 4
             for rank, cards in rank_groups.items():
-                if len(cards) >= 4 and _rank_to_order(rank, self.cur_rank) > greater_order:
+                if len(cards) < 4:
+                    continue
+                if len(cards) != greater_cnt:
+                    if len(cards) > greater_cnt:
+                        actions.append(self._bomb_action(cards))
+                    continue
+                if _rank_to_order(rank, self.cur_rank) > greater_order:
                     actions.append(self._bomb_action(cards))
 
         elif greater_type == "StraightFlush":
@@ -366,9 +375,15 @@ class ActionListGenerator:
                     actions.append(self._straight_action(list(combo), low))
 
         # Also add all bombs as valid follow plays
-        for rank, cards in rank_groups.items():
-            if len(cards) >= 4:
-                actions.append(self._bomb_action(cards))
+        if greater_type not in ("Bomb", "StraightFlush"):
+            for rank, cards in rank_groups.items():
+                if len(cards) >= 4:
+                    actions.append(self._bomb_action(cards))
+        elif greater_type == "StraightFlush":
+            # 同花顺只被 6+ 张炸压制（裁判：4/5 张炸 < 同花顺 < 6+ 炸，G1）
+            for rank, cards in rank_groups.items():
+                if len(cards) >= 6:
+                    actions.append(self._bomb_action(cards))
 
         seen: Set[str] = set()
         deduped = []
@@ -1009,16 +1024,40 @@ class BotzoneAdapter:
         return True
 
     def _beats(self, action: list, greater: list, cur_rank: str = "2") -> bool:
-        """Check if action beats greater (for tracking)."""
+        """Check if action beats greater (裁判 checkBigger 语义，用于合法性防线)。
+
+        - 火箭 > 炸弹/同花顺 > 普通牌型；
+        - 同花顺 vs 炸弹：4/5 张炸 < 同花顺 < 6+ 张炸（裁判先比张数）；
+        - 炸弹 vs 炸弹：先比张数（裁判 points[0]），同张数再比牌值（points[1]）；
+        - 顺子/同花顺比窗口最高牌（rank 字段是窗口低牌，不能直接比大小）。
+        """
         t1, r1 = action[0], action[1] if len(action) >= 2 else ""
         t2, r2 = greater[0], greater[1] if len(greater) >= 2 else ""
-        if t1 in ("Bomb", "StraightFlush") and t2 not in ("Bomb", "StraightFlush"):
-            return True
-        if t1 == "StraightFlush" and t2 == "Bomb":
-            return True
+
+        def _bomb_count(a: list) -> int:
+            cards = a[2] if len(a) >= 3 and isinstance(a[2], list) else []
+            return len(cards)
+
+        if t1 not in ("Bomb", "StraightFlush"):
+            # 普通牌型不能压炸弹/同花顺
+            if t2 in ("Bomb", "StraightFlush"):
+                return False
+        else:
+            if t2 not in ("Bomb", "StraightFlush"):
+                return True
+            if t1 == "Bomb" and t2 == "Bomb":
+                a_cnt, g_cnt = _bomb_count(action), _bomb_count(greater)
+                if a_cnt != g_cnt:
+                    return a_cnt > g_cnt
+                return _rank_to_order(r1, cur_rank) > _rank_to_order(r2, cur_rank)
+            if t1 == "StraightFlush" and t2 == "Bomb":
+                # 同花顺只压 4/5 张炸；6+ 炸 > 同花顺
+                return _bomb_count(greater) < 6
+            if t1 == "Bomb" and t2 == "StraightFlush":
+                # 6+ 炸压同花顺；4/5 张炸不压
+                return _bomb_count(action) >= 6
         if t1 == t2:
             if t1 in ("Straight", "StraightFlush"):
-                # rank 字段是窗口低牌，不能直接比大小；用窗口最高牌比较
                 a_cards = (action[2]
                            if len(action) >= 3 and isinstance(action[2], list) else [])
                 g_cards = (greater[2]
@@ -1065,7 +1104,7 @@ class BotzoneAdapter:
 
     def _handle_return_request(self, match_id: str, game: BotzoneGameState,
                                req: dict) -> str:
-        """Handle return tribute: give back a card <= 10."""
+        """Handle return tribute: give back a card <= 9 (level='9' 时 <= 8)."""
         # First, add any tribute card received into hand
         tribute_cards: dict = self._extract_global(req).get("tribute_cards", {})
         for payer_id, bz_card in tribute_cards.items():
@@ -1076,9 +1115,12 @@ class BotzoneAdapter:
                     if game.card_tracker:
                         game.card_tracker.add(v8_card, bz_card)
 
-        rank_order_10 = 8  # T = rank index 8 (fixed, regardless of cur_rank)
+        # 裁判 isValidReturn：还贡须 ≤'9'（level='9' 时 ≤'8'），按级牌重排后点序。
+        # RANK_ORDER：'9'→7、'8'→6；级牌卡 `_card_rank_order` 返回 15 被自然排除。
+        max_return = "8" if game.cur_rank == "9" else "9"
+        threshold = RANK_ORDER[max_return]
         candidates = [c for c in game.hand_cards
-                      if _card_rank_order(c, game.cur_rank) <= rank_order_10]
+                      if _card_rank_order(c, game.cur_rank) <= threshold]
         if not candidates:
             candidates = game.hand_cards[:]
         return_card = min(candidates, key=lambda c: _card_rank_order(c, game.cur_rank))
@@ -1087,6 +1129,66 @@ class BotzoneAdapter:
         if bz_cards:
             return json.dumps([bz_cards[0]], separators=(",", ":"))
         return json.dumps([v8_to_bz_int(return_card)], separators=(",", ":"))
+
+    def _build_bz_claim(self, chosen: list, cur_rank: str,
+                        bz_ints: List[int]) -> List[int]:
+        """构造 Botzone claim（裁判用 checkPokerType(claim) 判型）。
+
+        官方规定「出牌中不包含配子时，两个数组应当相同」→ 默认 claim==action；
+        含 H+cur_rank 逢人配且作配子（同花顺补缺位）时，把配子替换为所代表
+        rank 的同花牌，否则含 H2 的 claim 会被裁判判 invalid → INVALID_TYPE（G2）。
+        """
+        v8_cards = (chosen[2]
+                    if len(chosen) >= 3 and isinstance(chosen[2], list) else [])
+        covering = f"H{cur_rank}"
+        if chosen[0] != "StraightFlush" or covering not in v8_cards:
+            return bz_ints
+        low_rank = chosen[1] if len(chosen) >= 2 else ""
+        try:
+            claim_cards = self._replace_sf_covering(v8_cards, cur_rank, low_rank)
+            if claim_cards is not None:
+                return v8_to_bz_cards(claim_cards)
+        except Exception as exc:  # 兜底：不阻断出牌，退回 claim==action
+            logger.warning("构造同花顺 claim 失败，退回 claim==action: %s", exc)
+        return bz_ints
+
+    def _replace_sf_covering(self, v8_cards: List[str], cur_rank: str,
+                             low_rank: str = "") -> Optional[List[str]]:
+        """H+cur_rank 逢人配同花顺：把配子替换为窗口缺位 rank 的同花牌。
+
+        窗口由 chosen 的 rank 字段（窗口低牌，window[0]）消歧——同一副牌可对应
+        多个窗口（如 [H2,S4,S5,S6,S7] 可作 3-7 或 4-8）。返回 None 表示配子作
+        自然级牌（如 A2345 窗口的 H2），claim==action 即可，无需替换。
+        """
+        covering = f"H{cur_rank}"
+        covering_cnt = v8_cards.count(covering)
+        natural = [c for c in v8_cards if c != covering]
+        if not natural or len(natural) + covering_cnt != len(v8_cards):
+            return None
+        suit = natural[0][0]
+        if any(c[0] != suit for c in natural):
+            return None
+        nranks = {_card_rank(c) for c in natural}
+        windows = ActionListGenerator._all_straight_windows()
+        if low_rank:
+            windows = [w for w in windows if w[0] == low_rank]
+        for window in windows:
+            missing = [r for r in window if r not in nranks]
+            if len(missing) != covering_cnt:
+                continue
+            if cur_rank in missing:
+                return None  # 配子作自然级牌，claim==action 即合法
+            by_rank: Dict[str, str] = {}
+            for c in natural:
+                by_rank.setdefault(_card_rank(c), c)
+            result = []
+            for r in window:
+                if r in by_rank:
+                    result.append(by_rank[r])
+                else:
+                    result.append(f"{suit}{r}")
+            return result
+        return None
 
     @staticmethod
     def _parse_bz_play_history(history) -> list:
@@ -1367,7 +1469,8 @@ class BotzoneAdapter:
             # 官方文档规定「如出牌中不包含配子，两个数组应当相同」；
             # 官方 bot（ruleAI/easyAI）无条件 claim = action.copy()。
             # 此前返回 [bz_ints, []]（claim 空）被平台判为非法响应，导致对局终止。
-            bz_response = [bz_ints, bz_ints]
+            # 含 H2 逢人配同花顺须替换 claim 中的配子（_build_bz_claim）。
+            bz_response = [bz_ints, self._build_bz_claim(chosen, game.cur_rank, bz_ints)]
 
         # 6. Update hand tracking
         chosen_cards = chosen[2] if len(chosen) >= 3 and isinstance(chosen[2], list) else []

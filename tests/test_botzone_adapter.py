@@ -1090,3 +1090,126 @@ def test_memory_tracker_replays_new_history_format():
     # 对手 2 已出对 5（两张 5），剩张应从 27 扣到 24（publicInfo 亦为 24）
     hand_counts = engine._tracker.hand_counts
     assert hand_counts.get(2) == 24, hand_counts
+
+
+# ── 11. 裁判语义回归（G1/G4/G5/G2）────────────
+
+def test_beats_bomb_sf_mutual_exclusion_by_count():
+    """G1：同花顺只压 4/5 张炸，6+ 炸压同花顺（裁判 checkBigger 先比张数）。"""
+    adapter = _make_adapter()
+    sf = ["StraightFlush", "9", ["H9", "HT", "HJ", "HQ", "HK"]]  # 9-K
+    bomb4 = ["Bomb", "A", ["HA", "DA", "SA", "CA"]]
+    bomb5 = ["Bomb", "K", ["HK", "DK", "SK", "CK", "HK"]]
+    bomb6 = ["Bomb", "Q", ["HQ", "DQ", "SQ", "CQ", "HQ", "DQ"]]
+    # 同花顺 vs 炸弹
+    assert adapter._beats(sf, bomb4, "2") is True, "SF 应压 4 张炸"
+    assert adapter._beats(sf, bomb5, "2") is True, "SF 应压 5 张炸"
+    assert adapter._beats(sf, bomb6, "2") is False, "6+ 炸 > 同花顺"
+    # 炸弹 vs 同花顺
+    assert adapter._beats(bomb4, sf, "2") is False, "4 张炸不压同花顺"
+    assert adapter._beats(bomb5, sf, "2") is False, "5 张炸不压同花顺"
+    assert adapter._beats(bomb6, sf, "2") is True, "6+ 炸压同花顺"
+
+
+def test_beats_bomb_vs_bomb_count_then_rank():
+    """G5：炸弹对炸弹先比张数，同张数再比牌值（裁判 points[0]/points[1]）。"""
+    adapter = _make_adapter()
+    bomb4a = ["Bomb", "A", ["HA", "DA", "SA", "CA"]]
+    bomb5k = ["Bomb", "K", ["HK", "DK", "SK", "CK", "HK"]]
+    bomb4k = ["Bomb", "K", ["HK", "DK", "SK", "CK"]]
+    bomb4j = ["Bomb", "J", ["HJ", "DJ", "SJ", "CJ"]]
+    assert adapter._beats(bomb4a, bomb5k, "2") is False, "4 张 A 炸不能压 5 张 K 炸"
+    assert adapter._beats(bomb5k, bomb4a, "2") is True, "5 张 K 炸压 4 张 A 炸"
+    assert adapter._beats(bomb4k, bomb4j, "2") is True, "同张数比牌值"
+    assert adapter._beats(bomb4j, bomb4k, "2") is False, "同张数牌值小者不压"
+
+
+def test_follow_bomb_filters_by_count():
+    """G5：跟牌炸弹按张数过滤——4 张高值炸不能跟进 5/6 张炸，5 张炸可压 4 张炸。"""
+    gen = ActionListGenerator(cur_rank="2")
+    # greater = 5 张 K 炸；手牌仅 4 张 A 炸 → 不应出现在跟牌候选
+    greater5k = ["Bomb", "K", ["HK", "DK", "SK", "CK", "HK"]]
+    hand4a = ["HA", "DA", "SA", "CA", "S3", "H3", "D3"]
+    bombs = _collect(gen.generate_follow_actions(hand4a, greater5k), "Bomb")
+    assert bombs == [], f"4 张 A 炸不能压 5 张 K 炸: {bombs}"
+    # greater = 4 张 A 炸；手牌 5 张 K 炸 → 应出现在跟牌候选
+    greater4a = ["Bomb", "A", ["HA", "DA", "SA", "CA"]]
+    hand5k = ["HK", "DK", "SK", "CK", "HK", "H3", "D3"]
+    bombs = _collect(gen.generate_follow_actions(hand5k, greater4a), "Bomb")
+    sizes = [len(b[2]) for b in bombs]
+    assert 5 in sizes, f"5 张 K 炸应能压 4 张 A 炸: {bombs}"
+
+
+def test_follow_straight_flush_only_six_plus_bombs():
+    """G1：跟牌同花顺时，4/5 张炸不进入候选，6+ 炸保留。"""
+    gen = ActionListGenerator(cur_rank="2")
+    greater_sf = ["StraightFlush", "4", ["C4", "C5", "C6", "C7", "C8"]]  # 4-8
+    hand = ["H5", "D5", "S5", "C5",                  # 4 张 5 炸
+            "H6", "D6", "S6", "C6", "H6", "D6"]      # 6 张 6 炸
+    bombs = _collect(gen.generate_follow_actions(hand, greater_sf), "Bomb")
+    sizes = sorted(len(b[2]) for b in bombs)
+    assert sizes == [6], f"仅 6+ 炸可压同花顺: {bombs}"
+
+
+def test_return_tribute_threshold():
+    """G4：还贡 ≤9（level='9' 时 ≤8），级牌/10 均不可还。"""
+    from src.communication.botzone_adapter import BotzoneGameState
+    adapter = _make_adapter()
+    game = BotzoneGameState(match_id="m1", player_id=0)
+    game.cur_rank = "2"
+    game.hand_cards = ["ST", "H9", "H8", "H3"]  # T 不可还，应还最小合法 3
+    resp = adapter._handle_return_request("m1", game, {"global": {"level": "2"}})
+    assert bz_to_v8_card(int(resp[1:-1])) == "H3", resp
+    # level='9'：只能还 ≤8（级牌 9 与 10 均不可还）
+    game2 = BotzoneGameState(match_id="m1", player_id=0)
+    game2.cur_rank = "9"
+    game2.hand_cards = ["S9", "S8", "S7"]
+    resp2 = adapter._handle_return_request("m1", game2, {"global": {"level": "9"}})
+    assert bz_to_v8_card(int(resp2[1:-1])) == "S7", resp2
+
+
+def test_h2_wild_sf_claim_replaced():
+    """G2：H2 逢人配同花顺的 claim 把配子替换为所代表 rank 的同花牌。"""
+    adapter = _make_adapter()
+    # [S4,S5,S6,H2,S8] rank='4' → 窗口 4-8，缺 7 → H2 替换为 S7
+    chosen = ["StraightFlush", "4", ["S4", "S5", "S6", "H2", "S8"]]
+    claim = adapter._build_bz_claim(chosen, "2", v8_to_bz_cards(chosen[2]))
+    assert claim == v8_to_bz_cards(["S4", "S5", "S6", "S7", "S8"]), claim
+    # 同一副牌按窗口低牌消歧：rank='3' → 窗口 3-7，缺 3 → H2 替换为 S3
+    chosen2 = ["StraightFlush", "3", ["H2", "S4", "S5", "S6", "S7"]]
+    claim2 = adapter._build_bz_claim(chosen2, "2", v8_to_bz_cards(chosen2[2]))
+    assert claim2 == v8_to_bz_cards(["S3", "S4", "S5", "S6", "S7"]), claim2
+    # A2345 窗口：H2 是自然级牌，无需替换（claim==action）
+    chosen3 = ["StraightFlush", "A", ["HA", "H2", "H3", "H4", "H5"]]
+    bz3 = v8_to_bz_cards(chosen3[2])
+    assert adapter._build_bz_claim(chosen3, "2", bz3) == bz3, "A2345 的 H2 为自然级牌"
+    # 非同花顺含 H2（Single/Pair）→ claim==action
+    chosen4 = ["Single", "2", ["H2"]]
+    assert adapter._build_bz_claim(chosen4, "2", [4]) == [4], "非配子场景 claim==action"
+
+
+def test_play_decision_h2_wild_sf_claim_in_response():
+    """G2 集成：出牌响应 [action, claim] 中 H2-wild 同花顺的 claim 替换配子。"""
+    from src.communication.botzone_adapter import BotzoneGameState
+
+    class _FixedGen:
+        cur_rank = "2"
+
+        def generate_lead_actions(self, hand_cards):
+            return [["StraightFlush", "4", ["S4", "S5", "S6", "H2", "S8"]]]
+
+        def generate_follow_actions(self, hand_cards, greater):
+            return [["PASS", "PASS", "PASS"]]
+
+    adapter = _make_adapter_with_engine()
+    adapter.action_generator = _FixedGen()
+    game = BotzoneGameState(match_id="m1", player_id=0)
+    game.cur_rank = "2"
+    game.hand_cards = ["S4", "S5", "S6", "H2", "S8"]
+    req = {"stage": "play", "history": [], "global": {"level": "2"}}
+    resp = _run_play_decision(adapter, game, req)
+    import json as _json
+    action, claim = _json.loads(resp)
+    assert action == v8_to_bz_cards(["S4", "S5", "S6", "H2", "S8"]), action
+    assert claim == v8_to_bz_cards(["S4", "S5", "S6", "S7", "S8"]), claim
+
