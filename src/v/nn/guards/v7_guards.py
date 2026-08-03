@@ -933,14 +933,18 @@ def _rule_r14_no_break_pattern_when_lead(
             return list(range(len(action_list)))
 
     # ── 统计手牌中的天然牌型 ──
+    # H2（逢人配/万能牌）不是天然牌：C2+H2 不构成天然对子，
+    # H2 以野牌身份用于顺子/同花顺时不应判为「拆对子」。
     from collections import Counter
-    hand_ranks = Counter(get_card_rank(c) for c in hand_cards)
+    hand_ranks = Counter(
+        get_card_rank(c) for c in hand_cards if c != "H2"
+    )
 
-    # 天然对子：恰好 2 张
+    # 天然对子：恰好 2 张同 rank（非 H2）
     natural_pairs: Dict[str, bool] = {
         r: True for r, cnt in hand_ranks.items() if cnt == 2
     }
-    # 天然三张：恰好 3 张
+    # 天然三张：恰好 3 张同 rank（非 H2）
     natural_trips: Dict[str, bool] = {
         r: True for r, cnt in hand_ranks.items() if cnt == 3
     }
@@ -948,11 +952,45 @@ def _rule_r14_no_break_pattern_when_lead(
     if not natural_pairs and not natural_trips:
         return list(range(len(action_list)))
 
+    # 天然牌型的具体成员牌张（rank+suit 定位），供「按实际用牌判拆」：
+    # 手牌 rank 出现 4 次（如 S4 + 天然三张 H4/C4/C4）时，S4 不属天然三张，
+    # 用它组顺子/同花顺不破坏任何天然牌型。
+    pair_members = {
+        c for c in hand_cards
+        if c != "H2" and get_card_rank(c) in natural_pairs
+    }
+    trip_members = {
+        c for c in hand_cards
+        if c != "H2" and get_card_rank(c) in natural_trips
+    }
+
+    # 完整牌型豁免：SF/顺子/三带二/三连对/钢板/炸弹本身是完整结构，
+    # 即便用到天然对子/三张的牌也不算「拆牌型」——拆牌指拆成更弱的子集
+    # （如 Single/Pair），而非出更完整的强牌型（见 ITERATIONS v8-botzone-h2wild-sf-lowrank）。
+    _COMPLETE_PATTERNS_EXEMPT_R14 = {
+        ACTION_TYPE_STRAIGHT_FLUSH,
+        ACTION_TYPE_STRAIGHT,
+        ACTION_TYPE_THREE_WITH_TWO,
+        ACTION_TYPE_THREE_PAIR,
+        ACTION_TYPE_TWO_TRIPS,
+        ACTION_TYPE_BOMB,
+    }
+
     # ── 检查每个 action 是否拆了天然牌型 ──
     excluded: set = set()
     for i, act in enumerate(action_list):
-        act_type = get_action_type(act)
+        # 平台格式 [type, rank, [cards]] 下直接信任声明牌型：get_action_type 对
+        # H2 野牌同花顺（如 ['StraightFlush','4',['S4','S5','S6','S8','H2']]）
+        # 实牌校验失败返回 Free，会漏过完整牌型豁免；R13 在其后校验假炸弹。
+        declared_type = (
+            act[0] if (isinstance(act, list) and len(act) >= 3
+                       and isinstance(act[2], list)) else None
+        )
+        act_type = declared_type or get_action_type(act)
         if act_type == ACTION_TYPE_PASS:
+            continue
+        # 完整牌型豁免（见上）
+        if act_type in _COMPLETE_PATTERNS_EXEMPT_R14:
             continue
 
         cards = _extract_action_cards(act)
@@ -960,20 +998,28 @@ def _rule_r14_no_break_pattern_when_lead(
 
         for rank, used_count in act_ranks.items():
             if rank in natural_pairs:
-                # 天然对子 → 用了其中 1 张就是拆对子
-                if used_count == 1:
+                # 天然对子 → 实际用了对子成员牌 1 张就是拆对子
+                used_members = sum(
+                    1 for c in cards
+                    if get_card_rank(c) == rank and c in pair_members
+                )
+                if used_members == 1:
                     excluded.add(i)
                     logger.debug(
-                        "R14: 领出拆对子 rank=%s (天然2张→用了%d张) 剔除 idx=%d",
-                        rank, used_count, i,
+                        "R14: 领出拆对子 rank=%s (天然2张→用成员%d张) 剔除 idx=%d",
+                        rank, used_members, i,
                     )
             elif rank in natural_trips:
-                # 天然三张 → 用了其中 1~2 张就是拆三张
-                if used_count in (1, 2):
+                # 天然三张 → 实际用了三张成员牌 1~2 张就是拆三张
+                used_members = sum(
+                    1 for c in cards
+                    if get_card_rank(c) == rank and c in trip_members
+                )
+                if 1 <= used_members <= 2:
                     excluded.add(i)
                     logger.debug(
-                        "R14: 领出拆三张 rank=%s (天然3张→用了%d张) 剔除 idx=%d",
-                        rank, used_count, i,
+                        "R14: 领出拆三张 rank=%s (天然3张→用成员%d张) 剔除 idx=%d",
+                        rank, used_members, i,
                     )
 
     if not excluded:

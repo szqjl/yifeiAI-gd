@@ -244,6 +244,9 @@ class ActionListGenerator:
                                 key=lambda r: RANK_ORDER.get(r, 99))
                 actions.extend(self._generate_straight_flushes(s_cards, s_ranks))
 
+        # H2-wild StraightFlushes (逢人配)：H2 补同花色 5 连窗口缺位
+        actions.extend(self._generate_h2_wild_straight_flushes(hand_cards, suits))
+
         # ThreePairs (三连对，只能 3 连)：每 rank 的 pair 全组合
         consecutive_pairs = self._find_consecutive_pairs(rank_groups, 3)
         for ranks, _pairs in consecutive_pairs:
@@ -277,6 +280,14 @@ class ActionListGenerator:
         greater_type = greater_action[0] if len(greater_action) >= 1 else ""
         greater_rank = greater_action[1] if len(greater_action) >= 2 else ""
         greater_order = _rank_to_order(greater_rank, self.cur_rank)
+        # 顺子/同花顺：rank 字段是窗口低牌，比大小须用窗口最高牌（_straight_top_order）
+        greater_cards = (greater_action[2]
+                         if len(greater_action) >= 3 and isinstance(greater_action[2], list)
+                         else [])
+        greater_straight_top = (self._straight_top_order(greater_cards, self.cur_rank)
+                                if greater_cards
+                                and greater_type in ("Straight", "StraightFlush")
+                                else greater_order)
 
         rank_groups = self._group_by_rank(hand_cards)
         suits = self._group_by_suit(hand_cards)
@@ -297,7 +308,8 @@ class ActionListGenerator:
                     actions.append(self._bomb_action(cards))
 
         elif greater_type == "StraightFlush":
-            sfs = self._generate_straight_flushes_by_suit(suits, greater_order)
+            sfs = self._generate_straight_flushes_by_suit(
+                hand_cards, suits, greater_straight_top)
             actions.extend(sfs)
 
         elif greater_type == "ThreeWithTwo":
@@ -340,12 +352,12 @@ class ActionListGenerator:
         elif greater_type == "Straight":
             rank_set = set(rank_groups.keys())
             for window in self._straight_windows(rank_set):
-                high = window[-1]
-                if _rank_to_order(high, self.cur_rank) <= greater_order:
+                low = window[0]
+                if _rank_to_order(window[-1], self.cur_rank) <= greater_straight_top:
                     continue
                 choices = [self._uniq_cards(rank_groups[r], 3) for r in window]
                 for combo in itertools.product(*choices):
-                    actions.append(self._straight_action(list(combo), high))
+                    actions.append(self._straight_action(list(combo), low))
 
         # Also add all bombs as valid follow plays
         for rank, cards in rank_groups.items():
@@ -377,8 +389,8 @@ class ActionListGenerator:
         rank = _card_rank(trips[0])
         return _make_action("ThreeWithTwo", rank, trips + pair)
 
-    def _straight_action(self, cards: List[str], high_rank: str) -> list:
-        return _make_action("Straight", high_rank, cards)
+    def _straight_action(self, cards: List[str], rank: str) -> list:
+        return _make_action("Straight", rank, cards)
 
     def _three_pair_action(self, cards: List[str], high_rank: str) -> list:
         return _make_action("ThreePair", high_rank, cards)
@@ -386,14 +398,18 @@ class ActionListGenerator:
     def _two_trips_action(self, cards: List[str], high_rank: str) -> list:
         return _make_action("TwoTrips", high_rank, cards)
 
-    def _straight_flush_action(self, cards: List[str], high_rank: str) -> list:
-        return _make_action("StraightFlush", high_rank, cards)
+    def _straight_flush_action(self, cards: List[str], rank: str) -> list:
+        return _make_action("StraightFlush", rank, cards)
 
     def _action_key(self, action: list) -> str:
-        # 含牌型维度：Straight 与 StraightFlush 可用相同 5 张牌，不能互相去重
+        # 含牌型维度：Straight 与 StraightFlush 可用相同 5 张牌，不能互相去重。
+        # 含 rank 维度：同花顺同一副牌可对应多个窗口（如 H2,H2,D6,D7,D8 →
+        # rank '4' 与 '5' 都是合法动作，服务器 size=2209 实证两者共存），
+        # 不能仅按牌面去重吞掉后者。
         cards = action[2] if len(action) >= 3 and isinstance(action[2], list) else []
         atype = action[0] if len(action) >= 1 else ""
-        return f"{atype}|{'|'.join(sorted(cards))}"
+        arank = action[1] if len(action) >= 2 else ""
+        return f"{atype}|{arank}|{'|'.join(sorted(cards))}"
 
     def _group_by_rank(self, hand_cards: List[str]) -> Dict[str, List[str]]:
         groups: Dict[str, List[str]] = defaultdict(list)
@@ -417,26 +433,41 @@ class ActionListGenerator:
 
     @staticmethod
     def _combos(cards: List[str], n: int, max_cards: int = 4) -> List[List[str]]:
-        """cards（去重后最多 max_cards 张）的所有 n 组合。"""
-        uniq = ActionListGenerator._uniq_cards(cards, max_cards)
-        if len(uniq) < n:
+        """cards 中取 n 张的所有组合（保留两副牌重复牌，去重相同组合）。
+
+        两副牌下同 rank 同花色可重复（如 ['CJ','HJ','HJ'] 三张 J），
+        旧实现用 _uniq_cards 去重会把重复牌吞掉，导致 ThreeWithTwo /
+        ThreePair / TwoTrips 无法生成 → GUA-075 推荐匹配不到 actionList
+        → 该压不压 PASS（Botzone 实测两处）。
+        修复：不去重直接组合，按排序后牌面 key 去重相同组合。
+        """
+        pool = cards[:max_cards]
+        if len(pool) < n:
             return []
-        return [list(c) for c in itertools.combinations(uniq, n)]
+        seen: Set[Tuple[str, ...]] = set()
+        result: List[List[str]] = []
+        for combo in itertools.combinations(pool, n):
+            key = tuple(sorted(combo))
+            if key not in seen:
+                seen.add(key)
+                result.append(list(combo))
+        return result
 
     @staticmethod
-    def _straight_windows(rank_set: Set[str]) -> List[List[str]]:
-        """Botzone 官方顺子 rank 窗口（只能 5 张）。
+    def _all_straight_windows() -> List[List[str]]:
+        """Botzone 官方顺子 rank 窗口全集（10 个，5 张）。
 
         A 可作 1（A2345）也可作 14（TJQKA）；JQKA2、2AKQJ 等非法。
         返回形如 [['A','2','3','4','5'], ..., ['T','J','Q','K','A']]。
         """
         seq = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
-        windows = []
-        for i in range(len(seq) - 5 + 1):
-            chunk = seq[i:i + 5]
-            if all(r in rank_set for r in chunk):
-                windows.append(chunk)
-        return windows
+        return [seq[i:i + 5] for i in range(len(seq) - 5 + 1)]
+
+    @staticmethod
+    def _straight_windows(rank_set: Set[str]) -> List[List[str]]:
+        """Botzone 官方顺子 rank 窗口（只能 5 张），要求窗口内 rank 全部在手。"""
+        return [w for w in ActionListGenerator._all_straight_windows()
+                if all(r in rank_set for r in w)]
 
     def _find_consecutive_pairs(self, rank_groups: Dict[str, List[str]],
                                 length: int) -> List[Tuple[List[str], List[List[str]]]]:
@@ -474,10 +505,10 @@ class ActionListGenerator:
         actions = []
         rank_set = set(rank_groups.keys())
         for window in self._straight_windows(rank_set):
-            high = window[-1]
+            low = window[0]
             choices = [self._uniq_cards(rank_groups[r], 3) for r in window]
             for combo in itertools.product(*choices):
-                actions.append(self._straight_action(list(combo), high))
+                actions.append(self._straight_action(list(combo), low))
         return actions
 
     def _generate_straight_flushes(self, suit_cards: List[str],
@@ -485,11 +516,13 @@ class ActionListGenerator:
         """Generate straight flush actions（官方：只能五张相连、花色相同）。
 
         全组合：同花色窗口内每个 rank 选一张（同花色同点最多 2 张）。
+        rank 取窗口低牌（window[0]），与 OpenGuanDan 服务器 / 引擎推荐一致
+        （如 9-K 同花顺 rank='9'；A2345 rank='A'）。
         """
         actions = []
         rank_set = set(_card_rank(c) for c in suit_cards)
         for window in self._straight_windows(rank_set):
-            high = window[-1]
+            low = window[0]
             choices = []
             ok = True
             for r in window:
@@ -501,11 +534,56 @@ class ActionListGenerator:
             if not ok:
                 continue
             for combo in itertools.product(*choices):
-                actions.append(self._straight_flush_action(list(combo), high))
+                actions.append(self._straight_flush_action(list(combo), low))
         return actions
 
-    def _generate_straight_flushes_by_suit(self, suits: Dict[str, List[str]],
-                                            greater_order: int) -> List[list]:
+    def _generate_h2_wild_straight_flushes(
+        self, hand_cards: List[str], suits: Dict[str, List[str]],
+        greater_top: Optional[int] = None,
+    ) -> List[list]:
+        """H2 逢人配同花顺（服务器语义，实测 size=2209 RAW 证据）。
+
+        H2 可补同花色 5 连窗口任意缺位（同一 SF 至多 2 张 H2，两副牌上限）；
+        同花色其它 rank 的 2（如 D2/S2/C2）是自然牌，仅 H2 是万能牌。
+        rank 取窗口低牌（window[0]），如 ['S4','S5','S6','H2','S8'] → rank='4'。
+        greater_top 非空时（跟牌路径）只保留能压过 greater 的候选。
+        """
+        actions = []
+        h2_count = hand_cards.count("H2")
+        if h2_count == 0:
+            return actions
+        for suit, s_cards in suits.items():
+            # H2 只作万能牌，不参与本花色自然牌池（服务器 H2 恒作 wild）
+            natural = [c for c in s_cards if c != "H2"]
+            if len(natural) < 3:
+                continue
+            by_rank: Dict[str, List[str]] = defaultdict(list)
+            for c in natural:
+                by_rank[_card_rank(c)].append(c)
+            for window in self._all_straight_windows():
+                missing = [r for r in window if not by_rank.get(r)]
+                if not missing or len(missing) > h2_count:
+                    continue
+                if greater_top is not None:
+                    # 窗口最高牌（A2345 → '5'）带级牌提升，与 _straight_top_order 一致
+                    if _rank_to_order(window[-1], self.cur_rank) <= greater_top:
+                        continue
+                choices = [self._uniq_cards(by_rank[r], 2)
+                           for r in window if r not in missing]
+                for combo in itertools.product(*choices):
+                    cards = list(combo) + ["H2"] * len(missing)
+                    actions.append(self._straight_flush_action(cards, window[0]))
+        return actions
+
+    def _generate_straight_flushes_by_suit(
+        self, hand_cards: List[str], suits: Dict[str, List[str]],
+        greater_top: int,
+    ) -> List[list]:
+        """跟牌路径：生成能压过 greater SF 的同花顺候选（含 H2 逢人配）。
+
+        比较键 = 5 连窗口最高牌 order（_straight_top_order），而非 rank 字段——
+        rank 字段已统一为窗口低牌（window[0]），不能直接用于「比最大」。
+        """
         actions = []
         for suit, cards in suits.items():
             if len(cards) < 5:
@@ -513,10 +591,28 @@ class ActionListGenerator:
             suit_ranks = sorted(set(_card_rank(c) for c in cards),
                                key=lambda r: RANK_ORDER.get(r, 99))
             for sf in self._generate_straight_flushes(cards, suit_ranks):
-                sf_high = sf[1] if len(sf) >= 2 else ""
-                if _rank_to_order(sf_high, self.cur_rank) > greater_order:
+                if self._straight_top_order(sf[2], self.cur_rank) > greater_top:
                     actions.append(sf)
+        actions.extend(
+            self._generate_h2_wild_straight_flushes(hand_cards, suits, greater_top))
         return actions
+
+    @staticmethod
+    def _straight_top_order(cards: List[str], cur_rank: str = "2") -> int:
+        """5 连牌（顺子/同花顺）的比较值 = 窗口最高牌 order（级牌提升沿用
+        _rank_to_order 的 15）。
+
+        A2345 视为窗口最高 '5'；TJQKA 最高 'A'。用于「比最大牌」，与服务器
+        跟牌规则一致；不能用 rank 字段（已统一为窗口低牌）直接比较。
+        """
+        if not cards:
+            return -1
+        ranks = {_card_rank(c) for c in cards}
+        if "A" in ranks and {"2", "3", "4", "5"}.issubset(ranks):
+            top = "5"
+        else:
+            top = max(ranks, key=lambda r: RANK_ORDER.get(r, -1))
+        return _rank_to_order(top, cur_rank)
 
 
 # ──────────────────────────────────────────────
@@ -545,6 +641,10 @@ class BotzoneGameState:
 
     # History tracking
     play_history: List[dict] = field(default_factory=list)
+
+    # 各席累计已出 Botzone 整数牌（跨 request history 重叠去重用 set）
+    # 用于推算各席剩张 → publicInfo[].rest → engine 残局管线激活（GUA-170）
+    played_cards: Dict[int, Set[int]] = field(default_factory=dict)
 
     # Pass-on (接风) state
     pass_on: int = -1
@@ -730,6 +830,7 @@ class BotzoneAdapter:
         game.self_rank = level
         game.oppo_rank = level
         game.play_history = []
+        game.played_cards = {}
         game.pass_on = -1
         game.done = []
         game.episode_count += 1
@@ -745,6 +846,7 @@ class BotzoneAdapter:
         if history:
             game.play_history.extend(history)
             self._update_from_history(game, history)
+            self._accumulate_played_cards(game, history)
 
         game.done = req.get("done", [])
         game.pass_on = req.get("pass_on", -1)
@@ -752,6 +854,31 @@ class BotzoneAdapter:
         global_info = req.get("global", {})
         if "level" in global_info:
             game.cur_rank = global_info["level"]
+
+    def _accumulate_played_cards(self, game: BotzoneGameState, history: list) -> None:
+        """累计各席已出的 Botzone 整数牌（set 去重，跨 request history 重叠安全）。"""
+        for player, action_cards, _claim_cards in self._parse_bz_play_history(history):
+            if player < 0 or not action_cards:
+                continue
+            game.played_cards.setdefault(player, set()).update(action_cards)
+
+    def _compute_numofplayers(self, game: BotzoneGameState,
+                              hand_cards: List[str],
+                              known_done: List[int]) -> List[int]:
+        """推算各席剩余张数：自己实牌数，done 玩家 0，其他 = 27 - 已出。
+
+        Botzone 每副 27 张起（两副牌 108/4）；进贡/还贡只交换不改变张数。
+        """
+        numofplayers = [27] * 4
+        for seat in range(4):
+            if seat == game.player_id:
+                numofplayers[seat] = len(hand_cards)
+            elif seat in known_done:
+                numofplayers[seat] = 0
+            else:
+                played = len(game.played_cards.get(seat, set()))
+                numofplayers[seat] = max(0, 27 - played)
+        return numofplayers
 
     def _update_from_history(self, game: BotzoneGameState, history: list) -> None:
         """Update greater action from play history."""
@@ -806,11 +933,11 @@ class BotzoneAdapter:
             return _make_action("Bomb", ranks[0], cards)
         if n >= 5:
             if self._is_consecutive(ranks, cr) and len(set(suits)) == 1:
-                high = max(ranks, key=lambda r: _rank_to_order(r, cr))
-                return _make_action("StraightFlush", high, cards)
+                low = min(ranks, key=lambda r: _rank_to_order(r, cr))
+                return _make_action("StraightFlush", low, cards)
             if self._is_consecutive(ranks, cr):
-                high = max(ranks, key=lambda r: _rank_to_order(r, cr))
-                return _make_action("Straight", high, cards)
+                low = min(ranks, key=lambda r: _rank_to_order(r, cr))
+                return _make_action("Straight", low, cards)
         if n == 5 and 3 in rank_counts.values() and 2 in rank_counts.values():
             trip_rank = [r for r, c in most_common if c == 3][0]
             return _make_action("ThreeWithTwo", trip_rank, cards)
@@ -847,6 +974,15 @@ class BotzoneAdapter:
         if t1 == "StraightFlush" and t2 == "Bomb":
             return True
         if t1 == t2:
+            if t1 in ("Straight", "StraightFlush"):
+                # rank 字段是窗口低牌，不能直接比大小；用窗口最高牌比较
+                a_cards = (action[2]
+                           if len(action) >= 3 and isinstance(action[2], list) else [])
+                g_cards = (greater[2]
+                           if len(greater) >= 3 and isinstance(greater[2], list) else [])
+                if a_cards and g_cards:
+                    return (ActionListGenerator._straight_top_order(a_cards, cur_rank)
+                            > ActionListGenerator._straight_top_order(g_cards, cur_rank))
             return _rank_to_order(r1, cur_rank) > _rank_to_order(r2, cur_rank)
         return False
 
@@ -959,9 +1095,10 @@ class BotzoneAdapter:
         parsed_history = self._parse_bz_play_history(history)
         greater_action_str = None
         greater_pos = -1
-        cur_pos = -1
+        # curPos = 当前行动席 = V8 自己（本 adapter 只在轮到自己出牌时决策）；
+        # 不能取 history 最后一项（领出轮最后一项常为跟牌 PASS 的他人）。
+        cur_pos = game.player_id
         for player, action_cards, _claim_cards in parsed_history:
-            cur_pos = player
             if action_cards:
                 v8_action = self._bz_response_to_v8_action(action_cards)
                 if v8_action and v8_action[0] != "PASS":
@@ -1028,10 +1165,12 @@ class BotzoneAdapter:
                 "action": v8_action,
             })
 
-        # numofplayers: estimate from known cards
+        # numofplayers: 各席剩余张数 = 27 - 已出张数；done 玩家为 0；
+        # 自己以实牌数为准。补传 publicInfo[].rest（GUA-170 最高优先级），
+        # 否则 engine 残局管线因对手恒 27 永远不激活（Botzone 实测全程 GUA-091）。
         known_done = req.get("done", [])
-        numofplayers = [27] * 4
-        numofplayers[game.player_id] = len(hand_cards)
+        numofplayers = self._compute_numofplayers(game, hand_cards, known_done)
+        public_info = [{"rest": n} for n in numofplayers]
 
         game_state = {
             "actionList": action_list,
@@ -1049,6 +1188,7 @@ class BotzoneAdapter:
             "curAction": (["PASS", "PASS", "PASS"]
                           if must_play else (greater_action_str or ["PASS", "PASS", "PASS"])),
             "done": known_done,
+            "publicInfo": public_info,
             "_botzone_mode": True,
             "_history": history_actions,
         }

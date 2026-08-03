@@ -378,6 +378,11 @@ def _collect(al, t):
     return [a for a in al if a[0] == t]
 
 
+def _make_adapter():
+    from src.communication.botzone_adapter import BotzoneAdapter
+    return BotzoneAdapter("test", "test_key")
+
+
 def test_straight_only_five_cards():
     """官方：顺子只能五张。不能生成长顺（6+）。"""
     gen = ActionListGenerator(cur_rank="2")
@@ -397,13 +402,13 @@ def test_straight_a2345_and_tjqka():
     # 分开验证：A2345
     hand_a2345 = ["SA", "S2", "H3", "D4", "C5", "H7", "D9"]
     a2345 = [s for s in _collect(gen.generate_lead_actions(hand_a2345), "Straight")
-             if s[1] == "5" and sorted(_card_rank(c) for c in s[2]) == ["2", "3", "4", "5", "A"]]
+             if s[1] == "A" and sorted(_card_rank(c) for c in s[2]) == ["2", "3", "4", "5", "A"]]
     assert a2345, f"应能生成 A2345 顺子"
 
     # TJQKA
     hand_tjqka = ["ST", "HJ", "DQ", "CK", "SA", "S3", "D7"]
     tjqka = [s for s in _collect(gen.generate_lead_actions(hand_tjqka), "Straight")
-             if s[1] == "A" and sorted(_card_rank(c) for c in s[2]) == ["A", "J", "K", "Q", "T"]]
+             if s[1] == "T" and sorted(_card_rank(c) for c in s[2]) == ["A", "J", "K", "Q", "T"]]
     assert tjqka, f"应能生成 TJQKA 顺子"
 
 
@@ -412,11 +417,11 @@ def test_straight_full_combos_multi_suit():
     gen = ActionListGenerator(cur_rank="2")
     hand = ["S3", "H3", "H4", "D4", "D5", "C5", "C6", "S6", "S7", "H7"]
     straights = _collect(gen.generate_lead_actions(hand), "Straight")
-    by_high = {}
+    by_low = {}
     for s in straights:
-        by_high.setdefault(s[1], []).append(tuple(sorted(s[2])))
-    # 3-4-5-6-7 窗口应有多个花色组合
-    assert len(by_high.get("7", [])) >= 2, f"应生成多花色顺子组合: {by_high}"
+        by_low.setdefault(s[1], []).append(tuple(sorted(s[2])))
+    # 3-4-5-6-7 窗口应有多个花色组合（rank=窗口低牌 '3'）
+    assert len(by_low.get("3", [])) >= 2, f"应生成多花色顺子组合: {by_low}"
 
 
 def test_threepair_full_combos():
@@ -455,14 +460,123 @@ def test_twt_full_combos_pair_choices():
 
 
 def test_sf_only_five_and_same_suit():
-    """同花顺：只能 5 张且同花色。"""
+    """同花顺：只能 5 张；非万能牌必须同花色（H2 逢人配可跨花色补位）。"""
     gen = ActionListGenerator(cur_rank="2")
     hand = ["S3", "S4", "S5", "S6", "S7", "S8", "S9", "H2"]
     sf = _collect(gen.generate_lead_actions(hand), "StraightFlush")
     assert len(sf) >= 1
     for s in sf:
         assert len(s[2]) == 5, f"同花顺必须 5 张: {s[2]}"
-        assert len(set(c[0] for c in s[2])) == 1, f"同花顺需同花色: {s[2]}"
+        non_wild = [c for c in s[2] if c != "H2"]
+        assert len(non_wild) >= 3, f"同花顺至少 3 张自然牌: {s[2]}"
+        assert len(set(c[0] for c in non_wild)) == 1, f"非万能牌需同花色: {s[2]}"
+
+
+def test_h2_wild_sf_generated_low_rank():
+    """H2 逢人配同花顺：H2 补窗口缺位，rank 取窗口低牌。
+
+    锚点：logs/v8_vs_botzone_20260802_220840.log G0 手牌 ['S4','S5','S6','H2','S8']
+    服务器 RAW ['StraightFlush','4',['H2','H2','D6','D7','D8']] → rank='4'。
+    """
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["S4", "S5", "S6", "H2", "S8"]
+    sf = _collect(gen.generate_lead_actions(hand), "StraightFlush")
+    assert len(sf) == 1, f"仅 4-8 一窗口可补位，不应多生成: {sf}"
+    s = sf[0]
+    assert s[0] == "StraightFlush" and s[1] == "4", s
+    assert sorted(s[2]) == sorted(["S4", "S5", "S6", "S8", "H2"]), s
+    assert len(s[2]) == 5, s
+
+
+def test_h2_wild_sf_two_h2_up_to_2_gaps():
+    """两副牌上限：同一 SF 至多 2 张 H2（服务器 size=2209 实证）。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["D6", "D7", "D8", "H2", "H2"]
+    sf = _collect(gen.generate_lead_actions(hand), "StraightFlush")
+    keys = {(s[1], tuple(sorted(s[2]))) for s in sf}
+    # 3 张 D6-D8 + 2 H2：窗口 4-8 缺 4,5 → rank '4'（服务器同款）
+    assert ("4", ("D6", "D7", "D8", "H2", "H2")) in keys, sf
+    # 窗口 5-9 缺 5,9 → rank '5'（服务器同样出现过）
+    assert ("5", ("D6", "D7", "D8", "H2", "H2")) in keys, sf
+
+
+def test_sf_natural_low_rank():
+    """自然同花顺 rank 取窗口低牌（服务器：9-K → '9'）。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["H9", "HT", "HJ", "HQ", "HK", "H8", "S3"]
+    sf = _collect(gen.generate_lead_actions(hand), "StraightFlush")
+    target = ["StraightFlush", "9", ["H9", "HT", "HJ", "HQ", "HK"]]
+    assert target in sf, f"自然同花顺 rank 应为低牌 '9': {sf}"
+
+
+def test_straight_low_rank():
+    """顺子 rank 取窗口低牌（服务器：D6-DT → '6'）。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["D6", "D7", "D8", "H9", "DT", "S2"]
+    st = _collect(gen.generate_lead_actions(hand), "Straight")
+    target = ["Straight", "6", ["D6", "D7", "D8", "H9", "DT"]]
+    assert target in st, f"顺子 rank 应为低牌 '6': {st}"
+
+
+def test_classify_sf_low_rank():
+    """_classify_action 同花顺/顺子 rank 解析为窗口低牌（与服务器 greater_action 一致）。"""
+    adapter = _make_adapter()
+    sf = adapter._classify_action(["H9", "HT", "HJ", "HQ", "HK"])
+    assert sf[0] == "StraightFlush" and sf[1] == "9", sf
+    st = adapter._classify_action(["D6", "D7", "D8", "H9", "DT"])
+    assert st[0] == "Straight" and st[1] == "6", st
+
+
+def test_follow_sf_h2_wild_and_natural():
+    """跟牌：H2-wild 与自然同花顺仅保留能压过 greater 者（比窗口最高牌）。"""
+    gen = ActionListGenerator(cur_rank="2")
+    # greater 2-6（rank 低牌 '2'，窗口最高 '6'）
+    greater = ["StraightFlush", "2", ["S2", "S3", "S4", "S5", "S6"]]
+    hand = ["S3", "S4", "S5", "S6", "S7", "H2", "D9", "C9"]
+    follow = gen.generate_follow_actions(hand, greater)
+    sfs = [a for a in follow if a[0] == "StraightFlush"]
+    keys = {(s[1], tuple(sorted(s[2]))) for s in sfs}
+    # 自然 3-7（rank 低牌 '3'，窗口最高 7）压过 2-6
+    assert ("3", ("S3", "S4", "S5", "S6", "S7")) in keys, sfs
+    # H2 补 8 的 4-8（rank '4'，窗口最高 8）压过 2-6
+    assert ("4", ("H2", "S4", "S5", "S6", "S7")) in keys, sfs
+    # 2-6 的 H2 补位（窗口最高 '6' = greater，不能压过）应排除
+    assert ("2", ("H2", "S3", "S4", "S5", "S6")) not in keys, sfs
+
+
+def test_follow_straight_by_window_top():
+    """跟牌顺子：按窗口最高牌压过 greater（rank 字段是低牌）。"""
+    gen = ActionListGenerator(cur_rank="2")
+    greater = ["Straight", "3", ["S3", "H4", "D5", "C6", "S7"]]  # 3-7，最高 7
+    hand = ["S4", "H5", "D6", "C7", "S8", "S3", "D9", "H9"]
+    follow = gen.generate_follow_actions(hand, greater)
+    strs = [a for a in follow if a[0] == "Straight"]
+    low_ranks = {s[1] for s in strs}
+    # 4-8（rank '4'）与 5-9（rank '5'）最高牌 8/9 > 7 → 保留
+    assert "4" in low_ranks, f"应保留 4-8: {strs}"
+    assert "5" in low_ranks, f"应保留 5-9: {strs}"
+    # 3-7（最高 7 = greater，不能压过）应排除
+    assert "3" not in low_ranks, f"不应保留 3-7: {strs}"
+
+
+def test_beats_sf_by_window_top():
+    """_beats 对同花顺按窗口最高牌比较（rank 字段已是低牌）。"""
+    adapter = _make_adapter()
+    a = ["StraightFlush", "9", ["H9", "HT", "HJ", "HQ", "HK"]]  # 9-K
+    b = ["StraightFlush", "2", ["S2", "S3", "S4", "S5", "S6"]]  # 2-6
+    assert adapter._beats(a, b, "2") is True, "9-K 应压过 2-6"
+    assert adapter._beats(b, a, "2") is False, "2-6 不应压过 9-K"
+
+
+def test_h2_wild_sf_no_h2():
+    """无 H2 时不生成逢人配同花顺（自然同花顺不受影响）。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["S4", "S5", "S6", "S8", "D2"]  # 无 H2，4-8 缺 7 无牌可补
+    sf = _collect(gen.generate_lead_actions(hand), "StraightFlush")
+    assert sf == [], f"无 H2 不应生成补位同花顺: {sf}"
+    hand2 = ["S4", "S5", "S6", "S7", "S8", "D2"]  # 有自然 4-8
+    sf2 = _collect(gen.generate_lead_actions(hand2), "StraightFlush")
+    assert ["StraightFlush", "4", ["S4", "S5", "S6", "S7", "S8"]] in sf2, sf2
 
 
 def test_bomb_full_and_four():
@@ -472,3 +586,125 @@ def test_bomb_full_and_four():
     bombs = _collect(gen.generate_lead_actions(hand), "Bomb")
     sizes = sorted(len(b[2]) for b in bombs)
     assert 4 in sizes and 5 in sizes, f"炸弹应含 4 张和全量 5 张: {sizes}"
+
+
+# ── 10. 两副牌重复牌（Botzone）回归 ─────────────
+
+def test_twt_with_duplicate_suit_cards():
+    """两副牌下同 rank 同花色重复（如 CJ/HJ/HJ）必须能组 ThreeWithTwo。
+
+    锚点：match=6a6f3a80 两处 GUA-075 推荐 ThreeWithTwo/J
+    [C7,CJ,D7,HJ,HJ] 无法匹配 actionList → PASS。
+    旧 _combos 用 _uniq_cards（dict.fromkeys）去重吞掉重复 HJ →
+    trip 组合为空 → TWT 缺失。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["C7", "D7", "CJ", "HJ", "HJ", "S5", "H5"]
+    twt = _collect(gen.generate_lead_actions(hand), "ThreeWithTwo")
+    j_twts = [a for a in twt if a[1] == "J"]
+    assert j_twts, f"应有 J 的三带二（含两张 HJ）: {twt}"
+    for t in j_twts:
+        assert len(t[2]) == 5
+        assert sorted(_card_rank(c) for c in t[2][:3]) == ["J", "J", "J"], t[2]
+
+
+def test_follow_twt_with_duplicate_suit_cards():
+    """跟牌轮 TWT 对重复花色牌同样成立（原 20:39:43/20:39:51 PASS 场景）。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["C7", "CJ", "D7", "HJ", "HJ", "S5", "H5"]
+    greater = ["ThreeWithTwo", "5", ["C5", "D5", "S5", "C6", "D6"]]
+    actions = gen.generate_follow_actions(hand, greater)
+    j_twts = [a for a in actions if a[0] == "ThreeWithTwo" and a[1] == "J"]
+    assert j_twts, f"跟牌轮应有 J 三带二: {actions}"
+
+
+def test_combos_keeps_duplicates():
+    """_combos 保留两副牌重复牌：['CJ','HJ','HJ'] 取 3 应得 1 组。"""
+    from src.communication.botzone_adapter import ActionListGenerator
+    combos = ActionListGenerator._combos(["CJ", "HJ", "HJ"], 3)
+    assert len(combos) == 1
+    assert sorted(combos[0]) == ["CJ", "HJ", "HJ"], combos
+
+
+def test_combos_dedup_by_sorted_key():
+    """_combos 对同牌面不同顺序去重：CJ/HJ/HJ 任意排列只产一组。"""
+    from src.communication.botzone_adapter import ActionListGenerator
+    combos = ActionListGenerator._combos(["HJ", "CJ", "HJ"], 3)
+    assert len(combos) == 1
+    assert sorted(combos[0]) == ["CJ", "HJ", "HJ"], combos
+
+
+# ── 11. numofplayers / publicInfo（残局激活）──────
+
+def test_accumulate_played_cards_dedup_overlap():
+    """跨 request history 重叠时 played_cards 用 set 去重，不重复计数。"""
+    from src.communication.botzone_adapter import (
+        BotzoneAdapter, BotzoneGameState,
+    )
+    adapter = BotzoneAdapter("test", "test_key")
+    game = BotzoneGameState(match_id="m1")
+    # request 1: player0 出 2 张, player1 出 1 张
+    adapter._accumulate_played_cards(game, [
+        {"player": 0, "response": [[10, 64], [10, 64]]},
+        {"player": 1, "response": [[66], [66]]},
+    ])
+    # request 2: 同一手牌再次出现在近四手 history 中（重叠）
+    adapter._accumulate_played_cards(game, [
+        {"player": 0, "response": [[10, 64], [10, 64]]},
+        {"player": 2, "response": [[69], [69]]},
+    ])
+    assert game.played_cards[0] == {10, 64}, game.played_cards
+    assert game.played_cards[1] == {66}, game.played_cards
+    assert game.played_cards[2] == {69}, game.played_cards
+
+
+def test_handle_play_request_updates_played_cards():
+    """_handle_play_request 应累计各席已出牌（含 PASS 跳过）。"""
+    from src.communication.botzone_adapter import (
+        BotzoneAdapter, BotzoneGameState,
+    )
+    adapter = BotzoneAdapter("test", "test_key")
+    game = BotzoneGameState(match_id="m1")
+    req = {
+        "stage": "play",
+        "history": [
+            {"player": 1, "response": [[36, 92], [36, 92]]},
+            {"player": 2, "response": [[], []]},
+        ],
+        "done": [],
+        "pass_on": -1,
+        "global": {"level": "2"},
+    }
+    adapter._handle_play_request(game, req)
+    assert game.played_cards[1] == {36, 92}, game.played_cards
+    assert 2 not in game.played_cards or game.played_cards[2] == set()
+
+
+def test_deal_resets_played_cards():
+    """新副发牌应清空 played_cards（跨副不串）。"""
+    from src.communication.botzone_adapter import (
+        BotzoneAdapter, BotzoneGameState,
+    )
+    adapter = BotzoneAdapter("test", "test_key")
+    game = BotzoneGameState(match_id="m1")
+    game.played_cards = {0: {10}, 1: {66}}
+    adapter._handle_deal(game, {"deliver": [0, 1, 2], "your_id": 0,
+                                "global": {"level": "2"}})
+    assert game.played_cards == {}
+
+
+def test_numofplayers_and_public_info():
+    """numofplayers（对手剩张 = 27 - 已出，done 玩家 0）+ publicInfo[].rest。"""
+    from src.communication.botzone_adapter import (
+        BotzoneAdapter, BotzoneGameState,
+    )
+    adapter = BotzoneAdapter("test", "test_key")
+    game = BotzoneGameState(match_id="m1", player_id=0)
+    game.hand_cards = ["S3", "H5", "D7", "C9", "HJ"]  # 5 张
+    game.played_cards = {1: {10, 64, 66}, 2: {69}, 3: {1, 2, 3, 4, 5, 6}}
+    known_done = [3]
+    numofplayers = adapter._compute_numofplayers(game, game.hand_cards, known_done)
+    assert numofplayers == [5, 24, 26, 0], numofplayers
+    public_info = [{"rest": n} for n in numofplayers]
+    assert public_info == [
+        {"rest": 5}, {"rest": 24}, {"rest": 26}, {"rest": 0},
+    ], public_info
