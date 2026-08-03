@@ -1683,6 +1683,14 @@ class EndgameDecider:
         if teammate_single_cover is not None:
             return teammate_single_cover
 
+        # ③.5 GUA-190：敌方剩 1 张 + 跟牌压单 + 我方手牌结构恰好「2 炸 + 1 孤立大单(>K) + 其余 2 手整牌」
+        # → 直接炸弹封死，不给敌方残余牌接牌机会（无法可靠判断残余牌，以手牌结构替代判据）。
+        enemy_one_bomb_lock = self._q1_enemy_one_bomb_lock_special(
+            game_state, non_banned_candidates, ec, main_pos, main_enemy,
+        )
+        if enemy_one_bomb_lock is not None:
+            return enemy_one_bomb_lock
+
         enemy_one_lead = self._q1_enemy_critical_lead_special(
             game_state, non_banned_candidates, ec, main_pos, main_enemy,
         )
@@ -2309,6 +2317,119 @@ class EndgameDecider:
         if remaining == 1:
             return self._select_enemy_one_strongest_single(singles, game_state)
         return None
+
+    def _q1_enemy_one_bomb_lock_special(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        GUA-190：敌方剩 1 张 + 跟牌压单时，若我方手牌结构为
+        「≥2 手炸 + 恰好 1 个孤立大单(>K) + 其余恰好 2 手整牌」→ 直接炸弹封死。
+
+        判据用我方手牌结构替代"敌方残余牌判断"（下家是否大王不可靠）：
+        开炸 → 领出整牌 → 若被压再炸 → 领出另一整牌 → 留大单头游。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+        if int(main_enemy.get("remaining", 27) or 27) != 1:
+            return None
+        # 跟牌压单：greater 为 Single 且我方非领出（greaterAction 存在即跟牌回合）
+        greater_action = game_state.get("greaterAction")
+        if not greater_action:
+            return None
+        try:
+            gtype = get_action_type(greater_action)
+        except Exception:
+            return None
+        if gtype != ACTION_TYPE_SINGLE:
+            return None
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+
+        hand_cards = list(game_state.get("handCards", []) or [])
+        if not hand_cards:
+            return None
+        cur_rank = str(game_state.get("curRank", "2"))
+
+        from collections import Counter
+        cnt: Counter = Counter()
+        for c in hand_cards:
+            try:
+                cnt[get_card_rank(str(c))] += 1
+            except Exception:
+                return None
+
+        # ① 孤立单张恰好 1 个，且 > K
+        single_ranks = [r for r, n in cnt.items() if n == 1]
+        if len(single_ranks) != 1:
+            return None
+        solo_rank = single_ranks[0]
+        k_value = get_card_value("SK", cur_rank)
+        solo_value = get_card_value(
+            next((c for c in hand_cards if get_card_rank(str(c)) == solo_rank), "SB"),
+            cur_rank,
+        )
+        if solo_value <= k_value:
+            return None
+
+        # ② ≥2 手炸
+        bomb_ranks = [r for r, n in cnt.items() if n >= 4]
+        if len(bomb_ranks) < 2:
+            return None
+
+        # ③ 其余（count 2/3）恰好 2 手整牌
+        rest_ranks = [r for r, n in cnt.items() if 2 <= n <= 3]
+        if not self._rest_forms_two_hands(rest_ranks, cnt):
+            return None
+
+        # 从候选里选炸弹（最小足够封死当前 Single）
+        bomb_cands = [
+            (i, a) for i, a in candidates if _is_bomb_like_action(a)
+        ]
+        if not bomb_cands:
+            return None
+        bomb_cands = _sort_q1_block_candidates(bomb_cands, hand_cards, game_state)
+        picked = bomb_cands[0]
+        logger.info(
+            "GUA-190 enemy-one bomb lock: idx=%s type=%s",
+            picked[0],
+            _get_declared_action_type(picked[1]) if GUARD_TOOLS_OK else "?",
+        )
+        return picked
+
+    @staticmethod
+    def _is_one_hand_structure(ranks: List[str], cnt) -> bool:
+        """这些 rank（count 均为 2 或 3）能否组成恰好一手整牌。"""
+        if not ranks:
+            return False
+        counts = sorted(cnt[r] for r in ranks)
+        total = sum(counts)
+        if counts == [2] or counts == [3]:
+            return total in (2, 3)
+        if counts == [2, 3] or counts == [3, 3]:
+            return total in (5, 6)
+        if counts == [2, 2, 2]:
+            return total == 6
+        return False
+
+    @classmethod
+    def _rest_forms_two_hands(cls, rest_ranks: List[str], cnt) -> bool:
+        """其余（非单非炸）牌能否恰好拆成 2 手整牌。"""
+        n = len(rest_ranks)
+        if n < 2:
+            return False
+        total = sum(cnt[r] for r in rest_ranks)
+        if total < 6 or total > 12:
+            return False
+        for mask in range(1, (1 << n) - 1):
+            g1 = [rest_ranks[i] for i in range(n) if mask & (1 << i)]
+            g2 = [rest_ranks[i] for i in range(n) if not (mask & (1 << i))]
+            if cls._is_one_hand_structure(g1, cnt) and cls._is_one_hand_structure(g2, cnt):
+                return True
+        return False
 
     def _is_bomb_destroying_action(
         self, act: List, hand_cards: List[str],
