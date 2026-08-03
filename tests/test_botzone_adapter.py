@@ -8,6 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import pytest
+
 from src.communication.botzone_adapter import (
     bz_to_v8_card,
     v8_to_bz_int,
@@ -197,12 +199,18 @@ def test_lead_straight():
         assert len(s[2]) >= 5
 
 
-def test_has_pass():
+def test_lead_has_no_pass():
+    """领出轮 actionList 应不含 PASS（对齐 OpenGuanDan 服务器领出轮实测无 PASS）。
+
+    修复前 lead 首项恒为 ["PASS","PASS","PASS"]，领出/接风轮引擎选 PASS 被
+    兜底成弱单张（logs/v8_vs_botzone_20260802_220840.log 22:09:03 → Single/J）。
+    """
     gen = ActionListGenerator(cur_rank="2")
     hand = ["S3", "H5"]
     actions = gen.generate_lead_actions(hand)
     pass_actions = [a for a in actions if a[0] == "PASS"]
-    assert len(pass_actions) == 1
+    assert len(pass_actions) == 0, f"领出轮不应含 PASS: {actions}"
+    assert len(actions) >= 2, f"应含可出候选: {actions}"
 
 
 def test_follow_beats_greater():
@@ -866,3 +874,184 @@ def test_numofplayers_and_public_info():
     assert public_info == [
         {"rest": 5}, {"rest": 24}, {"rest": 26}, {"rest": 0},
     ], public_info
+
+
+# ── 12. GUA-19x 回归：领出无 PASS + history 键对齐 ────
+
+class _RecordingEngine:
+    """记录最后一次传给 decide 的 game_state。"""
+
+    def __init__(self):
+        self.last_game_state = None
+
+    def decide(self, game_state) -> int:
+        self.last_game_state = dict(game_state)
+        return 0
+
+
+def _make_recording_adapter():
+    from src.communication.botzone_adapter import BotzoneAdapter
+    engine = _RecordingEngine()
+    adapter = BotzoneAdapter("test", "test_key")
+    adapter.set_decision_engine(engine)
+    return adapter, engine
+
+
+def test_history_keys_aligned_with_engine():
+    """history 条目键对齐引擎：pos/action + PASS 条目的 context.greaterAction。
+
+    修复前 adapter 传 "_history" 键 + "player" 键，引擎只读 g["history"] +
+    pos/seat → MemoryTracker 回放静默失效；现必须用 pos + history。
+    """
+    from src.communication.botzone_adapter import BotzoneGameState
+    adapter, engine = _make_recording_adapter()
+    game = BotzoneGameState(match_id="m1", player_id=0)
+    game.hand_cards = ["S3", "H5", "D7", "C9", "SJ", "HJ", "D2", "C2", "S2"]  # 9 张
+    game.cur_rank = "2"
+    # player1 出对 3，player2 PASS，轮到 V8(0) 跟牌
+    pair_bz = v8_to_bz_cards(["S3", "H3"])
+    req = {
+        "stage": "play",
+        "history": [
+            {"player": 1, "response": [pair_bz, pair_bz]},
+            {"player": 2, "response": [[], []]},
+        ],
+        "done": [],
+        "pass_on": -1,
+        "global": {"level": "2"},
+    }
+    _run_play_decision(adapter, game, req)
+    gs = engine.last_game_state
+    assert gs is not None
+    assert "history" in gs, f"game_state 应含 history 键: {list(gs.keys())}"
+    history = gs["history"]
+    assert len(history) == 2, history
+    # 条目 1：player1 出 Pair
+    e0 = history[0]
+    assert e0.get("pos") == 1, e0
+    assert e0["action"][0] == "Pair", e0
+    # 条目 2：player2 PASS，context.greaterAction 指向当时面对的最大动作（Pair）
+    e1 = history[1]
+    assert e1.get("pos") == 2, e1
+    assert e1["action"][0] == "PASS", e1
+    assert e1.get("context", {}).get("greaterAction", [])[0] == "Pair", e1
+
+
+def test_history_passes_running_greater_not_final():
+    """PASS 条目的 context.greaterAction 用当时的 running greater。
+
+    同一 request 内后续还有更大动作时，先前 PASS 条目不得引用最终更大动作。
+    """
+    from src.communication.botzone_adapter import BotzoneGameState
+    adapter, engine = _make_recording_adapter()
+    game = BotzoneGameState(match_id="m1", player_id=0)
+    game.hand_cards = ["S3", "H5", "D7", "C9", "SJ", "HJ", "D2", "C2", "S2"]
+    game.cur_rank = "2"
+    # player1 出单 5，player2 PASS（面对 单5），player3 出单 7（新的更大）
+    single5 = v8_to_bz_cards(["H5"])
+    single7 = v8_to_bz_cards(["D7"])
+    req = {
+        "stage": "play",
+        "history": [
+            {"player": 1, "response": [single5, single5]},
+            {"player": 2, "response": [[], []]},
+            {"player": 3, "response": [single7, single7]},
+        ],
+        "done": [],
+        "pass_on": -1,
+        "global": {"level": "2"},
+    }
+    _run_play_decision(adapter, game, req)
+    gs = engine.last_game_state
+    history = gs["history"]
+    assert len(history) == 3, history
+    # player2 的 PASS 面对的是当时的 greater（单5），不是最后的单7
+    pass_entry = history[1]
+    ga = pass_entry["context"]["greaterAction"]
+    assert ga[0] == "Single" and ga[1] == "5", ga
+    assert history[2]["action"][0] == "Single" and history[2]["action"][1] == "7"
+
+
+def test_deal_calls_on_game_start():
+    """每副发牌应调用引擎 on_game_start（重置 tracker / 增量回放游标）。
+
+    缺失会跨副串位：_tracker_history_replayed 从上一副末值继续，新副首 request
+    的 history 从头开始 → 增量回放 `history[start:]` 全空，MemoryTracker 失忆。
+    """
+    from src.communication.botzone_adapter import BotzoneGameState
+    calls = {"n": 0}
+
+    class _OnStartEngine:
+        def on_game_start(self, my_pos=None, game_id=None):
+            calls["n"] += 1
+            calls["my_pos"] = my_pos
+
+        def decide(self, game_state) -> int:
+            return 0
+
+    from src.communication.botzone_adapter import BotzoneAdapter
+    adapter = BotzoneAdapter("test", "test_key")
+    adapter.set_decision_engine(_OnStartEngine())
+    game = BotzoneGameState(match_id="m1", player_id=0)
+    adapter._handle_deal(game, {"deliver": [0, 1, 2], "your_id": 0,
+                                "global": {"level": "2"}})
+    assert calls["n"] == 1, calls
+    assert calls.get("my_pos") == 0, calls
+
+
+def test_memory_tracker_replays_new_history_format():
+    """引擎 decide 可正确消费 adapter 新 history 格式（pos + action + greaterAction）。
+
+    修复前 adapter 用 "_history"+"player" 键，引擎只读 g["history"]+pos/seat →
+    MemoryTracker 回放静默失效（对手牌张数推算失真）。本测试验证：
+      ① 非 PASS 条目被 record_play（tracker 记录该牌已出）；
+      ② PASS 条目 + context.greaterAction 触发 record_pass（记该 PASS 面对的牌型）。
+    """
+    import importlib
+    try:
+        ultimate = importlib.import_module(
+            "src.v.nn.ultimate_win_rate_engine_v7")
+        UltimateWinRateEngineV7 = ultimate.UltimateWinRateEngineV7
+        FEATURE_IMPORT_OK = ultimate.FEATURE_IMPORT_OK
+    except Exception:
+        pytest_skip = True
+    else:
+        pytest_skip = not FEATURE_IMPORT_OK
+    if pytest_skip:
+        pytest.skip("V8 特征/引擎不可用，跳过集成测试")
+
+    engine = UltimateWinRateEngineV7(player_id=0, use_grouping_engine=True)
+    engine.on_game_start(0)
+    # player1 出对 3，player2 出对 5（压 3），player3 PASS（面对 对5）
+    history = [
+        {"pos": 1, "action": ["Pair", "3", ["S3", "H3"]]},
+        {"pos": 2, "action": ["Pair", "5", ["S5", "H5"]]},
+        {"pos": 3, "action": ["PASS", "PASS", "PASS"],
+         "context": {"greaterAction": ["Pair", "5", ["S5", "H5"]]}},
+    ]
+    gs = {
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 2,
+        "greaterAction": ["Pair", "5", ["S5", "H5"]],
+        "handCards": ["C3", "D3", "S6", "H6", "D6", "C7", "S8", "H9", "D9",
+                      "ST", "CT", "SJ", "DJ", "SK", "DK"],
+        "actionList": [
+            ["PASS", "PASS", "PASS"],
+            ["Pair", "6", ["S6", "H6"]],
+            ["Pair", "9", ["H9", "D9"]],
+        ],
+        "curRank": "2",
+        "selfRank": "2",
+        "oppoRank": "2",
+        "publicInfo": [{"rest": 15}, {"rest": 24}, {"rest": 24}, {"rest": 26}],
+        "history": history,
+    }
+    idx = engine.decide(gs)
+    assert isinstance(idx, int) and idx >= 0, idx
+    # tracker 已回放 3 条
+    assert engine._tracker is not None
+    assert engine._tracker_history_replayed == 3, engine._tracker_history_replayed
+    # 对手 2 已出对 5（两张 5），剩张应从 27 扣到 24（publicInfo 亦为 24）
+    hand_counts = engine._tracker.hand_counts
+    assert hand_counts.get(2) == 24, hand_counts

@@ -195,8 +195,13 @@ class ActionListGenerator:
         self.cur_rank = cur_rank
 
     def generate_lead_actions(self, hand_cards: List[str]) -> List[list]:
-        """Generate all valid lead actions from hand."""
-        actions = [["PASS", "PASS", "PASS"]]
+        """Generate all valid lead actions from hand.
+
+        对齐 OpenGuanDan 服务器：领出轮 actionList 不含 PASS（服务器领出轮
+        size=1731/1410/1091 均无 "PASS" 实测），消除「领出/接风轮引擎选 PASS
+        被兜底成弱单张」退化（logs/v8_vs_botzone_20260802_220840.log 22:09:03）。
+        """
+        actions = []
         rank_groups = self._group_by_rank(hand_cards)
         suits = self._group_by_suit(hand_cards)
 
@@ -204,22 +209,23 @@ class ActionListGenerator:
         for card in hand_cards:
             actions.append(self._single_action(card))
 
-        # Pairs
+        # Pairs：同 rank 全 2 张组合（对齐服务器枚举，让引擎可挑不拆核组合）
         for rank, cards in rank_groups.items():
             if len(cards) >= 2:
-                actions.append(self._pair_action(cards[:2]))
+                for combo in self._combos(cards, 2):
+                    actions.append(self._pair_action(combo))
 
-        # Trips
+        # Trips：同 rank 全 3 张组合
         for rank, cards in rank_groups.items():
             if len(cards) >= 3:
-                actions.append(self._trips_action(cards[:3]))
+                for combo in self._combos(cards, 3):
+                    actions.append(self._trips_action(combo))
 
-        # Bombs (4+ same rank): 全量炸弹 + 4 张炸（小炸保留核心打法）
+        # Bombs (4+ same rank)：全量炸弹 + 各档小炸（对齐服务器 4/5/6…张枚举）
         for rank, cards in rank_groups.items():
             if len(cards) >= 4:
-                actions.append(self._bomb_action(list(cards)))
-            if len(cards) >= 5:
-                actions.append(self._bomb_action(list(cards[:4])))
+                for size in range(4, len(cards) + 1):
+                    actions.append(self._bomb_action(list(cards[:size])))
 
         # ThreeWithTwo (trips + pair)：trip × pair 全组合
         for t_rank, t_cards in rank_groups.items():
@@ -355,7 +361,7 @@ class ActionListGenerator:
                 low = window[0]
                 if _rank_to_order(window[-1], self.cur_rank) <= greater_straight_top:
                     continue
-                choices = [self._uniq_cards(rank_groups[r], 3) for r in window]
+                choices = [self._uniq_cards(rank_groups[r]) for r in window]
                 for combo in itertools.product(*choices):
                     actions.append(self._straight_action(list(combo), low))
 
@@ -506,7 +512,7 @@ class ActionListGenerator:
         rank_set = set(rank_groups.keys())
         for window in self._straight_windows(rank_set):
             low = window[0]
-            choices = [self._uniq_cards(rank_groups[r], 3) for r in window]
+            choices = [self._uniq_cards(rank_groups[r]) for r in window]
             for combo in itertools.product(*choices):
                 actions.append(self._straight_action(list(combo), low))
         return actions
@@ -863,6 +869,15 @@ class BotzoneAdapter:
         game.done = []
         game.episode_count += 1
         game.current_request = None  # deal needs no response
+        # 每副开始重置引擎跨副残留状态（MemoryTracker / 增量回放游标等）。
+        # 缺失会跨副/跨 match 串位：_tracker_history_replayed 从上一副末值继续，
+        # 新副首 request 的 history 从头开始 → 增量回放 `history[start:]` 全空，
+        # MemoryTracker 完全失忆（与 yf1_v8.py on_game_start 每 game_start 调用对齐）。
+        if self.decision_engine is not None:
+            try:
+                self.decision_engine.on_game_start(game.player_id)
+            except Exception:
+                logger.warning("on_game_start 失败 match=%s", game.match_id, exc_info=True)
         logger.info(
             "发牌: match=%s player=%d hand=%d curRank=%s",
             game.match_id, game.player_id, len(game.hand_cards), level,
@@ -1210,13 +1225,23 @@ class BotzoneAdapter:
                 return json.dumps([[], []], separators=(",", ":"))
 
         # 3. Build game_state for V8's decide()
+        # history 用完整 parsed_history（不能截断，引擎 _replay_history_to_tracker
+        # 按 _tracker_history_replayed 增量回放，截断会漏回放/错位）。
+        # 条目键对齐引擎期望：pos/seat + action/curAction + context.greaterAction。
+        # PASS 条目的 context.greaterAction 用该 PASS 发生时面对的当前最大动作
+        # （引擎据此 record_pass 记牌），而非本条 request 的最终 greater。
         history_actions = []
-        for player, action_cards, _claim_cards in parsed_history[-8:]:  # last 8 entries
+        running_greater = None
+        for player, action_cards, _claim_cards in parsed_history:
             v8_action = self._bz_response_to_v8_action(action_cards)
-            history_actions.append({
-                "player": player,
-                "action": v8_action,
-            })
+            entry: Dict[str, Any] = {"pos": player, "action": v8_action}
+            if v8_action and v8_action[0] == "PASS":
+                entry["context"] = {
+                    "greaterAction": running_greater or ["PASS", "PASS", "PASS"],
+                }
+            else:
+                running_greater = v8_action or running_greater
+            history_actions.append(entry)
 
         # numofplayers: 各席剩余张数 = 27 - 已出张数；done 玩家为 0；
         # 自己以实牌数为准。补传 publicInfo[].rest（GUA-170 最高优先级），
@@ -1243,7 +1268,7 @@ class BotzoneAdapter:
             "done": known_done,
             "publicInfo": public_info,
             "_botzone_mode": True,
-            "_history": history_actions,
+            "history": history_actions,
         }
 
         # 4. Call V8's decision engine
