@@ -1158,11 +1158,17 @@ class BotzoneAdapter:
         self_lead = (greater_pos == game.player_id)
         pass_on = req.get("pass_on", -1)
         no_greater = not (greater_action_str and greater_action_str[0] != "PASS")
-        # 接风领出判定：greater 出牌者已 done，且其最后一手之后仍有动作（即该手
-        # 已被其他未 done 玩家 PASS 完），则 V8 是接风者必须领出。区分场景：
+        # 接风领出判定：greater 出牌者已 done，且其最后一手之后 V8 自己与其他
+        # 未 done 玩家均已 PASS，则 V8 是接风者必须领出。区分场景：
         #   request A：history=[..., P2:QQQ44]（QQQ44 是末条）→ V8 首个响应，跟牌轮可 PASS；
-        #   request B：history=[P1:[], P2:QQQ44, P0:[], P1:[]]（末条之后有 PASS）
-        #              → 该手已响应完，V8 接风领出，禁止 PASS。
+        #   request B：history=[P1:[], P2:QQQ44, P0:[], P1:[]]（末条之后有 PASS 且
+        #              含 V8 自己）→ 该手已响应完，V8 接风领出，禁止 PASS；
+        #   request C：history=[P0:[], P1:[59,6], P2:[], P3:[]]（P0 在 greater 之前，
+        #              P1 已 done，P2/P3 PASS）→ V8 是最后一个未表态者，仍须跟牌轮
+        #              （可跟同型 / 炸 / PASS），不能自由领出——否则平台判
+        #              「牌型与上家不一致」中止（实测 21:33:03 对局 6a709869）。
+        # 判定关键：trailing 必须包含 V8 自己对该 greater 的 PASS 表态，才说明
+        # 这手已响应完轮到 V8 领出；V8 未表态（trailing 无自己条目）是跟牌轮。
         done_set = set(req.get("done", []) or [])
         done_greater_lead = False
         if (greater_pos >= 0 and greater_pos in done_set
@@ -1172,7 +1178,9 @@ class BotzoneAdapter:
                 default=-1,
             )
             trailing = parsed_history[last_non_pass_idx + 1:]
-            done_greater_lead = bool(trailing) and all(
+            v8_responded = any(
+                p == game.player_id for (p, _ac, _cc) in trailing)
+            done_greater_lead = bool(trailing) and v8_responded and all(
                 not ac for (_p, ac, _cc) in trailing
             )
         must_play = (self_lead or (pass_on == game.player_id)
@@ -1222,6 +1230,12 @@ class BotzoneAdapter:
                 else:
                     return json.dumps([[], []], separators=(",", ":"))
             else:
+                logger.info(
+                    "跟牌轮无可压动作（仅 PASS）: match=%s greater=%s/%s hand=%d，直接 PASS",
+                    match_id, greater_action_str[0] if greater_action_str else "?",
+                    greater_action_str[1] if greater_action_str and len(greater_action_str) >= 2 else "",
+                    len(hand_cards),
+                )
                 return json.dumps([[], []], separators=(",", ":"))
 
         # 3. Build game_state for V8's decide()

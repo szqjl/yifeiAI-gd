@@ -858,6 +858,41 @@ def test_follow_turn_may_pass():
     assert parsed == [[], []], f"跟牌轮应可 PASS: {resp}"
 
 
+def test_greater_done_but_v8_unresponded_is_follow_turn():
+    """request C：greater 已 done 但 V8 尚未对该手表态 → 仍是跟牌轮，可 PASS。
+
+    复现 match=6a70986927e7bf01db0f2585 21:33:03（S69）：
+    history=[P0:[], P1:[59,6]=对2, P2:[], P3:[]]，done=[1]，pass_on=1。
+    P1 已出完、P2/P3 均 PASS，但 trailing 不含 V8(P0) 自己的 PASS 表态，
+    V8 是最后一个未表态者——平台视角仍须跟牌（同型/炸/PASS），
+    不能自由领出。旧判定误判为「接风领出 → must_play=True」，
+    领出 Straight 被平台判「牌型与上家不一致」中止（实测对局）。
+    """
+    from src.communication.botzone_adapter import BotzoneGameState
+    adapter = _make_adapter_with_engine()
+    game = BotzoneGameState(match_id="m1", player_id=0)
+    game.hand_cards = ["C3", "D4", "H5", "S6", "C7", "D8", "H9", "S10", "CJ", "DQ", "HK"]
+    game.cur_rank = "2"
+    req = {
+        "stage": "play",
+        "history": [
+            {"player": 0, "response": [[], []]},
+            {"player": 1, "response": [[59, 6], [59, 6]]},
+            {"player": 2, "response": [[], []]},
+            {"player": 3, "response": [[], []]},
+        ],
+        "done": [1],
+        "pass_on": 1,
+        "global": {"level": "2"},
+    }
+    resp = _run_play_decision(adapter, game, req)
+    import json as _json
+    parsed = _json.loads(resp)
+    assert parsed == [[], []], (
+        f"V8 未表态应为跟牌轮可 PASS（实测会跟对2失败而 PASS）: {resp}"
+    )
+
+
 def test_numofplayers_and_public_info():
     """numofplayers（对手剩张 = 27 - 已出，done 玩家 0）+ publicInfo[].rest。"""
     from src.communication.botzone_adapter import (
