@@ -239,6 +239,61 @@ def test_bomb_in_follow():
     assert len(bombs) >= 1
 
 
+def test_straight_flush_bomb_in_follow():
+    """同花顺是炸弹：跟牌轮对手出 Single/Pair/Trips 等非炸牌型时，
+    actionList 必须含同花顺整手候选，否则手牌仅剩 SF 时该压不压 PASS。
+    锚点：match=6a714a8027e7bf01db1017a3 —— C5-C9 SF 对 Single/7、Pair/8
+    全程 PASS（修复前生成器只补同 rank≥4 四头炸，漏同花顺炸）。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["C5", "C6", "C7", "C8", "C9"]  # 一手同花顺炸弹
+
+    for greater in (
+        ["Single", "7", ["S7"]],
+        ["Pair", "8", ["S8", "H8"]],
+        ["Trips", "5", ["S5", "H5", "D5"]],
+        ["Straight", "3", ["S3", "H4", "D5", "C6", "S7"]],
+        ["ThreeWithTwo", "K", ["SK", "HK", "DK", "S4", "H4"]],
+    ):
+        actions = gen.generate_follow_actions(hand, greater)
+        sfs = [a for a in actions if a[0] == "StraightFlush"]
+        assert sfs, f"greater={greater} 应含同花顺候选: {actions}"
+        assert ["StraightFlush", "5",
+                ["C5", "C6", "C7", "C8", "C9"]] in sfs, sfs
+
+
+def test_straight_flush_bomb_follow_pairs_and_trips():
+    """同花顺炸候选与拆牌单张共存：对 Single/7 既有拆 C8/C9 单张，
+    也有 SF 整手（引擎据此可走 Q0.5 一手清，而非 PASS）。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["C5", "C6", "C7", "C8", "C9"]
+    greater = ["Single", "7", ["S7"]]
+    actions = gen.generate_follow_actions(hand, greater)
+    types = {a[0] for a in actions}
+    assert "StraightFlush" in types, actions
+    assert "Single" in types, actions
+    assert all(a[0] != "Bomb" for a in actions), (
+        "手牌无 4 张同 rank，不应出现四头炸: "
+        f"{[a for a in actions if a[0] == 'Bomb']}")
+
+
+def test_straight_flush_bomb_follow_respects_bomb_count():
+    """同花顺压 4/5 张炸，6+ 炸压同花顺（裁判 G1）：
+    对 6 张炸 greater 不补 SF（SF 压不过 6+ 炸）。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["C5", "C6", "C7", "C8", "C9"]
+    # 6 张炸
+    greater_big = ["Bomb", "A",
+                   ["SA", "SA", "DA", "DA", "HA", "HA"]]
+    actions = gen.generate_follow_actions(hand, greater_big)
+    sfs = [a for a in actions if a[0] == "StraightFlush"]
+    assert not sfs, f"6+ 炸压同花顺，不应补 SF: {actions}"
+    # 4 张炸 → 同花顺可压
+    greater_small = ["Bomb", "A", ["SA", "SA", "DA", "DA"]]
+    actions2 = gen.generate_follow_actions(hand, greater_small)
+    sfs2 = [a for a in actions2 if a[0] == "StraightFlush"]
+    assert sfs2, f"4 张炸应可被同花顺压: {actions2}"
+
+
 def test_follow_single_pair_generates_all_combos():
     """follow 的 Single/Pair/Trips 应生成该 rank 全部 n 组合，
     让引擎可挑不拆核心组的组合（避免该压不压 PASS）。

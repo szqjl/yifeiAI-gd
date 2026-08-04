@@ -157,3 +157,23 @@ class TestGua112FinishNowBannedExempt:
         gs = {"handCards": hand}
         found = find_finish_now_candidate(gs, al)
         assert found == (0, al[0])
+
+    def test_sf_finish_now_follow_when_only_sf_left(self):
+        """match=6a714a8027e7bf01db1017a3 10:12:54：手牌仅剩 C5-C9 同花顺，
+        对手出 Single/7，跟牌轮 actionList 含 SF 整手时应一手清出 SF（而非 PASS）。
+        修复前 adapter 跟牌候选漏同花顺炸 → actionList 无 SF → 全程 PASS。"""
+        hand = ["C5", "C6", "C7", "C8", "C9"]
+        sf = ["StraightFlush", "5", hand]
+        al = [
+            ["PASS", "PASS", "PASS"],
+            ["Single", "8", ["C8"]],
+            ["Single", "9", ["C9"]],
+            sf,
+        ]
+        gs = _base_gs(hand, al, numofplayers=[5, 4, 0, 0], cur_rank="2")
+        gs["greaterPos"] = 1
+        gs["greaterAction"] = ["Single", "7", ["S7"]]
+        gs["curPos"] = 0
+        (idx, act), filtered = _decide_after_preprocess(gs)
+        assert sf in filtered, f"SF 一手清候选不应被 banned_filter 删除: {filtered}"
+        assert act == sf, f"应一手清出 SF: {act}"

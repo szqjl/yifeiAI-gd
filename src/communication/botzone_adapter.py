@@ -379,11 +379,21 @@ class ActionListGenerator:
             for rank, cards in rank_groups.items():
                 if len(cards) >= 4:
                     actions.append(self._bomb_action(cards))
+            # 同花顺也是炸：能压任意非炸牌型（Single/Pair/Trips/Straight/TWT…）
+            # 此前只补同 rank≥4 四头炸，漏同花顺炸 → 手牌仅剩 SF 时该压不压 PASS
+            # （实测 match=6a714a8027e7bf01db1017a3：C5-C9 SF 对 Single/7 全程 PASS）。
+            actions.extend(self._sf_bomb_candidates(hand_cards, suits))
         elif greater_type == "StraightFlush":
             # 同花顺只被 6+ 张炸压制（裁判：4/5 张炸 < 同花顺 < 6+ 炸，G1）
             for rank, cards in rank_groups.items():
                 if len(cards) >= 6:
                     actions.append(self._bomb_action(cards))
+        elif greater_type == "Bomb":
+            # 同花顺压 4/5 张炸（裁判 G1：4/5 张炸 < 同花顺 < 6+ 炸）；
+            # 6+ 炸压同花顺，不补。
+            greater_cnt = len(greater_cards) if greater_cards else 4
+            if greater_cnt < 6:
+                actions.extend(self._sf_bomb_candidates(hand_cards, suits))
 
         seen: Set[str] = set()
         deduped = []
@@ -393,6 +403,23 @@ class ActionListGenerator:
                 seen.add(key)
                 deduped.append(act)
         return deduped
+
+    def _sf_bomb_candidates(self, hand_cards: List[str],
+                            suits: Dict[str, List[str]]) -> List[list]:
+        """手牌中全部同花顺（自然 + H2 逢人配），作为跟牌炸弹候选。
+
+        同花顺在掼蛋中属于炸弹，能压任意非炸牌型（_beats 已确认）。
+        领出侧已有同花顺生成，跟牌侧此前漏掉，导致手牌仅剩 SF 时
+        对手出 Single/Pair 等无法用 SF 压 → 该压不压 PASS。
+        """
+        sfs: List[list] = []
+        for suit, s_cards in suits.items():
+            if len(s_cards) >= 5:
+                s_ranks = sorted(set(_card_rank(c) for c in s_cards),
+                                key=lambda r: RANK_ORDER.get(r, 99))
+                sfs.extend(self._generate_straight_flushes(s_cards, s_ranks))
+        sfs.extend(self._generate_h2_wild_straight_flushes(hand_cards, suits))
+        return sfs
 
     def _single_action(self, card: str) -> list:
         return _make_action("Single", _card_rank(card), [card])
