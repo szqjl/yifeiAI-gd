@@ -636,20 +636,27 @@ class ActionListGenerator:
         self, hand_cards: List[str], suits: Dict[str, List[str]],
         greater_top: Optional[int] = None,
     ) -> List[list]:
-        """H2 逢人配同花顺（服务器语义，实测 size=2209 RAW 证据）。
+        """逢人配同花顺（服务器语义，实测 size=2209 RAW 证据）。
 
-        H2 可补同花色 5 连窗口任意缺位（同一 SF 至多 2 张 H2，两副牌上限）；
-        同花色其它 rank 的 2（如 D2/S2/C2）是自然牌，仅 H2 是万能牌。
+        H{cur_rank} 万能牌（cur_rank=2 时即 H2）可补同花色 5 连窗口任意缺位
+        （同一 SF 至多 2 张万能牌，两副牌上限）；同花色其它 rank 的 2
+        （如 D2/S2/C2，当 cur_rank=2）是自然牌，仅 H{cur_rank} 是万能牌。
         rank 取窗口低牌（window[0]），如 ['S4','S5','S6','H2','S8'] → rank='4'。
         greater_top 非空时（跟牌路径）只保留能压过 greater 的候选。
+
+        GUA-200（2026-08-04）：此前写死 H2，cur_rank≠2 时配子 SF 全部丢失。
+        实证 match=6a71cf5f 回合19：级牌6 手牌 DA,D2,D3,D4,H6 本可组成
+        A2345 同花顺炸压 Single/HR，actionList 却只剩配子补炸 Bomb/3（拆 SF
+        core 被 _group_consistency_filter 拦截）→ 该炸未炸，对手双上。
         """
+        wild = f"H{self.cur_rank}"
         actions = []
-        h2_count = hand_cards.count("H2")
-        if h2_count == 0:
+        wild_count = hand_cards.count(wild)
+        if wild_count == 0:
             return actions
         for suit, s_cards in suits.items():
-            # H2 只作万能牌，不参与本花色自然牌池（服务器 H2 恒作 wild）
-            natural = [c for c in s_cards if c != "H2"]
+            # 万能牌只作补位，不参与本花色自然牌池（服务器 H{cur_rank} 恒作 wild）
+            natural = [c for c in s_cards if c != wild]
             if len(natural) < 3:
                 continue
             by_rank: Dict[str, List[str]] = defaultdict(list)
@@ -657,7 +664,7 @@ class ActionListGenerator:
                 by_rank[_card_rank(c)].append(c)
             for window in self._all_straight_windows():
                 missing = [r for r in window if not by_rank.get(r)]
-                if not missing or len(missing) > h2_count:
+                if not missing or len(missing) > wild_count:
                     continue
                 if greater_top is not None:
                     # 窗口最高牌（A2345 → '5'）带级牌提升，与 _straight_top_order 一致
@@ -666,7 +673,7 @@ class ActionListGenerator:
                 choices = [self._uniq_cards(by_rank[r], 2)
                            for r in window if r not in missing]
                 for combo in itertools.product(*choices):
-                    cards = list(combo) + ["H2"] * len(missing)
+                    cards = list(combo) + [wild] * len(missing)
                     actions.append(self._straight_flush_action(cards, window[0]))
         return actions
 

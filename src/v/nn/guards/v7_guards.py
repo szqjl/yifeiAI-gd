@@ -528,15 +528,19 @@ def _rule_r04_single_b_non_pass(
 def _rule_r06_no_break_structure_pair(
     action_list: List[List[str]],
     hand_cards: List[str],
+    cur_rank: str = "2",
 ) -> List[int]:
     """
     V7-R06（轻量）：存在不拆结构的更大 Pair 可压时，
     剔除拆 ThreePair/钢板的 Pair。
     """
     # 获取手牌中所有完整的结构
-    # 简化：统计手牌中每种 rank 的牌数
+    # 简化：统计手牌中每种 rank 的牌数（逢人配 H{cur_rank} 不参与天然对子）
     from collections import Counter
-    hand_ranks = Counter(get_card_rank(c) for c in hand_cards)
+    _WILD = f"H{cur_rank}"
+    hand_ranks = Counter(
+        get_card_rank(c) for c in hand_cards if c != _WILD
+    )
 
     pair_indices = []
     for i, act in enumerate(action_list):
@@ -904,6 +908,7 @@ def _rule_r14_no_break_pattern_when_lead(
     greater_pos: int,
     my_pos: int,
     numofplayers: List[int] = None,
+    cur_rank: str = "2",
 ) -> List[int]:
     """
     V7-R14：领出时不拆天然牌型。
@@ -933,18 +938,21 @@ def _rule_r14_no_break_pattern_when_lead(
             return list(range(len(action_list)))
 
     # ── 统计手牌中的天然牌型 ──
-    # H2（逢人配/万能牌）不是天然牌：C2+H2 不构成天然对子，
-    # H2 以野牌身份用于顺子/同花顺时不应判为「拆对子」。
+    # H{cur_rank}（逢人配/万能牌，cur_rank=2 即 H2）不是天然牌：C2+H2 不构成天然对子，
+    # 配子以野牌身份用于顺子/同花顺时不应判为「拆对子」。cur_rank 动态定位配子，
+    # 否则级牌≠2 时 H{cur_rank} 被计入天然对子/三张统计（GUA-201，实测 match
+    # 6a71cf5f 级牌6：H6+S6 被误判为天然对子 → 合法 Single/6 被剔除）。
     from collections import Counter
+    _WILD = f"H{cur_rank}"
     hand_ranks = Counter(
-        get_card_rank(c) for c in hand_cards if c != "H2"
+        get_card_rank(c) for c in hand_cards if c != _WILD
     )
 
-    # 天然对子：恰好 2 张同 rank（非 H2）
+    # 天然对子：恰好 2 张同 rank（非配子）
     natural_pairs: Dict[str, bool] = {
         r: True for r, cnt in hand_ranks.items() if cnt == 2
     }
-    # 天然三张：恰好 3 张同 rank（非 H2）
+    # 天然三张：恰好 3 张同 rank（非配子）
     natural_trips: Dict[str, bool] = {
         r: True for r, cnt in hand_ranks.items() if cnt == 3
     }
@@ -957,11 +965,11 @@ def _rule_r14_no_break_pattern_when_lead(
     # 用它组顺子/同花顺不破坏任何天然牌型。
     pair_members = {
         c for c in hand_cards
-        if c != "H2" and get_card_rank(c) in natural_pairs
+        if c != _WILD and get_card_rank(c) in natural_pairs
     }
     trip_members = {
         c for c in hand_cards
-        if c != "H2" and get_card_rank(c) in natural_trips
+        if c != _WILD and get_card_rank(c) in natural_trips
     }
 
     # 完整牌型豁免：SF/顺子/三带二/三连对/钢板/炸弹本身是完整结构，
@@ -1370,7 +1378,7 @@ def _filter_action_list_impl(
     _capture_guard_step("R02")
 
     # 4) R06: 不拆结构对子
-    r06_kept = _rule_r06_no_break_structure_pair(action_list, hand_cards)
+    r06_kept = _rule_r06_no_break_structure_pair(action_list, hand_cards, cur_rank)
     excluded |= {i for i in range(len(action_list)) if i not in set(r06_kept)}
     _capture_guard_step("R06")
 
@@ -1381,7 +1389,7 @@ def _filter_action_list_impl(
 
     # 4.6) R14: 领出不拆天然牌型（有天然对子/三张时 → 剔除拆散动作）
     r14_kept = _rule_r14_no_break_pattern_when_lead(
-        action_list, hand_cards, greater_pos, my_pos, numofplayers)
+        action_list, hand_cards, greater_pos, my_pos, numofplayers, cur_rank)
     excluded |= {i for i in range(len(action_list)) if i not in set(r14_kept)}
     _capture_guard_step("R14")
 

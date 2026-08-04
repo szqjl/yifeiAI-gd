@@ -127,3 +127,44 @@ def test_r14_hand_counter_ranks_exclude_h2():
     from src.v.nn.guards.v7_guards import get_card_rank
     non_h2_ranks = Counter(get_card_rank(c) for c in HAND_B if c != "H2")
     assert non_h2_ranks["2"] == 1, "排除 H2 后 rank2 只剩 C2，不应是天然对子"
+
+
+def test_r14_wild_sf_currank6_not_natural_pair():
+    """GUA-201: 配子动态定位——级牌=6 时 H6 是配子，S6 不构成天然对子。
+
+    锚点：match=6a71cf5f27e7bf01db106f56（级牌6）。修复前 R14 硬编码排除
+    H2，H6 被计入 hand_ranks['6']=2 → 误判 S6+H6 为天然对子 → 合法
+    Single/6(S6) 被剔除。修复后传 cur_rank 动态排除 H6。
+    """
+    hand = ["S6", "H6", "S5", "D5", "S8", "H9", "C9"]
+    actions = [
+        ["PASS", "PASS", "PASS"],
+        ["Single", "6", ["S6"]],          # 修复前被误剔；H6是配子，S6非天然对子
+        ["Single", "5", ["S5"]],          # 真拆对5，应剔
+        ["Pair", "5", ["S5", "D5"]],      # 完整对5，保留
+        ["Pair", "6", ["S6", "H6"]],      # 配子补对，保留
+        ["StraightFlush", "A", ["DA", "D2", "D3", "D4", "H6"]],  # 完整SF，豁免
+    ]
+    kept = _rule_r14_no_break_pattern_when_lead(
+        actions, hand, greater_pos=-1, my_pos=0, cur_rank="6")
+    kept_list = [actions[i] for i in kept]
+    assert ["Single", "6", ["S6"]] in kept_list, f"H6配子不应判拆天然对子: {kept_list}"
+    assert ["Single", "5", ["S5"]] not in kept_list, f"真拆对5应剔除: {kept_list}"
+    assert ["Pair", "5", ["S5", "D5"]] in kept_list
+    assert ["Pair", "6", ["S6", "H6"]] in kept_list
+    assert ["StraightFlush", "A", ["DA", "D2", "D3", "D4", "H6"]] in kept_list
+
+
+def test_r14_currank2_default_backward_compat():
+    """GUA-201: 默认 cur_rank='2' 保持旧行为（H2 作配子，C2 非天然对子）。"""
+    hand = ["H2", "C2", "S5", "D5"]
+    actions = [
+        ["PASS", "PASS", "PASS"],
+        ["Single", "2", ["C2"]],
+        ["Pair", "5", ["S5", "D5"]],
+    ]
+    kept = _rule_r14_no_break_pattern_when_lead(
+        actions, hand, greater_pos=0, my_pos=0)
+    kept_list = [actions[i] for i in kept]
+    assert ["Single", "2", ["C2"]] in kept_list
+    assert ["Pair", "5", ["S5", "D5"]] in kept_list

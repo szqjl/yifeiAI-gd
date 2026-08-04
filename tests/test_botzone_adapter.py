@@ -699,6 +699,47 @@ def test_h2_wild_sf_no_h2():
     assert ["StraightFlush", "4", ["S4", "S5", "S6", "S7", "S8"]] in sf2, sf2
 
 
+def test_h6_wild_sf_generated_follow():
+    """GUA-200: 配子不限于 H2，cur_rank=6 时 H6 补位同花顺必须生成。
+
+    锚点：match=6a71cf5f27e7bf01db106f56 回合19（19:39:47）手牌
+    DA,D2,D3,D4,H6 + 对3/对7/对10，greater Single/HR。修复前 actionList
+    只有 PASS+Bomb/3（H6 拆 SF core 被 _group_consistency_filter 拦截），
+    该用完整 SF A2345 炸却没炸 → 对手双上。修复后必须含
+    ['StraightFlush','A',['DA','D2','D3','D4','H6']]（完整 core 组，不拆）。
+    """
+    gen = ActionListGenerator(cur_rank="6")
+    hand = ["DA", "D2", "D3", "D4", "H6", "H3", "S3", "H7", "C7", "CT", "ST"]
+    follow = gen.generate_follow_actions(hand, ["Single", "R", ["HR"]])
+    target = ["StraightFlush", "A", ["DA", "D2", "D3", "D4", "H6"]]
+    assert target in follow, f"H6 配子应生成 A2345 同花顺: {follow}"
+
+
+def test_h6_wild_sf_lead():
+    """GUA-200: cur_rank=6 领出也生成 H6 配子同花顺。"""
+    gen = ActionListGenerator(cur_rank="6")
+    hand = ["DA", "D2", "D3", "D4", "H6", "S3"]
+    sf = _collect(gen.generate_lead_actions(hand), "StraightFlush")
+    assert ["StraightFlush", "A", ["DA", "D2", "D3", "D4", "H6"]] in sf, sf
+
+
+def test_h3_wild_sf_generated():
+    """GUA-200: cur_rank=3 时 H3 作配子补位（非 H2 硬编码）。"""
+    gen = ActionListGenerator(cur_rank="3")
+    hand = ["DA", "D2", "D4", "D5", "H3", "S3", "C3"]
+    follow = gen.generate_follow_actions(hand, ["Single", "R", ["HR"]])
+    target = ["StraightFlush", "A", ["DA", "D2", "D4", "D5", "H3"]]
+    assert target in follow, f"H3 配子应生成 A2345 同花顺: {follow}"
+
+
+def test_wild_sf_beats_single_joker():
+    """GUA-200: 配子 SF（完整 core）能压 Single/大王，且不视为拆 core。"""
+    adapter = _make_adapter()
+    sf = ["StraightFlush", "A", ["DA", "D2", "D3", "D4", "H6"]]
+    greater = ["Single", "R", ["HR"]]
+    assert adapter._beats(sf, greater, "6") is True, "A2345 SF 应压过大王"
+
+
 def test_bomb_full_and_four():
     """炸弹：覆盖全量（>=4）+ 4 张小炸。"""
     gen = ActionListGenerator(cur_rank="2")
