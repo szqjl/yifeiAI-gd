@@ -458,6 +458,40 @@ def test_classify_straight_flush():
     assert result[0] == "StraightFlush"
 
 
+def test_classify_straight_with_level_card_low():
+    """级牌不提升：level=2 时 2-3-4-5-6 仍是合法顺子（裁判 cardscale 语义）。
+
+    锚点：match=6a71ace3 对手打 2-6 顺子被误判 'Free' → 跟牌轮无 Straight
+    候选 → 手有 5-9 顺子却 PASS。修复前 _is_consecutive 用 _rank_to_order
+    （级牌 2 提升为 15）→ 2-6 不连续 → 'Free'。
+    """
+    from src.communication.botzone_adapter import BotzoneAdapter
+    adapter = BotzoneAdapter("test", "test_key")
+    result = adapter._classify_action(["D2", "C3", "C4", "D5", "D6"])
+    assert result == ["Straight", "2", ["D2", "C3", "C4", "D5", "D6"]], result
+    # A2345 / TJQKA 窗口低牌与裁判 points 一致
+    assert adapter._classify_action(["SA", "S2", "H3", "D4", "C5"]) == \
+        ["Straight", "A", ["SA", "S2", "H3", "D4", "C5"]]
+    assert adapter._classify_action(["ST", "HJ", "DQ", "CK", "SA"]) == \
+        ["Straight", "T", ["ST", "HJ", "DQ", "CK", "SA"]]
+
+
+def test_follow_straight_beats_level_low_straight():
+    """跟牌轮 greater=2-6 顺子时，手牌 5-9 顺子必须进入候选（该压不压回归）。
+
+    锚点：match=6a71ace3 第 24 回合——V8 手有 S5-S9，2 号对手打 2-6 顺子，
+    队友/对手均过，V8 因 greater 被误判 'Free' 导致 actionList 只有 PASS+SF
+    → 全程 PASS。修复后必须含 Straight/5。
+    """
+    from src.communication.botzone_adapter import ActionListGenerator
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["S5", "S6", "C7", "C8", "S9"]
+    greater = ["Straight", "2", ["D2", "C3", "C4", "D5", "D6"]]
+    actions = gen.generate_follow_actions(hand, greater)
+    straights = [a for a in actions if a[0] == "Straight"]
+    assert ["Straight", "5", ["S5", "S6", "C7", "C8", "S9"]] in straights, actions
+
+
 # ── 9. 全组合与官方牌型对齐 ─────────────────────
 
 def _collect(al, t):
@@ -1290,4 +1324,59 @@ def test_play_decision_h2_wild_sf_claim_in_response():
     action, claim = _json.loads(resp)
     assert action == v8_to_bz_cards(["S4", "S5", "S6", "H2", "S8"]), action
     assert claim == v8_to_bz_cards(["S4", "S5", "S6", "S7", "S8"]), claim
+
+
+def test_follow_wild_bomb_candidate():
+    """GUA-199：跟牌侧逢人配补炸——自然 3 张 + H2 → 4 张 Bomb 候选。
+
+    修复前炸弹兜底只认自然 4+ 同 rank，手牌 444+H2 时候选仅 PASS+Pair，
+    引擎拆炸弹 core 打弱牌（match=6a71ace3 回合11：H4,H4,D4,H2,C2 对
+    Pair/8 只出 22 对子）。
+    """
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["H4", "H4", "D4", "H2", "C2"]
+    greater = ["Pair", "8", ["D8", "S8"]]
+    actions = gen.generate_follow_actions(hand, greater)
+    bombs = [a for a in actions if a[0] == "Bomb"]
+    assert ["Bomb", "4", ["H4", "H4", "D4", "H2"]] in bombs, actions
+
+
+def test_lead_wild_bomb_candidate():
+    """GUA-199：领出侧逢人配补炸——自然 3 张 + H2 → 4 张 Bomb 候选。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["H4", "H4", "D4", "H2"]
+    actions = gen.generate_lead_actions(hand)
+    bombs = [a for a in actions if a[0] == "Bomb"]
+    assert ["Bomb", "4", ["H4", "H4", "D4", "H2"]] in bombs, actions
+
+
+def test_wild_bomb_claim_replaced():
+    """GUA-199：逢人配补炸的 claim 把配子替换为所代表 rank（G2 同规则）。"""
+    adapter = _make_adapter()
+    chosen = ["Bomb", "4", ["H4", "H4", "D4", "H2"]]
+    claim = adapter._build_bz_claim(chosen, "2", v8_to_bz_cards(chosen[2]))
+    assert claim == v8_to_bz_cards(["H4", "H4", "D4", "S4"]), claim
+    # 配子作自然级牌（Bomb/2 含 H2）→ claim==action
+    chosen2 = ["Bomb", "2", ["S2", "H2", "D2", "C2"]]
+    bz2 = v8_to_bz_cards(chosen2[2])
+    assert adapter._build_bz_claim(chosen2, "2", bz2) == bz2, "Bomb/2 的 H2 为自然级牌"
+    # 无配子炸弹 → claim==action
+    chosen3 = ["Bomb", "K", ["HK", "DK", "SK", "CK"]]
+    bz3 = v8_to_bz_cards(chosen3[2])
+    assert adapter._build_bz_claim(chosen3, "2", bz3) == bz3, "无配子 claim==action"
+
+
+def test_follow_wild_bomb_beats_bomb_by_count_and_rank():
+    """GUA-199：配子补炸参与比炸——4 张炸同张数比牌值，5+ 张炸不可压。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["H4", "H4", "D4", "H2", "C2"]
+    # greater 4 张炸（rank 3）→ 配子 4 张炸（rank 4）可压
+    greater_bomb = ["Bomb", "3", ["S3", "H3", "D3", "C3"]]
+    acts = gen.generate_follow_actions(hand, greater_bomb)
+    bombs = [a for a in acts if a[0] == "Bomb"]
+    assert ["Bomb", "4", ["H4", "H4", "D4", "H2"]] in bombs, acts
+    # greater 5 张炸 → 配子 4 张炸不可压（裁判先比张数 G5）
+    greater_5 = ["Bomb", "3", ["S3", "H3", "D3", "C3", "S3"]]
+    acts5 = gen.generate_follow_actions(hand, greater_5)
+    assert all(a[0] == "PASS" or len(a[2]) >= 5 for a in acts5), acts5
 

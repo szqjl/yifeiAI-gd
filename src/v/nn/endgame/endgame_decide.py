@@ -3110,11 +3110,13 @@ class EndgameDecider:
         if not action_cards_set:
             return False
 
-        # 核心整牌类型（不包含普通对子/单张/炸弹）
-        # 注意：组牌引擎产出为小写 straight / trips，复合牌型拆为子组
-        # trip_in_three_with_two/pair_in_three_with_two/pair_in_three_pair/trip_in_steel_plate
+        # 核心整牌类型（不包含普通对子/单张）
+        # 注意：组牌引擎产出为小写 straight / trips，复合牌型拆为子组；
+        # 炸弹/同花顺为组牌引擎大写 "Bomb"/"StraightFlush"（grouping_engine.py:167）。
+        # GUA-199: Bomb 纳入核心 → 拆炸弹 core 打弱牌（如 444+H2 拆 H2 打 22 对子）
+        # 被拦截 PASS，防止把炸弹核心当弱牌打出（match=6a71ace3 回合11）。
         CORE_TYPES = frozenset({
-            "StraightFlush", "straight", "trips",
+            "StraightFlush", "Bomb", "straight", "trips",
             "trip_in_three_with_two", "pair_in_three_with_two",
             "pair_in_three_pair", "trip_in_steel_plate",
         })

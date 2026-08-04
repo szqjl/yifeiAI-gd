@@ -105,6 +105,11 @@ batch_executor/latest_victory_num.json
 # V8 战绩文件（Layer 2 runtime state）
 v8_vs_lalala_scores.json
 v8_vs_lalala_state.json
+v7dan_vs_danzero_scores.json
+v7dan_vs_danzero_state.json
+v8_vs_v8_scores.json
+v8_vs_v8_state.json
+game_records_v7dan/
 
 # 平台日志（V8 OpenGuanDan 服务器输出）
 offline_platform/openguandan_latest/log.txt

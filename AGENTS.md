@@ -29,6 +29,7 @@
 - 掼蛋规则：`.cursor/rules/guandan-knowledge.mdc`；回放不篡改真实流水。
 - **WF-12 临时脚本**：分析结束后删除，不保留在 `scripts/analysis/archive/`。
 - **WF-12 报告**：不自动产出，仅用户明确要求时生成。
+- **WF-13（Botzone）**：数据源仅 `logs/v8_vs_botzone_*.log`（无 game_records）；结论只追加进 `docs/guandan-brain/ITERATIONS.md`（不写 docs/analysis 报告）。
 
 ---
 
@@ -154,6 +155,7 @@ Remove-Item m3_vs_lalala_scores.json, m3_vs_lalala_state.json -ErrorAction Silen
 | 新会话 / 自启动 | `guandan-session-start` |
 | 批跑 / 胜率分析 | `guandan-batch-eval` |
 | **yf 出牌决策链路 / 败招根因** | **`guandan-decision-trace`**（WF-12） |
+| **Botzone 对局 / 该压不压 / 牌型误判** | **`guandan-botzone-trace`**（WF-13） |
 | 组牌引擎测试 | `guandan-grouping-engine` |
 | handoff 接续 | `guandan-handoff-continue` |
 | commit / push | `guandan-git-push` |

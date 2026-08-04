@@ -352,6 +352,7 @@
 | **WF-04 L2 日志** | `<repo_root>/logs/v7_vs_lalala_*.log` + `yf1_v7_*.log` + `yf2_v7_*.log`（**Shell 列目录**；`.cursorignore` 屏蔽 IDE 读） |
 | **分析批跑结果** | 见上行「WF-04 批跑解读」；详规 [`工作流.md`](./工作流.md) §2.3 |
 | **yf 单步决策链路（WF-12）** | **yf1**：直开 `*yf1_*` JSON；**yf2**：`[副序]-[后缀]` 配对 → §2.2 **`find_decision_at_step`** 对齐 `handCards` + `logs/yf*_*.log`；回归 `python scripts/tools/wf12_find_decision_at_step.py`；见 [`WF-12`](./workflows/WF-12-yf-decision-trace.md) §2.0–§2.2 |
+| **Botzone 适配层链路（WF-13）** | `python scripts/checks/check_botzone_trace.py <logs/v8_vs_botzone_*.log> --match <前缀> --by-cards <greater 牌面>`（或 `--step N`）；数据源**无 game_records**，`greater=Free` = R-B01 判型 bug 信号；结论只追加进 `docs/guandan-brain/ITERATIONS.md`（不写报告）；见 [`WF-13`](./workflows/WF-13-botzone-decision-trace.md) §2.0–§2.4 |
 | **回放单局** | `YF_REPLAY.bat` |
 | **BC 训练** | `python scripts/train_bc_v7.py` |
 | **推送前冗余校验** | `python verify_gitignore.py` |

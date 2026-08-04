@@ -158,7 +158,7 @@ enumerate_groupings()（一次跑，三产出）
 
 | 文档 | 作用 |
 |------|------|
-| `docs/guandan-brain/工作流.md` | 完整工作流体系（WF-01 ~ WF-12） |
+| `docs/guandan-brain/工作流.md` | 完整工作流体系（WF-01 ~ WF-13） |
 | `docs/guandan-brain/AGENT_FIRST_MESSAGE.md` | 新会话/换机/接续的"一句话触发"模板 |
 | `docs/guandan-brain/v8-win-rate-history.md` | V8 批跑 KPI 历史（每次批跑强制记录） |
 | `docs/knowledge/rules/01_basic_rules/README.md` | 掼蛋基础规则索引 |
@@ -260,6 +260,7 @@ python scripts/wiki.py ingest             # 摄入（不常用）
 | 换机/handoff 接续 | WF-07 | `按工作流 WF-07 接续：读 handoff + ITERATIONS 最新一行` |
 | 批跑/胜率分析 | WF-04 | `按工作流 WF-04：解读批跑数据` |
 | yf 出牌/败招分析 | WF-12 | `按工作流 WF-12：分析 yf 决策链路` |
+| Botzone 对局/该压不压 | WF-13 | `按工作流 WF-13：分析 Botzone 适配层链路` |
 | 改 V7/V8 引擎 | WF-02+WF-05 | `按工作流 WF-02 + WF-05` |
 | 提交/推送 | WF-08 | `按工作流 WF-08 + AGENT_PUSH_CHECKLIST` |
 

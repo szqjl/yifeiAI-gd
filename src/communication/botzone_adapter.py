@@ -241,6 +241,8 @@ class ActionListGenerator:
             if len(cards) >= 4:
                 for size in range(4, len(cards) + 1):
                     actions.append(self._bomb_action(list(cards[:size])))
+        # 逢人配补炸：自然 3 张同 rank + H{cur_rank} → 4 张 Bomb（配子补炸）
+        actions.extend(self._wild_bomb_candidates(hand_cards))
 
         # ThreeWithTwo (trips + pair)：trip × pair 全组合
         for t_rank, t_cards in rank_groups.items():
@@ -336,6 +338,12 @@ class ActionListGenerator:
                     continue
                 if _rank_to_order(rank, self.cur_rank) > greater_order:
                     actions.append(self._bomb_action(cards))
+            # 逢人配补炸参与比炸：自然 3 张 + H{cur_rank} 为 4 张炸，
+            # 仅能压 4 张炸（同张数比牌值），5+ 张炸不可压（G5）。
+            if greater_cnt == 4:
+                for bomb in self._wild_bomb_candidates(hand_cards):
+                    if _rank_to_order(bomb[1], self.cur_rank) > greater_order:
+                        actions.append(bomb)
 
         elif greater_type == "StraightFlush":
             sfs = self._generate_straight_flushes_by_suit(
@@ -394,6 +402,10 @@ class ActionListGenerator:
             for rank, cards in rank_groups.items():
                 if len(cards) >= 4:
                     actions.append(self._bomb_action(cards))
+            # 逢人配补炸：自然 3 张同 rank + H{cur_rank} → 4 张 Bomb（GUA-199 配子补炸）。
+            # 此前漏配子补炸，手牌 444+H2 时候选仅 PASS+Pair → 拆炸弹 core 打弱牌
+            # （match=6a71ace3 回合11：H4,H4,D4,H2,C2 对 Pair/8 只出 22 对子）。
+            actions.extend(self._wild_bomb_candidates(hand_cards))
             # 同花顺也是炸：能压任意非炸牌型（Single/Pair/Trips/Straight/TWT…）
             # 此前只补同 rank≥4 四头炸，漏同花顺炸 → 手牌仅剩 SF 时该压不压 PASS
             # （实测 match=6a714a8027e7bf01db1017a3：C5-C9 SF 对 Single/7 全程 PASS）。
@@ -435,6 +447,26 @@ class ActionListGenerator:
                 sfs.extend(self._generate_straight_flushes(s_cards, s_ranks))
         sfs.extend(self._generate_h2_wild_straight_flushes(hand_cards, suits))
         return sfs
+
+    def _wild_bomb_candidates(self, hand_cards: List[str]) -> List[list]:
+        """逢人配补炸：自然 3 张同 rank + H{cur_rank} 配子 → 4 张 Bomb。
+
+        领出/跟牌炸弹枚举此前只认自然 4+ 同 rank，「444 + H2」配子补炸漏掉
+        → actionList 无 Bomb，引擎只能 PASS 或拆炸弹 core 打弱牌
+        （GUA-199，实测 match=6a71ace3 回合11：手牌 H4,H4,D4,H2,C2，greater Pair/8
+        候选仅 PASS+Pair/2，H2 被拆出打 22 对子）。语义对齐
+        `_generate_h2_wild_straight_flushes`（H2 恒作万能牌）。
+        """
+        wild = f"H{self.cur_rank}"
+        if wild not in hand_cards:
+            return []
+        actions = []
+        natural_groups = self._group_by_rank([c for c in hand_cards if c != wild])
+        for rank, cards in natural_groups.items():
+            if len(cards) == 3:
+                # 配子放最后，保证 _bomb_action 以自然 rank 声明
+                actions.append(self._bomb_action(list(cards) + [wild]))
+        return actions
 
     def _single_action(self, card: str) -> list:
         return _make_action("Single", _card_rank(card), [card])
@@ -1031,13 +1063,15 @@ class BotzoneAdapter:
             return _make_action("Trips", ranks[0], cards)
         if len(most_common) == 1 and n >= 4:
             return _make_action("Bomb", ranks[0], cards)
-        if n >= 5:
-            if self._is_consecutive(ranks, cr) and len(set(suits)) == 1:
-                low = min(ranks, key=lambda r: _rank_to_order(r, cr))
-                return _make_action("StraightFlush", low, cards)
-            if self._is_consecutive(ranks, cr):
-                low = min(ranks, key=lambda r: _rank_to_order(r, cr))
-                return _make_action("Straight", low, cards)
+        if n == 5:
+            # 顺子/同花顺：级牌不提升（裁判 cardscale 中 2 为自然位，level=2 的
+            # 2-3-4-5-6 仍是合法顺子，实测 match=6a71ace3 对手打 2-6 被误判 Free）。
+            # 用官方 10 个窗口匹配（A2345 … TJQKA），避免 _rank_to_order 级牌
+            # 提升打断连续性。
+            if self._is_straight_ranks(ranks) and len(set(suits)) == 1:
+                return _make_action("StraightFlush", self._straight_low(ranks), cards)
+            if self._is_straight_ranks(ranks):
+                return _make_action("Straight", self._straight_low(ranks), cards)
         if n == 5 and 3 in rank_counts.values() and 2 in rank_counts.values():
             trip_rank = [r for r, c in most_common if c == 3][0]
             return _make_action("ThreeWithTwo", trip_rank, cards)
@@ -1053,6 +1087,22 @@ class BotzoneAdapter:
                 return _make_action("TwoTrips", high, cards)
 
         return _make_action("Free", ranks[0] if ranks else "2", cards)
+
+    @staticmethod
+    def _is_straight_ranks(ranks: List[str]) -> bool:
+        """5 张牌 rank 是否构成官方顺子窗口（A2345 / 23456 / … / TJQKA）。"""
+        rs = set(ranks)
+        return len(rs) == 5 and any(
+            set(w) == rs for w in ActionListGenerator._all_straight_windows())
+
+    @staticmethod
+    def _straight_low(ranks: List[str]) -> str:
+        """顺子窗口低牌（裁判 points[0] 语义）：A2345→'A'、23456→'2'、TJQKA→'T'。"""
+        rs = set(ranks)
+        for w in ActionListGenerator._all_straight_windows():
+            if set(w) == rs:
+                return w[0]
+        return min(ranks, key=lambda r: RANK_ORDER.get(r, -1))
 
     def _is_consecutive(self, ranks: List[str], cur_rank: Optional[str] = None) -> bool:
         """Check if ranks form a consecutive sequence."""
@@ -1183,7 +1233,16 @@ class BotzoneAdapter:
         v8_cards = (chosen[2]
                     if len(chosen) >= 3 and isinstance(chosen[2], list) else [])
         covering = f"H{cur_rank}"
-        if chosen[0] != "StraightFlush" or covering not in v8_cards:
+        if covering not in v8_cards:
+            return bz_ints
+        if chosen[0] == "Bomb":
+            # 逢人配补炸：H{cur_rank} 作配子补足自然 3 张同 rank，claim 须把配子
+            # 替换为所代表 rank 的牌，否则裁判判 invalid（与同花顺同规则 G2）。
+            claim_cards = self._replace_bomb_covering(v8_cards, cur_rank)
+            if claim_cards is not None:
+                return v8_to_bz_cards(claim_cards)
+            return bz_ints
+        if chosen[0] != "StraightFlush":
             return bz_ints
         low_rank = chosen[1] if len(chosen) >= 2 else ""
         try:
@@ -1231,6 +1290,34 @@ class BotzoneAdapter:
                     result.append(f"{suit}{r}")
             return result
         return None
+
+    def _replace_bomb_covering(self, v8_cards: List[str],
+                               cur_rank: str) -> Optional[List[str]]:
+        """H+cur_rank 逢人配补炸：把配子替换为所代表 rank 的牌。
+
+        配子补炸形如 [H4,H4,D4,H2]（自然 3 张同 rank + H2），配子代表自然
+        rank。替换花色取一未在自然牌中出现的花色（同花顺替换沿用自然花色，
+        炸弹无窗口约束，任取一个不在场花色即可保证 claim 判型唯一）。
+        返回 None 表示无需替换（配子作自然级牌，如 Bomb/2 含 H2 本身），
+        claim==action 即可。
+        """
+        covering = f"H{cur_rank}"
+        covering_cnt = v8_cards.count(covering)
+        natural = [c for c in v8_cards if c != covering]
+        if not natural or len(natural) + covering_cnt != len(v8_cards):
+            return None
+        ranks = {_card_rank(c) for c in natural}
+        if len(ranks) != 1:
+            return None
+        rank = next(iter(ranks))
+        if rank == cur_rank:
+            return None  # 配子作自然级牌（Bomb/2 含 H2），claim==action 即合法
+        used_suits = {c[0] for c in natural}
+        for suit in ("H", "D", "S", "C"):
+            if suit not in used_suits:
+                return natural + [f"{suit}{rank}"] * covering_cnt
+        return None
+
 
     @staticmethod
     def _parse_bz_play_history(history) -> list:
