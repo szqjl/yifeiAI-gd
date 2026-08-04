@@ -336,3 +336,101 @@ def test_p3d_natural_trips_with_bomb_recapture():
     assert rec["type"] == "Trips"
     assert rec["intent"] == "main_p3d_trips"
     assert set(rec["cards"]) == set(trips)
+
+
+def test_p2_lone_twt_bomb_recap_defers_to_straight_recap():
+    """
+    GUA-198：独 TWT 仅靠炸弹回手（无同型 TWT），且存在「同型回手」顺子
+    → 先领小顺（6-10 回手 9-K），不领 TWT/4 烧 SF。
+    Botzone 20260804 match 6a718a9427e7bf01db10408b 败招复现。
+    """
+    # 组0/1: TWT 444+55；组2: StraightFlush 10-A(H2 配子)；组3/4: 顺 6-10 / 9-K
+    t_trip = ["S4", "H4", "C4"]
+    t_pair = ["D5", "H5"]
+    sf = ["CT", "CJ", "CQ", "CK", "H2"]
+    st_low = ["S6", "H7", "D8", "C9", "ST"]
+    st_hi = ["H9", "DT", "SJ", "DQ", "HK"]
+    card_mask = {}
+    group_members = {0: t_trip, 1: t_pair, 2: sf, 3: st_low, 4: st_hi}
+    group_type_map = {
+        0: "trip_in_three_with_two",
+        1: "pair_in_three_with_two",
+        2: "StraightFlush",
+        3: "straight",
+        4: "straight",
+    }
+    for gid, cards in group_members.items():
+        for c in cards:
+            card_mask[c] = (gid, 1.0, len(cards))
+    engine = _make_engine(
+        card_mask=card_mask,
+        group_type_map=group_type_map,
+        group_members=group_members,
+    )
+    rec = recommend_main_attack_lead(
+        engine, {}, card_mask, list(card_mask), "2", "stage_2",
+    )
+    assert rec is not None
+    assert rec["type"] == "Straight"
+    assert rec["rank"] == "6"
+    assert rec["intent"] == "main_p3_short_straight"
+    assert set(rec["cards"]) == set(st_low)
+
+
+def test_p2_lone_twt_bomb_recap_no_straight_still_leads_twt():
+    """GUA-198 边界：独 TWT + 炸，无同型回手顺子 → 仍领 TWT（原逻辑）。"""
+    trip = ["S6", "H6", "C6"]
+    pair = ["S4", "H4"]
+    bomb = ["SJ", "HJ", "CJ", "DJ"]
+    card_mask = {}
+    group_members = {0: trip, 1: pair, 2: bomb}
+    group_type_map = {
+        0: "trip_in_three_with_two",
+        1: "pair_in_three_with_two",
+        2: "Bomb",
+    }
+    for gid, cards in group_members.items():
+        for c in cards:
+            card_mask[c] = (gid, 1.0, len(cards))
+    engine = _make_engine(
+        card_mask=card_mask,
+        group_type_map=group_type_map,
+        group_members=group_members,
+    )
+    rec = recommend_main_attack_lead(
+        engine, {}, card_mask, list(card_mask), "2", "stage_2",
+    )
+    assert rec is not None
+    assert rec["type"] == "ThreeWithTwo"
+    assert rec["intent"] == "main_p2_three_with_two"
+
+
+def test_p2_twt_with_same_recap_keeps_twt_priority():
+    """GUA-198 边界：TWT 有同型回手（两手 TWT）→ 仍领最小 TWT。"""
+    t1_trip = ["S4", "H4", "C4"]
+    t1_pair = ["D5", "H5"]
+    t2_trip = ["S9", "H9", "C9"]
+    t2_pair = ["D8", "H8"]
+    card_mask = {}
+    group_members = {0: t1_trip, 1: t1_pair, 2: t2_trip, 3: t2_pair}
+    group_type_map = {
+        0: "trip_in_three_with_two",
+        1: "pair_in_three_with_two",
+        2: "trip_in_three_with_two",
+        3: "pair_in_three_with_two",
+    }
+    for gid, cards in group_members.items():
+        for c in cards:
+            card_mask[c] = (gid, 1.0, len(cards))
+    engine = _make_engine(
+        card_mask=card_mask,
+        group_type_map=group_type_map,
+        group_members=group_members,
+    )
+    rec = recommend_main_attack_lead(
+        engine, {}, card_mask, list(card_mask), "2", "stage_2",
+    )
+    assert rec is not None
+    assert rec["type"] == "ThreeWithTwo"
+    assert rec["rank"] == "4"
+    assert rec["intent"] == "main_p2_three_with_two"

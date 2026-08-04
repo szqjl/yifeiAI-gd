@@ -674,8 +674,19 @@ def recommend_main_attack_lead(
     elif twt_pick and not _sprint_two_hands:
         gid, typ, pr, cards = twt_pick
         defer = twt_count == 1 and stage == "stage_1"
-        if not defer and _has_structure_recapture(
-            groups, lead_gid=gid, kind="twt", engine=engine, cur_rank=cur_rank,
+        # GUA-198: 独 TWT 仅炸弹回手（无同型回手）时，若存在「同型回手」顺子
+        # → 让 P3 顺子先领（6-10 回手 9-K 不耗炸），TWT 留作后续
+        _twt_same_recap = _has_twt_recapture(groups, gid)
+        _st_same_recap = st_pick is not None and _has_straight_recapture(
+            groups, st_pick[1]
+        )
+        _twt_straight_better = (not _twt_same_recap) and _st_same_recap
+        if (
+            not defer
+            and not _twt_straight_better
+            and _has_structure_recapture(
+                groups, lead_gid=gid, kind="twt", engine=engine, cur_rank=cur_rank,
+            )
         ):
             return {
                 "type": typ,
