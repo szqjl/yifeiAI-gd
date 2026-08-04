@@ -84,12 +84,36 @@ def _eligible_p1_singles(
     return out
 
 
-def _pick_p1_second_smallest(eligible: List[str]) -> Optional[str]:
+def _pick_p1_second_smallest(
+    eligible: List[str], *, enemy_one_left: bool = False,
+) -> Optional[str]:
+    """P1 出单：默认第二小；若第二小 > Q 则出第一小（守大不破）。
+
+    对方剩一张时保持原逻辑（始终第二小），不触发 >Q 改写。
+    """
+    from src.v.nn.guards.v7_guards import CARD_RANK_ORDER, get_card_rank
+
     if len(eligible) >= 2:
+        second = eligible[1]
+        if not enemy_one_left and CARD_RANK_ORDER.get(get_card_rank(second), 99) > CARD_RANK_ORDER["Q"]:
+            return eligible[0]
         return eligible[1]
     if len(eligible) == 1:
         return eligible[0]
     return None
+
+
+def _any_enemy_one_left(game_state: Dict[str, Any], my_pos: int) -> bool:
+    """任一敌方剩 1 张 → True（P1 保持原逻辑出第二小）。"""
+    numofplayers = game_state.get("numofplayers") or []
+    if not numofplayers or len(numofplayers) != 4:
+        return False
+    teammate_pos = (my_pos + 2) % 4
+    for seat in ((my_pos + 1) % 4, (my_pos + 3) % 4):
+        rem = numofplayers[seat]
+        if isinstance(rem, (int, float)) and int(rem) == 1:
+            return True
+    return False
 
 
 def _has_k_principle_pair_recapture(
@@ -564,7 +588,8 @@ def recommend_main_attack_lead(
         engine, card_mask, hand_cards, cur_rank, group_type_map, group_members,
     )
     if _has_joker(hand_cards) or len(p1_singles) >= 2:
-        card = _pick_p1_second_smallest(p1_singles)
+        enemy_one_left = _any_enemy_one_left(game_state, my_pos)
+        card = _pick_p1_second_smallest(p1_singles, enemy_one_left=enemy_one_left)
         if card:
             return {
                 "type": "Single",

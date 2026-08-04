@@ -1129,3 +1129,101 @@ class TestQ0StraightFlushSprint:
         assert idx is not None
         assert act[0] == "TwoTrips"
         assert set(act[2]) == set(t7 + t8)
+
+    def test_is_my_q1_lead_turn_botzone_follow_turn_not_lead(self):
+        """GUA-193：Botzone 模式恒设 curPos=myPos，跟牌轮（敌人出牌）不得判为自由领出。"""
+        decider = EndgameDecider()
+        # 跟牌轮：敌人出 Single/8，V8 有 DJ 可压
+        gs_follow = {
+            "myPos": 0,
+            "curPos": 0,
+            "greaterPos": 3,
+            "greaterAction": ["Single", "8", ["H8"]],
+            "_botzone_mode": True,
+        }
+        assert decider._is_my_q1_lead_turn(gs_follow, 0) is False
+
+        # 领出轮：greaterAction 为 PASS 占位 → 自由领出
+        gs_lead = {
+            "myPos": 0,
+            "curPos": 0,
+            "greaterPos": 0,
+            "greaterAction": ["PASS", "PASS", "PASS"],
+            "_botzone_mode": True,
+        }
+        assert decider._is_my_q1_lead_turn(gs_lead, 0) is True
+
+        # 非 Botzone 平台保持旧语义：curPos=myPos 即领出
+        gs_old = {"myPos": 0, "curPos": 0, "greaterPos": 1}
+        assert decider._is_my_q1_lead_turn(gs_old, 0) is True
+
+    def test_botzone_follow_turn_single_covers_instead_of_pass(self):
+        """GUA-193 端到端：Botzone 跟牌轮手有 DJ，敌人出 Single/8，
+        应出 Single/J 压牌而非 Q0 误判领出轮 PASS。
+        回放：match=6a7172a327e7bf01db10319f 104 步（13:04:10）。"""
+        tracker = MemoryTracker(my_pos=0, enable_inference=False, max_infer_depth=0)
+        tracker.init_from_hand(["C5", "S5", "DJ"])
+        tracker.set_level_rank("2")
+
+        gs = {
+            "myPos": 0,
+            "curPos": 0,
+            "greaterPos": 3,
+            "greaterAction": ["Single", "8", ["H8"]],
+            "handCards": ["C5", "S5", "DJ"],
+            "actionList": [
+                ["PASS", "PASS", "PASS"],
+                ["Single", "J", ["DJ"]],
+            ],
+            "curRank": "2",
+            "selfRank": "2",
+            "oppoRank": "2",
+            "numofplayers": [3, 9, 0, 9],
+            "done": [2],
+            "_memory_tracker": tracker,
+            "_botzone_mode": True,
+        }
+
+        EndgamePreprocessor().preprocess(gs)
+        idx, act = EndgameDecider().decide(gs, gs["actionList"])
+
+        assert idx == 1
+        assert act[0] == "Single"
+        assert act[1] == "J"
+
+    def test_wild_trips_finish_now_preferred_over_split_single_pair(self):
+        """GUA-195 端到端：H2+ST+HT 领出应一手清 Trips/10，
+        而非先出单 H2 再出对 10 分两次打。
+        回放：match=6a717aab27e7bf01db10369f 13:38:30。"""
+        tracker = MemoryTracker(my_pos=0, enable_inference=False, max_infer_depth=0)
+        tracker.init_from_hand(["H2", "ST", "HT"])
+        tracker.set_level_rank("2")
+
+        gs = {
+            "myPos": 0,
+            "curPos": 0,
+            "greaterPos": 0,
+            "greaterAction": ["PASS", "PASS", "PASS"],
+            "handCards": ["H2", "ST", "HT"],
+            "actionList": [
+                ["Single", "2", ["H2"]],
+                ["Single", "T", ["ST"]],
+                ["Single", "T", ["HT"]],
+                ["Pair", "T", ["HT", "ST"]],
+                ["Trips", "T", ["H2", "HT", "ST"]],
+            ],
+            "curRank": "2",
+            "selfRank": "2",
+            "oppoRank": "2",
+            "numofplayers": [3, 9, 0, 9],
+            "done": [2],
+            "_memory_tracker": tracker,
+            "_botzone_mode": True,
+        }
+
+        EndgamePreprocessor().preprocess(gs)
+        idx, act = EndgameDecider().decide(gs, gs["actionList"])
+
+        assert act[0] == "Trips"
+        assert act[1] == "T"
+        assert sorted(act[2]) == sorted(["H2", "ST", "HT"])

@@ -169,6 +169,29 @@ def test_lead_trips():
         assert len(t[2]) == 3
 
 
+def test_lead_trips_with_wild_pairs_pair_into_trips():
+    """GUA-195：H2 配子补对成三张。
+
+    H2+ST+HT 领出应生成 Trips/10（一手清）候选，而非只有 Single×3+Pair×1，
+    否则残局先出单 H2 再出对 10 分两次打（实测 match 6a717aab27e7bf01db10369f
+    13:38:30）。"""
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["H2", "ST", "HT"]
+    actions = gen.generate_lead_actions(hand)
+    trips = [a for a in actions if a[0] == "Trips"]
+    assert any(sorted(t[2]) == sorted(["H2", "ST", "HT"]) for t in trips), trips
+    for t in trips:
+        assert len(t[2]) == 3
+    # 一手清检测应命中 Trips/10
+    from src.v.nn.endgame.endgame_decide import find_finish_now_candidate
+    hit = find_finish_now_candidate(
+        {"handCards": hand, "curRank": "2"}, actions,
+    )
+    assert hit is not None
+    assert hit[1][0] == "Trips"
+    assert sorted(hit[1][2]) == sorted(hand)
+
+
 def test_lead_bomb():
     gen = ActionListGenerator(cur_rank="2")
     hand = ["S3", "H3", "D3", "C3", "S5"]

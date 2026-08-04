@@ -64,6 +64,35 @@ def test_s1_2b_skips_level_single_when_cur_rank_is_two():
     assert rec["intent"] == "assist_feed_s1_second_single"
 
 
+def test_s1_2b_second_bigger_than_q_plays_first_smallest():
+    """S1-2b：第二小 > Q 时出第一小（守大不破）。"""
+    card_mask = {
+        "S5": (-1, 0.0, 0),
+        "HA": (-1, 0.0, 0),
+    }
+    engine = _make_engine(card_mask=card_mask)
+    rec = _feed_stage1_open(engine, {}, card_mask, ["S5", "HA"], "2")
+    assert rec is not None
+    assert rec["type"] == "Single"
+    assert rec["rank"] == "5"
+    assert rec["intent"] == "assist_feed_s1_second_single"
+
+
+def test_s1_2b_enemy_one_left_keeps_second_smallest():
+    """对方剩 1 张时保持原逻辑（仍出第二小）。"""
+    card_mask = {
+        "S5": (-1, 0.0, 0),
+        "HA": (-1, 0.0, 0),
+    }
+    engine = _make_engine(card_mask=card_mask)
+    gs = {"numofplayers": [3, 1, 9, 8]}
+    rec = _feed_stage1_open(engine, gs, card_mask, ["S5", "HA"], "2")
+    assert rec is not None
+    assert rec["type"] == "Single"
+    assert rec["rank"] == "A"
+    assert rec["intent"] == "assist_feed_s1_second_single"
+
+
 def test_s1_2_prefers_mid_single_over_second_smallest():
     """S1-2 主路径：有 6–10 中单时仍出最小中单，不走第二小。"""
     card_mask = {

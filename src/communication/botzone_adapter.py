@@ -221,6 +221,21 @@ class ActionListGenerator:
                 for combo in self._combos(cards, 3):
                     actions.append(self._trips_action(combo))
 
+        # GUA-195: 配子(H{curRank})补对成三张 —— H2+对10 应生成 Trips/10 候选，
+        # 否则 actionList 只有 Single×3+Pair×1，残局一手清（H2+ST+HT=Trips/10）
+        # 无法命中，引擎只能先出单 H2 再出对 10，分两次打（实测 match
+        # 6a717aab27e7bf01db10369f 13:38:30）。
+        wild = "H" + str(self.cur_rank)
+        if any(c == wild for c in hand_cards):
+            natural_groups = self._group_by_rank(
+                [c for c in hand_cards if c != wild]
+            )
+            for rank, cards in natural_groups.items():
+                if len(cards) >= 2:
+                    for combo in self._combos(cards, 2):
+                        # 配子放最后，保证 _trips_action 以组合牌点数声明
+                        actions.append(self._trips_action(list(combo) + [wild]))
+
         # Bombs (4+ same rank)：全量炸弹 + 各档小炸（对齐服务器 4/5/6…张枚举）
         for rank, cards in rank_groups.items():
             if len(cards) >= 4:

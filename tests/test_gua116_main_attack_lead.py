@@ -46,6 +46,37 @@ def test_p1_joker_triggers_second_smallest():
     assert rec["rank"] == "6"
 
 
+def test_p1_second_bigger_than_q_plays_first_smallest():
+    """第二小 > Q 时出第一小（守大不破）。"""
+    from src.v.nn.stage_main_attack_lead import _pick_p1_second_smallest
+    assert _pick_p1_second_smallest(["S3", "HA"]) == "S3"
+    assert _pick_p1_second_smallest(["S3", "DK"]) == "S3"
+    # 第二小 == Q → 不触发，仍第二小
+    assert _pick_p1_second_smallest(["S3", "HQ"]) == "HQ"
+    # 第二小 < Q → 仍第二小
+    assert _pick_p1_second_smallest(["S3", "D9"]) == "D9"
+
+
+def test_p1_enemy_one_left_keeps_second_smallest():
+    """对方剩 1 张时保持原逻辑（仍出第二小）。"""
+    from src.v.nn.stage_main_attack_lead import _pick_p1_second_smallest
+    assert _pick_p1_second_smallest(["S3", "HA"], enemy_one_left=True) == "HA"
+    assert _pick_p1_second_smallest(["S3", "DK"], enemy_one_left=True) == "DK"
+
+
+def test_p1_second_smallest_low_singles_unchanged():
+    """P1 候选限 3-9，第二小不触发 >Q 改写 → 仍第二小。"""
+    card_mask = {"S3": (-1, 0.0, 0), "D5": (-1, 0.0, 0), "HA": (-1, 0.0, 0)}
+    engine = _make_engine(card_mask=card_mask)
+    rec = recommend_main_attack_lead(
+        engine, {"_current_stage": "stage_1"}, card_mask, list(card_mask), "2", "stage_1",
+    )
+    assert rec is not None
+    assert rec["type"] == "Single"
+    assert rec["rank"] == "5"
+    assert rec["intent"] == "main_p1_second_single"
+
+
 def test_p4_small_pair_when_no_p1():
     card_mask = {
         "S9": (0, 0.0, 2),

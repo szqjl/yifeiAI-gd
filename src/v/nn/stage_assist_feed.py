@@ -159,7 +159,22 @@ def _feed_stage1_open(
 
     scatter_singles.sort(key=lambda c: (_pip_order(c), str(c)))
     if len(scatter_singles) >= 2:
-        card = scatter_singles[1]
+        # 第二小 > Q 则出第一小（守大不破）；对方剩 1 张时保持原逻辑
+        enemy_one_left = False
+        numofplayers = game_state.get("numofplayers") or []
+        if numofplayers and len(numofplayers) == 4:
+            my_pos = int(game_state.get("myPos", 0))
+            teammate_pos = (my_pos + 2) % 4
+            for seat in ((my_pos + 1) % 4, (my_pos + 3) % 4):
+                rem = numofplayers[seat]
+                if isinstance(rem, (int, float)) and int(rem) == 1:
+                    enemy_one_left = True
+                    break
+        second = scatter_singles[1]
+        if not enemy_one_left and CARD_RANK_ORDER.get(get_card_rank(second), 99) > CARD_RANK_ORDER["Q"]:
+            card = scatter_singles[0]
+        else:
+            card = second
         return {
             "type": "Single",
             "rank": _prank(get_card_rank(card)),

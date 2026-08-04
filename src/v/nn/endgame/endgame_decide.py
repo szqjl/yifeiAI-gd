@@ -2479,10 +2479,24 @@ class EndgameDecider:
         return min(candidates, key=_key)
 
     def _is_my_q1_lead_turn(self, game_state: Dict[str, Any], my_pos: int) -> bool:
-        """Q1 自由领出兼容两种平台表示：curPos=myPos 或 curPos/greaterPos 都为 -1。"""
+        """Q1 自由领出兼容两种平台表示：curPos=myPos 或 curPos/greaterPos 都为 -1。
+
+        Botzone 模式特判：adapter 只在轮到自己决策时调用 engine，恒设
+        curPos=myPos；若存在真实待压的 greater（敌人出牌且非 PASS 占位），
+        则是跟牌轮而非自由领出，避免 Q0 冲刺/封锁逻辑在跟牌轮误触发
+        （实测 match=6a7172a327e7bf01db10319f 104 步：player3 出 Single/8，
+        V8 手有 DJ 却因误判领出轮而 PASS）。
+        """
         cur_pos = game_state.get("curPos", my_pos)
         greater_pos = game_state.get("greaterPos", -1)
         if cur_pos == my_pos:
+            if not game_state.get("_botzone_mode"):
+                return True
+            # Botzone：跟牌轮特征 = 有真实待压 greater（敌人出牌且非 PASS 占位）
+            if greater_pos in (-1, None, my_pos):
+                return True
+            if _is_control_action(game_state.get("greaterAction")):
+                return False
             return True
         return cur_pos in (-1, None) and greater_pos in (-1, my_pos)
 
