@@ -894,12 +894,17 @@ def _rank_to_value(rank_char: str) -> int:
 
 def _detect_straights(
     singles: List[str], pairs: List[List[str]], trips: List[List[str]],
-    cur_rank: str, wilds: List[str],
+    cur_rank: str, wilds: List[str], start_pos: int = 0,
 ) -> Tuple[List[List[str]], List[str], List[List[str]], List[List[str]], List[str]]:
     """
     从剩余牌中检测顺子（支持百搭（含百搭）填补缺口）。
     返回 (straights, remaining_singles, remaining_pairs, remaining_trips, remaining_wilds)。
     贪心策略：找最长连续 rank 段 → 5 张窗口扫描 → 缺口用 wilds 填补。
+
+    GUA-187（2026-08-05）：start_pos 多窗口竞争。
+    同一连续段允许从不同窗口起点扫描（如 2-6 / 3-7 / 4-8 并存），由上层枚举
+    多个 start_pos 变体、评分择优，避免单窗口贪心漏枚举更优组法（如 Botzone
+    27 张手牌：3-7 顺 + 对8 优于 4-8 顺 + 散单 3/8）。
 
     GUA-063 去小单化策略（2026-06-18）：
     - 窗口扫描从低→高（而非高→低）。原因：
@@ -964,33 +969,26 @@ def _detect_straights(
     # (a) Backward wrap：A → K → Q → ...（A 在末尾，A=14）— 需要自然 A 在高位 + 2 在低位
     if (len(rank_indices) > 1 and rank_indices[-1] == 'A' and rank_indices[0] == '2'
             and 'A' in card_by_rank and '2' in card_by_rank):
-        wrap_tail_ranks = ['A']
-        wrap_tail_wilds = 0
-        for ti in range(len(rank_indices) - 2, -1, -1):
-            gap = RANKS.index(rank_indices[ti + 1]) - RANKS.index(rank_indices[ti]) - 1
-            if gap == 0:
-                wrap_tail_ranks.append(rank_indices[ti])
-            elif gap == 1 and wrap_tail_wilds < available_wilds:
-                missing_rank = RANKS[RANKS.index(rank_indices[ti + 1]) - 1]
-                wrap_tail_ranks.append(f'__WILD_{missing_rank}_SLOT__')
-                wrap_tail_wilds += 1
-                wrap_tail_ranks.append(rank_indices[ti])
+        # GUA-187（2026-08-05）：修正 wrap 段长度劫持 bug。
+        # 原实现把 tail(A→K→…→2) 与 head(2→…→A) 首尾拼接成 25 长度往返段，
+        # 段长 > 自然段长，导致 chosen_seg 被劫持、窗口从 A(高位) 反向扫描，
+        # 违背 GUA-063「低→高窗口扫描、去小单化」原则（如 27 张 Botzone 手牌
+        # 漏枚举 3-7 顺、H3/H4 落单）。
+        # 修正：A 当 1 起头连接低位连续段（与 forward wrap 同义），长度 ≤ 6。
+        wrap_seg_backward = ['A']
+        wrap_bwd_wilds = 0
+        for r2 in ('2', '3', '4', '5', '6'):
+            if r2 in rank_indices:
+                wrap_seg_backward.append(r2)
+            elif wrap_bwd_wilds < available_wilds:
+                wrap_seg_backward.append(f'__WILD_{r2}_SLOT__')
+                wrap_bwd_wilds += 1
             else:
                 break
-        wrap_head_ranks = ['2']
-        wrap_head_wilds = 0
-        for hi in range(1, len(rank_indices)):
-            gap = RANKS.index(rank_indices[hi]) - RANKS.index(rank_indices[hi - 1]) - 1
-            if gap == 0:
-                wrap_head_ranks.append(rank_indices[hi])
-            elif gap == 1 and (wrap_tail_wilds + wrap_head_wilds) < available_wilds:
-                missing_rank = RANKS[RANKS.index(rank_indices[hi - 1]) + 1]
-                wrap_head_ranks.append(f'__WILD_{missing_rank}_SLOT__')
-                wrap_head_wilds += 1
-                wrap_head_ranks.append(rank_indices[hi])
-            else:
+            if len(wrap_seg_backward) >= 6:
                 break
-        wrap_seg_backward = wrap_tail_ranks + wrap_head_ranks[1:]
+        if len(wrap_seg_backward) < 5:
+            wrap_seg_backward = None
 
     # (b) Forward wrap：A 当 1 起头 → 2 → 3(wild) → 4 → 5 → ...（GUA-164 新增）
     # 不要求 A 是自然牌（A 可以是级牌/百搭），只要有自然牌可续接即可。
@@ -1056,7 +1054,9 @@ def _detect_straights(
         seg_ranks = best_wrap_seg_ranks  # 可能含 __WILD_*_SLOT__ 标记
     else:
         seg_ranks = rank_indices[best_start:best_start + best_len]
-    pos = 0
+    # GUA-187：多窗口竞争 —— 允许从非 0 起点扫描（如 3-7 而非 2-6），
+    # 由上层枚举多个 start_pos 变体后评分择优。
+    pos = min(start_pos, max(len(seg_ranks) - 5, 0))
     pos_max = len(seg_ranks) - 5
     while pos <= pos_max:
         window_ranks = seg_ranks[pos:pos + 5]
@@ -1747,6 +1747,7 @@ def _run_multi_pass_loop(
     bomb_core_ranks: Optional[Set[str]] = None,
     three_pair_first: bool = False,
     straight_before_twt: bool = False,
+    straight_start_offset: int = 0,
 ) -> Tuple[
     List[str], List[List[str]], List[List[str]], List[str],
     List[List[str]], List[List[List[str]]], List[List[List[str]]],
@@ -1759,6 +1760,8 @@ def _run_multi_pass_loop(
             → trip降级+三连对扩展+trip恢复 → 单张合并对子
     GUA-109：`three_pair_first=True` 时每轮先三连对再三带二，使 334455 等与双三带二竞争方案并存。
     GUA-109：`straight_before_twt=True` 时每轮先顺子再三带二，使 6-10 顺子与 JJJ+66 等竞争方案并存。
+    GUA-187：`straight_start_offset` 透传给 _detect_straights 实现多窗口竞争
+    （同一连续段尝试不同窗口起点，评分择优）。
     循环直到无变化（退化为不变）。
 
     返回 (singles, pairs, trips, wilds, straights, three_pairs, steel_plates, three_with_twos)
@@ -1779,7 +1782,8 @@ def _run_multi_pass_loop(
 
         # 1/5. 三带二 ↔ 三连对 ↔ 顺子（GUA-109 竞争分支：换序但不删另一检测）
         if straight_before_twt:
-            new_st, s, p, t, w = _detect_straights(s, p, t, cur_rank, w)
+            new_st, s, p, t, w = _detect_straights(
+                s, p, t, cur_rank, w, start_pos=straight_start_offset)
             straights.extend(new_st)
 
         if three_pair_first:
@@ -1797,12 +1801,14 @@ def _run_multi_pass_loop(
 
         # 3. 顺子（第 1 轮；straight_before_twt 已在步骤 1 处理）
         if not straight_before_twt:
-            new_st, s, p, t, w = _detect_straights(s, p, t, cur_rank, w)
+            new_st, s, p, t, w = _detect_straights(
+                s, p, t, cur_rank, w, start_pos=straight_start_offset)
             straights.extend(new_st)
 
         # 4. 顺子（第 2 轮 / 双重）
         if double_straights:
-            new_st2, s, p, t, w = _detect_straights(s, p, t, cur_rank, w)
+            new_st2, s, p, t, w = _detect_straights(
+                s, p, t, cur_rank, w, start_pos=straight_start_offset)
             straights.extend(new_st2)
 
         # 5. 三连对（默认序：三带二之后；three_pair_first 已在步骤 1 处理）
@@ -1983,6 +1989,7 @@ def _enumerate_plans(
         bridge_bomb_idx: Optional[int] = None,
         three_pair_first: bool = False,
         straight_before_twt: bool = False,
+        straight_start_offset: int = 0,
     ) -> GroupingPlan:
         all_sf = nat_sf + wild_sf
 
@@ -2038,7 +2045,8 @@ def _enumerate_plans(
         pool_s, pool_p, pool_t, pool_w, straights, three_pairs, steel_plates, twt_list = _run_multi_pass_loop(
             pool_s, pool_p, pool_t, pool_w, cur_rank, double_st, bomb_core_ranks,
             three_pair_first=three_pair_first,
-            straight_before_twt=straight_before_twt)
+            straight_before_twt=straight_before_twt,
+            straight_start_offset=straight_start_offset)
 
         # Step 5: 剩余牌重分类
         rem_all = pool_s + [x for px in pool_p for x in px] + [x for tx in pool_t for x in tx]
@@ -2056,81 +2064,109 @@ def _enumerate_plans(
     # 生成各策略方案
     # ═══════════════════════════════════
 
+    # GUA-187：顺子多窗口竞争 —— 顺子相关策略为每个 straight_start_offset 生成变体方案。
+    # offset>0 时策略名加 `_OFF<n>` 后缀：dedup 键含 strategy，结构计数相同也会被去重，
+    # 只有换策略名才能让 2-6 / 3-7 / 4-8 等窗口变体并存参与评分。
+    STRAIGHT_OFFSETS = (0, 1, 2)
+
+    def _add_plan_variants(
+        nat: List[List[str]], wild: List[List[str]],
+        rem_s: List[str], rem_p: List[List[str]], rem_t: List[List[str]],
+        rem_w: List[str], res_b: List[List[str]],
+        strategy: str, break_bombs: bool, double_st: bool,
+        large_bomb_peel: int = 0,
+        bridge_bomb_idx: Optional[int] = None,
+        three_pair_first: bool = False,
+        straight_before_twt: bool = False,
+        offset_variants: bool = False,
+    ) -> None:
+        offsets = STRAIGHT_OFFSETS if offset_variants else (0,)
+        for off in offsets:
+            plans.append(_make_plan_from_sf(
+                nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
+                f"{strategy}_OFF{off}" if off else strategy,
+                break_bombs, double_st,
+                large_bomb_peel=large_bomb_peel,
+                bridge_bomb_idx=bridge_bomb_idx,
+                three_pair_first=three_pair_first,
+                straight_before_twt=straight_before_twt,
+                straight_start_offset=off))
+
     if all_sf_results:
         # 有同花顺候选：SF 三策略 + GUA-084 BOMB_FIRST 保炸候选
         for nat, wild, rem_s, rem_p, rem_t, rem_w, res_b in all_sf_results:
             peel_opts = _large_bomb_peel_options(res_b)
             for peel in peel_opts:
-                plans.append(_make_plan_from_sf(
+                _add_plan_variants(
                     nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
                     "SF_FIRST", break_bombs=True, double_st=True,
-                    large_bomb_peel=peel))
-                plans.append(_make_plan_from_sf(
+                    large_bomb_peel=peel, offset_variants=True)
+                _add_plan_variants(
                     nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
                     "ROUND_OPTIMAL", break_bombs=True, double_st=False,
-                    large_bomb_peel=peel))
-                plans.append(_make_plan_from_sf(
+                    large_bomb_peel=peel, offset_variants=True)
+                _add_plan_variants(
                     nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
                     "ALL_COMBOS", break_bombs=True, double_st=True,
-                    large_bomb_peel=peel))
-            plans.append(_make_plan_from_sf(
+                    large_bomb_peel=peel, offset_variants=True)
+            _add_plan_variants(
                 nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
                 "BOMB_FIRST", break_bombs=False, double_st=False,
-                large_bomb_peel=0))
-            plans.append(_make_plan_from_sf(
+                large_bomb_peel=0)
+            _add_plan_variants(
                 nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
                 "THREE_PAIR_FIRST", break_bombs=True, double_st=False,
-                large_bomb_peel=0, three_pair_first=True))
-            plans.append(_make_plan_from_sf(
+                large_bomb_peel=0, three_pair_first=True, offset_variants=True)
+            _add_plan_variants(
                 nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
                 "STRAIGHT_BEFORE_TWT", break_bombs=True, double_st=False,
-                large_bomb_peel=0, straight_before_twt=True))
+                large_bomb_peel=0, straight_before_twt=True, offset_variants=True)
             for bridge_idx in _eligible_straight_bridge_bombs(
                 rem_s, rem_p, rem_t, rem_w, res_b, cur_rank
             ):
-                plans.append(_make_plan_from_sf(
+                _add_plan_variants(
                     nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
                     "STRAIGHT_BRIDGE", break_bombs=False, double_st=False,
-                    large_bomb_peel=0, bridge_bomb_idx=bridge_idx))
+                    large_bomb_peel=0, bridge_bomb_idx=bridge_idx)
     else:
         # 无同花顺：生成 BOMB_FIRST + ROUND_OPTIMAL + ALL_COMBOS 基准方案
         peel_opts = _large_bomb_peel_options(all_bombs)
         for peel in peel_opts:
-            plans.append(_make_plan_from_sf(
+            _add_plan_variants(
                 [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
                 "ROUND_OPTIMAL", break_bombs=True, double_st=False,
-                large_bomb_peel=peel))
-            plans.append(_make_plan_from_sf(
+                large_bomb_peel=peel, offset_variants=True)
+            _add_plan_variants(
                 [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
                 "ALL_COMBOS", break_bombs=True, double_st=True,
-                large_bomb_peel=peel))
-            plans.append(_make_plan_from_sf(
+                large_bomb_peel=peel, offset_variants=True)
+            _add_plan_variants(
                 [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
                 "THREE_PAIR_FIRST", break_bombs=True, double_st=False,
-                large_bomb_peel=peel, three_pair_first=True))
-            plans.append(_make_plan_from_sf(
+                large_bomb_peel=peel, three_pair_first=True, offset_variants=True)
+            _add_plan_variants(
                 [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
                 "STRAIGHT_BEFORE_TWT", break_bombs=True, double_st=False,
-                large_bomb_peel=peel, straight_before_twt=True))
-        plans.append(_make_plan_from_sf(
+                large_bomb_peel=peel, straight_before_twt=True, offset_variants=True)
+        _add_plan_variants(
             [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
             "BOMB_FIRST", break_bombs=False, double_st=False,
-            large_bomb_peel=0))
-        plans.append(_make_plan_from_sf(
+            large_bomb_peel=0)
+        _add_plan_variants(
             [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
             "THREE_PAIR_FIRST", break_bombs=True, double_st=False,
-            large_bomb_peel=0, three_pair_first=True))
-        plans.append(_make_plan_from_sf(
+            large_bomb_peel=0, three_pair_first=True, offset_variants=True)
+        _add_plan_variants(
             [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
             "STRAIGHT_BEFORE_TWT", break_bombs=True, double_st=False,
-            large_bomb_peel=0, straight_before_twt=True))
+            large_bomb_peel=0, straight_before_twt=True, offset_variants=True)
         for bridge_idx in _eligible_straight_bridge_bombs(
             sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs, cur_rank
         ):
-            plans.append(_make_plan_from_sf(
+            _add_plan_variants(
                 [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
                 "STRAIGHT_BRIDGE", break_bombs=False, double_st=False,
-                large_bomb_peel=0, bridge_bomb_idx=bridge_idx))
+                large_bomb_peel=0, bridge_bomb_idx=bridge_idx)
 
     # ═══════════════════════════════════
     # 去重：相同得分相同结构的方案只保留一个
