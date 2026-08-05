@@ -1663,7 +1663,8 @@ class BotzoneAdapter:
             logger.info("创建对局成功: %s", body)
             return body
         except urllib.error.HTTPError as e:
-            logger.error("创建对局失败: %s", e)
+            body = e.read().decode("utf-8", errors="replace").strip() if e.fp else ""
+            logger.error("创建对局失败: %s %s", e, body)
             return None
         except Exception as e:
             logger.error("创建对局异常: %s", e)
