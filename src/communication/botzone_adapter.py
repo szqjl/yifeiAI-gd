@@ -975,8 +975,9 @@ class BotzoneAdapter:
             except Exception:
                 logger.warning("on_game_start 失败 match=%s", game.match_id, exc_info=True)
         logger.info(
-            "发牌: match=%s player=%d hand=%d curRank=%s",
+            "发牌: match=%s player=%d hand=%d curRank=%s hand=%s",
             game.match_id, game.player_id, len(game.hand_cards), level,
+            sorted(game.hand_cards),
         )
 
     def _handle_play_request(self, game: BotzoneGameState, req: dict) -> None:
