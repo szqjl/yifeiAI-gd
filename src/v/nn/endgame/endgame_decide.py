@@ -3254,6 +3254,15 @@ class EndgameDecider:
         但非全部成员，则视为破坏结构。兼容 GUA-154 跨组归属（card 被分配
         到非核心组时，仍能从 _group_members 检出真正的核心组）。
         """
+        # GUA-206: 完整炸弹/同花顺本身就是最高等级核心整牌（同花顺 > 5星炸 > 4星炸，
+        # 组牌引擎 _score_power 同花顺 +3、普通炸弹 +2 已体现该大小关系）。
+        # 出完整炸弹类动作 = 用核心整牌压制敌人，绝非 GUA-199 要拦的「拆核心打弱牌」
+        # （如 444+H2 拆 H2 打 22 对子，那类 action 是 Pair 等非炸弹型，不受豁免）。
+        # 背景：组牌引擎优先组同花顺、用 H2 配子补 SF（[SA,S2,S3,S4,H2]），而平台
+        # actionList 枚举真实牌 SF（[SA,S2,S3,S4,S5]）——两张同花顺牌面 set 不同，
+        # 若不豁免会被误判「拆核心」→ 强压敌炸被 PASS（match=6a74198a step20/22）。
+        if _is_bomb_like_action(action):
+            return False
         group_members = game_state.get("_group_members")
         gid_type_map = game_state.get("_group_gid_type_map", {})
         if not group_members:
