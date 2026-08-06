@@ -315,6 +315,14 @@
 | `run_e2e_simple.py` | V8 端到端测试简化版 |
 | `run_v8_e2e_debug.py` | V8 端到端测试调试版 |
 
+### scripts/launchers/botzone/ — V8 Botzone 在线 Bot（打包上传）
+
+| 文件 | 说明 |
+|------|------|
+| `__main__.py` | **Botzone 在线 Bot 入口** — stdin/stdout JSON Interaction 协议 + KEEP_RUNNING 长驻（引擎加载一次，冷启动 ~2s 会超时）；复用 `botzone_adapter.handle_online_turn` 全量重放历史重建状态再决策；torch 惰性导入，沙箱无 torch 时走 model=None 规则栈 |
+| `package_v8_online.py` | **在线 Bot 打包脚本** — 复制 `src/` + 入口 `__main__.py` 成 zip（`data/eval/botzone/v8_online_bot_YYYYMMDD_vN.zip`）；版本自动 +1（`--rev` 指定）、`--check` 校验、`--dry-run` 预览、`--keep` 保留旧版；第三方库由 Botzone 沙箱预装，数据文件走 `data` 路径 |
+| `README.md` | 打包/上传/本地验证/工作流（本地迭代 → 验收 → 重打包） |
+
 ### scripts/launchers/m1/ — M1 启动器
 
 | 脚本 | 用途 |

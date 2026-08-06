@@ -5,8 +5,12 @@ Ultimate Win Rate Decision Engine V7
 基于终极胜率导向训练模型的决策引擎
 """
 
-import torch
-import torch.nn as nn
+try:
+    import torch
+    import torch.nn as nn
+except ImportError:
+    torch = None  # type: ignore[assignment]
+    nn = None  # type: ignore[assignment]
 import numpy as np
 import logging
 import os
@@ -68,7 +72,9 @@ class UltimateWinRateEngineV7:
         self.use_grouping_engine = use_grouping_engine
 
         # 设备（必须在 _load_model 前设置；规则栈路径仍可能用到 device）
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # GUA-208：torch 可选导入（Botzone 在线部署无 torch 环境时 model 恒为
+        # None，规则栈路径完全不依赖 torch，仅保留 device 占位以兼容 _load_model）。
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') if torch is not None else 'cpu'
 
         # ── BC 权重挂载（已停用 · 2026-07-10）──────────────────────────────
         # 战略口径：GUA-064/071 + 推荐法主路径；bc_model_v3 非必须，缺文件/挂上

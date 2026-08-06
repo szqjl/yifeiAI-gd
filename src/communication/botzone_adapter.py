@@ -887,6 +887,85 @@ class BotzoneAdapter:
                 scores = list(map(int, parts[3:])) if len(parts) > 3 else []
                 self._on_result(match_id, slot, player_count, scores)
 
+    async def handle_online_turn(self, full_input: dict) -> str:
+        """Botzone 在线模式：全量重放 requests/responses 后对当前回合决策。
+
+        在线 bot（JSON Interaction）每回合由平台调用一次，stdin 输入
+        {"requests": [...], "responses": [...], "data": ..., "globaldata": ...}
+        —— requests 为该局从头到当前回合的全部请求（首元素为 deal），
+        responses 为自己此前全部响应。本方法复用 Local AI 的决策链
+        （_on_request 重建状态 + _handle_request 决策），输出须为
+        {"response": <JSON 字符串>, "data": ..., "globaldata": ...}。
+
+        与 Local AI 差异：
+          - match_id 固定为 "online"（单局单进程）；
+          - 不依赖 HTTP 轮询 / pending_responses；
+          - 支持 KEEP_RUNNING 长驻（进程存活，首回合加载一次引擎后复用）。
+        """
+        match_id = "online"
+        requests = full_input.get("requests") or []
+        responses = full_input.get("responses") or []
+
+        # 全量重放历史：从 deal 开始逐条喂入，重建 state（hand_cards / greater /
+        # play_history / played_cards / pass_on / done），并同步自己此前响应。
+        for i, req_raw in enumerate(requests):
+            req = req_raw
+            if isinstance(req_raw, str):
+                try:
+                    req = json.loads(req_raw)
+                except json.JSONDecodeError:
+                    logger.warning("在线请求解析失败 i=%d raw=%s", i, req_raw[:200])
+                    continue
+            if not isinstance(req, dict):
+                continue
+            self._on_request(match_id, json.dumps(req, separators=(",", ":")))
+            game = self.games.get(match_id)
+            if game is None:
+                continue
+            # 历史回合：把该回合自己的响应同步进状态（进贡/还贡/出牌对手牌有影响）
+            if i < len(responses) and responses[i]:
+                self._apply_online_self_response(game, responses[i])
+
+        # 当前回合决策
+        game = self.games.get(match_id)
+        if game is None or game.current_request is None:
+            return json.dumps([[], []], separators=(",", ":"))
+        try:
+            resp = await self._handle_request(match_id, game)
+        except Exception:
+            logger.error("在线决策异常", exc_info=True)
+            resp = None
+        if resp is None:
+            resp = json.dumps([[], []], separators=(",", ":"))
+        logger.info("在线决策输出: %s", resp)
+        return resp
+
+    def _apply_online_self_response(self, game: BotzoneGameState,
+                                    resp_raw: str) -> None:
+        """在线重放中应用自己某一历史回合的响应到 game 状态。
+
+        仅处理会改变手牌的动作（tribute/return/play 出的牌），PASS 无影响。
+        之所以需要：重放时 _on_request 只重建「他人动作带来的 state」，
+        自己出过的牌必须从 hand_cards 扣除，否则当前回合手牌数错误。
+        """
+        if not resp_raw or not isinstance(resp_raw, str):
+            return
+        try:
+            resp = json.loads(resp_raw)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(resp, list) or not resp:
+            return
+        action_cards = resp[0]
+        if not isinstance(action_cards, list) or not action_cards:
+            return
+        v8_cards = bz_to_v8_cards(action_cards)
+        for card in v8_cards:
+            if card in game.hand_cards:
+                game.hand_cards.remove(card)
+        if game.card_tracker is not None:
+            game.card_tracker.remove_multi(v8_cards)
+
     def _on_request(self, match_id: str, request_json: str) -> None:
         """Handle a new request from Botzone."""
         try:
