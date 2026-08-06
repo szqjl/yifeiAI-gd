@@ -1227,3 +1227,44 @@ class TestQ0StraightFlushSprint:
         assert act[0] == "Trips"
         assert act[1] == "T"
         assert sorted(act[2]) == sorted(["H2", "ST", "HT"])
+
+    def test_gua203_q0_sprint_two_pairs_leads_small_pair_first(self):
+        """GUA-203：Q0 冲刺 4 张两手整对（对 K + 对 9）领出应小牌优先，
+        先出对 9 留对 K 回收，而非按 actionList 顺序（HK 在 C9 前）先出对 K。
+        回放：match=6a73f4d827e7bf01db12d16e 10:44:03。"""
+        tracker = MemoryTracker(my_pos=0, enable_inference=False, max_infer_depth=0)
+        tracker.init_from_hand(["HK", "SK", "C9", "S9"])
+        tracker.set_level_rank("2")
+
+        gs = {
+            "myPos": 0,
+            "curPos": 0,
+            "greaterPos": -1,
+            "greaterAction": [],
+            "handCards": ["HK", "SK", "C9", "S9"],
+            "actionList": [
+                ["Single", "K", ["HK"]],
+                ["Single", "K", ["SK"]],
+                ["Single", "9", ["C9"]],
+                ["Single", "9", ["S9"]],
+                ["Pair", "K", ["HK", "SK"]],
+                ["Pair", "9", ["C9", "S9"]],
+            ],
+            "curRank": "2",
+            "selfRank": "5",
+            "oppoRank": "2",
+            "numofplayers": [4, 6, 8, 9],
+            "done": [],
+            "_memory_tracker": tracker,
+            "_botzone_mode": True,
+            "_group_type_map": {"Pair": 2},
+        }
+
+        EndgamePreprocessor().preprocess(gs)
+        assert gs["_endgame_context"]["self"]["should_sprint"] is True
+        idx, act = EndgameDecider().decide(gs, gs["actionList"])
+
+        assert act[0] == "Pair"
+        assert act[1] == "9"
+        assert sorted(act[2]) == sorted(["C9", "S9"])
+

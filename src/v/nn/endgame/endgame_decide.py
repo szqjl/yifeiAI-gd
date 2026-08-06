@@ -1359,6 +1359,12 @@ class EndgameDecider:
                             if _get_declared_action_type(a) == ACTION_TYPE_PAIR
                         ]
                         if pair_acts:
+                            # GUA-203: 两对子间按小牌优先（先出小对留大对回收），
+                            # 避免 actionList 顺序（手牌顺序）导致先出大对。
+                            cur_rank = str(game_state.get("curRank", "2"))
+                            pair_acts.sort(
+                                key=lambda item: _min_card_value(item[1], cur_rank),
+                            )
                             return self._select_best_index(pair_acts, action_list, game_state)
                 # GUA-183: 敌人报单（≤1 张）领出时，对子/顺子/三带二/三张/三连对/钢板优先于单张
                 enemies = ec.get("enemies", {})
