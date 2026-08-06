@@ -1516,6 +1516,14 @@ class EndgameDecider:
                 )
                 if sprint_first is not None:
                     return sprint_first
+                # GUA-207: 被动跟压 + 敌控散牌型 + 手牌 = 炸 + 少量散牌（非两手冲刺）
+                # → 先用最小可压散牌（含级牌）压制、保留炸弹作回手，避免盲目炸后
+                #   被敌方更大炸反压而散牌失去控制权。
+                keep_bomb = self._q0_passive_keep_bomb_play_scatter(
+                    game_state, action_list, ec,
+                )
+                if keep_bomb is not None:
+                    return keep_bomb
                 if bombs:
                     return self._select_best_bomb(bombs, action_list)
                 return None
@@ -1612,6 +1620,71 @@ class EndgameDecider:
         return self._select_two_turn_sprint_structure(
             playable, all_candidates, game_state, ec,
         )
+
+    def _q0_passive_keep_bomb_play_scatter(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-207: 被动跟压时保留炸弹，先用最小可压散牌（含级牌）压制。
+
+        适用场景（镜像 GUA-168 领出侧「先出单试探、炸留作回手」）：
+          跟压敌方控牌 + greater 为散牌型（Single/Pair）+ 手牌 = 炸弹 + 少量散牌
+          （非两手冲刺结构）+ 敌未报单 → 用最小能压 greater 的散牌（级牌优先）
+          先压，炸弹保留作回手冲刺。
+
+        原缺陷：`_q0_passive_sprint_vs_enemy_control` 两手冲刺规划失败后直接
+        `_select_best_bomb` 盲目炸，被敌方更大炸反压后散牌彻底失去控制权。
+        例（match=6a74236927e7bf01db12f002 L493-500）：手牌 Bomb/5 + D2 + SJ，
+        敌 Single/Q → 应出 D2 压并留 Bomb/5 回手，而非直接 Bomb/5 被 Bomb/J 反压。
+        """
+        if not self._is_q1_following_enemy_control(game_state, ec):
+            return None
+
+        greater_action = game_state.get("greaterAction")
+        if not greater_action or not _is_control_action(greater_action):
+            return None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+        greater_type = _get_declared_action_type(greater_action)
+        if greater_type not in (ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR):
+            return None
+
+        # 敌报单时不适用：单张可被敌直接接走，且无回手意义 → 落回出炸逻辑
+        enemies = ec.get("enemies", {})
+        if enemies and any(e.get("remaining", 27) == 1 for e in enemies.values()):
+            return None
+
+        scatter_plays = []
+        for idx, act in enumerate(action_list):
+            declared = _get_declared_action_type(act)
+            if declared in (ACTION_TYPE_PASS, "PASS"):
+                continue
+            if _is_bomb_like_action(act):
+                continue
+            if declared not in (ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR):
+                continue
+            if not _action_beats_greater(act, greater_action, cur_rank):
+                continue
+            scatter_plays.append((idx, act))
+
+        if not scatter_plays:
+            return None
+
+        # 级牌优先（大牌留作冲刺），同值取小
+        scatter_plays.sort(key=lambda item: (
+            _min_card_value(item[1], cur_rank), item[0],
+        ))
+        idx, act = scatter_plays[0]
+        logger.info(
+            "Q0 被动保留炸: greater=%s/%s → 先出散牌 %s/%s 保留炸弹回手",
+            greater_type,
+            greater_action[1] if len(greater_action) > 1 else "",
+            _get_declared_action_type(act),
+            act[1] if len(act) > 1 else "",
+        )
+        return idx, act
 
     # ═══════════════════════════════════════════════════
     #  Q1: 封锁敌方
