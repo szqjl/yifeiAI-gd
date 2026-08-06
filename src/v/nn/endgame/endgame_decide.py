@@ -747,6 +747,35 @@ def _q1_structure_priority(action_type: str) -> int:
     return type_priority.get(action_type, 99)
 
 
+def _breaks_core_subgroup(
+    act: List, group_members: Dict[int, List[str]], group_gid_type: Dict[int, str],
+) -> bool:
+    """GUA-202 抽取：判断 action 是否拆解了 core 复合牌型子组的部分成员。
+
+    复用 `_sort_q1_prefer_structure_preserving` 的逐张计数判据（正确处理重复牌）：
+    consumed ∈ (0, len(members)) 即视为拆核。用 Counter 精确匹配避免重复牌误判。
+    """
+    from collections import Counter as _C
+    if not group_members or not group_gid_type:
+        return False
+    cards = _get_cards(act)
+    if not cards:
+        return False
+    act_cnt = _C(cards)
+    for gid, members in group_members.items():
+        gtype = group_gid_type.get(gid) or group_gid_type.get(str(gid), "")
+        if gtype not in ("trip_in_three_with_two", "pair_in_three_with_two",
+                         "pair_in_three_pair", "trip_in_steel_plate",
+                         "trips", "straight", "Bomb", "StraightFlush"):
+            continue
+        mem_cnt = _C(members)
+        consumed = sum(min(act_cnt[c], mem_cnt[c]) for c in act_cnt if c in mem_cnt)
+        total = sum(mem_cnt.values())
+        if 0 < consumed < total:
+            return True
+    return False
+
+
 def _sort_q1_prefer_structure_preserving(
     actions: List, group_members: Dict[int, List[str]], group_gid_type: Dict[int, str],
 ) -> List:
@@ -1691,6 +1720,13 @@ class EndgameDecider:
         if enemy_one_bomb_lock is not None:
             return enemy_one_bomb_lock
 
+        # ④.5d GUA-202：我方领出 + 队友 close → 优先送牌（防整牌锁敌抢跑）
+        lead_feed = self._q1_lead_feed_teammate_special(
+            game_state, non_banned_candidates, ec,
+        )
+        if lead_feed is not None:
+            return lead_feed
+
         enemy_one_lead = self._q1_enemy_critical_lead_special(
             game_state, non_banned_candidates, ec, main_pos, main_enemy,
         )
@@ -2209,6 +2245,116 @@ class EndgameDecider:
                 best = (idx, act)
                 best_value = value
         return best
+
+    def _q1_lead_feed_teammate_special(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-202：我方领出轮 + 队友 is_close → 优先按 assist_prefer 送牌。
+
+        解决「敌方报单领出时 Q1 整牌锁敌抢跑，队友剩 2 张却不出对子」：
+        残局管线 Q1 先于 Q2，Q1 内 `_q1_enemy_critical_lead_special` 整牌锁敌
+        （ThreeWithTwo 优先）直接 return，Q2 送牌永远到不了。本特判插在
+        `_q1_enemy_critical_lead_special` 之前，领出轮且队友 close 时优先喂牌。
+
+        安全约束（全部满足才送，否则回退整牌锁敌）：
+          1. 本回合是自由领出（_is_my_q1_lead_turn）
+          2. 队友 is_close（1-5 张）
+          3. 送牌候选不拆炸弹核心结构（_is_bomb_destroying_action）
+          4. 不送 Bomb/SF/JokerBomb（炸是回手/锁敌资源）
+          5. 队友报单(1张)时仅送安全单（_select_enemy_one_safe_single，防敌方截胡）
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if not self._is_my_q1_lead_turn(game_state, my_pos):
+            return None
+
+        teammate = ec.get("teammate", {})
+        if not teammate.get("is_close"):
+            return None
+
+        assist_prefer = teammate.get("assist_prefer", [])
+        if not assist_prefer:
+            return None
+
+        # GUA-202 护栏①：V8 自己有 2 手冲刺线（如 TWT+单 = 2 手收尾）→ 自己冲刺优先，不送牌。
+        # 对应 GUA-110：仅剩两手冲刺时自由领出先出整牌；GUA-111 场景同样经此让位给
+        # `_q1_enemy_critical_lead_special` / 风险通道剪枝后的推荐路径。
+        structured_all = [
+            (i, a) for i, a in candidates
+            if _get_declared_action_type(a) not in (ACTION_TYPE_PASS, "PASS")
+            and not _is_bomb_like_action(a)
+        ]
+        if self._select_two_turn_sprint_structure(
+            structured_all, candidates, game_state, ec,
+            prefer_structure_first=True,
+        ) is not None:
+            return None
+
+        hand_cards = list(game_state.get("handCards", []) or [])
+        feed_candidates: List[Tuple[int, List]] = []
+        for idx, act in candidates:
+            try:
+                atype = get_action_type(act)
+            except Exception:
+                continue
+            if atype == ACTION_TYPE_PASS:
+                continue
+            if atype not in assist_prefer:
+                continue
+            if atype in ("Bomb", "StraightFlush", "JokerBomb"):
+                continue
+            if self._is_bomb_destroying_action(act, hand_cards):
+                continue
+            # 不拆 core 整牌结构（TTT/TWT/Trips 等，见 GUA-202 细案 §2.2）
+            if _breaks_core_subgroup(
+                act,
+                game_state.get("_group_members") or {},
+                game_state.get("_group_gid_type_map") or {},
+            ):
+                continue
+            feed_candidates.append((idx, act))
+
+        if not feed_candidates:
+            return None
+
+        # GUA-202 护栏②：送牌通道同样要过风险剪枝（GUA-111）。
+        # 若送牌类型（如 Pair）该通道最终更可能被敌方持有，则送牌会被截胡，
+        # 不成立 → 回退整牌锁敌/推荐路径。
+        main_pos2, main_enemy2 = self._select_main_enemy(ec.get("enemies", {}), my_pos)
+        pruned_feed = self._prune_q1_risky_same_type_lane_candidates(
+            game_state, feed_candidates, ec, main_pos2, main_enemy2,
+        )
+        if pruned_feed:
+            feed_candidates = pruned_feed
+        if not feed_candidates:
+            return None
+
+        # 队友报单(1张)：仅送当前无外部压制的安全单，防敌方截胡
+        remaining = int(teammate.get("remaining", 0) or 0)
+        if remaining == 1:
+            safe = self._select_enemy_one_safe_single(feed_candidates, game_state, ec)
+            if safe is None:
+                return None
+            logger.info("Q1 领出送队友(GUA-202): idx=%d type=%s",
+                        safe[0], get_action_type(safe[1]))
+            return safe
+
+        # 送牌排序：牌力小优先（队友更好接）→ 回收优先（留回手）
+        # 与 GUA-189 送小单让队友接的意图一致，不沿用 _sort_by_recapture_first
+        # （其牌力大优先会让队友接不住）。
+        cur_rank = str(game_state.get("curRank", "2"))
+        ordered = sorted(
+            feed_candidates,
+            key=lambda item: (_max_card_value(item[1], cur_rank), not _has_recapture(item[1], hand_cards, cur_rank)),
+        )
+        logger.info("Q1 领出送队友(GUA-202): idx=%d type=%s",
+                    ordered[0][0], get_action_type(ordered[0][1]))
+        return ordered[0]
 
     def _q1_teammate_single_cover_special(
         self,
@@ -3122,7 +3268,7 @@ class EndgameDecider:
         })
 
         for gid, members in group_members.items():
-            gtype = gid_type_map.get(str(gid), "")
+            gtype = gid_type_map.get(gid) or gid_type_map.get(str(gid), "")
             if gtype not in CORE_TYPES:
                 continue
             members_set = set(members)
