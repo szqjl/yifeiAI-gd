@@ -79,6 +79,59 @@ class TestR10NoLeadBomb:
         result = _rule_r10_no_lead_bomb(actions, greater_pos=-1)
         assert result == [0, 1, 2], f"无炸弹场景应全部保留，实际 {result}"
 
+    def test_lead_all_bomb_structure_keeps_bombs(self):
+        """GUA-204：手牌语义全由炸弹/同花顺构成（组牌引擎无普通牌型）→ 领出不禁炸弹。
+
+        对局 match=6a740a2427e7bf01db12df05：V8 手牌 14 = 5×7 炸弹 + 4×K 炸弹
+        + A2345 同花顺，领出若禁炸弹 → 只剩拆炸弹碎片 → 安全阀放行 → 拆 5×7 打对子。
+        """
+        actions = [
+            ["S7", "H7"],                # 0: Pair 7（拆炸弹碎片）
+            ["S2"],                      # 1: Single 2
+            ["C7", "D7", "H7", "S7"],    # 2: Bomb 7（4张）
+            ["C7", "D7", "H7", "S7", "S7"],  # 3: Bomb 7（5张，完整）
+            ["CK", "HK", "SK", "CK"],    # 4: Bomb K
+        ]
+        game_state = {
+            "myPos": 0,
+            "curPos": 0,
+            "greaterPos": -1,
+            "greaterAction": [],
+            "handCards": ["C7", "D7", "H7", "S7", "S7",
+                          "CK", "HK", "SK", "CK",
+                          "SA", "S2", "H2", "S4", "S5"],
+            "curRank": "2",
+            "numofplayers": [14, 6, 0, 9],
+            "_group_type_map": {"Bomb": 2, "StraightFlush": 1},
+        }
+        result = _rule_r10_no_lead_bomb(actions, greater_pos=-1, my_pos=0,
+                                        game_state=game_state)
+        # 手牌语义全炸弹 → 全部保留（含完整 5×7、Bomb/K）
+        assert result == list(range(len(actions))), (
+            f"手牌全炸弹结构领出应不禁炸弹，实际 {result}"
+        )
+
+    def test_lead_normal_hand_still_filters_bomb(self):
+        """GUA-204 回归：手牌含普通牌型（对子/单张）→ R10 仍禁炸弹，不受新分支影响"""
+        actions = [
+            ["S2"],                      # 0: Single
+            ["H3", "D3"],                # 1: Pair
+            ["S4", "H4", "D4", "C4"],    # 2: Bomb 4
+        ]
+        game_state = {
+            "myPos": 0,
+            "curPos": 0,
+            "greaterPos": -1,
+            "greaterAction": [],
+            "handCards": ["S2", "H3", "D3", "S4", "H4", "D4", "C4"],
+            "curRank": "2",
+            "numofplayers": [27, 27, 27, 27],
+            "_group_type_map": {"pair": 1, "scatter": 1, "Bomb": 1},
+        }
+        result = _rule_r10_no_lead_bomb(actions, greater_pos=-1, my_pos=0,
+                                        game_state=game_state)
+        assert result == [0, 1], f"含普通牌型仍应禁炸弹，实际 {result}"
+
 
 # ════════════════════════════════════════════
 #  R10 在 filter_action_list 集成

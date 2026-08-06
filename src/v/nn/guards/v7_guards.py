@@ -392,10 +392,30 @@ def _rule_r02_minimal_bomb(
     return kept if kept else list(range(len(action_list)))
 
 
+def _hand_semantically_all_bomb(
+    game_state: Dict[str, Any],
+) -> bool:
+    """手牌语义是否全由炸弹/同花顺构成（无任何普通牌型与散牌）。
+
+    依据组牌引擎注入的 ``_group_type_map``（type→count）判断：
+    存在 Bomb/StraightFlush，且除它们外无任何其他类型（含 scatter 散牌）。
+    用于 R10 领出不禁炸弹：手牌全炸弹结构时，领出禁炸弹只会逼拆炸弹打碎片。
+    """
+    type_counts = game_state.get("_group_type_map") or {}
+    if not type_counts:
+        return False
+    has_bomb_like = (
+        type_counts.get("Bomb", 0) > 0 or type_counts.get("StraightFlush", 0) > 0
+    )
+    other_types = {t for t in type_counts if t not in ("Bomb", "StraightFlush")}
+    return has_bomb_like and not other_types
+
+
 def _rule_r10_no_lead_bomb(
     action_list: List[List[str]],
     greater_pos: int,
     my_pos: int = -1,
+    game_state: Optional[Dict[str, Any]] = None,
 ) -> List[int]:
     """
     V7-R10：自己领出时禁用炸弹。
@@ -407,9 +427,15 @@ def _rule_r10_no_lead_bomb(
     - 领出判定：greaterPos in (-1, my_pos)（新轮领出 / 自己是greater）
     - 如果全被过滤（只剩炸弹）→ 保留最小的一张炸弹（不能无动作）
     - 不依赖 greater_action（领出时无 greater_action）
+    - **GUA-204：手牌语义全为炸弹/同花顺（无普通牌型）时不禁炸弹**
+      ——否则领出只剩拆炸弹碎片（安全阀全放行 → 拆 5×7 打对子）
     """
     is_lead = (greater_pos == -1) or (0 <= my_pos <= 3 and greater_pos == my_pos)
     if not is_lead:
+        return list(range(len(action_list)))
+
+    # GUA-204: 手牌全炸弹结构（组牌引擎语义无普通牌型）→ 不禁炸弹
+    if game_state is not None and _hand_semantically_all_bomb(game_state):
         return list(range(len(action_list)))
 
     banned = {ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH}
@@ -1334,7 +1360,7 @@ def _filter_action_list_impl(
     excluded = set()
 
     # 0) R10: 自己领出不炸（greaterPos == myPos 或 -1 → 新轮领出 → 炸自己）
-    r10_kept = _rule_r10_no_lead_bomb(action_list, greater_pos, my_pos)
+    r10_kept = _rule_r10_no_lead_bomb(action_list, greater_pos, my_pos, game_state)
     excluded |= {i for i in range(len(action_list)) if i not in set(r10_kept)}
     _capture_guard_step("R10")
 
