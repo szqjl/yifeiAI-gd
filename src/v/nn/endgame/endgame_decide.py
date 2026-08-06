@@ -1812,6 +1812,15 @@ class EndgameDecider:
         if enemy_one_lead is not None:
             return enemy_one_lead
 
+        # GUA-210: 封锁候选过滤「拆核心」动作——级牌单张若在 StraightFlush /
+        # straight / 炸弹核心组内（如 SF S2-S6 的 S2），Q1 通用路径会优先选级牌
+        # 压牌，被 decide 层 _action_breaks_core_structure 拦截后直接 PASS，
+        # 浪费可压且不拆核心的次优候选（实测对局 6a7476fe req15：手牌
+        # DA,SQ,S2-S6 压敌方 Single/K，Q1 选级牌 S2 拆 SF → PASS 让出头游，
+        # 正确应出 scatter 的 DA）。
+        non_banned_candidates = self._filter_q1_core_break_candidates(
+            non_banned_candidates, game_state)
+
         non_banned_candidates = self._prune_q1_risky_same_type_lane_candidates(
             game_state, non_banned_candidates, ec, main_pos, main_enemy,
         )
@@ -1861,6 +1870,33 @@ class EndgameDecider:
             action_list, baoshu_never, str(game_state.get("curRank", "2")),
             is_passive,
         )
+
+    def _filter_q1_core_break_candidates(
+        self, candidates: List, game_state: Dict[str, Any],
+    ) -> List:
+        """GUA-210: 过滤会破坏核心整牌结构的 Q1 封锁候选（保留 PASS 与不拆核心者）。
+
+        仅当过滤后仍有非 PASS 候选才替换；否则返回原列表，全部拆核心时
+        交由 decide 层 _action_breaks_core_structure / GUA-199 拦截裁决 PASS。
+        """
+        if not GUARD_TOOLS_OK:
+            return candidates
+        kept: List = []
+        for item in candidates:
+            act = item[1]
+            try:
+                if _get_declared_action_type(act) in ("PASS", "pass"):
+                    kept.append(item)
+                    continue
+                if self._action_breaks_core_structure(act, game_state):
+                    continue
+            except Exception:
+                pass
+            kept.append(item)
+        if any(_get_declared_action_type(i[1]) not in ("PASS", "pass")
+               for i in kept):
+            return kept
+        return candidates
 
     # ── GUA-142：自由领出整结构保 SF/炸冲刺路径 ──
 
