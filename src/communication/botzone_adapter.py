@@ -581,14 +581,22 @@ class ActionListGenerator:
 
     def _find_consecutive_trips(self, rank_groups: Dict[str, List[str]],
                                 length: int) -> List[Tuple[List[str], List[List[str]]]]:
-        """Find consecutive ranks that each have >= 3 cards."""
+        """Find consecutive ranks that each have >= 3 cards.
+
+        必须与 _find_consecutive_pairs 一样校验点数连续：钢板 = 相邻两个三张
+        （如 333-444），仅 len>=3 会把不相邻的 888+QQQ 拼成非法钢板
+        （实测线上对局 6a717aab 被判「1号玩家非法牌型」）。
+        """
         sorted_ranks = sorted(rank_groups.keys(), key=lambda r: RANK_ORDER.get(r, 99))
         result = []
         for i in range(len(sorted_ranks) - length + 1):
             chunk = sorted_ranks[i:i + length]
-            if all(len(rank_groups[r]) >= 3 for r in chunk):
-                trips = [rank_groups[r][:3] for r in chunk]
-                result.append((list(chunk), trips))
+            if all(_card_rank_order(rank_groups[r][0], self.cur_rank) ==
+                   _card_rank_order(rank_groups[chunk[0]][0], self.cur_rank) + idx
+                   for idx, r in enumerate(chunk)):
+                if all(len(rank_groups[r]) >= 3 for r in chunk):
+                    trips = [rank_groups[r][:3] for r in chunk]
+                    result.append((list(chunk), trips))
         return result
 
     def _generate_straights(self, rank_groups: Dict[str, List[str]],
@@ -895,8 +903,17 @@ class BotzoneAdapter:
         (Ubuntu 16.04) 为 Python 3.6，asyncio.run(3.7+)/to_thread(3.9+) 不可用。
         """
         match_id = "online"
+        if not isinstance(full_input, dict):
+            return json.dumps([[], []], separators=(",", ":"))
+        if "requests" not in full_input:
+            # 长驻增量模式：平台 KEEP_RUNNING 下首回合发 requests 包装，
+            # 后续回合发单对象（无 requests key）。单对象须直接处理，
+            # 否则被空转忽略、current_request 恒为 None → 全程 PASS
+            # （实测对局 6a746e0a：v8_10 常驻进程 play 回合全部 time=0 返回 PASS）。
+            return self._handle_single_turn_sync(match_id, full_input)
         requests = full_input.get("requests") or []
         responses = full_input.get("responses") or []
+        last_stage = ""
 
         for i, req_raw in enumerate(requests):
             req = req_raw
@@ -908,6 +925,7 @@ class BotzoneAdapter:
                     continue
             if not isinstance(req, dict):
                 continue
+            last_stage = req.get("stage", "")
             self._on_request(match_id, json.dumps(req, separators=(",", ":")))
             game = self.games.get(match_id)
             if game is None:
@@ -917,6 +935,8 @@ class BotzoneAdapter:
 
         game = self.games.get(match_id)
         if game is None or game.current_request is None:
+            if last_stage == "deal":
+                return json.dumps([], separators=(",", ":"))
             return json.dumps([[], []], separators=(",", ":"))
         try:
             req = game.current_request
@@ -936,6 +956,49 @@ class BotzoneAdapter:
         logger.info("在线决策输出: %s", resp)
         return resp
 
+    def _handle_single_turn_sync(self, match_id: str, req: dict) -> str:
+        """长驻增量模式单对象回合：无 requests/responses 包装，直接决策。
+
+        增量模式下无 responses 数组，自己的已出牌须从本回合 history 应用
+        （全量模式靠 _apply_online_self_response），否则 hand_cards 只增不减。
+        """
+        try:
+            self._on_request(match_id, json.dumps(req, separators=(",", ":")))
+        except Exception:
+            logger.error("在线增量回合请求处理异常", exc_info=True)
+            return json.dumps([[], []], separators=(",", ":"))
+        game = self.games.get(match_id)
+        if game is None:
+            return json.dumps([[], []], separators=(",", ":"))
+        stage = req.get("stage", "")
+        if stage == "deal":
+            # deal 无响应（_on_request 已建状态），返回空动作数组
+            return json.dumps([], separators=(",", ":"))
+        if stage == "play":
+            history = req.get("history") or []
+            for player, action_cards, _claim in self._parse_bz_play_history(history):
+                if player == game.player_id and action_cards:
+                    v8_cards = bz_to_v8_cards(action_cards)
+                    for card in v8_cards:
+                        if card in game.hand_cards:
+                            game.hand_cards.remove(card)
+                    if game.card_tracker is not None:
+                        game.card_tracker.remove_multi(v8_cards)
+        if game.current_request is None:
+            return json.dumps([[], []], separators=(",", ":"))
+        try:
+            r = game.current_request
+            rs = r.get("stage", "")
+            if rs == "play":
+                return self._handle_play_decision_sync(match_id, game, r)
+            if rs == "tribute":
+                return self._handle_tribute_request(match_id, game, r)
+            if rs == "return":
+                return self._handle_return_request(match_id, game, r)
+        except Exception:
+            logger.error("在线增量回合决策异常", exc_info=True)
+        return json.dumps([[], []], separators=(",", ":"))
+
     async def handle_online_turn(self, full_input: dict) -> str:
         """Botzone 在线模式：全量重放 requests/responses 后对当前回合决策。
 
@@ -952,8 +1015,14 @@ class BotzoneAdapter:
           - 支持 KEEP_RUNNING 长驻（进程存活，首回合加载一次引擎后复用）。
         """
         match_id = "online"
+        if not isinstance(full_input, dict):
+            return json.dumps([[], []], separators=(",", ":"))
+        if "requests" not in full_input:
+            # 长驻增量模式：单对象回合直接决策（见 _handle_single_turn_sync 说明）。
+            return self._handle_single_turn_sync(match_id, full_input)
         requests = full_input.get("requests") or []
         responses = full_input.get("responses") or []
+        last_stage = ""
 
         # 全量重放历史：从 deal 开始逐条喂入，重建 state（hand_cards / greater /
         # play_history / played_cards / pass_on / done），并同步自己此前响应。
@@ -967,6 +1036,7 @@ class BotzoneAdapter:
                     continue
             if not isinstance(req, dict):
                 continue
+            last_stage = req.get("stage", "")
             self._on_request(match_id, json.dumps(req, separators=(",", ":")))
             game = self.games.get(match_id)
             if game is None:
@@ -978,6 +1048,8 @@ class BotzoneAdapter:
         # 当前回合决策
         game = self.games.get(match_id)
         if game is None or game.current_request is None:
+            if last_stage == "deal":
+                return json.dumps([], separators=(",", ":"))
             return json.dumps([[], []], separators=(",", ":"))
         try:
             resp = await self._handle_request(match_id, game)

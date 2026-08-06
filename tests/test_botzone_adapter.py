@@ -1421,3 +1421,60 @@ def test_follow_wild_bomb_beats_bomb_by_count_and_rank():
     acts5 = gen.generate_follow_actions(hand, greater_5)
     assert all(a[0] == "PASS" or len(a[2]) >= 5 for a in acts5), acts5
 
+
+# ── GUA-209 在线长驻单对象增量模式 ──
+class _FakeEngine:
+    def __init__(self):
+        self.calls = 0
+    def decide(self, game_state):
+        self.calls += 1
+        return 0
+    def on_game_start(self, player_id):
+        pass
+
+def test_online_deal_full_input_returns_empty():
+    from src.communication.botzone_adapter import BotzoneAdapter
+    engine = _FakeEngine()
+    adapter = BotzoneAdapter("test", "test_key", decision_engine=engine, player_id=0)
+    deal = {"stage": "deal", "deliver": list(range(27)),
+            "your_id": 0, "global": {"level": "2"}}
+    resp = adapter.handle_online_turn_sync({"requests": [deal], "responses": []})
+    assert resp == "[]", resp
+
+def test_online_single_turn_play_does_not_pass():
+    """GUA-209：Botzone KEEP_RUNNING 长驻模式下，首回合 requests 包装，
+    后续回合发单对象（无 requests key）。单对象 play 必须实际决策出牌，
+    不能空转返回 [[],[]]（否则平台全程 PASS，实测 6a746e0a v8_10）。"""
+    from src.communication.botzone_adapter import BotzoneAdapter
+    engine = _FakeEngine()
+    adapter = BotzoneAdapter("test", "test_key", decision_engine=engine, player_id=0)
+    deal = {"stage": "deal", "deliver": list(range(27)),
+            "your_id": 0, "global": {"level": "2"}}
+    r0 = adapter.handle_online_turn_sync({"requests": [deal], "responses": []})
+    assert r0 == "[]"
+    play = {"stage": "play", "history": [], "done": [], "pass_on": -1,
+            "global": {"level": "2", "tribute": 0, "first": None, "last": None}}
+    r1 = adapter.handle_online_turn_sync(play)
+    assert r1 != "[[],[]]", r1
+    assert engine.calls == 1, engine.calls
+    assert r1.startswith("[["), r1
+
+def test_online_single_turn_applies_own_history_to_hand():
+    """GUA-209：单对象模式无 responses 数组，须从 history 应用自己的已出牌，
+    否则 hand_cards 只增不减导致后续决策手牌错误。"""
+    from src.communication.botzone_adapter import BotzoneAdapter
+    engine = _FakeEngine()
+    adapter = BotzoneAdapter("test", "test_key", decision_engine=engine, player_id=0)
+    deal = {"stage": "deal", "deliver": list(range(27)),
+            "your_id": 0, "global": {"level": "2"}}
+    adapter.handle_online_turn_sync({"requests": [deal], "responses": []})
+    # 自己(P0)出了一张 HA(0)，history 含自己条目
+    play = {"stage": "play",
+            "history": [{"player": 0, "response": [[0], [0]]}],
+            "done": [], "pass_on": -1,
+            "global": {"level": "2", "tribute": 0, "first": None, "last": None}}
+    adapter.handle_online_turn_sync(play)
+    game = adapter.games["online"]
+    # 历史应用：自己已出的 HA 被移除；随后 FakeEngine 决策再出 1 张（27-1-1=25）
+    assert "HA" not in game.hand_cards, sorted(game.hand_cards)
+    assert len(game.hand_cards) == 25, len(game.hand_cards)

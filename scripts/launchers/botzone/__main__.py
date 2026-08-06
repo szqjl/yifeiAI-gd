@@ -94,7 +94,7 @@ def main() -> int:
             full_input = json.loads(line)
         except json.JSONDecodeError:
             logger.error("无法解析 stdin 输入: %s", line[:200])
-            print(json.dumps({"response": json.dumps([[], []])}))
+            print(json.dumps({"response": [[], []]}))
             sys.stdout.flush()
             continue
 
@@ -110,10 +110,12 @@ def main() -> int:
             logger.error("决策失败", exc_info=True)
             resp = json.dumps([[], []], separators=(",", ":"))
 
-        # Botzone 在线输出：response 必须是 JSON 字符串（掼蛋响应本身是
-        # [[action], [claim]] 数组的 JSON 序列化）。
+        # Botzone 在线输出：response 必须是 JSON 值（掼蛋响应本身是数组，
+        # 如 [] / [贡牌] / [[action],[claim]]），不能是 JSON 字符串——
+        # 裁判将 response 作为数组存历史（play 请求 history 中 response
+        # 即为 [[action],[claim]] 数组），字符串会被判「格式错误」。
         output = {
-            "response": resp,
+            "response": json.loads(resp),
             "debug": "",
             "data": None,
             "globaldata": None,
