@@ -4468,6 +4468,17 @@ class UltimateWinRateEngineV7:
         hr_with_opponents = joker_belief["hr_with_opponents"]
 
         if is_teammate:
+            # GUA-205 支线1：队友出牌但队友不 close → 超强手牌允许抢攻开炸
+            aggressive = self._mid_aggressive_bomb_special(
+                game_state, card_mask, hand_cards, cur_rank,
+                greater_action=greater_action,
+                greater_type=greater_type,
+                greater_rank=greater_rank,
+                teammate_pos=teammate_pos,
+                is_teammate=True,
+            )
+            if aggressive:
+                return aggressive
             intent = (
                 "mid_yield_teammate_control"
                 if teammate_cover_confidence >= 0.65
@@ -4576,6 +4587,18 @@ class UltimateWinRateEngineV7:
                 if bomb:
                     return _with_intent(bomb, f"mid_bomb_cutoff:{reason}")
 
+            # GUA-205 支线2：超强手牌中局主动开炸抢攻（敌方非报单临界）
+            aggressive = self._mid_aggressive_bomb_special(
+                game_state, card_mask, hand_cards, cur_rank,
+                greater_action=greater_action,
+                greater_type=greater_type,
+                greater_rank=greater_rank,
+                teammate_pos=teammate_pos,
+                is_teammate=False,
+            )
+            if aggressive:
+                return aggressive
+
             if teammate_cover_confidence >= 0.75 and 0 < _remaining(teammate_pos) <= 4:
                 return {
                     "type": "PASS",
@@ -4637,6 +4660,18 @@ class UltimateWinRateEngineV7:
                 if bomb:
                     return _with_intent(bomb, f"mid_bomb_cutoff:{reason}")
 
+            # GUA-205 支线2：超强手牌中局主动开炸抢攻（敌方非报单临界）
+            aggressive = self._mid_aggressive_bomb_special(
+                game_state, card_mask, hand_cards, cur_rank,
+                greater_action=greater_action,
+                greater_type=greater_type,
+                greater_rank=greater_rank,
+                teammate_pos=teammate_pos,
+                is_teammate=False,
+            )
+            if aggressive:
+                return aggressive
+
             counter = self._recommend_counter_bomb_in_action_list(game_state)
             if counter:
                 return _with_intent(counter, "mid_counter_enemy_bomb")
@@ -4649,6 +4684,126 @@ class UltimateWinRateEngineV7:
             }
 
         return None
+
+    def _mid_aggressive_bomb_special(
+        self,
+        game_state: Dict[str, Any],
+        card_mask: Dict[str, tuple],
+        hand_cards: List[str],
+        cur_rank: str,
+        *,
+        greater_action: List[Any],
+        greater_type: str,
+        greater_rank: str,
+        teammate_pos: int,
+        is_teammate: bool,
+    ) -> Optional[Dict[str, Any]]:
+        """GUA-205：超强主攻中局主动开炸抢攻。
+
+        触发前提（全局）：
+          1. 手牌炸弹族数量 bombs>=3，或 role=超强主攻
+          2. 存在可选炸弹（_recommend_bomb_from_mask 非空）
+
+        支线1（is_teammate=True，队友出牌）：
+          额外要求队友剩牌 > 4（不 close）——队友不 close 意味着未进入
+          送牌/冲刺临界，自己超强手牌有权抢攻开炸。
+
+        支线2（is_teammate=False，敌方出牌）：
+          额外要求：
+            a. greater 是普通牌型（非 Bomb/SF，R11 已拦对手出炸场景）
+            b. 敌方非报单临界（critical_enemy_remaining > 3）——
+               报单临界仍交给原 mid_bomb_cutoff 精确处理
+            c. teammate_cover_confidence < 0.5（队友也接不住，一圈无人接）
+            d. 开炸价值达标（_mid_aggressive_value_check）
+        """
+        from collections import Counter
+
+        if not greater_action or greater_action[0] == "PASS":
+            return None
+
+        group_type_map = self._group_type_map or {}
+        type_counter = Counter(group_type_map.values())
+        bomb_count = int(
+            type_counter.get("Bomb", 0) + type_counter.get("StraightFlush", 0)
+        )
+        role = self._current_role or "主攻"
+        if not (bomb_count >= 3 or role == "超强主攻"):
+            return None
+
+        belief = game_state.get("_belief") or {}
+        phase_relation = game_state.get("_phase_relation") or {}
+        hand_counts = belief.get("hand_counts") or game_state.get("numofplayers") or {}
+        teammate_remaining = 27
+        if isinstance(hand_counts, dict):
+            teammate_remaining = int(hand_counts.get(teammate_pos, 27) or 27)
+        elif isinstance(hand_counts, list) and teammate_pos < len(hand_counts):
+            teammate_remaining = int(hand_counts[teammate_pos] or 27)
+
+        if is_teammate:
+            if teammate_remaining <= 4:
+                return None
+        else:
+            from src.v.nn.guards.v7_guards import (
+                get_action_type, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+            )
+            gt = get_action_type(greater_action)
+            if gt in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+                return None
+            critical_enemy_seat = int(phase_relation.get("critical_enemy_seat", -1))
+            critical_enemy_remaining = 27
+            if isinstance(hand_counts, dict):
+                critical_enemy_remaining = int(hand_counts.get(critical_enemy_seat, 27) or 27)
+            elif isinstance(hand_counts, list) and critical_enemy_seat < len(hand_counts):
+                critical_enemy_remaining = int(hand_counts[critical_enemy_seat] or 27)
+            if critical_enemy_remaining <= 3:
+                return None
+            teammate_cover_confidence = float(
+                phase_relation.get("teammate_cover_confidence", 0.0) or 0.0
+            )
+            if teammate_cover_confidence >= 0.5:
+                return None
+            if not self._mid_aggressive_value_check(
+                game_state, card_mask, hand_cards, cur_rank,
+                teammate_pos=teammate_pos,
+            ):
+                return None
+
+        bomb = self._recommend_bomb_from_mask(
+            card_mask, cur_rank,
+            action_list=game_state.get("actionList") or [],
+        )
+        if not bomb:
+            return None
+
+        tagged = dict(bomb)
+        tagged["intent"] = "mid_aggressive_bomb"
+        return tagged
+
+    def _mid_aggressive_value_check(
+        self,
+        game_state: Dict[str, Any],
+        card_mask: Dict[str, tuple],
+        hand_cards: List[str],
+        cur_rank: str,
+        *,
+        teammate_pos: int,
+    ) -> bool:
+        """GUA-205：开炸价值判断（支线2 专用）。
+
+        同时满足才算有开炸价值：
+          1. 本手含 ≥3 炸弹族（bomb_count>=3）或 role=超强主攻（外层已保证）
+          2. enemy_bomb_risk_max < 0.5（敌方反炸风险不失控）
+          3. 手牌总张数 > 3（非只剩炸弹等收尾阶段）
+        """
+        phase_relation = game_state.get("_phase_relation") or {}
+        enemy_bomb_risk_max = float(
+            phase_relation.get("enemy_bomb_risk_max", 0.0) or 0.0
+        )
+        if enemy_bomb_risk_max >= 0.5:
+            return False
+        if not hand_cards or len(hand_cards) <= 3:
+            return False
+        return True
 
     def _recommend_lead_impl(
         self, game_state, card_mask, hand_cards, cur_rank

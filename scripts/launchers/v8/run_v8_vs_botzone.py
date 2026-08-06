@@ -34,6 +34,15 @@ sys.path.insert(0, str(project_root))
 
 from src.communication.botzone_adapter import BotzoneAdapter
 
+# Windows 下 stdout/stderr 默认 GBK，nohup 重定向后 StreamHandler 会写成乱码；
+# 统一为 UTF-8，保证脚本自身 FileHandler 与重定向日志编码一致。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        if _stream is not None and hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 log_dir = project_root / "logs"
 log_dir.mkdir(exist_ok=True)
 log_file = log_dir / f"v8_vs_botzone_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
