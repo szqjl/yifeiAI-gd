@@ -751,18 +751,45 @@ class UltimateWinRateEngineV7:
                                     action_list[act_index], game_state,
                                 ):
                                     if recommendation.get("type") in ("Bomb", "StraightFlush"):
-                                        self.logger.info(
-                                            "GUA-075 推荐被组牌保护拦截: %s/%s 拆 %s → 回退",
-                                            recommendation.get("type"), recommendation.get("rank"), broken)
-                                        blocked_by_mask = True
-                                        self._replay_record(
-                                            "recommendation_mask",
-                                            {
-                                                "gua_id": "GUA-075",
-                                                "blocked": True,
-                                                "broken_type": broken,
-                                            },
+                                        # GUA-211: 炸弹/SF 拆核心被拦 → 回退找不拆核心的同类 Bomb/SF
+                                        alt_idx = self._find_alternative_core_intact_bomb(
+                                            action_list, act_index,
+                                            self._card_mask,
+                                            self._group_type_map,
+                                            self._group_members,
+                                            game_state.get("greaterAction", []),
+                                            str(game_state.get("curRank", "2")),
                                         )
+                                        if alt_idx >= 0 and alt_idx != act_index:
+                                            act_index = alt_idx
+                                            rec_type = action_list[alt_idx][0] if len(action_list[alt_idx]) >= 1 else ""
+                                            rec_rank = action_list[alt_idx][1] if len(action_list[alt_idx]) >= 2 else ""
+                                            self.logger.info(
+                                                "GUA-211: 推荐 %s/%s 拆 %s → 改出完整核心 %s/%s actIndex=%d",
+                                                recommendation.get("type"), recommendation.get("rank"),
+                                                broken, rec_type, rec_rank, alt_idx)
+                                            self._replay_record(
+                                                "recommendation_mask",
+                                                {
+                                                    "gua_id": "GUA-211",
+                                                    "blocked": False,
+                                                    "broken_type": broken,
+                                                    "alt_actIndex": alt_idx,
+                                                },
+                                            )
+                                        else:
+                                            self.logger.info(
+                                                "GUA-211: 推荐 %s/%s 拆 %s → 无完整核心 Bomb/SF 替代, 回退",
+                                                recommendation.get("type"), recommendation.get("rank"), broken)
+                                            blocked_by_mask = True
+                                            self._replay_record(
+                                                "recommendation_mask",
+                                                {
+                                                    "gua_id": "GUA-211",
+                                                    "blocked": True,
+                                                    "broken_type": broken,
+                                                },
+                                            )
                                     else:
                                         # GUA-176: 推荐非炸弹拆 Bomb/SF core → 改出其他不拆核动作
                                         alt_idx = self._find_alternative_non_core_breaking_action(
@@ -2330,6 +2357,71 @@ class UltimateWinRateEngineV7:
                     continue
             return i
         return -1
+
+    def _find_alternative_core_intact_bomb(
+        self,
+        action_list: list,
+        exclude_idx: int,
+        card_mask: dict,
+        group_type_map: dict,
+        group_members: Optional[dict] = None,
+        greater_action: Optional[list] = None,
+        cur_rank: str = "2",
+    ) -> int:
+        """GUA-211: 炸弹/同花顺推荐被组牌保护拦截后，回退找 actionList 中同是
+        Bomb/SF 且不拆核心的候选。
+
+        GUA-205 中局主动开炸时，_recommend_bomb_from_mask 按「牌点大优先」可能选中
+        拆 Bomb/SF 核心的候选（如 SF/8 拆 Bomb 组 S8），GUA-075 拦截后原本直接回退
+        PASS——而 actionList 里存在完整核心 SF/Bomb（如 SF/7 S3-S7、Bomb 8888）
+        却不被尝试。本方法补上该回退：拦截的推荐是 Bomb/SF 时，找不拆核心的
+        同类候选（follow 模式下还须能合法压过 greater_action），找不到才维持回退。
+
+        Returns:
+            候选下标；无则返回 -1。
+        """
+        from src.v.nn.guards.v7_guards import (
+            ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+        )
+        from src.v.nn.endgame.endgame_decide import _action_beats_greater
+
+        follow = bool(
+            greater_action
+            and len(greater_action) >= 2
+            and str(greater_action[0]).upper() != "PASS"
+        )
+        candidates: list = []
+        for i, action in enumerate(action_list):
+            if i == exclude_idx:
+                continue
+            if not action or len(action) < 3:
+                continue
+            if action[0] not in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+                continue
+            broken = self._get_broken_core_type(
+                action, card_mask, group_type_map, group_members)
+            if broken is not None:
+                continue
+            if follow and not _action_beats_greater(action, greater_action, cur_rank):
+                continue
+            candidates.append((i, action))
+        if not candidates:
+            return -1
+
+        def _priority(item):
+            _i, act = item
+            cards = act[2] if len(act) >= 3 and isinstance(act[2], list) else []
+            size = len(cards)
+            strength = 9 if act[0] == ACTION_TYPE_STRAIGHT_FLUSH else size
+            rank = str(act[1]) if len(act) >= 2 else ""
+            return (
+                -strength,
+                -self.RANK_ORDER.get(rank, -1),
+                tuple(sorted(str(c) for c in cards)),
+            )
+
+        best = min(candidates, key=_priority)
+        return best[0]
 
     @staticmethod
     def _action_breaks_core(
