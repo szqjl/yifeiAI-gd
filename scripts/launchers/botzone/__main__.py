@@ -32,14 +32,23 @@ from pathlib import Path
 # zip 根（本文件所在目录）加入 path，保证 `src.*` 可导入。
 # 本地运行时本文件位于 scripts/launchers/botzone/，src/ 在仓库根：
 #  - 打包后（zip 根 / 解压目录）：__main__.py 与 src/ 同级 → ZIP_ROOT 即 src 所在；
-#  - 仓库内本地运行：src/ 在仓库根（_REPO_ROOT = ZIP_ROOT.parents[3]）。
+#  - 仓库内本地运行：src/ 在仓库根（向上找到含 src/ 的祖先目录）。
 ZIP_ROOT = Path(__file__).resolve().parent
 if str(ZIP_ROOT) not in sys.path:
     sys.path.insert(0, str(ZIP_ROOT))
 
-# 仓库根（本地运行 / 打包前自测用）：scripts/launchers/botzone → 仓库根
-_REPO_ROOT = ZIP_ROOT.parents[3]
-if str(_REPO_ROOT) not in sys.path:
+# 仓库根（本地运行 / 打包前自测用）。勿用硬编码 parents[3]：
+# Botzone 沙箱把 zip 解压到工作目录（/var/sandbox/box1/，__main__.py 与 src/
+# 同级，深度仅 3 层），parents[3] 越界 → IndexError: 3（GUA-208 实盘 RE）。
+_REPO_ROOT = ZIP_ROOT
+if not (ZIP_ROOT / "src").exists():
+    _cur = ZIP_ROOT
+    while _cur != _cur.parent:
+        if (_cur / "src").exists():
+            _REPO_ROOT = _cur
+            break
+        _cur = _cur.parent
+if _REPO_ROOT and str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 # 兼容 `python <xxx>.zip` 直接执行：此时 __file__ 形如 "<zip>/__main__.py"，
@@ -69,8 +78,6 @@ def _load_adapter(engine):
 
 
 def main() -> int:
-    import asyncio
-
     # 每回合调用一次，输出标准 JSON 响应 + KEEP_RUNNING 保持进程（加载一次引擎）。
     # 首回合加载引擎；后续回合复用已加载实例（进程常驻）。
     engine = None
@@ -96,7 +103,9 @@ def main() -> int:
             adapter = _load_adapter(engine)
 
         try:
-            resp = asyncio.run(adapter.handle_online_turn(full_input))
+            # Botzone 沙箱为 Python 3.6（无 asyncio.run/to_thread），
+            # 用同步在线入口 handle_online_turn_sync。
+            resp = adapter.handle_online_turn_sync(full_input)
         except Exception:
             logger.error("决策失败", exc_info=True)
             resp = json.dumps([[], []], separators=(",", ":"))

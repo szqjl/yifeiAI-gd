@@ -887,6 +887,55 @@ class BotzoneAdapter:
                 scores = list(map(int, parts[3:])) if len(parts) > 3 else []
                 self._on_result(match_id, slot, player_count, scores)
 
+    def handle_online_turn_sync(self, full_input: dict) -> str:
+        """Botzone 在线模式同步版（py3.6 沙箱无 asyncio.to_thread/run）。
+
+        与 handle_online_turn 等价，但决策走同步直调（use_thread=False），
+        供 scripts/launchers/botzone/__main__.py 使用——Botzone python3 沙箱
+        (Ubuntu 16.04) 为 Python 3.6，asyncio.run(3.7+)/to_thread(3.9+) 不可用。
+        """
+        match_id = "online"
+        requests = full_input.get("requests") or []
+        responses = full_input.get("responses") or []
+
+        for i, req_raw in enumerate(requests):
+            req = req_raw
+            if isinstance(req_raw, str):
+                try:
+                    req = json.loads(req_raw)
+                except json.JSONDecodeError:
+                    logger.warning("在线请求解析失败 i=%d raw=%s", i, req_raw[:200])
+                    continue
+            if not isinstance(req, dict):
+                continue
+            self._on_request(match_id, json.dumps(req, separators=(",", ":")))
+            game = self.games.get(match_id)
+            if game is None:
+                continue
+            if i < len(responses) and responses[i]:
+                self._apply_online_self_response(game, responses[i])
+
+        game = self.games.get(match_id)
+        if game is None or game.current_request is None:
+            return json.dumps([[], []], separators=(",", ":"))
+        try:
+            req = game.current_request
+            if req.get("stage", "") == "play":
+                resp = self._handle_play_decision_sync(match_id, game, req)
+            elif req.get("stage", "") == "tribute":
+                resp = self._handle_tribute_request(match_id, game, req)
+            elif req.get("stage", "") == "return":
+                resp = self._handle_return_request(match_id, game, req)
+            else:
+                resp = None
+        except Exception:
+            logger.error("在线决策异常", exc_info=True)
+            resp = None
+        if resp is None:
+            resp = json.dumps([[], []], separators=(",", ":"))
+        logger.info("在线决策输出: %s", resp)
+        return resp
+
     async def handle_online_turn(self, full_input: dict) -> str:
         """Botzone 在线模式：全量重放 requests/responses 后对当前回合决策。
 
@@ -1247,7 +1296,8 @@ class BotzoneAdapter:
             return _rank_to_order(r1, cur_rank) > _rank_to_order(r2, cur_rank)
         return False
 
-    async def _handle_request(self, match_id: str, game: BotzoneGameState) -> Optional[str]:
+    async def _handle_request(self, match_id: str, game: BotzoneGameState,
+                              use_thread: bool = True) -> Optional[str]:
         """Process a Botzone request and return the response string."""
         req = game.current_request
         if req is None:
@@ -1260,7 +1310,8 @@ class BotzoneAdapter:
         elif stage == "return":
             return self._handle_return_request(match_id, game, req)
         elif stage == "play":
-            return await self._handle_play_decision(match_id, game, req)
+            return await self._handle_play_decision(match_id, game, req,
+                                                    use_thread=use_thread)
         return None
 
     def _handle_tribute_request(self, match_id: str, game: BotzoneGameState,
@@ -1440,9 +1491,33 @@ class BotzoneAdapter:
             entries.append((player, action_cards, claim_cards))
         return entries
 
+    def _handle_play_decision_sync(self, match_id: str, game: BotzoneGameState,
+                                   req: dict) -> Optional[str]:
+        """同步版 _handle_play_decision（在线模式，py3.6 兼容）。
+
+        复用 async 版本的完整逻辑，仅把决策调用改为同步直调
+        （use_thread=False）。实现为对 async 版本的事件循环驱动封装：
+        Botzone 在线场景单进程单回合，直接 run_until_complete 即可；
+        但 py3.6 无 asyncio.run，用 get_event_loop + run_until_complete。
+        """
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(
+            self._handle_play_decision(match_id, game, req, use_thread=False))
+
     async def _handle_play_decision(self, match_id: str, game: BotzoneGameState,
-                                     req: dict) -> Optional[str]:
-        """Convert Botzone play request -> V8 decide -> Botzone response."""
+                                     req: dict,
+                                     use_thread: bool = True) -> Optional[str]:
+        """Convert Botzone play request -> V8 decide -> Botzone response.
+
+        use_thread=True：Local AI 轮询模式（async 事件循环内跑，用线程池隔离
+        长决策，asyncio.wait_for 超时保护）。
+        use_thread=False：Botzone 在线模式（同步直调，py3.6 沙箱无
+        asyncio.to_thread/run；规则栈同步执行，超时靠平台 6s 限时兜底）。
+        """
         if self.decision_engine is None:
             logger.error("decision_engine 未设置")
             return None
@@ -1616,10 +1691,14 @@ class BotzoneAdapter:
             logger.warning("actionList 摘要失败: %s", _e)
         try:
             t0 = time.perf_counter()
-            act_index = await asyncio.wait_for(
-                asyncio.to_thread(self.decision_engine.decide, game_state),
-                timeout=self._max_decision_time,
-            )
+            if use_thread:
+                act_index = await asyncio.wait_for(
+                    asyncio.to_thread(self.decision_engine.decide, game_state),
+                    timeout=self._max_decision_time,
+                )
+            else:
+                # 在线模式：同步直调（避免 py3.6 无 asyncio.to_thread/run）。
+                act_index = self.decision_engine.decide(game_state)
             elapsed = time.perf_counter() - t0
             if elapsed > 0.5:
                 logger.warning("决策偏慢: match=%s elapsed=%.3fs", match_id, elapsed)

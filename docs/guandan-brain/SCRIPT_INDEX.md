@@ -321,6 +321,7 @@
 |------|------|
 | `__main__.py` | **Botzone 在线 Bot 入口** — stdin/stdout JSON Interaction 协议 + KEEP_RUNNING 长驻（引擎加载一次，冷启动 ~2s 会超时）；复用 `botzone_adapter.handle_online_turn` 全量重放历史重建状态再决策；torch 惰性导入，沙箱无 torch 时走 model=None 规则栈 |
 | `package_v8_online.py` | **在线 Bot 打包脚本** — 复制 `src/` + 入口 `__main__.py` 成 zip（`data/eval/botzone/v8_online_bot_YYYYMMDD_vN.zip`）；版本自动 +1（`--rev` 指定）、`--check` 校验、`--dry-run` 预览、`--keep` 保留旧版；第三方库由 Botzone 沙箱预装，数据文件走 `data` 路径 |
+| `fetch_match.py` | **Botzone 对局拉取 + 本地重放** — `GET /match/<id>?lite=true`（公开，无需登录）拉取指定玩家 requests/responses 序列；`--replay` 逐回合喂 `handle_online_turn_sync` 全量重放，决策链落 `logs/fetch_match_<id>.log`，供 WF-13 `check_botzone_trace.py` 分析（含上传的在线 v8 bot 参与的对局） |
 | `README.md` | 打包/上传/本地验证/工作流（本地迭代 → 验收 → 重打包） |
 
 ### scripts/launchers/m1/ — M1 启动器
