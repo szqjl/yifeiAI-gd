@@ -73,6 +73,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="队友 Bot ID（默认同对手 bot，不推荐；推荐 Joker: 686264afa4349e61674f526a）")
     parser.add_argument("--games", type=int, default=3,
                         help="对局数（仅对手 bot 模式有效，默认 3）")
+    parser.add_argument("--player-id", type=int, default=0,
+                        help="V8 座位（默认 0）。手动创建对局时 V8 可能是 0 或 2；"
+                             "决策引擎以 deal 的 your_id 为准动态适配，本参数仅作初始默认。")
     return parser.parse_args(argv)
 
 
@@ -89,7 +92,8 @@ async def main_async(argv: list[str] | None = None) -> None:
     try:
         from src.v.nn import UltimateWinRateEngineV7
         logger.info("加载 V8 决策引擎...")
-        engine = UltimateWinRateEngineV7(player_id=0, use_grouping_engine=True)
+        engine = UltimateWinRateEngineV7(
+            player_id=args.player_id, use_grouping_engine=True)
         logger.info("V8 决策引擎加载完成")
     except ImportError as e:
         logger.error("加载 V8 决策引擎失败: %s", e)
@@ -104,7 +108,7 @@ async def main_async(argv: list[str] | None = None) -> None:
         api_key=args.api_key,
         base_url=args.base_url,
         decision_engine=engine,
-        player_id=0,
+        player_id=args.player_id,
     )
 
     # Start listening FIRST (background task), then create matches

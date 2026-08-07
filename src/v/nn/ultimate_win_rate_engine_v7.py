@@ -150,6 +150,11 @@ class UltimateWinRateEngineV7:
 
     def on_game_start(self, my_pos: int = None, game_id: Optional[str] = None):
         """每局开始时清理跨副残留状态（R11记忆/R15相克锁/MemoryTracker等）。"""
+        if my_pos is not None:
+            # 动态座位回写（GUA-205 支线1 顺带修复）：构造时 player_id 仅为
+            # 启动默认，实际座位以 deal 的 your_id 为准（Botzone 对局可能是
+            # 0/1/2/3），否则 DecisionTracer / trace 文件名等会记录错误座位。
+            self.player_id = my_pos
         if GUARD_IMPORT_OK:
             try:
                 from src.v.nn.guards.v7_guards import _clear_r11_memory_for_game
@@ -1271,7 +1276,11 @@ class UltimateWinRateEngineV7:
             return None
 
         greater_pos = int(game_state.get("greaterPos", -1) or -1)
-        if greater_pos in (-1, self.player_id, teammate_pos):
+        # 席位判断统一以 game_state["myPos"] 为准（对局 V8 座位可能是 0 或 2，
+        # 不能用构造时 self.player_id 硬编码，否则 your_id=2 时把「自己的牌」
+        # 误判为可炸的敌方牌 → 炸自己/席位错位）。
+        my_pos = int(game_state.get("myPos", self.player_id) or self.player_id)
+        if greater_pos in (-1, my_pos, teammate_pos):
             return None
 
         greater_action = game_state.get("greaterAction", []) or []
@@ -4560,17 +4569,8 @@ class UltimateWinRateEngineV7:
         hr_with_opponents = joker_belief["hr_with_opponents"]
 
         if is_teammate:
-            # GUA-205 支线1：队友出牌但队友不 close → 超强手牌允许抢攻开炸
-            aggressive = self._mid_aggressive_bomb_special(
-                game_state, card_mask, hand_cards, cur_rank,
-                greater_action=greater_action,
-                greater_type=greater_type,
-                greater_rank=greater_rank,
-                teammate_pos=teammate_pos,
-                is_teammate=True,
-            )
-            if aggressive:
-                return aggressive
+            # GUA-205 支线1：队友已持 great（greaterPos==teammate），
+            # 一律让道——用炸弹抢队友控制权损己利敌，禁止抢攻开炸。
             intent = (
                 "mid_yield_teammate_control"
                 if teammate_cover_confidence >= 0.65
@@ -4797,8 +4797,9 @@ class UltimateWinRateEngineV7:
           2. 存在可选炸弹（_recommend_bomb_from_mask 非空）
 
         支线1（is_teammate=True，队友出牌）：
-          额外要求队友剩牌 > 4（不 close）——队友不 close 意味着未进入
-          送牌/冲刺临界，自己超强手牌有权抢攻开炸。
+          队友已持 great（greaterPos==teammate_pos）——无论队友出什么牌，
+          用炸弹抢队友控制权都是损己利敌（炸队友小王/炸队友炸弹），一律让道。
+          不炸队友是本线的硬规则，不再依赖队友剩牌或所出牌型。
 
         支线2（is_teammate=False，敌方出牌）：
           额外要求：
@@ -4825,15 +4826,15 @@ class UltimateWinRateEngineV7:
         belief = game_state.get("_belief") or {}
         phase_relation = game_state.get("_phase_relation") or {}
         hand_counts = belief.get("hand_counts") or game_state.get("numofplayers") or {}
-        teammate_remaining = 27
-        if isinstance(hand_counts, dict):
-            teammate_remaining = int(hand_counts.get(teammate_pos, 27) or 27)
-        elif isinstance(hand_counts, list) and teammate_pos < len(hand_counts):
-            teammate_remaining = int(hand_counts[teammate_pos] or 27)
 
         if is_teammate:
-            if teammate_remaining <= 4:
-                return None
+            # GUA-205 支线1：队友已持 great（greaterPos==teammate_pos）。
+            # 无论队友出什么牌，用炸弹抢队友控制权都是损己利敌
+            # （炸队友小王/炸队友炸弹都帮敌方），一律让道。
+            self.logger.info(
+                "GUA-205 支线1 队友持 great(greaterPos=%d) → 让道不炸",
+                teammate_pos)
+            return None
         else:
             from src.v.nn.guards.v7_guards import (
                 get_action_type, ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,

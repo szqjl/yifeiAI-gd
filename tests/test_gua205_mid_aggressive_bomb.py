@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """GUA-205: 超强手牌（bombs>=3 或 role=超强主攻）中局主动开炸抢攻。
 
-支线1：队友出牌但队友不 close → 允许抢攻开炸（而非无条件让道）。
+支线1：队友已持 great（greaterPos==teammate）→ 一律让道不炸，
+       无论队友出什么牌型（含大小王/炸弹高控），用炸弹抢队友控制权
+       都是损己利敌，不依赖队友剩牌或所出牌型。
 支线2：敌方出普通牌型 + 敌方非报单临界 + 队友接不住 → 按开炸价值主动炸。
 """
 
@@ -50,7 +52,8 @@ def _dispatch(engine, gs, *, greater_type="Pair", greater_rank="T",
 
 
 # ════════════════════════════════════════════
-#  支线1：队友出牌 + 队友不 close → 抢攻开炸
+#  支线1：队友持 great（greaterPos==teammate）→ 一律让道不炸
+#  队友已获得控制权，无论出什么牌都不能用炸弹抢（防炸队友小王败招）
 # ════════════════════════════════════════════
 
 class TestBranch1TeammateAggressive:
@@ -63,8 +66,8 @@ class TestBranch1TeammateAggressive:
         }
         return engine
 
-    def test_aggressive_bomb_when_teammate_not_close(self):
-        """超强主攻 + 队友出牌 + 队友 15 张（不 close）→ 抢攻开炸"""
+    def test_yield_when_teammate_holds_great_plain(self):
+        """超强主攻 + 队友持 great 出普通牌（Pair/T，15 张不 close）→ 让道不炸"""
         engine = self._engine_with_bomb()
         gs = {
             "_current_stage": "stage_2",
@@ -87,8 +90,9 @@ class TestBranch1TeammateAggressive:
         }
         rec = _dispatch(engine, gs, is_teammate=True, teammate_pos=2)
         assert rec is not None
-        assert rec["type"] == "Bomb"
-        assert rec["intent"] == "mid_aggressive_bomb"
+        assert rec["type"] == "PASS"
+        assert rec["intent"] in ("mid_yield_teammate_control",
+                                 "mid_preserve_teammate_lane")
 
     def test_pass_when_teammate_close(self):
         """超强主攻 + 队友出牌 + 队友 3 张（close）→ 仍让道 PASS"""
@@ -149,8 +153,80 @@ class TestBranch1TeammateAggressive:
 
 
 # ════════════════════════════════════════════
-#  支线2：敌方出普通牌型 + 非报单临界 → 主动炸
+#  支线1 通理覆盖：队友持 great，无论出什么牌型都让道
+#  （含大小王/炸弹/同花顺等高控牌，Botzone match 6a759ae9 实证）
 # ════════════════════════════════════════════
+
+class TestBranch1TeammateHoldsGreatYield:
+    _HAND = ["S7", "H7", "D7", "C7", "S8", "H8", "D8", "C8",
+             "SK", "HK", "CK", "DK",
+             "SA", "S2", "H2", "S4", "S5", "S6", "S9", "H9"]
+
+    def _engine(self):
+        engine = _make_engine(role="超强主攻")
+        engine._recommend_bomb_from_mask = lambda *a, **k: {
+            "type": "Bomb",
+            "rank": "7",
+            "cards": ["S7", "H7", "D7", "C7"],
+        }
+        return engine
+
+    def _dispatch_with(self, greater_action, greater_type, greater_rank):
+        gs = {
+            "_current_stage": "stage_2",
+            "_belief": {"hand_counts": {0: 20, 1: 10, 2: 15, 3: 12}},
+            "_phase_relation": {
+                "critical_enemy_seat": 1,
+                "enemy_shape_hint": "unknown",
+                "teammate_cover_confidence": 0.2,
+                "same_type_suppressor_outside": False,
+                "enemy_bomb_risk_max": 0.1,
+            },
+            "myPos": 0,
+            "curPos": 2,
+            "greaterPos": 2,
+            "greaterAction": greater_action,
+            "handCards": self._HAND,
+            "curRank": "2",
+        }
+        return _dispatch(self._engine(), gs,
+                         greater_type=greater_type, greater_rank=greater_rank,
+                         is_teammate=True, teammate_pos=2)
+
+    def test_yield_when_teammate_plays_small_joker(self):
+        """超强主攻 + 队友持 great 出单张小王(SB) → 让道，不炸队友小王"""
+        rec = self._dispatch_with(["Single", "B", ["SB"]], "Single", "B")
+        assert rec is not None
+        assert rec["type"] == "PASS"
+        assert rec["intent"] in ("mid_yield_teammate_control",
+                                 "mid_preserve_teammate_lane")
+
+    def test_yield_when_teammate_plays_big_joker(self):
+        """超强主攻 + 队友持 great 出单张大王(SR) → 让道"""
+        rec = self._dispatch_with(["Single", "R", ["SR"]], "Single", "R")
+        assert rec is not None
+        assert rec["type"] == "PASS"
+
+    def test_yield_when_teammate_plays_bomb(self):
+        """超强主攻 + 队友持 great 出炸弹 → 让道，不用更大炸压队友"""
+        rec = self._dispatch_with(["Bomb", "7", ["S7", "H7", "D7", "C7"]],
+                                  "Bomb", "7")
+        assert rec is not None
+        assert rec["type"] == "PASS"
+
+    def test_yield_when_teammate_plays_straight_flush(self):
+        """超强主攻 + 队友持 great 出同花顺 → 让道"""
+        rec = self._dispatch_with(
+            ["StraightFlush", "9", ["S9", "H9", "C9", "D9", "S9"]],
+            "StraightFlush", "9")
+        assert rec is not None
+        assert rec["type"] == "PASS"
+
+    def test_yield_when_teammate_plays_single_ace(self):
+        """超强主攻 + 队友持 great 出普通单张(Single/A) → 一律让道"""
+        rec = self._dispatch_with(["Single", "A", ["SA"]], "Single", "A")
+        assert rec is not None
+        assert rec["type"] == "PASS"
 
 class TestBranch2EnemyAggressive:
     def _engine(self, role="超强主攻"):
