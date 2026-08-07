@@ -1229,29 +1229,32 @@ class EndgameDecider:
         self_context = ec.get("self", {})
         enemies = ec.get("enemies", {})
 
-        # ── GUA-XXX: 不压队友 — greaterPos 为 teammate 且 teammate 出炸型 → PASS
-        # 仅拦截 teammate 出炸/同花顺的情况（队友互炸），非炸型正常让 Q1 裁决
-        # 例外：有敌人 ≤2 张时即使队友出炸也允许轻压拦截
+        # ── GUA-212: 不压队友 — greaterPos 为 teammate 且 teammate 已出牌 → PASS 让道
+        # 覆盖队友出的任意牌型（炸/同花顺/顺/对子/单张等），非特殊控局一律让道，
+        # 防止残局 Q0 冲刺 / Q1 封锁把队友当敌方反压（实测 V8 炸10 压队友 TJQKA 顺，
+        # 出完剩 C2 D3 D4 D5 S5 烂尾；队友 close 已控牌时正确应对是让队友拿圈）。
+        # 条件：队友 close（控牌）才强制让道——队友剩牌多不 close 时保留
+        # GUA-113「主攻帮挡」（敌人可能压制队友，主攻拿回控制权）语义。
+        # 例外：有敌人 ≤2 张（imminent）时允许接管拦截。
         my_pos = ec.get("my_pos", game_state.get("myPos", 0))
         greater_pos = game_state.get("greaterPos", -1)
         greater_action = game_state.get("greaterAction")
         teammate_pos = (my_pos + 2) % 4
         if greater_pos not in (-1, None) and greater_pos == teammate_pos:
             if greater_action and _get_declared_action_type(greater_action) not in ("PASS", "pass"):
-                gt = _get_declared_action_type(greater_action)
-                is_bomb_like = _is_bomb_like_action(greater_action) if GUARD_TOOLS_OK else (
-                    gt in ("Bomb", "StraightFlush")
-                )
-                if is_bomb_like:
-                    enemy_imminent = any(
-                        e.get("remaining", 99) <= 2 for e in enemies.values()
-                    ) if enemies else False
-                    if not enemy_imminent:
-                        for i, a in enumerate(action_list):
-                            if _get_declared_action_type(a) in ("PASS", "pass"):
-                                logger.info("GUA-XXX: greaterPos=teammate(%d) 出炸型 → PASS", greater_pos)
-                                return i, a
-                        return None, None
+                teammate_close = ec.get("teammate", {}).get("is_close", False)
+                enemy_imminent = any(
+                    e.get("remaining", 99) <= 2 for e in enemies.values()
+                ) if enemies else False
+                if teammate_close and not enemy_imminent:
+                    for i, a in enumerate(action_list):
+                        if _get_declared_action_type(a) in ("PASS", "pass"):
+                            logger.info(
+                                "GUA-212: greaterPos=teammate(%d) 出%s → PASS 让道",
+                                greater_pos, _get_declared_action_type(greater_action),
+                            )
+                            return i, a
+                    return None, None
 
         # ── Q0.5: 一手清（finish_now）────  [GUA-097 fix: 提升至 Q0 之前]
         # GUA-112: 无论敌人/队友状态，只要 actionList 含一手清候选 → 立即出完
