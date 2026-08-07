@@ -1407,6 +1407,41 @@ def test_wild_bomb_claim_replaced():
     assert adapter._build_bz_claim(chosen3, "2", bz3) == bz3, "无配子 claim==action"
 
 
+def test_greater_claim_sf_not_free_no_4card_bomb():
+    """GUA-213：greater 用 claim 分类——逢人配同花顺不再被误判 Free。
+
+    复现 match=6a759ae9 16:44:42：p3 实际出 [H2,D6,D7,D8,D9]（H2 逢人配当 D5），
+    claim [D5,D6,D7,D8,D9] = 同花顺 D5-D9。修复前只用实际牌分类判 Free，
+    generate_follow_actions 按 greater_type not in (Bomb,StraightFlush) 误加
+    4 头炸 → 引擎出 Bomb/9 压同花顺（压不过）。修复后 greater=StraightFlush，
+    4 头炸不再出现在候选。
+    """
+    adapter = _make_adapter()
+    # claim 优先分类
+    got = adapter._bz_response_to_v8_action(
+        v8_to_bz_cards(["H2", "D6", "D7", "D8", "D9"]),
+        bz_claim_cards=v8_to_bz_cards(["D5", "D6", "D7", "D8", "D9"]),
+        cur_rank="2",
+    )
+    assert got[0] == "StraightFlush", got
+    # 无 claim 时才回退实际牌（保持原分类行为）
+    fallback = adapter._bz_response_to_v8_action(
+        v8_to_bz_cards(["H2", "D6", "D7", "D8", "D9"]), cur_rank="2")
+    assert fallback[0] == "Free", fallback
+
+    # generate_follow_actions 面对 StraightFlush 不生成 4 头炸
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["S9", "H9", "H9", "H2", "H3", "HK", "S3"]  # 含 Bomb/9(4头) 原料
+    greater_sf = ["StraightFlush", "5", ["D5", "D6", "D7", "D8", "D9"]]
+    acts = gen.generate_follow_actions(hand, greater_sf)
+    assert not [a for a in acts if a[0] == "Bomb"], f"同花顺 greater 不得生成 4 头炸候选: {acts}"
+    # 若 greater 是 Free（旧 bug 场景），4 头炸会混入——验证对比
+    acts_free = gen.generate_follow_actions(hand, ["Free", "2", ["H2", "D6", "D7", "D8", "D9"]])
+    bombs_free = [a for a in acts_free if a[0] == "Bomb"]
+    assert bombs_free, f"Free 场景应混入炸弹候选: {acts_free}"
+
+
+
 def test_follow_wild_bomb_beats_bomb_by_count_and_rank():
     """GUA-199：配子补炸参与比炸——4 张炸同张数比牌值，5+ 张炸不可压。"""
     gen = ActionListGenerator(cur_rank="2")

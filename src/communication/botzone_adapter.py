@@ -1231,7 +1231,10 @@ class BotzoneAdapter:
                 resp = entry.get("response", [[], []])
             action_list = resp[0] if isinstance(resp, list) and len(resp) > 0 else []
             if action_list:
-                v8_action = self._bz_response_to_v8_action(action_list)
+                claim_list = (resp[1] if isinstance(resp, list) and len(resp) > 1
+                              and isinstance(resp[1], list) else None)
+                v8_action = self._bz_response_to_v8_action(
+                    action_list, bz_claim_cards=claim_list, cur_rank=game.cur_rank)
                 game.cur_action = v8_action
                 game.cur_pos = player
                 # If not pass and beats current greater, update greater
@@ -1245,12 +1248,27 @@ class BotzoneAdapter:
                 game.cur_action = None
                 game.cur_pos = player
 
-    def _bz_response_to_v8_action(self, bz_action_cards: List[int]) -> Optional[list]:
-        """Convert Botzone play action (list of card ints) to OpenGuanDan format."""
+    def _bz_response_to_v8_action(self, bz_action_cards: List[int],
+                                  bz_claim_cards: Optional[List[int]] = None,
+                                  cur_rank: Optional[str] = None) -> Optional[list]:
+        """Convert Botzone play action (list of card ints) to OpenGuanDan format.
+
+        逢人配牌形下 Botzone 下发的 [action, claim] 两栏：action 是实际物理牌
+        （逢人配如 H{cur_rank} 保持原值），claim 才是声明成的牌型（逢人配
+        已按声明补齐，如 H2 充当 D5 组成 D5-D9 同花顺）。只用 action 分类会把
+        逢人配同花顺误判为 Free（实测 match=6a759ae9 16:44:42：greater 被判
+        ['Free','2',...]，4 头炸被当合法压牌出，实际压不过同花顺）。
+        因此优先用 claim 牌分类（平台保证合法），Free 时回退到实际牌。
+        """
         if not bz_action_cards:
             return ["PASS", "PASS", "PASS"]
+        if bz_claim_cards:
+            claim_v8 = bz_to_v8_cards(bz_claim_cards)
+            claimed = self._classify_action(claim_v8, cur_rank)
+            if claimed and claimed[0] != "Free":
+                return claimed
         v8_cards = bz_to_v8_cards(bz_action_cards)
-        return self._classify_action(v8_cards)
+        return self._classify_action(v8_cards, cur_rank)
 
     def _classify_action(self, cards: List[str], cur_rank: Optional[str] = None) -> Optional[list]:
         """Classify a list of V8 cards into an OpenGuanDan action tuple."""
@@ -1606,9 +1624,10 @@ class BotzoneAdapter:
         # curPos = 当前行动席 = V8 自己（本 adapter 只在轮到自己出牌时决策）；
         # 不能取 history 最后一项（领出轮最后一项常为跟牌 PASS 的他人）。
         cur_pos = game.player_id
-        for player, action_cards, _claim_cards in parsed_history:
+        for player, action_cards, claim_cards in parsed_history:
             if action_cards:
-                v8_action = self._bz_response_to_v8_action(action_cards)
+                v8_action = self._bz_response_to_v8_action(
+                    action_cards, bz_claim_cards=claim_cards, cur_rank=cur_rank)
                 if v8_action and v8_action[0] != "PASS":
                     greater_action_str = v8_action
                     greater_pos = player
@@ -1711,8 +1730,9 @@ class BotzoneAdapter:
         # （引擎据此 record_pass 记牌），而非本条 request 的最终 greater。
         history_actions = []
         running_greater = None
-        for player, action_cards, _claim_cards in parsed_history:
-            v8_action = self._bz_response_to_v8_action(action_cards)
+        for player, action_cards, claim_cards in parsed_history:
+            v8_action = self._bz_response_to_v8_action(
+                action_cards, bz_claim_cards=claim_cards, cur_rank=cur_rank)
             entry: Dict[str, Any] = {"pos": player, "action": v8_action}
             if v8_action and v8_action[0] == "PASS":
                 entry["context"] = {
