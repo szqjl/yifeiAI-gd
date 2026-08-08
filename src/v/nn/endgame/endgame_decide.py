@@ -1229,6 +1229,34 @@ class EndgameDecider:
         self_context = ec.get("self", {})
         enemies = ec.get("enemies", {})
 
+        # ── GUA-214: 队友出炸弹/同花顺（greater 炸弹类）→ 无论队友剩几张一律 PASS 让道
+        # 与 GUA-205 支线1 同语义：队友已持 great 且出炸弹（含 StraightFlush）时，
+        # 用任何牌压队友都是损己利敌（炸队友炸弹/同花顺 = 帮敌方拆控制权）。
+        # 不依赖队友 is_close（剩牌多也强制让道），无敌人 imminent 例外
+        # （队友出炸即掌控权在队友，接管无意义）。
+        # 实测：6a76847d 09:21:26 队友剩 12 张出 Bomb/J，V8 Q0 冲刺用 SF/6 反压
+        # → 本分支拦截为 PASS。
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction")
+        teammate_pos = (my_pos + 2) % 4
+        if greater_pos not in (-1, None) and greater_pos == teammate_pos:
+            if greater_action and _get_declared_action_type(greater_action) not in ("PASS", "pass"):
+                greater_declared = _get_declared_action_type(greater_action)
+                if greater_declared in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+                    pidx = next(
+                        (i for i, a in enumerate(action_list)
+                         if _get_declared_action_type(a) in ("PASS", "pass")),
+                        None,
+                    )
+                    if pidx is not None:
+                        logger.info(
+                            "GUA-214: greaterPos=teammate(%d) 出%s → PASS 让道（队友炸弹不压，剩牌无关）",
+                            greater_pos, greater_declared,
+                        )
+                        return pidx, action_list[pidx]
+                    return None, None
+
         # ── GUA-212: 不压队友 — greaterPos 为 teammate 且 teammate 已出牌 → PASS 让道
         # 覆盖队友出的任意牌型（炸/同花顺/顺/对子/单张等），非特殊控局一律让道，
         # 防止残局 Q0 冲刺 / Q1 封锁把队友当敌方反压（实测 V8 炸10 压队友 TJQKA 顺，
@@ -1236,10 +1264,6 @@ class EndgameDecider:
         # 条件：队友 close（控牌）才强制让道——队友剩牌多不 close 时保留
         # GUA-113「主攻帮挡」（敌人可能压制队友，主攻拿回控制权）语义。
         # 例外：有敌人 ≤2 张（imminent）时允许接管拦截。
-        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
-        greater_pos = game_state.get("greaterPos", -1)
-        greater_action = game_state.get("greaterAction")
-        teammate_pos = (my_pos + 2) % 4
         if greater_pos not in (-1, None) and greater_pos == teammate_pos:
             if greater_action and _get_declared_action_type(greater_action) not in ("PASS", "pass"):
                 teammate_close = ec.get("teammate", {}).get("is_close", False)
