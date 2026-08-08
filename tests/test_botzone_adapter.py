@@ -1510,6 +1510,8 @@ def test_online_single_turn_applies_own_history_to_hand():
             "global": {"level": "2", "tribute": 0, "first": None, "last": None}}
     adapter.handle_online_turn_sync(play)
     game = adapter.games["online"]
-    # 历史应用：自己已出的 HA 被移除；随后 FakeEngine 决策再出 1 张（27-1-1=25）
+    # 决策出的牌被移除（27-1=26）；history 中 player==自己的动作是上一轮决策
+    # 已扣过的牌，不重复扣（GUA-216：重复扣会把重复张误删，手牌漂移 → 线上
+    # 退化为 PASS，p2_92 实测。改动前此断言固化了双扣行为）。
     assert "HA" not in game.hand_cards, sorted(game.hand_cards)
-    assert len(game.hand_cards) == 25, len(game.hand_cards)
+    assert len(game.hand_cards) == 26, len(game.hand_cards)

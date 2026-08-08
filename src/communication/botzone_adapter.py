@@ -974,16 +974,10 @@ class BotzoneAdapter:
         if stage == "deal":
             # deal 无响应（_on_request 已建状态），返回空动作数组
             return json.dumps([], separators=(",", ":"))
-        if stage == "play":
-            history = req.get("history") or []
-            for player, action_cards, _claim in self._parse_bz_play_history(history):
-                if player == game.player_id and action_cards:
-                    v8_cards = bz_to_v8_cards(action_cards)
-                    for card in v8_cards:
-                        if card in game.hand_cards:
-                            game.hand_cards.remove(card)
-                    if game.card_tracker is not None:
-                        game.card_tracker.remove_multi(v8_cards)
+        # 注意：增量模式下自己已出的牌只在决策路径（_handle_play_decision 第 6 步
+        # "Update hand tracking"）扣减一次。history 中 player==自己的动作是上一轮
+        # 决策已扣过的牌，此处若再从 history 重复扣减会双扣，导致手牌漂移
+        # （GUA-216：真手牌含 SB 时被误删，线上退化为 PASS）。
         if game.current_request is None:
             return json.dumps([[], []], separators=(",", ":"))
         try:

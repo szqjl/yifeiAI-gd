@@ -104,6 +104,13 @@ def _has_recapture(
     if not cards:
         return False
 
+    # GUA-215：bomb family（同花顺/炸弹/王炸）的回收 = 剩余手牌还能构成更强的炸弹，
+    # 而非单张牌力跨牌型比较（同花顺最大单张 C6=6 < SB=16，会误判 SF 有回收，
+    # 使 `_sort_by_recapture_first` 把 StraightFlush 排到 Single/SB 前面，浪费炸弹）。
+    # 总序（guandan-knowledge L205）：王炸 > 8星 > 7星 > 6星 > 同花顺 > 5星 > 4星。
+    if _is_bomb_family(action):
+        return _hand_has_stronger_bomb(action, hand_cards, cur_rank)
+
     max_val = _max_card_value(action, cur_rank)
 
     # 在剩余手牌中找同牌型更高值
@@ -115,6 +122,89 @@ def _has_recapture(
             cv = CARD_RANK_ORDER.get(rk, 0)
         if cv > max_val:
             return True
+    return False
+
+
+def _bomb_family_strength(action: List, cur_rank: str = "2") -> Optional[Tuple[int, int]]:
+    """bomb family 强度键 (level, rank_value)，越大越强；非 bomb family 返回 None。
+
+    层级（guandan-knowledge L205）：
+      王炸(100) > 8星(80) > 7星(70) > 6星(60) > 同花顺(55) > 5星(50) > 4星(40)。
+    rank_value 用于同层比较（同花顺比最大点，同点炸比点数）。
+    """
+    if _is_joker_bomb(action):
+        return (100, 0)
+    cards = _get_cards(action)
+    if not cards:
+        return None
+    if GUARD_TOOLS_OK:
+        atype = get_action_type(action)
+    else:
+        atype = action[0] if isinstance(action, list) and action else ""
+    n = len(cards)
+    if atype in (ACTION_TYPE_STRAIGHT_FLUSH, "StraightFlush"):
+        return (55, _max_card_value(action, cur_rank))
+    if atype in (ACTION_TYPE_BOMB, "Bomb"):
+        return (n * 10, _max_card_value(action, cur_rank))
+    return None
+
+
+def _hand_has_natural_joker_bomb(hand_cards: List[str]) -> bool:
+    """手牌能否构成王炸（2 大王 + 2 小王）。"""
+    sb = hr = 0
+    for card in hand_cards:
+        c = str(card)
+        if c in ("SB", "BJ"):
+            sb += 1
+        elif c in ("HR", "RJ"):
+            hr += 1
+    return sb >= 2 and hr >= 2
+
+
+def _hand_has_stronger_bomb(
+    action: List, hand_cards: List[str], cur_rank: str = "2",
+) -> bool:
+    """剩余手牌能否构成比 action 更强的炸弹（bomb family 内部比较）。
+
+    对 StraightFlush：更强 = 王炸 / 6+ 星炸（6/7/8 星；同花顺 > 5 星及以下）。
+    对 Bomb N 张：更强 = 王炸 / 更高星 / 同星更高点数 / （N<=5 时）同花顺。
+    王炸无更强，返回 False。
+    """
+    act_key = _bomb_family_strength(action, cur_rank)
+    if act_key is None:
+        return False
+    act_level = act_key[0]
+
+    # 剩余手牌 = 手牌总量扣除 action 已用牌（防止 action 的牌被计入候选计数，
+    # 例如 5×S6 + C2-C6 SF：出 SF 后 C6 已用，S6 只剩 5 张 = 五星炸，不构成更强）。
+    hand_ct = Counter(str(c) for c in hand_cards)
+    used_ct = Counter(str(c) for c in _get_cards(action))
+    remaining_ct = hand_ct - used_ct
+
+    if _hand_has_natural_joker_bomb(
+        [c for c, cnt in remaining_ct.items() for _ in range(cnt)]
+    ) and act_level < 100:
+        return True
+
+    counts: Counter = Counter()
+    for card, cnt in remaining_ct.items():
+        rk = get_card_rank(str(card)) if GUARD_TOOLS_OK else (
+            str(card)[1] if len(str(card)) >= 2 else str(card))
+        if rk in ("SB", "HR", "BJ", "RJ"):
+            continue
+        counts[rk] += cnt
+
+    for rank, cnt in counts.items():
+        if cnt < 4:
+            continue
+        if GUARD_TOOLS_OK:
+            rank_val = get_card_value("S" + rank, cur_rank)
+        else:
+            rank_val = CARD_RANK_ORDER.get(rank, 0)
+        cand_key = (cnt * 10, rank_val)
+        if cand_key > act_key:
+            return True
+
     return False
 
 
