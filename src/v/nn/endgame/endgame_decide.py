@@ -1550,7 +1550,20 @@ class EndgameDecider:
 
             if bomb_first:
                 # 先炸后整：出最大炸弹
-                return self._select_best_bomb(bombs, action_list)
+                # GUA-221: 炸后剩余牌必须 ≤1 或构成一手整牌，否则（炸弹拆自同张数牌型）
+                # 先炸=空扔拆结构，炸完只剩散牌，落回先整后炸（保炸出单等）。
+                bomb_idx, bomb_action = self._select_best_bomb(bombs, action_list)
+                bomb_cards = _get_cards(bomb_action)
+                hand_cards = game_state.get("handCards", []) or []
+                remain = list((Counter(hand_cards) - Counter(bomb_cards)).elements())
+                remain_type = get_action_type(remain) if GUARD_TOOLS_OK else None
+                if len(remain) <= 1 or remain_type not in (None, ACTION_TYPE_FREE):
+                    return (bomb_idx, bomb_action)
+                logger.info(
+                    "Q0 跳过 bomb_first(GUA-221): 炸后剩 %d 张非整手 %s，先整后炸",
+                    len(remain), remain,
+                )
+                bomb_first = False
 
             # GUA-151: 领出时炸后剩牌 ≤1（一次清场或仅剩单张）→ 直接出炸抢头游
             # 避免 prefer_structure_first 把炸排在整牌后面，
