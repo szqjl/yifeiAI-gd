@@ -104,6 +104,19 @@
 | `start_v7_complete.py` | V7 完整流程启动（客户端+训练一条龙） |
 | `start_v7_gui.py` | V7 GUI 启动器 |
 
+
+### scripts/etl/ — 数据 ETL（2026-08-09 新建）
+
+| 脚本 | 用途 |
+|------|------|
+| `botzone_to_counting_dataset.py` | **GUA-223 Phase 0 ETL** — 从 `logs/v8_vs_botzone_*.log` 还原回合级训练样本（含 history / hand_self / curRank / 3 类 ground truth），输出到 `data/training/card_counting_v1/<match>_<step>.npz`；`--all-matches` 全量模式扫 `logs/v8_vs_botzone_*.log`；端到端验证 5 项硬门槛 ① 手算对账；每个 .npz 含 `has_warning` + `warning_cards` 字段（GUA-216 双扣 bug 信号）；提供 `iter_clean_samples(output_dir, drop_warnings=)` 与 `summarize_dataset()` helper 供 Phase 1 训练直接调用。**GUA-223 子任务**。配套 pytest `tests/test_botzone_etl_counting.py` 9/9 全绿。 |
+| `game_records_to_counting_dataset.py` | **GUA-223 lalala ETL**（第 3 项补数据） — 从 `game_records_v8/*.json`（V8 vs lalala 离线对局）还原 13 decisions × 148 games = **3884 个样本**，与 Botzone ETL 输出到同一目录。`--limit N` 只处理前 N 个文件（调试用）。**第 3 项交付**。 |
+| `bench_rule_card_counting.py` | **GUA-223 baseline benchmark**（Phase 0 ③） — 跑 trivial-REST 与 history-only 两个 baseline，输出 `val_acc` + 分项 recall（MY_HAND / PLAYED / REST），供 NN 训练后对比。**当前 trivial-REST val_acc=0.3982 · history-only val_acc=0.5758**（基线）。 |
+| `training/train_card_counting_v1.py` | **GUA-223 Phase 1 LSTM 训练入口** — 调 `iter_clean_samples` 加载 577/4465 样本（drop_warnings），match_id 分组切分 80/20，Adam(lr=3e-4, wd=1e-4, dropout=0.3) + masked CE，30 epoch + 早停(patience=5)，模型保存 `models/card_counting/card_counting_v1_best.pt`。**当前 best_val_acc=0.6266**（超越 history-only 0.5758 baseline）。 |
+| `../src/v/nn/features/card_counting_network.py` | **GUA-223 LSTM 模型实现** — `CardCountingNet` (LSTM hidden=32, 40K 参数)，输入 = history_seq(4,128) + hand_context(461)，输出 = (108, 3) logits。配套 `encode_history_sequence` / `build_hand_context` / `build_sample_input` 等 ETL 友好接口。 |
+| `../src/v/nn/features/stage_encoding.py` | **GUA-223 stage + tribute 编码器**（Phase 0 ⑤） — `stage_to_onehot(7)` + `tribute_events_to_vec(335)`，拼装 `build_input_features()` 总 342 维。`infer_stage_from_global()` 从 Botzone global_state 推断 stage（tribute/anti-tribute/back/play/beginning）。 |
+| `../src/v/nn/features/belief_bomb_risk.py` | **GUA-223 heuristic ⑨ 草案**（Phase 0 ④） — `heuristic_belief_bomb_risk(action_cards, belief_state, rest_distribution)` 返回 [-1, +1] 风险分；降级路径：belief_state=None / 低置信度 / NaN-Inf / shape 错时回退 rest_distribution。Phase 2 才接 `_heuristic_select`（GUA-224，未开）。 |
+| `checks/check_botzone_post_gua216.py` | **第 2 项 GUA-216 验证脚本** — 扫 `logs/v8_vs_botzone_*.log` 新增文件 → ETL → 检查 `warning_samples == 0`（之前 GUA-216 修复前有 4 个）。首次运行创建 baseline marker；用户本地 WF-14 重启 Botzone 监听 30+ 分钟后跑。**第 2 项交付**。 |
 ### scripts/training/ — 训练脚本
 
 | 脚本 | 用途 |

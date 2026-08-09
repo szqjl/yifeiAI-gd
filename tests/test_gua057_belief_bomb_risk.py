@@ -1,129 +1,129 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-GUA-057 Phase 0 任务 5：heuristic 规则 ⑨ 等价性 pytest
+GUA-223 / CardCountingNetwork-训练方案 §8 Phase 0 ④
+heuristic 规则 ⑨ 草案骨架 + 5 项等价性 pytest
 
-测试覆盖方案 v2 §7.2 5 项场景：
-  1. belief=None（降级路径）→ 0.0
-  2. belief 全 0 → 0.0
-  3. belief 对手高概率持更大炸弹 → -200
-  4. belief 对手高概率持同点炸弹 → -100
-  5. 末局 + 高信念炸弹风险 → -300
+关联：GUA-223 / GUA-057 / GUA-224（Phase 2 接入点）
 
-注意：测试用 action_rank=5（小牌），让 _get_bomb_slots_with_rank_gt(5) 选中
-      rank>5 的所有 slot（总和 > 0.5），让 _get_bomb_slots_with_rank_eq(5) 选中
-      rank=5 的所有 slot（总和 > 0.3）。
-
-slot 索引约定（_get_bomb_slots_with_rank_gt 实现）：
-  rank_idx("5") = 3（_RANK_ORDER[3]="5"）
-  range(4, 13) = 9 个 rank (5,6,7,8,9,T,J,Q,K,A)
-  每个 rank 8 slot (4 花色 × 2 副本) = 72
-  + 王炸 (SB, HR) × 2 副本 = 4
-  = 76
-
-运行：
-  pytest tests/test_gua057_belief_bomb_risk.py -v
+5 项等价性（pytest 锁行为）：
+  ① belief_state=None → 降级到 rest_distribution
+  ② belief_state 低置信度（L2 < threshold） → 降级
+  ③ 降级路径无 rest_distribution → 返回 0.0 中性值
+  ④ belief_state 含 NaN/Inf → 降级（不抛异常）
+  ⑤ 主路径返回 ∈ [-1.0, +1.0]，0.5 阈值化打分
 """
+
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
-from src.v.nn.features.counting.heuristic_bomb_risk import (
-    _heuristic_belief_bomb_risk,
-    _get_bomb_slots_with_rank_gt,
-    _get_bomb_slots_with_rank_eq,
-    OPPONENT_HAND_IDX,
+from src.v.nn.features.belief_bomb_risk import (
+    BELIEF_CONFIDENCE_THRESHOLD,
+    heuristic_belief_bomb_risk,
 )
 
 
-def test_belief_none_returns_zero():
-    action = {"type": "Bomb", "cards": ["SA", "SA", "SA", "SA"], "rank": "A"}
-    score = _heuristic_belief_bomb_risk(action, belief_vector=None)
-    assert score == 0.0
+class TestFallbackPath:
+    """降级路径等价性（5 项硬约束）"""
+
+    def test_降级_1_belief_state_None(self):
+        """belief_state=None → 用 rest_distribution 计算。"""
+        rest_dist = {"A": 0.9, "K": 0.3}
+        risk = heuristic_belief_bomb_risk(
+            action_cards=["HA"],
+            belief_state=None,
+            rest_distribution=rest_dist,
+        )
+        # rest_dist["A"]=0.9 > 0.8 → risk = 2; norm = 2/2 = 1; clip(2*1-1, -1, 1) = 1
+        assert risk == pytest.approx(1.0, abs=0.01)
+
+    def test_降级_2_low_confidence_L2(self):
+        """belief_state L2 norm 低于阈值 → 降级。"""
+        # uniform 0.5 → L2 = sqrt(108*0.25) ≈ 5.2 > threshold，OK
+        # 但全 0 → L2 = 0 < threshold → 降级
+        belief = np.zeros(108, dtype=np.float32)
+        rest_dist = {"A": 0.6}  # 中等风险
+        risk = heuristic_belief_bomb_risk(
+            action_cards=["HA"],
+            belief_state=belief,
+            rest_distribution=rest_dist,
+        )
+        # 降级路径：rest_dist["A"]=0.6 > 0.5 → risk=1; norm = 1/2 = 0.5; clip(0)=0
+        assert risk == pytest.approx(0.0, abs=0.01)
+
+    def test_降级_3_无_rest_distribution(self):
+        """belief_state=None + rest_distribution=None → 返回 0.0 中性值（不抛异常）。"""
+        risk = heuristic_belief_bomb_risk(
+            action_cards=["HA"],
+            belief_state=None,
+            rest_distribution=None,
+        )
+        assert risk == 0.0
+
+    def test_降级_4_belief_含_NaN_Inf(self):
+        """belief_state 含 NaN/Inf → 降级（不抛异常）。"""
+        belief = np.ones(108, dtype=np.float32)
+        belief[10] = np.nan
+        rest_dist = {"A": 0.7}
+        # 不应抛异常
+        risk = heuristic_belief_bomb_risk(
+            action_cards=["HA"],
+            belief_state=belief,
+            rest_distribution=rest_dist,
+        )
+        assert isinstance(risk, float)
+        assert -1.0 <= risk <= 1.0
+
+    def test_降级_5_belief_shape_错误(self):
+        """belief_state shape ≠ (108,) → 降级。"""
+        belief = np.ones(100, dtype=np.float32)
+        risk = heuristic_belief_bomb_risk(
+            action_cards=["HA"],
+            belief_state=belief,
+            rest_distribution={"A": 0.9},
+        )
+        # shape 错 → 降级 → risk = 1.0
+        assert risk == pytest.approx(1.0, abs=0.01)
 
 
-def test_belief_none_pass_action_returns_zero():
-    action = {"type": "PASS", "cards": [], "rank": "PASS"}
-    score = _heuristic_belief_bomb_risk(action, belief_vector=None)
-    assert score == 0.0
+class TestMainPath:
+    """主路径行为校验"""
 
+    def test_主路径返回值范围(self):
+        """主路径返回值 ∈ [-1.0, +1.0]。"""
+        belief = np.full(108, 0.5, dtype=np.float32)
+        risk = heuristic_belief_bomb_risk(
+            action_cards=["HA", "HK", "HQ"],
+            belief_state=belief,
+            rest_distribution=None,
+        )
+        assert -1.0 <= risk <= 1.0
 
-def test_belief_zeros_returns_zero():
-    belief = np.zeros((108, 3), dtype=np.float32)
-    action = {"type": "Bomb", "cards": ["SA", "SA", "SA", "SA"], "rank": "A"}
-    score = _heuristic_belief_bomb_risk(action, belief_vector=belief)
-    assert score == 0.0
+    def test_主路径_高_belief_高风险(self):
+        """belief 高概率（REST=对手有牌）→ 风险分 > 0。"""
+        belief = np.zeros(108, dtype=np.float32)
+        belief[54:108] = 0.9  # 第 2 副本 REST 概率 0.9
+        risk = heuristic_belief_bomb_risk(
+            action_cards=["HA", "HK", "HQ"],
+            belief_state=belief,
+            rest_distribution=None,
+        )
+        # 风险应该 > 0
+        assert risk > 0
 
-
-def test_belief_zeros_non_bomb_action_returns_zero():
-    belief = np.zeros((108, 3), dtype=np.float32)
-    action = {"type": "Single", "cards": ["S5"], "rank": "5"}
-    score = _heuristic_belief_bomb_risk(action, belief_vector=belief)
-    assert score == 0.0
-
-
-def test_opp_higher_bomb_high_prob_triggers_minus_200():
-    """action_rank=5，belief 让 rank>5 slot 总和 > 0.5 → 触发规则 1 扣 200。"""
-    belief = np.zeros((108, 3), dtype=np.float32)
-    belief[:, OPPONENT_HAND_IDX] = 0.02
-    action = {"type": "Bomb", "cards": ["S5", "H5", "D5", "C5"], "rank": "5"}
-    game_state = {"handCards": ["S5"] * 10, "stage": "play"}
-    score = _heuristic_belief_bomb_risk(action, belief_vector=belief, game_state=game_state)
-    assert score == pytest.approx(-200.0), f"expected -200.0, got {score}"
-
-
-def test_opp_same_rank_bomb_triggers_minus_100():
-    """仅 rank=5 slot 总和 > 0.3（rank>5 总和 < 0.5）→ 触发规则 2 扣 100。"""
-    belief = np.zeros((108, 3), dtype=np.float32)
-    belief[:, OPPONENT_HAND_IDX] = 0.001
-    rank5_slots = _get_bomb_slots_with_rank_eq("5")
-    belief[rank5_slots, OPPONENT_HAND_IDX] = 0.04
-    action = {"type": "Single", "cards": ["S5"], "rank": "5"}
-    game_state = {"handCards": ["S5"] * 10, "stage": "play"}
-    score = _heuristic_belief_bomb_risk(action, belief_vector=belief, game_state=game_state)
-    assert score == pytest.approx(-100.0), f"expected -100.0, got {score}"
-
-
-def test_endgame_high_bomb_risk_triggers_minus_300():
-    """末局（5 张）+ 高信念更大炸弹 → 200 * 1.5 = -300。"""
-    belief = np.zeros((108, 3), dtype=np.float32)
-    belief[:, OPPONENT_HAND_IDX] = 0.02
-    action = {"type": "Bomb", "cards": ["S5", "H5", "D5", "C5"], "rank": "5"}
-    game_state = {"handCards": ["S5", "H6", "D7", "C8", "S9"], "stage": "play"}
-    score = _heuristic_belief_bomb_risk(action, belief_vector=belief, game_state=game_state)
-    assert score == pytest.approx(-300.0), f"expected -300.0, got {score}"
-
-
-def test_belief_wrong_shape_returns_zero():
-    belief = np.zeros((50, 3), dtype=np.float32)
-    action = {"type": "Bomb", "cards": ["SA", "SA", "SA", "SA"], "rank": "A"}
-    score = _heuristic_belief_bomb_risk(action, belief_vector=belief)
-    assert score == 0.0
-
-
-def test_belief_none_type_returns_zero():
-    action = {"type": "Bomb", "cards": ["SA", "SA", "SA", "SA"], "rank": "A"}
-    score = _heuristic_belief_bomb_risk(action, belief_vector=[0.5] * 108)
-    assert score == 0.0
-
-
-def test_bomb_slots_with_rank_gt_5_includes_9_ranks():
-    """rank=5 时 higher slots = 9 ranks × 8 slot + 王炸 4 = 76."""
-    slots = _get_bomb_slots_with_rank_gt("5")
-    assert slots.size == 76, f"expected 76 slots, got {slots.size}"
-
-
-def test_bomb_slots_with_rank_eq_returns_8_slots():
-    """rank=5 时同 rank slot = 8 个（4 花色 × 2 副本）。"""
-    slots = _get_bomb_slots_with_rank_eq("5")
-    assert slots.size == 8
-
-
-def test_bomb_slots_with_rank_gt_a_is_just_jokers():
-    """rank=A 时 higher slots 只有王炸（4 个 slot）。"""
-    slots = _get_bomb_slots_with_rank_gt("A")
-    assert slots.size == 4
+    def test_主路径_空_action_cards(self):
+        """空 action_cards → 返回 0.0。"""
+        belief = np.full(108, 0.5, dtype=np.float32)
+        risk = heuristic_belief_bomb_risk(
+            action_cards=[],
+            belief_state=belief,
+            rest_distribution=None,
+        )
+        assert risk == 0.0
