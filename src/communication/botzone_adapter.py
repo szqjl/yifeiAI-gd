@@ -258,7 +258,7 @@ class ActionListGenerator:
                         actions.append(self._three_with_two_action(trips, pair))
 
         # Straights
-        actions.extend(self._generate_straights(rank_groups, suits))
+        actions.extend(self._generate_straights(rank_groups, suits, hand_cards))
 
         # StraightFlushes
         for suit, s_cards in suits.items():
@@ -396,6 +396,8 @@ class ActionListGenerator:
                 choices = [self._uniq_cards(rank_groups[r]) for r in window]
                 for combo in itertools.product(*choices):
                     actions.append(self._straight_action(list(combo), low))
+            # GUA-217: 跟牌轮配子补普通顺子缺位（能压 greater 的候选）
+            actions.extend(self._generate_wild_straights(hand_cards, greater_straight_top))
 
         # Also add all bombs as valid follow plays
         if greater_type not in ("Bomb", "StraightFlush"):
@@ -600,10 +602,12 @@ class ActionListGenerator:
         return result
 
     def _generate_straights(self, rank_groups: Dict[str, List[str]],
-                            suits: Dict[str, List[str]]) -> List[list]:
+                            suits: Dict[str, List[str]],
+                            hand_cards: Optional[List[str]] = None) -> List[list]:
         """Generate straight actions (官方：只能五张相连，A 可作 1 或 14）。
 
         全组合：窗口内每个 rank 选一张（去重后前 3 张候选），笛卡尔积。
+        hand_cards 非空时叠加 H{cur_rank} 配子补缺位候选（GUA-217）。
         """
         actions = []
         rank_set = set(rank_groups.keys())
@@ -612,6 +616,42 @@ class ActionListGenerator:
             choices = [self._uniq_cards(rank_groups[r]) for r in window]
             for combo in itertools.product(*choices):
                 actions.append(self._straight_action(list(combo), low))
+        # GUA-217: 配子补普通顺子缺位（如 A2345 缺 3 → H{cur_rank} 当 3）。
+        # 此前手牌 HA+D2+H2+D4+S5 组牌引擎识别 A2345，但 actionList 只有
+        # Single×5+Pair×1，残局 Q0 只能拆 HA 打 Single/A（match 6a7772fb）。
+        if hand_cards:
+            actions.extend(self._generate_wild_straights(hand_cards))
+        return actions
+
+    def _generate_wild_straights(self, hand_cards: List[str],
+                                 greater_top: Optional[int] = None) -> List[list]:
+        """H{cur_rank} 配子补普通顺子缺位（GUA-217，领出/跟牌共用）。
+
+        cur_rank=2 时 H2 万能牌可补 5 连窗口任意缺位 rank（如 HA+D2+H2+D4+S5
+        → A2345，H2 当 3）；配子放 cards 末尾，rank 取窗口低牌 window[0]。
+        greater_top 非空时（跟牌轮）只保留窗口最高牌 order > greater_top 的候选。
+        """
+        wild = f"H{self.cur_rank}"
+        wild_count = hand_cards.count(wild)
+        if wild_count == 0:
+            return []
+        actions = []
+        natural = [c for c in hand_cards if c != wild]
+        natural_groups = self._group_by_rank(natural)
+        for window in self._all_straight_windows():
+            missing = [r for r in window if r not in natural_groups]
+            if not missing or len(missing) > wild_count:
+                continue
+            if greater_top is not None:
+                # 窗口最高牌（A2345 → '5'）带级牌提升，与 _straight_top_order 一致
+                if _rank_to_order(window[-1], self.cur_rank) <= greater_top:
+                    continue
+            low = window[0]
+            choices = [self._uniq_cards(natural_groups[r])
+                       for r in window if r not in missing]
+            for combo in itertools.product(*choices):
+                cards = list(combo) + [wild] * len(missing)
+                actions.append(self._straight_action(cards, low))
         return actions
 
     def _generate_straight_flushes(self, suit_cards: List[str],
@@ -1464,6 +1504,17 @@ class BotzoneAdapter:
             if claim_cards is not None:
                 return v8_to_bz_cards(claim_cards)
             return bz_ints
+        if chosen[0] == "Straight":
+            # GUA-217: 配子补普通顺子缺位（如 HA+D2+H2+D4+S5 → A2345），claim
+            # 须把配子替换为所代表 rank 的牌，否则含 H2 的 claim 被判 INVALID_TYPE。
+            low_rank = chosen[1] if len(chosen) >= 2 else ""
+            try:
+                claim_cards = self._replace_straight_covering(v8_cards, cur_rank, low_rank)
+                if claim_cards is not None:
+                    return v8_to_bz_cards(claim_cards)
+            except Exception as exc:  # 兜底：不阻断出牌，退回 claim==action
+                logger.warning("构造顺子 claim 失败，退回 claim==action: %s", exc)
+            return bz_ints
         if chosen[0] != "StraightFlush":
             return bz_ints
         low_rank = chosen[1] if len(chosen) >= 2 else ""
@@ -1538,6 +1589,46 @@ class BotzoneAdapter:
         for suit in ("H", "D", "S", "C"):
             if suit not in used_suits:
                 return natural + [f"{suit}{rank}"] * covering_cnt
+        return None
+
+    def _replace_straight_covering(self, v8_cards: List[str], cur_rank: str,
+                                   low_rank: str = "") -> Optional[List[str]]:
+        """H+cur_rank 逢人配普通顺子：把配子替换为窗口缺位 rank 的牌。
+
+        与 _replace_sf_covering 相同逻辑但用于普通顺子（非同花）：普通顺子
+        无花色约束，配子补位任意 rank，替换花色取一未在自然牌中出现的花色
+        即可保证 claim 判型唯一。返回 None 表示无需替换（配子作自然级牌，
+        如 A2345 窗口的 H2），claim==action 即可。
+        """
+        covering = f"H{cur_rank}"
+        covering_cnt = v8_cards.count(covering)
+        natural = [c for c in v8_cards if c != covering]
+        if not natural or len(natural) + covering_cnt != len(v8_cards):
+            return None
+        nranks = {_card_rank(c) for c in natural}
+        windows = ActionListGenerator._all_straight_windows()
+        if low_rank:
+            windows = [w for w in windows if w[0] == low_rank]
+        for window in windows:
+            missing = [r for r in window if r not in nranks]
+            if len(missing) != covering_cnt:
+                continue
+            if cur_rank in missing:
+                return None  # 配子作自然级牌，claim==action 即合法
+            by_rank: Dict[str, str] = {}
+            for c in natural:
+                by_rank.setdefault(_card_rank(c), c)
+            used_suits = {c[0] for c in natural}
+            result = []
+            for r in window:
+                if r in by_rank:
+                    result.append(by_rank[r])
+                else:
+                    for suit in ("H", "D", "S", "C"):
+                        if suit not in used_suits:
+                            result.append(f"{suit}{r}")
+                            break
+            return result
         return None
 
 

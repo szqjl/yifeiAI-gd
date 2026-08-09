@@ -4861,10 +4861,17 @@ class UltimateWinRateEngineV7:
             ):
                 return None
 
-        bomb = self._recommend_bomb_from_mask(
-            card_mask, cur_rank,
-            action_list=game_state.get("actionList") or [],
-        )
+        # GUA-218: 抢攻选炸最廉优先（保留高价值同花顺给后续领出）。
+        # greater 已保证非炸类（上方 gt 拦截），任意炸都能赢回合；
+        # _mid_aggressive_value_check 已保证 enemy_bomb_risk_max<0.5，
+        # 故最廉炸足够。不带入 GUA-172 主路径的「单张王 PASS 优先」。
+        bomb = self._recommend_cheapest_bomb_from_action_list(
+            game_state.get("actionList") or [], cur_rank)
+        if not bomb:
+            bomb = self._recommend_bomb_from_mask(
+                card_mask, cur_rank,
+                action_list=game_state.get("actionList") or [],
+            )
         if not bomb:
             return None
 

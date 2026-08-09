@@ -1515,3 +1515,68 @@ def test_online_single_turn_applies_own_history_to_hand():
     # 退化为 PASS，p2_92 实测。改动前此断言固化了双扣行为）。
     assert "HA" not in game.hand_cards, sorted(game.hand_cards)
     assert len(game.hand_cards) == 26, len(game.hand_cards)
+
+
+def test_lead_wild_straight_fills_gap():
+    """GUA-217：配子 H{cur_rank} 补普通顺子缺位。
+
+    锚点：match=v8_14_online_6a7772fb 回合12 手牌 ['HA','D2','H2','D4','S5']，
+    组牌引擎识别 A2345 顺子，但修复前 actionList 只有 Single×5+Pair×1，
+    残局 Q0 只能拆 HA 打 Single/A。修复后必须含 Straight/A（H2 当 3）。
+    """
+    gen = ActionListGenerator(cur_rank="2")
+    hand = ["HA", "D2", "H2", "D4", "S5"]
+    actions = gen.generate_lead_actions(hand)
+    straights = [a for a in actions if a[0] == "Straight"]
+    assert any(s[1] == "A" and sorted(s[2]) == sorted(["HA", "D2", "H2", "D4", "S5"])
+               for s in straights), f"应含 A2345 配子补位顺子: {straights}"
+
+
+def test_lead_wild_straight_currank_dynamic():
+    """GUA-217：配子补位用动态级牌 H{cur_rank}，非写死 H2。
+
+    级牌=6 时 H6 可补 2-6 窗口缺位（3,4,5 由自然牌补），生成 Straight/2。
+    写死 H2 的实现在此场景漏候选（GUA-200 同款教训）。
+    """
+    gen = ActionListGenerator(cur_rank="6")
+    hand = ["D2", "H6", "D3", "D4", "D5"]  # H6 当 6，补 2-6
+    actions = gen.generate_lead_actions(hand)
+    straights = [a for a in actions if a[0] == "Straight"]
+    assert any(s[1] == "2" and len(s[2]) == 5 for s in straights), \
+        f"级牌6 应生成 2-6 顺子: {straights}"
+
+
+def test_follow_wild_straight_beats_greater():
+    """GUA-217：跟牌轮配子补普通顺子，须能压 greater（比窗口最高牌）。
+
+    对手 3-7（rank '3'，最高 7），我方 H2 补 4 的 4-8（最高 8）应保留，
+    而 H2 补 2 的 2-6（最高 6）不能压 → 排除。
+    """
+    gen = ActionListGenerator(cur_rank="2")
+    greater = ["Straight", "3", ["S3", "H4", "D5", "C6", "S7"]]  # 3-7
+    hand = ["H2", "D5", "D6", "S7", "S8", "C3"]  # 4-8 用 H2 当 4
+    follow = gen.generate_follow_actions(hand, greater)
+    straights = [a for a in follow if a[0] == "Straight"]
+    keys = {(s[1], tuple(sorted(s[2]))) for s in straights}
+    assert ("4", ("D5", "D6", "H2", "S7", "S8")) in keys, \
+        f"4-8 配子补位应保留: {straights}"
+
+
+def test_claim_straight_wild_replaces_covering():
+    """GUA-217：普通顺子含配子时 claim 须替换配子为所代表 rank 的牌。
+
+    否则含 H2 的 claim 被判 invalid → INVALID_TYPE（G2，与同花顺同规则）。
+    替换花色取未在自然牌中出现者（claim 判型唯一）。
+    """
+    from src.communication.botzone_adapter import BotzoneAdapter
+    adapter = BotzoneAdapter.__new__(BotzoneAdapter)
+    chosen = ["Straight", "A", ["HA", "D2", "D4", "S5", "H2"]]
+    claim = adapter._build_bz_claim(chosen, "2", [0, 1, 2, 3, 4])
+    assert claim is not None and len(claim) == 5
+    claim_v8 = bz_to_v8_cards(claim)
+    # H2 替换为 rank 3（任一非 H/D/S 已占用花色 → C3）
+    assert "H2" not in claim_v8, f"配子应被替换: {claim_v8}"
+    assert "C3" in claim_v8, f"应含补位 rank 3: {claim_v8}"
+    # 配子作自然级牌（H2 当 2）→ 无需替换，claim==action
+    chosen_natural = ["Straight", "A", ["HA", "H2", "D3", "D4", "S5"]]
+    assert adapter._build_bz_claim(chosen_natural, "2", [0, 1, 2, 3, 4]) == [0, 1, 2, 3, 4]
