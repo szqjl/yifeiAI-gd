@@ -1916,6 +1916,14 @@ class EndgameDecider:
         if enemy_one_bomb_lock is not None:
             return enemy_one_bomb_lock
 
+        # ④.5e GUA-220 Tier 1：下家剩 2 张 + 队友剩 5 张且前序打过 TWT →
+        # 优先不组炸弹送队友 TWT（豁免隐式配子炸过滤；下家 2 张压不了 TWT，队友可一手走完）
+        twt_feed = self._q1_feed_teammate_twt_when_downseat_two(
+            game_state, non_banned_candidates, ec,
+        )
+        if twt_feed is not None:
+            return twt_feed
+
         # ④.5d GUA-202：我方领出 + 队友 close → 优先送牌（防整牌锁敌抢跑）
         lead_feed = self._q1_lead_feed_teammate_special(
             game_state, non_banned_candidates, ec,
@@ -2540,7 +2548,7 @@ class EndgameDecider:
                 continue
             if atype in ("Bomb", "StraightFlush", "JokerBomb"):
                 continue
-            if self._is_bomb_destroying_action(act, hand_cards):
+            if self._is_bomb_destroying_action(act, hand_cards, game_state):
                 continue
             # 不拆 core 整牌结构（TTT/TWT/Trips 等，见 GUA-202 细案 §2.2）
             if _breaks_core_subgroup(
@@ -2587,6 +2595,139 @@ class EndgameDecider:
         logger.info("Q1 领出送队友(GUA-202): idx=%d type=%s",
                     ordered[0][0], get_action_type(ordered[0][1]))
         return ordered[0]
+
+    def _q1_feed_teammate_twt_when_downseat_two(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-220 Tier 1：下家剩 2 张 + 队友剩 5 张且前序打过 TWT → 优先不组炸弹送队友 TWT。
+
+        下家剩 2 张时盲出对子可能被下家对子直接压赢（头游）。若队友剩 5 张且本局前序
+        出过 ThreeWithTwo（MemoryTracker.play_history 证据，队友可能正是 5 张 TWT 一手牌），
+        优先放弃隐式配子炸（如 3K+H2），改送 TWT——下家 2 张压不了 TWT，队友可一手走完。
+        因此本特判**豁免** `_is_bomb_destroying_action` 过滤（这正是「不组炸弹」之意）。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if not self._is_my_q1_lead_turn(game_state, my_pos):
+            return None
+        down_pos = (my_pos + 1) % 4
+        down = (ec.get("enemies") or {}).get(down_pos)
+        if down is None or int(down.get("remaining", 0) or 0) != 2:
+            return None
+
+        teammate = ec.get("teammate", {})
+        if not teammate.get("is_close") or int(teammate.get("remaining", 0) or 0) != 5:
+            return None
+
+        # 队友前序打过 TWT（MemoryTracker.play_history 证据）
+        tracker = game_state.get("_memory_tracker")
+        mate_pos = (my_pos + 2) % 4
+        played_twt = False
+        if tracker is not None:
+            for entry in getattr(tracker, "play_history", []) or []:
+                if entry.get("seat") != mate_pos:
+                    continue
+                atype = str(entry.get("action_type", "") or "").upper()
+                if "THREEWITHTWO" in atype or "THREE_WITH_TWO" in atype:
+                    played_twt = True
+                    break
+        if not played_twt:
+            return None
+
+        hand_cards = list(game_state.get("handCards", []) or [])
+        cur_rank = str(game_state.get("curRank", "2"))
+        twt_candidates: List[Tuple[int, List]] = []
+        for idx, act in candidates:
+            try:
+                atype = get_action_type(act)
+            except Exception:
+                continue
+            if atype != ACTION_TYPE_THREE_WITH_TWO:
+                continue
+            if _is_bomb_like_action(act):
+                continue
+            twt_candidates.append((idx, act))
+        if not twt_candidates:
+            return None
+
+        ordered = sorted(
+            twt_candidates,
+            key=lambda item: (_max_card_value(item[1], cur_rank), not _has_recapture(item[1], hand_cards, cur_rank)),
+        )
+        logger.info("Q1 下家2张送队友TWT(GUA-220): idx=%d type=%s",
+                    ordered[0][0], get_action_type(ordered[0][1]))
+        return ordered[0]
+
+    def _q1_downseat_two_single_first(
+        self,
+        singles: List[Tuple[int, List]],
+        game_state: Dict[str, Any],
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-220 Tier 2：下家剩 2 张时优先出单（单先于对），逼下家拆对。
+
+        下家剩 2 张且我方领出：若直接出对子，下家一旦持更大对（如 QQ）即可压赢头游。
+        改先出**能逼下家拆对的最小单张**——下家拆对后只剩 1 张，我方后续继续领出时
+        再出对子，下家单张无法应对。安全约束：
+          1. 不拆我方炸弹（_is_bomb_destroying_action，含 GUA-219 隐式配子炸）
+          2. 出该单后我方仍持有更大的非炸单张可回收（保证能继续领出，不把牌权白送）
+        """
+        if not singles:
+            return None
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if not self._is_my_q1_lead_turn(game_state, my_pos):
+            return None
+        down_pos = (my_pos + 1) % 4
+        down = (ec.get("enemies") or {}).get(down_pos)
+        if down is None or int(down.get("remaining", 0) or 0) != 2:
+            return None
+
+        hand_cards = list(game_state.get("handCards", []) or [])
+        cur_rank = str(game_state.get("curRank", "2"))
+        feasible = []
+        for idx, act in singles:
+            if self._is_bomb_destroying_action(act, hand_cards, game_state):
+                continue
+            cards = _get_cards(act)
+            if not cards:
+                continue
+            lead_value = get_card_value(cards[0], cur_rank)
+            if not self._hand_has_recapture_single(
+                hand_cards, cards, lead_value, cur_rank, game_state,
+            ):
+                continue
+            feasible.append((lead_value, idx, act))
+        if not feasible:
+            return None
+
+        feasible.sort(key=lambda item: item[0])
+        logger.info("Q1 下家2张优先出单(GUA-220): idx=%d type=%s",
+                    feasible[0][1], get_action_type(feasible[0][2]))
+        return (feasible[0][1], feasible[0][2])
+
+    def _hand_has_recapture_single(
+        self,
+        hand_cards: List[str],
+        played_cards: List[str],
+        lead_value: int,
+        cur_rank: str,
+        game_state: Dict[str, Any],
+    ) -> bool:
+        """出 lead 单后，剩余手牌仍持有更大的非炸单张可回收（保证继续领出）。"""
+        remaining = list((Counter(hand_cards) - Counter(played_cards)).elements())
+        for card in remaining:
+            if get_card_value(card, cur_rank) <= lead_value:
+                continue
+            rec_act = ["Single", "", [card]]
+            if self._is_bomb_destroying_action(rec_act, hand_cards, game_state):
+                continue
+            return True
+        return False
 
     def _q1_teammate_single_cover_special(
         self,
@@ -2682,11 +2823,22 @@ class EndgameDecider:
             hand_cards = list(game_state.get("handCards", []) or [])
             safe_structured = [
                 (i, a) for i, a in structured
-                if not self._is_bomb_destroying_action(a, hand_cards)
+                if not self._is_bomb_destroying_action(a, hand_cards, game_state)
                 and get_action_type(a) not in ("Bomb", "StraightFlush", "JokerBomb")
             ]
             if safe_structured:
-                return self._select_enemy_one_locking_structure(safe_structured, game_state)
+                best_lock = self._select_enemy_one_locking_structure(safe_structured, game_state)
+                if best_lock is not None:
+                    # GUA-220：下家剩 2 张时，若整牌锁首选是对子（2 张，下家 2 张可压），
+                    # 改单先于对（逼下家拆对；出后继续领出再出对锁死）；
+                    # 顺子/TWT/Trips 等 3+ 张下家 2 张压不了，仍直接锁死（GUA-078 语义）。
+                    if get_action_type(best_lock[1]) == ACTION_TYPE_PAIR:
+                        downseat_single = self._q1_downseat_two_single_first(
+                            singles, game_state, ec,
+                        )
+                        if downseat_single is not None:
+                            return downseat_single
+                    return best_lock
 
         safe_single = self._select_enemy_one_safe_single(singles, game_state, ec)
         if safe_single is not None:
@@ -2811,8 +2963,15 @@ class EndgameDecider:
 
     def _is_bomb_destroying_action(
         self, act: List, hand_cards: List[str],
+        game_state: Optional[Dict[str, Any]] = None,
     ) -> bool:
-        """检查非炸弹候选是否消耗了炸弹核心牌（手牌某rank≥4张时，该候选用了1-3张）。"""
+        """检查非炸弹候选是否消耗了炸弹核心牌。
+
+        GUA-219：优先回溯组牌引擎 `_group_members`——识别**隐式配子炸**
+        （如 3K+H2 成 Bomb/K，K 天然仅 3 张，旧 rank≥4 计数识别不到）。
+        对 Bomb/StraightFlush 组：action 用了组内**部分**成员（overlap 非空且
+        != members_set）即判拆炸；组牌信息缺失时回退手牌某 rank≥4 张的显式炸计数。
+        """
         act_cards = _get_cards(act)
         if not act_cards:
             return False
@@ -2822,6 +2981,22 @@ class EndgameDecider:
             return False
         if atype in ("Bomb", "StraightFlush", "JokerBomb"):
             return False
+
+        # GUA-219：组牌引擎真源（识别隐式配子炸，同花顺/炸弹组保留配子成员）
+        group_members = (game_state or {}).get("_group_members")
+        gid_type_map = (game_state or {}).get("_group_gid_type_map", {})
+        if group_members:
+            act_set = set(act_cards)
+            for gid, members in group_members.items():
+                gtype = gid_type_map.get(gid) or gid_type_map.get(str(gid), "")
+                if gtype not in ("Bomb", "StraightFlush"):
+                    continue
+                members_set = set(members)
+                overlap = act_set & members_set
+                if overlap and overlap != members_set:
+                    return True
+
+        # 回退：手牌某 rank≥4 张的显式炸计数
         from collections import Counter
         act_counter = Counter(act_cards)
         hand_counter = Counter(hand_cards)
@@ -2846,7 +3021,7 @@ class EndgameDecider:
         def _key(item: Tuple[int, List]):
             _, act = item
             atype = get_action_type(act)
-            bomb_destroy = self._is_bomb_destroying_action(act, hand_cards)
+            bomb_destroy = self._is_bomb_destroying_action(act, hand_cards, game_state)
             return (
                 _q1_structure_priority(atype),
                 0 if not bomb_destroy else 1,
