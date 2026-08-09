@@ -1963,6 +1963,16 @@ class EndgameDecider:
             game_state, non_banned_candidates, ec, main_pos, main_enemy,
         )
 
+        # GUA-222: 敌方报单剩 1 张 + 跟牌压单 → 用最大单张压（忽略回收优先）。
+        # 回收优先排序会把「拆对出的单」排到散单前（出 9 后 J 可回收、出 J 无可回收），
+        # 实测 match 6a782bde：手 SJ+H7S7+D9D9 压 Single/5 选拆对 D9，被下家最后一张
+        # 压过 done；报单敌方残余 1 张接走即丢头游，应取最大牌力单张。
+        enemy_one_press = self._q1_enemy_one_single_press_max(
+            game_state, non_banned_candidates, ec, main_pos, main_enemy,
+        )
+        if enemy_one_press is not None:
+            return enemy_one_press
+
         # ④ 走 recommended 优先（主目标）
         rec_types = main_enemy.get("recommended_types", [])
         if rec_types:
@@ -2940,6 +2950,56 @@ class EndgameDecider:
             "GUA-190 enemy-one bomb lock: idx=%s type=%s",
             picked[0],
             _get_declared_action_type(picked[1]) if GUARD_TOOLS_OK else "?",
+        )
+        return picked
+
+    def _q1_enemy_one_single_press_max(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        GUA-222：敌方（任一阵营玩家）报单剩 1 张 + 我方跟牌压单时，
+        取最大牌力单张压（忽略「回收优先」排序）。
+
+        回收优先排序会把拆对出的单排到散单前（如手 SJ+H7S7+D9D9 压 Single/5 时，
+        出 D9 后 J 可回收、出 SJ 无可回收 → 选拆对 D9）。但报单敌方残余最后一张
+        随时可能接走，丢头游风险远大于保留大单回收的价值。
+        """
+        enemies = ec.get("enemies", {}) or {}
+        if not any(
+            int(e.get("remaining", 27) or 27) == 1
+            for e in enemies.values()
+            if isinstance(e, dict)
+        ):
+            return None
+        greater_action = game_state.get("greaterAction")
+        if not greater_action:
+            return None
+        try:
+            gtype = get_action_type(greater_action)
+        except Exception:
+            gtype = None
+        if gtype != ACTION_TYPE_SINGLE:
+            return None
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if game_state.get("curPos", my_pos) == my_pos:
+            return None
+        singles = [
+            (i, a) for i, a in candidates
+            if _get_declared_action_type(a) == ACTION_TYPE_SINGLE
+        ]
+        if not singles:
+            return None
+        cur_rank = str(game_state.get("curRank", "2"))
+        picked = max(singles, key=lambda item: _max_card_value(item[1], cur_rank))
+        logger.info(
+            "GUA-222 enemy-one single press: idx=%d type=%s",
+            picked[0],
+            _get_declared_action_type(picked[1]),
         )
         return picked
 
