@@ -308,9 +308,14 @@ class UltimateWinRateEngineV7:
             self.logger.debug("decision trace begin skip: %s", e)
 
     def _prefer_stronger_same_cards_action(
-        self, act_index: int, action_list: List,
+        self, act_index: int, action_list: List, game_state: Optional[Dict[str, Any]] = None,
     ) -> int:
-        """GUA-161：同牌同时可声明 StraightFlush 时禁止选择 Straight。"""
+        """GUA-161：同牌同时可声明 StraightFlush 时禁止选择 Straight。
+
+        GUA-232: 自由领出（greaterPos 为自己的新轮）时禁止升级——同花顺是炸弹，
+        领出禁炸（R10）；只有跟压/残局（game_state 明确非自由领出）才允许升级。
+        game_state=None 时保持旧行为（升级）以兼容既有调用。
+        """
         if not 0 <= act_index < len(action_list):
             return act_index
         chosen = action_list[act_index]
@@ -318,6 +323,19 @@ class UltimateWinRateEngineV7:
             return act_index
         if chosen[0] != "Straight" or not isinstance(chosen[2], list):
             return act_index
+
+        # GUA-232: 自由领出禁升级（同花顺=炸弹，R10 领出禁炸）
+        if game_state is not None:
+            my_pos = game_state.get("myPos", self.player_id)
+            greater_pos = game_state.get("greaterPos", -1)
+            cur_pos = game_state.get("curPos", -1)
+            is_free_lead = (cur_pos == -1) or (greater_pos in (-1, my_pos))
+            if is_free_lead:
+                self.logger.info(
+                    "GUA-232 自由领出禁升级同花顺: Straight idx=%d → 保持 Straight",
+                    act_index,
+                )
+                return act_index
 
         from collections import Counter
 
@@ -339,8 +357,10 @@ class UltimateWinRateEngineV7:
             )
             return index
         return act_index
-    def _trace_finalize(self, act_index: int, action_list: List) -> int:
-        act_index = self._prefer_stronger_same_cards_action(act_index, action_list)
+    def _trace_finalize(
+        self, act_index: int, action_list: List, game_state: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        act_index = self._prefer_stronger_same_cards_action(act_index, action_list, game_state)
         chosen_action = (
             action_list[act_index]
             if 0 <= act_index < len(action_list)
@@ -531,7 +551,7 @@ class UltimateWinRateEngineV7:
         action_list = game_state.get("actionList", [])
         self._replay_record("input", {"candidate_count": len(action_list)})
         if not action_list:
-            return self._trace_finalize(0, action_list)
+            return self._trace_finalize(0, action_list, game_state)
 
         # ── ① 组牌引擎 ──
         self._run_grouping_engine(game_state)
@@ -708,7 +728,7 @@ class UltimateWinRateEngineV7:
                                 "endgame_hit",
                                 {"actIndex": orig_i, "action": endgame_act},
                             )
-                            return self._trace_finalize(orig_i, original_action_list)
+                            return self._trace_finalize(orig_i, original_action_list, game_state)
                     else:
                         self.logger.warning("残局决策未在原始 actionList 中匹配到: %s", endgame_act[:3] if len(endgame_act) >= 3 else endgame_act)
                 # 残局未命中 → 恢复 action_list（已过滤 banned）→ 继续 GUA-075
@@ -832,7 +852,7 @@ class UltimateWinRateEngineV7:
                             self._last_decision_layer = "GUA-075推荐"
                             self._last_decision_score = None
                             self._last_decision_candidates = len(action_list)
-                            return self._trace_finalize(act_index, action_list)
+                            return self._trace_finalize(act_index, action_list, game_state)
                         # 被拦截时继续往下走到回退路径
                     else:
                         self._replay_record(
@@ -1053,7 +1073,7 @@ class UltimateWinRateEngineV7:
                     self._last_decision_layer = "NN+heuristic覆盖" if need_heuristic_override else "NN"
                     self._last_decision_score = self._last_nn_confidence
                     self._last_decision_candidates = len(group_actions)
-                    return self._trace_finalize(original_idx, action_list)
+                    return self._trace_finalize(original_idx, action_list, game_state)
 
             # 回退到启发式规则引擎（GUA-071 _heuristic_select）
             self.heuristic_decisions += 1
@@ -1066,13 +1086,14 @@ class UltimateWinRateEngineV7:
                 self._last_decision_layer = "启发式"
                 self._last_decision_score = None
                 self._last_decision_candidates = len(group_actions)
-                return self._trace_finalize(original_idx, action_list)
+                return self._trace_finalize(original_idx, action_list, game_state)
             self._last_decision_layer = "规则回退"
             self._last_decision_score = None
             self._last_decision_candidates = len(group_actions)
             return self._trace_finalize(
                 self._rule_based_decision(game_state, group_actions),
                 action_list,
+                game_state,
             )
 
         except Exception as e:
@@ -1091,7 +1112,7 @@ class UltimateWinRateEngineV7:
             original_idx = self._match_chosen_to_original_action_list(
                 chosen, action_list
             )
-            return self._trace_finalize(original_idx, action_list)
+            return self._trace_finalize(original_idx, action_list, game_state)
 
     def _inject_belief_vector(self, game_state: Dict[str, Any]) -> None:
         """GUA-072：从 MemoryTracker 注入规则记牌信念到 game_state['_belief']。"""
@@ -2156,6 +2177,21 @@ class UltimateWinRateEngineV7:
                 if group_id >= 0 and used_count > 0
             }
             touched_types.discard(None)
+
+            # GUA-224: 完整复合动作豁免——声明是 TwoTrips/ThreePair/ThreeWithTwo
+            # 且动作牌用满所有触及的复合子组（无部分使用）时，是完整牌型而非半组。
+            # 组牌引擎常把钢板/三连对的子组归入 trip_in_three_with_two /
+            # pair_in_three_with_two（如 777+888+55 中 777 被组进 TWT 子组），
+            # 完整 TwoTrips(777888) 会因触及该子组被旧逻辑误拦 → 回退打低牌力 TWT
+            # 被更大 TWT（如 KKK）压制。此处用 allocation 判定完整性后放行。
+            if declared in ("TwoTrips", "ThreePair", "ThreeWithTwo"):
+                partial = any(
+                    0 < used_count < len(self._group_members.get(group_id, []))
+                    for group_id, used_count in allocation.items()
+                    if group_id >= 0 and used_count > 0
+                )
+                if not partial:
+                    return False
         else:
             touched_types = set()
             for card in action_cards:
@@ -2494,11 +2530,15 @@ class UltimateWinRateEngineV7:
 
         singles = list(self._scatter_singles(card_mask))
         pair_gtypes = ("pair", "pair_in_three_with_two", "pair_in_three_pair")
+        # GUA-233: 级牌 trips（如 curRank=2 时的三个 2）跟压可拆单，牌力强过普通单。
+        # 普通 trips 仍不拆（保持 GUA-081 整组牌理）。
+        trips_gtypes = ("trips", "trip_in_three_with_two")
         respect_r12 = self._has_any_natural_single(hand_cards, cur_rank)
         assist_borrow_ranks = {"9", "T", "J"}
 
         for _gid, ginfo in groups.items():
-            if ginfo["type"] not in pair_gtypes:
+            is_trips = ginfo["type"] in trips_gtypes
+            if ginfo["type"] not in pair_gtypes and not is_trips:
                 continue
             if respect_r12:
                 for card in ginfo["cards"]:
@@ -2513,6 +2553,8 @@ class UltimateWinRateEngineV7:
                         singles.append(card)
                 continue
             if ginfo["is_core"] <= 0:
+                if is_trips:
+                    raise ValueError("trips 组不应 is_core<=0")
                 singles.extend(ginfo["cards"])
                 continue
             for card in ginfo["cards"]:
@@ -5226,6 +5268,26 @@ class UltimateWinRateEngineV7:
             if c_type == greater_type and c_val > greater_val:
                 candidates.append((c_val, gid, ginfo, c_rank, c_type))
 
+        # GUA-233: 压对时允许拆「级牌 trips」（curRank 的三张）取对子，牌力强过普通对。
+        if greater_type == "Pair":
+            for gid, ginfo in groups.items():
+                gtype = ginfo["type"]
+                if gtype != "trips":
+                    continue
+                trip_cards = ginfo["cards"]
+                if not trip_cards:
+                    continue
+                t_rank = get_card_rank(str(trip_cards[0]))
+                if t_rank != cur_rank:
+                    continue
+                if len(trip_cards) < 2:
+                    continue
+                t_val = get_card_value(str(trip_cards[0]), cur_rank)
+                if t_val <= greater_val:
+                    continue
+                pair_two = sorted(str(c) for c in trip_cards)[:2]
+                candidates.append((t_val, gid, ginfo, t_rank, "Pair"))
+
         if not candidates:
             return None
 
@@ -5233,10 +5295,16 @@ class UltimateWinRateEngineV7:
         candidates.sort(key=lambda x: x[0])
         _, gid, ginfo, c_rank, c_type = candidates[0]
 
+        # GUA-233: trips 拆对 → 只取两张（普通对子/Pair 组取全量）
+        if ginfo["type"] == "trips" and c_type == "Pair":
+            out_cards = sorted(str(c) for c in ginfo["cards"])[:2]
+        else:
+            out_cards = sorted(ginfo["cards"])
+
         return {
             "type": c_type,
             "rank": _to_platform_rank(c_rank),
-            "cards": sorted(ginfo["cards"]),
+            "cards": out_cards,
         }
 
     def _build_three_with_two_press(
