@@ -212,6 +212,8 @@
 - `check_endgame_agent.py` — **残局智能体独立调试**（独立/扫描/单记录三种模式）
 - `check_q1_rule_table_consistency.py` — **Q1 规则表静态校验**（`endgame_rule` / `BAOSHU_RULE` 自洽性）
 - `check_endgame_anomalies.py` — **残局异常扫描器**（优先抓“临门 PASS”与“推荐被过滤到只剩 PASS”）
+- `check_endgame_solver.py` — **V8 残局确定性败招归因（不完美信息）**——以 `actions` 日志为唯一真源重建自己手牌（`initial_hand` 扣减已出，已验证可靠），规则检测 R1 报单不压 / R3 一手清拆牌 / R4 临门不炸（仅线索）；**级牌/配子语义**：逢人配=红桃级牌 `H{curRank}`，单张牌力 >A <小王（`trick_state.rank_value` 级牌=15.5）；`src/v/nn/endgame/endgame_solver.py` 完美信息 alpha-beta 求解器仅作参考（V8 牌谱无四家手牌，无法喂真完美信息）
+- `discover_rule_candidates.py` — **自动规则挖掘（b 路线：事后统计败招）v1**——真源 `docs/guandan-brain/自动规则挖掘-discover_rule_candidates-设计方案.md`。从自对弈池 `game_records_v8/*.json` 切片决策点（默认 yf1_v8 视角、`stage==play`），按 A 状态键（手牌规模 + greater 牌型 + 点数）分桶，桶内动作→队名次（`result.order`/`victoryNum`）对比，产出「同键下名次显著更差的动作」候选。默认只挖跟压场景（`--lead` 开启可含领出）。**注意**：37 副池样本过稀（多动作桶单动作≥5 仅 3 个），出可信候选须先扩自对弈池至数百副
 
 ### scripts/cos/ — COS 云端存储
 
