@@ -1212,6 +1212,18 @@ class EndgameDecider:
         if teammate_remaining != 6:
             return None, None
 
+        # GUA-229 下家报单禁止送单：下家（my_pos+1）剩 1 张时，送单=直接把牌权送对手跑
+        next_pos = (my_pos + 1) % 4
+        next_remaining = self._estimate_player_remaining(
+            next_pos, ec, game_state,
+        )
+        if next_remaining == 1:
+            logger.info(
+                "GUA-229 下家报单禁止送单: next=%d remaining=%d 放弃 GUA-160 送单",
+                next_pos, next_remaining,
+            )
+            return None, None
+
         cur_rank = str(game_state.get("curRank", "2"))
         card_mask = game_state.get("_card_mask") or {}
         scatter_cards = {
@@ -1266,6 +1278,19 @@ class EndgameDecider:
             teammate_pos, ec, game_state,
         )
         if teammate_remaining != 0:
+            return None, None
+
+        # GUA-229 下家报单禁止送单：队友已头游但下家（my_pos+1）剩 1 张时，
+        # 送单=把牌权直接送对手跑，争双上的前提崩塌
+        next_pos = (my_pos + 1) % 4
+        next_remaining = self._estimate_player_remaining(
+            next_pos, ec, game_state,
+        )
+        if next_remaining == 1:
+            logger.info(
+                "GUA-229 下家报单禁止送单: next=%d remaining=%d 放弃 GUA-161 送单",
+                next_pos, next_remaining,
+            )
             return None, None
 
         cur_rank = str(game_state.get("curRank", "2"))
