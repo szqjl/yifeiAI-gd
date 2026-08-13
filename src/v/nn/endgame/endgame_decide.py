@@ -1046,6 +1046,14 @@ class EndgameDecider:
         if self._should_relax_single_ban_for_enemy_five(game_state, ec, action_list):
             banned_set.discard(ACTION_TYPE_SINGLE)
 
+        # GUA-235：baoshu never_play 的 Bomb/SF（报四「火不打四」）只约束跟压，
+        # 不约束自由领出 / Q0 两手冲刺。否则敌剩 4 时硬删 Bomb → 冲刺看不到
+        # 「Straight/A 剩五星炸」residue，退化出 Single/A（match=6a7c7876）。
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if self._is_my_q1_lead_turn(game_state, my_pos):
+            banned_set.discard(ACTION_TYPE_BOMB)
+            banned_set.discard(ACTION_TYPE_STRAIGHT_FLUSH)
+
         if not banned_set:
             return action_list, False
 
@@ -1537,17 +1545,34 @@ class EndgameDecider:
                                 reverse=True,
                             )
                             return self._select_best_index(structured_acts, action_list, game_state)
-                # GUA-XXX: 自由领出时，优先完整组合动作（TWT/ThreePair/TwoTrips）
-                # 平台 actionList 可能截断此类动作；若组牌重建后可用则优先选
+                # GUA-236: 仅剩顺+TWT（或任意两手整牌）→ 两手冲刺择优，顺优先于 TWT
+                all_cands = [(i, a) for i, a in enumerate(action_list)]
+                sprint_lead = self._select_two_turn_sprint_structure(
+                    non_bombs, all_cands, game_state, ec,
+                    prefer_structure_first=True,
+                )
+                if sprint_lead is not None:
+                    return sprint_lead
+                # 自由领出：完整组合（TWT/ThreePair/TwoTrips）优先于散拆；
+                # 若同时有 Straight，用结构优先级保证顺 > TWT
                 structure_acts = [
                     (i, a) for i, a in non_bombs
                     if _get_declared_action_type(a) in (
+                        ACTION_TYPE_STRAIGHT,
                         ACTION_TYPE_THREE_WITH_TWO,
                         ACTION_TYPE_THREE_PAIR,
                         ACTION_TYPE_TWO_TRIPS,
                     )
                 ]
                 if structure_acts and is_my_turn:
+                    structure_acts.sort(
+                        key=lambda item: (
+                            _q1_structure_priority(
+                                _effective_structure_type(item[1])
+                            ),
+                            -len(_get_cards(item[1])),
+                        ),
+                    )
                     return structure_acts[0]
                 return self._select_best_index(non_bombs, action_list, game_state)
             return None
@@ -4409,6 +4434,10 @@ class EndgameDecider:
           圈 2: yf2 领出 6J → 三家 PASS
           圈 3: yf2 领出 777+888 三连对 → 三家 PASS
           圈 4: yf2 领出 22 对 → 三家 PASS → yf2 头游
+
+        GUA-235：无更大 TWT 可跟时，若仍有 Bomb/SF 可压，回退常规 Q1（与 C1
+        「有普通炸则 return None」对齐）。旧逻辑直接 PASS，导致敌剩 6 出 TWT
+        时有五星炸/同花顺却过牌（match=6a7c7876）。
         """
         if not ctx:
             return None
@@ -4421,6 +4450,16 @@ class EndgameDecider:
                 kind,
             )
             return twt
+        has_bomb_like = any(
+            isinstance(a, list) and _is_bomb_like_action(a)
+            for a in action_list
+        )
+        if has_bomb_like:
+            logger.info(
+                "GUA-134 C3/C5/C6(%s): 无更大 TWT，有 Bomb/SF 可压 → 回退常规 Q1",
+                ctx.get("c356_kind", "unknown"),
+            )
+            return None
         pass_act = self._find_pass_action(action_list)
         if pass_act is not None:
             return pass_act

@@ -789,14 +789,18 @@ def _detect_three_with_two(
     trips: List[List[str]], pairs: List[List[str]], cur_rank: str,
     singles: Optional[List[str]] = None,
     bomb_core_ranks: Optional[Set[str]] = None,
+    wilds: Optional[List[str]] = None,
 ) -> Tuple[List[Tuple[List[str], List[str]]], List[List[str]], List[List[str]]]:
     """
     从三张和对子中检测三带二。
     返回 (three_with_twos, remaining_trips, remaining_pairs)。
     贪心匹配：每个 trip 搭配一个 pair，消耗 5 张牌 → 1 轮（相比 trip+pair 单独出省 1 轮）。
     GUA-084：跳过炸核 rank / pool 内 ≥4 张同点的对子。
+    GUA-236：可选 wilds（就地消费）——对子+逢人配升三头再带另一对，避免
+    「先顺剥 trip 剩两对+配子」无法组 TWT、被迫升炸拆顺。
     """
-    if not trips or not pairs:
+    rem_w = wilds if wilds is not None else []
+    if (not trips and not (rem_w and len(pairs) >= 2)) or not pairs:
         return [], trips[:], pairs[:]
 
     pool_s = list(singles or [])
@@ -821,6 +825,21 @@ def _detect_three_with_two(
         pair = remaining_pairs.pop(pair_idx)
         three_with_twos.append((trip, pair))
         remaining_trips.remove(trip)
+
+    # GUA-236: 配子 + 对子 → 三头，再带另一对
+    while rem_w and len(remaining_pairs) >= 2:
+        rank_counts = _pool_rank_counts(pool_s, remaining_pairs, remaining_trips)
+        trip_base = remaining_pairs.pop(0)
+        wing_idx = None
+        for i, pr in enumerate(remaining_pairs):
+            if not _pair_reserved_for_twt(pr, reserved_ranks, rank_counts):
+                wing_idx = i
+                break
+        if wing_idx is None:
+            remaining_pairs.insert(0, trip_base)
+            break
+        wing = remaining_pairs.pop(wing_idx)
+        three_with_twos.append((trip_base + [rem_w.pop(0)], wing))
 
     return three_with_twos, remaining_trips, remaining_pairs
 
@@ -1790,11 +1809,13 @@ def _run_multi_pass_loop(
             new_tp, p = _detect_three_pairs(p, cur_rank)
             three_pairs.extend(new_tp)
             new_twt, t, p = _detect_three_with_two(
-                t, p, cur_rank, singles=s, bomb_core_ranks=bomb_core_ranks)
+                t, p, cur_rank, singles=s, bomb_core_ranks=bomb_core_ranks,
+                wilds=w)
             three_with_twos.extend(new_twt)
         else:
             new_twt, t, p = _detect_three_with_two(
-                t, p, cur_rank, singles=s, bomb_core_ranks=bomb_core_ranks)
+                t, p, cur_rank, singles=s, bomb_core_ranks=bomb_core_ranks,
+                wilds=w)
             three_with_twos.extend(new_twt)
 
         # 2. 三张 — 保留 trip 结构（不做额外检测，trip 在步骤 7 降级前保持原样）
@@ -1990,6 +2011,7 @@ def _enumerate_plans(
         three_pair_first: bool = False,
         straight_before_twt: bool = False,
         straight_start_offset: int = 0,
+        upgrade_wild_bombs: bool = True,
     ) -> GroupingPlan:
         all_sf = nat_sf + wild_sf
 
@@ -2037,9 +2059,12 @@ def _enumerate_plans(
         bomb_core_ranks = _bomb_core_ranks(remaining_bombs)
 
         # Step 3: wild → 升炸（逢人配先固化，避免被顺子/三带二消耗）
-        up_bombs, pool_t, pool_w = _upgrade_bombs_with_wilds(pool_t, pool_w, cur_rank)
-        remaining_bombs = remaining_bombs + up_bombs
-        bomb_core_ranks = _bomb_core_ranks(remaining_bombs)
+        # GUA-236: upgrade_wild_bombs=False 保留配子给顺/TWT，禁止「为炸拆顺材料」
+        if upgrade_wild_bombs:
+            up_bombs, pool_t, pool_w = _upgrade_bombs_with_wilds(
+                pool_t, pool_w, cur_rank)
+            remaining_bombs = remaining_bombs + up_bombs
+            bomb_core_ranks = _bomb_core_ranks(remaining_bombs)
 
         # Step 4: {} 多 pass 循环
         pool_s, pool_p, pool_t, pool_w, straights, three_pairs, steel_plates, twt_list = _run_multi_pass_loop(
@@ -2079,6 +2104,7 @@ def _enumerate_plans(
         three_pair_first: bool = False,
         straight_before_twt: bool = False,
         offset_variants: bool = False,
+        upgrade_wild_bombs: bool = True,
     ) -> None:
         offsets = STRAIGHT_OFFSETS if offset_variants else (0,)
         for off in offsets:
@@ -2090,7 +2116,8 @@ def _enumerate_plans(
                 bridge_bomb_idx=bridge_bomb_idx,
                 three_pair_first=three_pair_first,
                 straight_before_twt=straight_before_twt,
-                straight_start_offset=off))
+                straight_start_offset=off,
+                upgrade_wild_bombs=upgrade_wild_bombs))
 
     if all_sf_results:
         # 有同花顺候选：SF 三策略 + GUA-084 BOMB_FIRST 保炸候选
@@ -2121,6 +2148,12 @@ def _enumerate_plans(
                 nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
                 "STRAIGHT_BEFORE_TWT", break_bombs=True, double_st=False,
                 large_bomb_peel=0, straight_before_twt=True, offset_variants=True)
+            # GUA-236: 保留配子给顺+TWT，禁止为炸拆顺材料
+            _add_plan_variants(
+                nat, wild, rem_s, rem_p, rem_t, rem_w, res_b,
+                "KEEP_WILD_ST_TWT", break_bombs=True, double_st=False,
+                large_bomb_peel=0, straight_before_twt=True,
+                upgrade_wild_bombs=False, offset_variants=True)
             for bridge_idx in _eligible_straight_bridge_bombs(
                 rem_s, rem_p, rem_t, rem_w, res_b, cur_rank
             ):
@@ -2160,6 +2193,12 @@ def _enumerate_plans(
             [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
             "STRAIGHT_BEFORE_TWT", break_bombs=True, double_st=False,
             large_bomb_peel=0, straight_before_twt=True, offset_variants=True)
+        # GUA-236: 保留配子给顺+TWT，禁止为炸拆顺材料
+        _add_plan_variants(
+            [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
+            "KEEP_WILD_ST_TWT", break_bombs=True, double_st=False,
+            large_bomb_peel=0, straight_before_twt=True,
+            upgrade_wild_bombs=False, offset_variants=True)
         for bridge_idx in _eligible_straight_bridge_bombs(
             sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs, cur_rank
         ):
@@ -2255,8 +2294,10 @@ def _extract_features(
 
     strategy_ids = {"SF_FIRST": 0, "BOMB_FIRST": 1, "BALANCED": 2,
                     "ROUND_OPTIMAL": 3, "NO_STRAIGHTS": 4, "ALL_COMBOS": 5,
-                    "STRAIGHT_BRIDGE": 6}
-    f[7] = strategy_ids.get(best.strategy, 0) / 7.0
+                    "THREE_PAIR_FIRST": 6, "STRAIGHT_BEFORE_TWT": 7,
+                    "KEEP_WILD_ST_TWT": 8, "STRAIGHT_BRIDGE": 9}
+    base_strategy = best.strategy.split("_OFF")[0]
+    f[7] = strategy_ids.get(base_strategy, 0) / 10.0
 
     # 方案多样性
     scores = [p.score for p in plans_sorted]

@@ -257,6 +257,25 @@ class ActionListGenerator:
                     for pair in pair_combos:
                         actions.append(self._three_with_two_action(trips, pair))
 
+        # GUA-236: 配子补三头组成 TWT —— 两枚同点 + H{curRank} 作 trip，再带另一对。
+        # GUA-195 只补了 Trips；缺配子 TWT 时两手清（顺 + 77H2+TT）无法命中残余一手。
+        if any(c == wild for c in hand_cards):
+            natural_groups = self._group_by_rank(
+                [c for c in hand_cards if c != wild]
+            )
+            for t_rank, t_cards in natural_groups.items():
+                if len(t_cards) < 2:
+                    continue
+                for trip_base in self._combos(t_cards, 2):
+                    trips = list(trip_base) + [wild]
+                    for p_rank, p_cards in natural_groups.items():
+                        if p_rank == t_rank or len(p_cards) < 2:
+                            continue
+                        for pair in self._combos(p_cards, 2):
+                            actions.append(
+                                self._three_with_two_action(trips, list(pair))
+                            )
+
         # Straights
         actions.extend(self._generate_straights(rank_groups, suits, hand_cards))
 

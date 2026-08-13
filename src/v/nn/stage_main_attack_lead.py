@@ -607,9 +607,15 @@ def recommend_main_attack_lead(
     _tt_units = _enumerate_two_trips_units(groups)
     _non_bomb_structures = twt_count + len(_tt_units) + len(_tp_units) + straight_count
     _scatter_singles = len(engine._scatter_singles(card_mask))
+    # GUA-174: 三连对/钢板两手冲刺；GUA-236: 顺+TWT 两手清亦视为冲刺
+    # （冲刺时跳过 P2 独 TWT，落到 P3 先出顺）
     _sprint_two_hands = (
         _non_bomb_structures == 2 and _scatter_singles == 0
-        and (len(_tp_units) > 0 or len(_tt_units) > 0)
+        and (
+            len(_tp_units) > 0
+            or len(_tt_units) > 0
+            or (straight_count >= 1 and twt_count >= 1)
+        )
     )
 
     # ── GUA-179：对手牌型弱点感知 → 优先出对手 PASS/被迫开炸过的牌型 ──
@@ -771,7 +777,15 @@ def recommend_main_attack_lead(
                 "intent": "main_p3d_trips",
             }
 
-    # GUA-174: 2-hand sprint fallback — ThreePair/TwoTrips unmatched, use TWT
+    # GUA-174/236: 2-hand sprint fallback — 顺+TWT 先顺；否则 TWT
+    if _sprint_two_hands and st_pick and straight_count >= 1 and twt_count >= 1:
+        _, typ, pr, cards = st_pick
+        return {
+            "type": typ,
+            "rank": pr,
+            "cards": cards,
+            "intent": "main_p3_straight_two_hand_sprint",
+        }
     if _sprint_two_hands and twt_pick:
         _, typ, pr, cards = twt_pick
         return {
