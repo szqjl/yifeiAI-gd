@@ -758,6 +758,19 @@ def should_allow_counter_bomb_core_exempt(
     return True
 
 
+def should_allow_gua239_single_probe(game_state: Dict[str, Any]) -> bool:
+    """GUA-239：自由领出多手「先单试探」标记 → 豁免拆核心拦截。
+
+    GUA-239 决策路径（`_q1_multi_hand_lead_single_first`）有意拆 SF/顺子核心组
+    出最小天然单（如 SF(H7,H2,H2,HT,HJ) 中出 H7），选前在 game_state 设
+    `_gua239_single_probe=True`；decide 层 `_action_breaks_core_structure`（L1432）
+    与引擎 `_group_consistency_filter` 据此放行，否则被转 PASS / 回退 GUA-075，
+    修复失效（实测 match 6a7dd97c 22:49:44）。game_state 每回合由 adapter 重建，
+    标记不会跨回合泄漏。
+    """
+    return bool(game_state and game_state.get("_gua239_single_probe"))
+
+
 def find_latent_bomb_like_beaters_not_in_action_list(
     hand_cards: List[str],
     cur_rank: str,
@@ -1429,16 +1442,18 @@ class EndgameDecider:
             if result is not None:
                 idx, action = result
                 if _get_declared_action_type(action) not in ("PASS",):
-                    if self._action_breaks_core_structure(action, game_state):
-                        pidx = next(
-                            (i for i, a in enumerate(action_list)
-                             if _get_declared_action_type(a) in ("PASS",)),
-                            None,
-                        )
-                        if pidx is not None:
-                            logger.info("Q1 封锁拆整牌(%s) → PASS",
-                                        _get_declared_action_type(action))
-                            return (pidx, action_list[pidx])
+                    # GUA-239：多手自由领出先单试探有意拆 SF/顺子核心 → 豁免拆核心转 PASS
+                    if not should_allow_gua239_single_probe(game_state):
+                        if self._action_breaks_core_structure(action, game_state):
+                            pidx = next(
+                                (i for i, a in enumerate(action_list)
+                                 if _get_declared_action_type(a) in ("PASS",)),
+                                None,
+                            )
+                            if pidx is not None:
+                                logger.info("Q1 封锁拆整牌(%s) → PASS",
+                                            _get_declared_action_type(action))
+                                return (pidx, action_list[pidx])
                 logger.info("Q1 封锁敌方: idx=%d type=%s", idx, get_action_type(action) if GUARD_TOOLS_OK else "?")
                 return idx, action
 
@@ -1999,6 +2014,22 @@ class EndgameDecider:
         )
         if enemy_one_lead is not None:
             return enemy_one_lead
+
+        # GUA-239: 自由领出 + 本方多手（≥4 手且含对子 ≥2）+ 下家剩 6 张 + 有天然单
+        # → 先出最小天然单试探（保留大王 HR / 对子 ≥2 作回手），而非匹配 recommended
+        # 甩整牌 SF/Straight。实测 match 6a7dd97c 22:49:44：V8 手 SF(H7,H2,H2,HT,HJ)+HR
+        # +4 对、下家 P3 剩 6 张，Q1 把 SF（GUA-232 降级成 Straight）当 5 张整牌打出，
+        # 被 P1 Straight/8 压死失权、对子烂手；正确应先出最小单张 7（下家 6→5），
+        # 大王回手后出对子（对子克 5 张）。
+        # 出 H7 有意拆 SF 核心组 → 设 _gua239_single_probe 标记，决定层/引擎据此豁免
+        # 拆核心拦截（否则被转 PASS / 回退 GUA-075）。须在 _filter_q1_core_break_candidates
+        # 之前执行（该过滤会把拆核心的 Single H7 提前滤除）。
+        gua239 = self._q1_multi_hand_lead_single_first(
+            game_state, non_banned_candidates, ec,
+        )
+        if gua239 is not None:
+            game_state["_gua239_single_probe"] = True
+            return gua239
 
         # GUA-210: 封锁候选过滤「拆核心」动作——级牌单张若在 StraightFlush /
         # straight / 炸弹核心组内（如 SF S2-S6 的 S2），Q1 通用路径会优先选级牌
@@ -3003,6 +3034,111 @@ class EndgameDecider:
         )
         return picked
 
+    def _q1_multi_hand_lead_single_first(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        GUA-239：自由领出 + 本方多手（≥4 手且含对子 ≥2）+ 下家剩 6 张
+        + 有天然单可拆 → 出最小天然单试探，而非匹配 recommended 甩整牌。
+
+        实测 match 6a7dd97c 22:49:44：V8=player2 手 SF(H7,H2,H2,HT,HJ)+HR+4 对，
+        下家 P3 剩 6 张，Q1 把 SF（GUA-232 降级成 Straight）当 5 张整牌打出，
+        被 P1 Straight/8 压死失权，后续拆对单走、对子烂手。正确应先出最小单张
+        （H7/7）试探，大王 HR 回手，再用对子（≥2 对可回手）克下家 5 张。
+        返回 (idx, action)；调用方须据此设 `_gua239_single_probe` 标记豁免拆核心拦截。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if not self._is_my_q1_lead_turn(game_state, my_pos):
+            return None
+
+        # 下家（(my_pos+1)%4）必须是敌方且恰剩 6 张（对子克 5 张的起点）
+        enemies = ec.get("enemies", {}) or {}
+        down_pos = (my_pos + 1) % 4
+        down_enemy = enemies.get(down_pos)
+        if not isinstance(down_enemy, dict):
+            return None
+        if int(down_enemy.get("remaining", 0) or 0) != 6:
+            return None
+
+        hand_cards = list(game_state.get("handCards", []) or [])
+        if not hand_cards:
+            return None
+
+        # 本方多手：≥4 手且含对子 ≥2（组牌引擎 _group_members 多集真源）
+        hands, pair_groups = self._count_hand_structure(hand_cards, game_state)
+        if hands < 4 or pair_groups < 2:
+            return None
+
+        # 找最小天然单（rank 在手牌中仅 1 张；大小王排除，留作回手）
+        cnt = Counter(get_card_rank(c) for c in hand_cards)
+        natural_singles: List[Tuple[int, List]] = []
+        for i, a in candidates:
+            try:
+                if get_action_type(a) != ACTION_TYPE_SINGLE:
+                    continue
+            except Exception:
+                continue
+            cards = _get_cards(a)
+            if len(cards) != 1:
+                continue
+            card = cards[0]
+            rk = get_card_rank(card)
+            if rk in ("SB", "HR"):
+                continue
+            if cnt.get(rk, 0) != 1:
+                continue
+            natural_singles.append((i, a))
+        if not natural_singles:
+            return None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+        picked = min(
+            natural_singles,
+            key=lambda item: get_card_value(_get_cards(item[1])[0], cur_rank),
+        )
+        logger.info(
+            "GUA-239 multi_hand lead single_first: idx=%d type=%s",
+            picked[0], ACTION_TYPE_SINGLE,
+        )
+        return picked
+
+    @staticmethod
+    def _count_hand_structure(
+        hand_cards: List[str], game_state: Dict[str, Any],
+    ) -> Tuple[int, int]:
+        """统计手数（一手=一个可出组合）与对子组数，返回 (hands, pair_groups)。
+
+        优先用组牌引擎 `_group_members` + `_group_gid_type_map`（多集真源，
+        gid=-1 为散单每张一手）；缺失时退化为按 rank 计数粗估。
+        """
+        group_members = game_state.get("_group_members") or {}
+        group_types = game_state.get("_group_gid_type_map") or {}
+        if group_members:
+            hands = 0
+            pair_groups = 0
+            for gid, members in group_members.items():
+                if gid == -1:
+                    hands += len(members)  # 散单每张一手
+                else:
+                    hands += 1
+                    gtype = group_types.get(gid)
+                    if gtype in ("pair", "pair_in_three_pair", "pair_in_three_with_two"):
+                        pair_groups += 1
+            if hands > 0:
+                return hands, pair_groups
+        cnt = Counter(hand_cards)
+        singles = sum(1 for r, c in cnt.items() if c == 1)
+        pairs = sum(1 for r, c in cnt.items() if c == 2)
+        trips = sum(1 for r, c in cnt.items() if c == 3)
+        quads = sum(1 for r, c in cnt.items() if c == 4)
+        return singles + pairs + trips + quads * 2, pairs
+
     def _q1_enemy_one_single_press_max(
         self,
         game_state: Dict[str, Any],
@@ -3224,7 +3360,11 @@ class EndgameDecider:
             return None
 
         cur_rank = str(game_state.get("curRank", "2"))
-        sprint_candidates: List[Tuple[Tuple[int, int, int, int], Tuple[int, List]]] = []
+        # GUA-238: 残局两手 = 整牌 TWT(5) + 单张，且对手本局已对 ThreeWithTwo PASS
+        # （memory_tracker 弱点证据，如 match=6a7dcf31 连打两个 TWT 对手全 PASS）→
+        # 先出 TWT 冲刺，避免「保留 TWT 后出单」被对手压单后 TWT 卡死。
+        opponent_twt_weakness = self._opponents_twt_weak(game_state, ec)
+        sprint_candidates: List[Tuple[Tuple[int, int, int, int, int], Tuple[int, List]]] = []
         for item in structured:
             idx, act = item
             cards = _get_cards(act)
@@ -3267,8 +3407,18 @@ class EndgameDecider:
                     else 1 if declared == "Bomb" or residue_bomb_like
                     else 2
                 )
+            # GUA-238: 残手是单张 + 本候选为 TWT 整牌 + 对手对 TWT 有弱点 →
+            # 该 TWT 候选最高优先级（先出 TWT 冲刺），否则维持原排序。
+            twt_sprint_boost = 1
+            if (
+                act_type == ACTION_TYPE_THREE_WITH_TWO
+                and residue_type == ACTION_TYPE_SINGLE
+                and opponent_twt_weakness
+            ):
+                twt_sprint_boost = 0
             sprint_candidates.append((
                 (
+                    twt_sprint_boost,
                     residue_bucket,
                     bomb_sprint_rank,
                     _q1_structure_priority(act_type),
@@ -3282,6 +3432,25 @@ class EndgameDecider:
             return None
         sprint_candidates.sort(key=lambda entry: entry[0])
         return sprint_candidates[0][1]
+
+    def _opponents_twt_weak(
+        self, game_state: Dict[str, Any], ec: Dict[str, Any],
+    ) -> bool:
+        """GUA-238: 任一对手对 ThreeWithTwo 有 PASS/被迫开炸弱点证据（接不住 TWT 圈）。"""
+        tracker = game_state.get("_memory_tracker")
+        if tracker is None:
+            return False
+        if not hasattr(tracker, "get_type_weakness"):
+            return False
+        enemies = (ec.get("enemies") or {}).keys()
+        if not enemies:
+            my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+            enemies = {(my_pos + 1) % 4, (my_pos + 3) % 4}
+        for seat in enemies:
+            weakness = tracker.get_type_weakness(int(seat))
+            if weakness.get("ThreeWithTwo", 0) > 0:
+                return True
+        return False
 
     def _prune_q1_risky_same_type_lane_candidates(
         self,

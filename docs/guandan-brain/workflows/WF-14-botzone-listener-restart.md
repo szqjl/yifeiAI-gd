@@ -68,12 +68,17 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
   Where-Object { $_.CommandLine -like '*run_v8_vs_botzone*' } |
   Select-Object ProcessId, CommandLine
 
+# 一行式：定位并强制结束（仅杀掉 run_v8_vs_botzone 监听）
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+  Where-Object { $_.CommandLine -like '*run_v8_vs_botzone*' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
 # 或：tasklist + wmic
 tasklist | rg -i python
 wmic process where "name='python.exe'" get ProcessId,CommandLine | rg -i botzone
 ```
 
-确认 PID 后：
+确认 PID 后（taskkill 备选）：
 
 ```powershell
 taskkill //PID <PID> //F
@@ -81,7 +86,26 @@ taskkill //PID <PID> //F
 
 ### 2.4 用最新代码重启监听
 
-在**仓库根目录**运行（引擎 Import 依赖根目录路径，否则报「请确保在仓库根目录运行」）：
+在**仓库根目录**运行（引擎 Import 依赖根目录路径，否则报「请确保在仓库根目录运行」）。
+
+**Windows / PowerShell 7（推荐，仓库当前运行平台）**：
+
+```powershell
+# 后台启动（-PassThru 拿到进程对象；脚本自带时间戳日志，无需手动重定向）
+$proc = Start-Process -FilePath "python" -ArgumentList @(
+  "scripts/launchers/v8/run_v8_vs_botzone.py",
+  "--user-id", "<USER_ID>",
+  "--api-key", "<API_KEY>",
+  "--base-url", "https://www.botzone.org.cn/api",
+  "--opponent-bot-id", "<OPPONENT_BOT_ID>",
+  "--teammate-bot-id", "686264afa4349e61674f526a",
+  "--games", "3"
+) -WorkingDirectory (Get-Location) -RedirectStandardOutput "logs\_listener_stdout.log" `
+  -RedirectStandardError "logs\_listener_stderr.log" -PassThru -WindowStyle Hidden
+$proc.Id
+```
+
+**Linux / WSL bash（若使用）**：
 
 ```bash
 nohup python scripts/launchers/v8/run_v8_vs_botzone.py \
@@ -94,7 +118,7 @@ nohup python scripts/launchers/v8/run_v8_vs_botzone.py \
 echo "PID=$!"
 ```
 
-> 脚本自身也会建 `logs/v8_vs_botzone_<时间戳>.log`（logging FileHandler）；nohup 重定向是兜底，两份日志并存属正常，**最终以脚本自身生成的文件为准**。
+> 脚本自身也会建 `logs/v8_vs_botzone_<时间戳>.log`（logging FileHandler）；PowerShell 的 `_listener_stdout/stderr.log` 与 bash 的 nohup 重定向都只是兜底，**最终以脚本自身生成的时间戳日志为准**（脚本内部已对 stdout/stderr 强制 UTF-8）。
 
 ### 2.5 验证
 
@@ -126,8 +150,8 @@ tail -20 logs/v8_vs_botzone_*.log
 | 日志 | `logs/v8_vs_botzone_YYYYMMDD_HHMMSS.log`（不进 Git） |
 | 回归测试 | `python -m pytest tests/test_botzone_adapter.py -q`（+ 相关 GUA 测试） |
 | 定位 PID | §2.3（CommandLine 匹配 `run_v8_vs_botzone`） |
-| 停进程 | `taskkill //PID <PID> //F` |
-| 启动 | §2.4 nohup 命令（仓库根目录） |
+| 停进程 | §2.3 一行式 / `taskkill //PID <PID> //F` |
+| 启动 | §2.4（Windows: `Start-Process ... -PassThru`；bash: nohup） |
 
 ---
 
@@ -136,8 +160,9 @@ tail -20 logs/v8_vs_botzone_*.log
 | 症状 | 原因 | 处理 |
 |------|------|------|
 | `ImportError: ... 请确保在仓库根目录运行` | 在非根目录执行 | `cd` 到仓库根目录重跑 |
+| PowerShell 下 `nohup` / `$(date ...)` 报错 | bash 语法在 pwsh 不可用 | 用 §2.4 的 `Start-Process` 写法（脚本自带时间戳日志，无需手动重定向） |
 | `对局创建失败` / HTTP 500 / 403 / `{"error":"Kicked"}` | Botzone 服务器端问题 | **不是本地失败**；监听进程存活即正常，等待或手动创建对局 |
-| 日志 GBK 乱码 | Windows 控制台编码 | `iconv -f GBK -t UTF-8 logs/...` 或换 UTF-8 终端 |
+| 日志 GBK 乱码 | Windows 控制台编码 | 脚本已强制 UTF-8；确认用脚本自身时间戳日志，而非重定向兜底日志 |
 | 启动后立刻退出 | 引擎加载失败 / 端口占用 | 看日志尾部错误；确认旧监听已停（§2.3） |
 | 多 python 进程难分辨 | 同机跑批 / 其他脚本 | 一律以 CommandLine 含 `run_v8_vs_botzone` 为判据 |
 

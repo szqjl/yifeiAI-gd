@@ -139,6 +139,13 @@ class UltimateWinRateEngineV7:
         self._regroup_triggered_count: int = 0
         # 决议 8: 接风跟线 — 记忆队友末手牌型
         self._teammate_last_trick_type: Optional[str] = None   # "Pair"/"Bomb"/"StraightFlush" 等
+        # GUA-234: 动态组牌门禁 + 中期队友需求观测
+        self._score_tier: Optional[str] = None
+        self._power_gate_tier: Optional[str] = None
+        self._dynamic_regroup_enabled: bool = True
+        self._mid_feed_tracker = None  # MidgameTeammateDemandTracker，lazy
+        self._mid_feed_P: Optional[List[str]] = None
+        self._last_greater_key: Optional[Tuple[Any, ...]] = None
         # 决议 10: 投喂策略 — 5 张反馈路径状态
         self._feed_five_card_tried: bool = False                # 是否已试探过 5 张类牌型
         # 决议 6: 组牌类型映射 — group_id → 牌型字符串
@@ -173,6 +180,13 @@ class UltimateWinRateEngineV7:
         self._regroup_triggered_count = 0
         self._teammate_last_trick_type = None
         self._feed_five_card_tried = False
+        self._score_tier = None
+        self._power_gate_tier = None
+        self._dynamic_regroup_enabled = True
+        self._mid_feed_P = None
+        self._last_greater_key = None
+        if self._mid_feed_tracker is not None:
+            self._mid_feed_tracker.reset()
         self._group_type_map = {}
         self._group_members = {}
         self._tracker = None
@@ -612,6 +626,8 @@ class UltimateWinRateEngineV7:
 
         # ── ③ 接风跟线记忆 ──
         self._update_teammate_last_trick(game_state)
+        # ── ③b GUA-234 中期队友需求观测（只写字段/日志，不改出牌）──
+        self._update_midgame_teammate_demand(game_state)
 
         # ── ④ MemoryTracker 注入 ──
         if self._tracker is not None:
@@ -706,13 +722,17 @@ class UltimateWinRateEngineV7:
                             _, filter_map = self._group_consistency_filter(
                                 original_action_list, game_state,
                             )
+                            # GUA-239：多手自由领出先单试探（拆 SF 核心）→ 消费标记并豁免
+                            gua239_probe = bool(
+                                game_state.pop("_gua239_single_probe", False))
                             if orig_i < len(filter_map) and filter_map[orig_i] == -1:
-                                self.logger.warning(
-                                    "残局管线命中但被_group_consistency_filter拦截: actIndex=%d cards=%s → 回退GUA-075",
-                                    orig_i,
-                                    endgame_act[2] if len(endgame_act) >= 3 and isinstance(endgame_act[2], list) else endgame_act[:3],
-                                )
-                                break  # 跳出 for（不触发 else），不 return，继续走到 GUA-075
+                                if not gua239_probe:
+                                    self.logger.warning(
+                                        "残局管线命中但被_group_consistency_filter拦截: actIndex=%d cards=%s → 回退GUA-075",
+                                        orig_i,
+                                        endgame_act[2] if len(endgame_act) >= 3 and isinstance(endgame_act[2], list) else endgame_act[:3],
+                                    )
+                                    break  # 跳出 for（不触发 else），不 return，继续走到 GUA-075
 
                             self._endgame_hit_count += 1
                             self.logger.info(
@@ -1481,6 +1501,25 @@ class UltimateWinRateEngineV7:
 
             # 产出 2: role（决定过滤行为）
             raw_role = best_plan.role or "主攻"
+            self._score_tier = getattr(best_plan, "score_tier", None)
+            # GUA-234 §二：牌力档位门禁（冲突取更保守）
+            try:
+                from src.v.nn.midgame_teammate_demand import (
+                    resolve_power_gate_tier,
+                    dynamic_regroup_enabled,
+                )
+                self._power_gate_tier = resolve_power_gate_tier(
+                    self._score_tier, raw_role,
+                )
+                self._dynamic_regroup_enabled = dynamic_regroup_enabled(
+                    self._power_gate_tier,
+                )
+                game_state["_power_gate_tier"] = self._power_gate_tier
+                game_state["_dynamic_regroup_enabled"] = self._dynamic_regroup_enabled
+                game_state["_score_tier"] = self._score_tier
+            except Exception as e:
+                self.logger.debug("GUA-234 门禁计算失败: %s", e)
+                self._dynamic_regroup_enabled = True
             # GUA-079: 初始 role 锚锁定 — 首算若为主攻以上，锁定 role；
             # 后续重算仍跑 enumerate_groupings 更新 card_mask/features，
             # 但 role 不退化，避免强牌打着打着变畏缩
@@ -1878,7 +1917,10 @@ class UltimateWinRateEngineV7:
             return action_list, list(range(len(action_list)))
 
         # ── 过滤逻辑（角色分流） ──
-        from src.v.nn.endgame.endgame_decide import should_allow_counter_bomb_core_exempt
+        from src.v.nn.endgame.endgame_decide import (
+            should_allow_counter_bomb_core_exempt,
+            should_allow_gua239_single_probe,
+        )
 
         keep_indices: List[int] = []
         removed_count = 0
@@ -1925,6 +1967,11 @@ class UltimateWinRateEngineV7:
                 if should_allow_counter_bomb_core_exempt(
                     action, game_state, cur_rank,
                 ):
+                    keep_indices.append(idx)
+                    continue
+                # GUA-239：自由领出多手先单试探 → 拆 SF/顺子核心出最小天然单放行
+                # （有意拆核心，见 _q1_multi_hand_lead_single_first 说明）
+                if should_allow_gua239_single_probe(game_state):
                     keep_indices.append(idx)
                     continue
                 # 炸弹/同花顺 → 永不放行（全角色）
@@ -2882,6 +2929,81 @@ class UltimateWinRateEngineV7:
         self._prev_hand_size = hand_size
 
     # ── 决议 8: 接风跟线 — 记忆队友末手牌型 ──────────────────
+
+    def _ensure_mid_feed_tracker(self):
+        if self._mid_feed_tracker is None:
+            from src.v.nn.midgame_teammate_demand import MidgameTeammateDemandTracker
+            self._mid_feed_tracker = MidgameTeammateDemandTracker()
+        return self._mid_feed_tracker
+
+    def _update_midgame_teammate_demand(self, game_state: Dict[str, Any]) -> None:
+        """GUA-234 B：更新中期 demand / feed_P（观测层）。
+
+        不驱动重组；仅写入 game_state 与日志，供后续阶段 D/E 消费。
+        """
+        tracker = self._ensure_mid_feed_tracker()
+        my_pos = int(game_state.get("myPos", self.player_id) or 0)
+        teammate = (my_pos + 2) % 4
+
+        # 增量同步 MemoryTracker 出牌史（若有）
+        mt = getattr(self, "_tracker", None) or game_state.get("_memory_tracker")
+        if mt is not None and getattr(mt, "play_history", None):
+            try:
+                tracker.sync_from_play_history(mt.play_history, my_pos)
+            except Exception as e:
+                self.logger.debug("GUA-234 sync play_history 失败: %s", e)
+
+        # 本回合 greater 快照（防重复记同一控牌动作）
+        greater_pos = game_state.get("greaterPos", -1)
+        greater_action = game_state.get("greaterAction") or []
+        try:
+            gkey = (greater_pos, tuple(greater_action) if isinstance(greater_action, list) else greater_action)
+        except TypeError:
+            gkey = (greater_pos, str(greater_action))
+        if gkey != self._last_greater_key and greater_action:
+            self._last_greater_key = gkey
+            if greater_pos is not None and int(greater_pos) >= 0:
+                is_pass = (
+                    isinstance(greater_action, list)
+                    and greater_action
+                    and greater_action[0] == "PASS"
+                )
+                tracker.observe(int(greater_pos), greater_action, my_pos, is_pass=is_pass)
+
+        nop = game_state.get("numofplayers") or []
+        mate_rest = None
+        if isinstance(nop, (list, tuple)) and len(nop) > teammate:
+            try:
+                mate_rest = int(nop[teammate])
+            except (TypeError, ValueError):
+                mate_rest = None
+
+        feed_p = tracker.compute_feed_P(mate_rest)
+        self._mid_feed_P = feed_p
+        snap = tracker.snapshot()
+        game_state["_mid_feed_P"] = feed_p
+        game_state["_mid_feed_snapshot"] = snap
+        game_state["_dynamic_regroup_enabled"] = bool(self._dynamic_regroup_enabled)
+        if self._power_gate_tier:
+            game_state["_power_gate_tier"] = self._power_gate_tier
+
+        if feed_p or snap.get("twt_topped_out") or snap.get("straight_pressed_unreclaimed"):
+            self.logger.info(
+                "GUA-234 mid_feed: enabled=%s tier=%s P=%s snap=%s",
+                self._dynamic_regroup_enabled,
+                self._power_gate_tier,
+                feed_p,
+                {
+                    k: snap.get(k)
+                    for k in (
+                        "raw_main",
+                        "play_count",
+                        "twt_topped_out",
+                        "twt_pressed_unreclaimed",
+                        "straight_pressed_unreclaimed",
+                    )
+                },
+            )
 
     def _update_teammate_last_trick(self, game_state: Dict[str, Any]) -> None:
         """每轮 decide() 入口处调用，检测队友末手牌型并记忆。
