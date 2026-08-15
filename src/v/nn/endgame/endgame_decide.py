@@ -1062,10 +1062,14 @@ class EndgameDecider:
         # GUA-235：baoshu never_play 的 Bomb/SF（报四「火不打四」）只约束跟压，
         # 不约束自由领出 / Q0 两手冲刺。否则敌剩 4 时硬删 Bomb → 冲刺看不到
         # 「Straight/A 剩五星炸」residue，退化出 Single/A（match=6a7c7876）。
+        # GUA-240：Trips 同理——下家报三（三同张）never_play Trips，自由领出
+        # 若硬删 Trips/AAA，Q0 冲刺只剩 Single+Pair 被 GUA-182 误判两对拆 AAA
+        # （match=6a7f1a17，手牌 AAA+9 拆 Pair/A）。自由领出是进攻非跟压，豁免。
         my_pos = ec.get("my_pos", game_state.get("myPos", 0))
         if self._is_my_q1_lead_turn(game_state, my_pos):
             banned_set.discard(ACTION_TYPE_BOMB)
             banned_set.discard(ACTION_TYPE_STRAIGHT_FLUSH)
+            banned_set.discard(ACTION_TYPE_TRIPS)
 
         if not banned_set:
             return action_list, False
@@ -1518,7 +1522,14 @@ class EndgameDecider:
                         if _get_declared_action_type(a) not in (ACTION_TYPE_PASS, "PASS")
                     ]
                     types = {_get_declared_action_type(a) for _, a in plays}
-                    if types == {ACTION_TYPE_PAIR, ACTION_TYPE_SINGLE}:
+                    # GUA-240: 必须真是两手整对（rank 分布 2+2）才对子优先。
+                    # AAA+9（A×3+9×1）被 banned 删 Trips 后 types 失真成
+                    # {Pair,Single}，不得把「一手三张+一单」误判为两对拆 AAA
+                    # （match=6a7f1a17，21:37:58 拆 Pair/A）。
+                    is_two_pairs = sorted(
+                        Counter(get_card_rank(c) for c in hand_cards).values()
+                    ) == [2, 2]
+                    if is_two_pairs and types == {ACTION_TYPE_PAIR, ACTION_TYPE_SINGLE}:
                         pair_acts = [
                             (i, a) for i, a in plays
                             if _get_declared_action_type(a) == ACTION_TYPE_PAIR
@@ -2191,18 +2202,133 @@ class EndgameDecider:
                     return [rank_map[r] for r in window]
         return None
 
+    @staticmethod
+    def _find_two_trips_cards(hand_cards: List[str]) -> Optional[List[str]]:
+        """
+        取一手 6 张钢板（平台 TwoTrips）：两个连续 rank 各 3 张。
+        group 内部名 two_trips ↔ 平台 TwoTrips（钢板）。
+        """
+        if not hand_cards or not GUARD_TOOLS_OK:
+            return None
+        from collections import Counter
+        by_rank: Counter = Counter()
+        for card in hand_cards:
+            rk = get_card_rank(str(card))
+            if rk in ("HR", "SB"):
+                continue
+            by_rank[rk] += 1
+        trip_ranks = sorted(
+            (rk for rk, n in by_rank.items() if n >= 3),
+            key=lambda r: CARD_RANK_ORDER[r],
+        )
+        for rk in trip_ranks:
+            nxt = next(
+                (r for r, v in CARD_RANK_ORDER.items() if v == CARD_RANK_ORDER[rk] + 1),
+                None,
+            )
+            if nxt in by_rank and by_rank[nxt] >= 3:
+                out, used = [], {rk: 0, nxt: 0}
+                for card in hand_cards:
+                    r = get_card_rank(str(card))
+                    if r in used and used[r] < 3:
+                        used[r] += 1
+                        out.append(str(card))
+                return out
+        return None
+
+    @staticmethod
+    def _find_three_pair_cards(hand_cards: List[str]) -> Optional[List[str]]:
+        """
+        取一手 6 张三连对（平台 ThreePair）：三个连续 rank 各 2 张。
+        group 内部名 three_pair ↔ 平台 ThreePair。
+        """
+        if not hand_cards or not GUARD_TOOLS_OK:
+            return None
+        from collections import Counter
+        by_rank: Counter = Counter()
+        for card in hand_cards:
+            rk = get_card_rank(str(card))
+            if rk in ("HR", "SB"):
+                continue
+            by_rank[rk] += 1
+        pair_ranks = sorted(
+            (rk for rk, n in by_rank.items() if n >= 2),
+            key=lambda r: CARD_RANK_ORDER[r],
+        )
+        for rk in pair_ranks:
+            nxt = next(
+                (r for r, v in CARD_RANK_ORDER.items() if v == CARD_RANK_ORDER[rk] + 1),
+                None,
+            )
+            nxt2 = next(
+                (r for r, v in CARD_RANK_ORDER.items() if v == CARD_RANK_ORDER[rk] + 2),
+                None,
+            )
+            if (
+                nxt in by_rank and by_rank[nxt] >= 2
+                and nxt2 in by_rank and by_rank[nxt2] >= 2
+            ):
+                out, used = [], {rk: 0, nxt: 0, nxt2: 0}
+                for card in hand_cards:
+                    r = get_card_rank(str(card))
+                    if r in used and used[r] < 2:
+                        used[r] += 1
+                        out.append(str(card))
+                return out
+        return None
+
+    @staticmethod
+    def _find_high_straight_cards(hand_cards: List[str]) -> Optional[List[str]]:
+        """
+        取一手 5 连顺（平台 Straight），起点 rank ≥ 8（用户口径）：
+        8-9-T-J-Q / 9-T-J-Q-K / T-J-Q-K-A（不含王）。
+        """
+        if not hand_cards or not GUARD_TOOLS_OK:
+            return None
+        rank_set = set()
+        for card in hand_cards:
+            rk = get_card_rank(str(card))
+            if rk in ("HR", "SB"):
+                continue
+            rank_set.add(rk)
+        for window in (
+            ["8", "9", "T", "J", "Q"],
+            ["9", "T", "J", "Q", "K"],
+            ["T", "J", "Q", "K", "A"],
+        ):
+            if all(r in rank_set for r in window):
+                return [
+                    next(str(c) for c in hand_cards if get_card_rank(str(c)) == r)
+                    for r in window
+                ]
+        return None
+
+    @staticmethod
+    def _find_high_recovery_structure_cards(hand_cards: List[str]) -> Optional[List[str]]:
+        """取一手「难被压」的冲刺尾牌结构：钢板 / 三连对 / 8+ 顺子。"""
+        return (
+            EndgameDecider._find_two_trips_cards(hand_cards)
+            or EndgameDecider._find_three_pair_cards(hand_cards)
+            or EndgameDecider._find_high_straight_cards(hand_cards)
+        )
+
     @classmethod
     def _has_structure_sprint_path(cls, hand_cards: List[str]) -> bool:
         """
-        GUA-142 局部：剩牌含 SF 或 ≥4 炸，且剥掉该手后剩余点数组 ≤3
-        （对/单/王等，对应「SF/炸回手 + 至多约两手尾/王」）。
+        GUA-142 局部：剩牌含 SF / ≥4 炸 / 难被压尾牌（钢板、三连对、8+ 顺子），
+        且剥掉该手后剩余点数组 ≤3（对/单/王等，对应「冲刺牌型回手 + 至多约两手尾/王」）。
 
-        不修改 GUA-135 `_has_sprint_capability`（后者只认同点炸）。
+        GUA-241：纳入钢板/三连对/8+ 顺子为冲刺牌型（用户口径 2026-08-14）。
+        不修改 GUA-135 `_has_sprint_capability`（后者只认同点炸 + 一手难压尾牌）。
         """
         cards = list(hand_cards or [])
         if len(cards) < 5:
             return False
-        bomb_like = cls._find_straight_flush_cards(cards) or cls._find_bomb_family_cards(cards)
+        bomb_like = (
+            cls._find_straight_flush_cards(cards)
+            or cls._find_bomb_family_cards(cards)
+            or cls._find_high_recovery_structure_cards(cards)
+        )
         if not bomb_like:
             return False
         left = list(cards)
@@ -3386,6 +3512,15 @@ class EndgameDecider:
             if residue_type == ACTION_TYPE_SINGLE:
                 safe_residue = self._select_enemy_one_safe_single([residue_item], game_state, ec)
                 residue_bucket = 1 if safe_residue is not None else 2
+            elif residue_type == ACTION_TYPE_TRIPS:
+                # GUA-240: 残手 Trips 无法压 Single 回收——「先出散单留整牌」对 Trips
+                # 不成立（出单后 Trips 只能等下圈同型，本圈单权回收不了），视为风险
+                # 残手排后，让整牌 Trips 冲刺优先（match=6a7f1a17 21:37:58：
+                # 手牌 AAA+9，先出 Single/9 即送单；出 Trips/AAA 顶大几乎必收权）。
+                # 注：TWT 残手不在此列——TWT+单已由 GUA-238 twt_sprint_boost 处理
+                # （有弱点先 TWT，无弱点维持先单）；Straight↔TWT 互拼走 GUA-236
+                # 领出顺优先（Straight=0 < TWT=1，两候选均 bucket=0 时顺序不变）。
+                residue_bucket = 2
 
             act_type = _effective_structure_type(act)
             declared = _get_declared_action_type(act)
@@ -4683,15 +4818,35 @@ class EndgameDecider:
         return counts in ([3, 3], [2, 2, 2], [6])
 
     @staticmethod
+    def _is_single_high_recovery_hand(cards: List[str]) -> bool:
+        """
+        GUA-241：整手是否恰好一手「难被压」的冲刺尾牌——
+        5 张 8+ 顺子 / 6 张钢板(TwoTrips) / 6 张三连对(ThreePair)。
+        """
+        cards = list(cards or [])
+        if not cards or not GUARD_TOOLS_OK:
+            return False
+        n = len(cards)
+        if n == 5:
+            return EndgameDecider._find_high_straight_cards(cards) is not None
+        if n == 6:
+            return (
+                EndgameDecider._find_two_trips_cards(cards) is not None
+                or EndgameDecider._find_three_pair_cards(cards) is not None
+            )
+        return False
+
+    @staticmethod
     def _hand_has_sprint_capability(hand_cards: List[str], *, _depth: int = 0) -> bool:
-        """纯函数：手牌是否 炸(+炸*)+单手结构。"""
+        """纯函数：手牌是否 炸(+炸*)+单手结构，或整手一手难被压尾牌(GUA-241)。"""
         if not hand_cards or len(hand_cards) < 5 or _depth > 4:
             return False
         from collections import Counter
         ranks = Counter(get_card_rank(c) for c in hand_cards)
         bomb_rank, max_count = max(ranks.items(), key=lambda kv: kv[1])
         if max_count < 4:
-            return False
+            # GUA-241：无炸，但整手恰好一手难被压尾牌（5 张 8+顺 / 6 张钢板或三连对）
+            return EndgameDecider._is_single_high_recovery_hand(hand_cards)
 
         left = []
         removed = 0
