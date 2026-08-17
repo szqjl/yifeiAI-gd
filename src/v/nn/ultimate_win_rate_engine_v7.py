@@ -587,10 +587,13 @@ class UltimateWinRateEngineV7:
         # ── ② 注入 numofplayers ──
         self._inject_numofplayers(game_state)
 
-        # ── ②b GUA-072 规则记牌信念（供 heuristic / 推荐器）──
+        # ── ②b GUA-244 注入剩余池（对手残牌构成推理，校验失败回退 None）──
+        self._inject_remaining_pool(game_state)
+
+        # ── ②c GUA-072 规则记牌信念（供 heuristic / 推荐器）──
         self._inject_belief_vector(game_state)
 
-        # ── ②c GUA-094 规则版推断层（供 stage_2 / trace 后续消费）──
+        # ── ②d GUA-094 规则版推断层（供 stage_2 / trace 后续消费）──
         self._inject_phase_relation(game_state)
         if self._active_replay_trace is not None:
             self._replay_record(
@@ -1647,6 +1650,40 @@ class UltimateWinRateEngineV7:
         # ── 3. 纠偏：myPos 以 handCards 实数为准 ──
         numofplayers[my_pos] = len(hand_cards)
         game_state["numofplayers"] = numofplayers
+
+    # ── GUA-244: 注入剩余池（对手残牌构成推理） ──────────
+
+    def _inject_remaining_pool(self, game_state: Dict[str, Any]) -> None:
+        """GUA-244：注入 name 级剩余池 → game_state['_remaining_pool_cards']。
+
+        数据源：adapter 的 `remainingPool`（108 ints − 各席已出 − 当前手牌，
+        name 级展开列表）。供残局决策做「单/对子被接风险」推理。
+
+        一致性校验（防污染，校验失败自动回退 None，决策层走原逻辑）：
+          1. 每张牌名 ≤ 2 副本（两副牌约束）
+          2. 池总张数 == 其余三家 numofplayers 之和（池 = 对手残牌全集）
+        v1006 线无 remainingPool 字段 → 校验失败 → None，行为不变。
+        """
+        pool = game_state.get("remainingPool")
+        if not isinstance(pool, list) or not pool:
+            game_state["_remaining_pool_cards"] = None
+            return
+        try:
+            from collections import Counter
+            cnt = Counter(pool)
+            if any(c > 2 for c in cnt.values()):
+                raise ValueError("副本数 >2")
+            nop = game_state.get("numofplayers", [27, 27, 27, 27])
+            hand_cards = game_state.get("handCards", []) or []
+            others = sum(nop) - len(hand_cards)
+            if len(pool) != others:
+                raise ValueError("池张数 %d != 对手剩余 %d" % (len(pool), others))
+            game_state["_remaining_pool"] = dict(cnt)
+            game_state["_remaining_pool_cards"] = sorted(pool)
+        except Exception as _e:
+            if self.logger is not None:
+                self.logger.warning("GUA-244 剩余池校验失败，回退原逻辑: %s", _e)
+            game_state["_remaining_pool_cards"] = None
 
     # ── GUA-072: 降级保护 — 组牌引擎异常时用简单规则识别炸弹 ──
 

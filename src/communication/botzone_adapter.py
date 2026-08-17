@@ -53,6 +53,11 @@ RANK_ORDER = {"2": 0, "3": 1, "4": 2, "5": 3, "6": 4, "7": 5, "8": 6,
               "9": 7, "T": 8, "J": 9, "Q": 10, "K": 11, "A": 12}
 JOKER_RANK_ORDER = {"B": 16, "R": 17}  # Small Joker, Big Joker
 
+# GUA-244: 全部 54 个牌名（value 0-12 × 4 花色 + SB/HR），剩余池按此序展开
+_POOL_NAME_ORDER = [
+    "%s%s" % (BZ_SUIT_MAP[s], r) for r in BZ_RANK_STR for s in (0, 1, 2, 3)
+] + ["SB", "HR"]
+
 # ──────────────────────────────────────────────
 #  Card encoding / decoding
 # ──────────────────────────────────────────────
@@ -1273,6 +1278,26 @@ class BotzoneAdapter:
                 numofplayers[seat] = max(0, 27 - played)
         return numofplayers
 
+    def _compute_remaining_pool(self, game: "BotzoneGameState",
+                                hand_cards: List[str]) -> List[str]:
+        """GUA-244：name 级剩余池 = 108 ints − 各席已出 − 当前手牌。
+
+        Botzone 每副 27 张、每张牌名 2 副本（int i 与 i+54 同牌名）。
+        返回展开的牌名列表（按 _POOL_NAME_ORDER 序）；供引擎/残局决策做
+        对手残牌构成推理（对子/单被接风险）。
+        """
+        played: Counter = Counter()
+        for seat in range(4):
+            for i in game.played_cards.get(seat, set()):
+                if 0 <= i <= 107:
+                    played[bz_to_v8_card(i)] += 1
+        hand: Counter = Counter(hand_cards or [])
+        pool: List[str] = []
+        for name in _POOL_NAME_ORDER:
+            cnt = 2 - hand.get(name, 0) - played.get(name, 0)
+            pool.extend([name] * max(0, cnt))
+        return pool
+
     def _update_from_history(self, game: BotzoneGameState, history: list) -> None:
         """Update greater action from play history."""
         for entry in history:
@@ -1862,6 +1887,7 @@ class BotzoneAdapter:
             "oppoRank": game.oppo_rank,
             "stage": "play",
             "numofplayers": numofplayers,
+            "remainingPool": self._compute_remaining_pool(game, hand_cards),
             "curPos": cur_pos,
             "greaterPos": greater_pos,
             "greaterAction": (["PASS", "PASS", "PASS"]

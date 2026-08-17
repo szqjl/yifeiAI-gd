@@ -1016,6 +1016,29 @@ def _rank_beats_same_type(played_rank: str, suppressor_rank: str, cur_rank: str)
     return CARD_RANK_ORDER.get(suppressor_rank, -1) > CARD_RANK_ORDER.get(played_rank, -1)
 
 
+# ── GUA-244：剩余池推理（对子/单被接风险）阈值 ──
+GUA244_SINGLE_RISK = 0.7          # 单被主敌接走的池风险 ≥ 0.7 → 触发护栏
+GUA244_PAIR_RISK = 0.3            # 对子被主敌接走的池风险 < 0.3 → 允许对子优先
+GUA244_ENUM_POOL_MAX = 18         # 精确枚举上限：池 ≤18 张
+GUA244_ENUM_SEAT_MAX = 6          # 且该席剩 ≤6 张（C(18,6)=18564，单次毫秒级）
+
+
+def _pool_card_rank(card: str) -> str:
+    """从牌名取 rank（S2→'2'；SB/HR 原样返回）。"""
+    if card in ("SB", "HR"):
+        return card
+    return card[1:] if len(card) >= 2 else card
+
+
+def _pool_card_beats_single(card: str, target_rank: str, cur_rank: str) -> bool:
+    """GUA-244：池中单张 card 能否压 target_rank 单张（含级牌）。"""
+    if not card or not target_rank:
+        return False
+    if card in ("SB", "HR"):
+        return True
+    return _rank_beats_same_type(target_rank, _pool_card_rank(card), cur_rank)
+
+
 # ═══════════════════════════════════════════════════════
 #  EndgameDecider
 # ═══════════════════════════════════════════════════════
@@ -1070,6 +1093,14 @@ class EndgameDecider:
             banned_set.discard(ACTION_TYPE_BOMB)
             banned_set.discard(ACTION_TYPE_STRAIGHT_FLUSH)
             banned_set.discard(ACTION_TYPE_TRIPS)
+            # GUA-243：本方仅剩「炸弹 + 对子」两手整牌且队友已头游（remaining=0）时，
+            # 自由领出豁免 Pair。报四/报双 never_play 的 Pair 只约束跟压，不得删掉
+            # 我方整手冲刺对子（match=6a7ff9f50fbd680d7c7549bc L444-455：手牌
+            # 4星8炸+对A 被 banned Pair 后 Q0 错拆 8 炸出 Single/8，broken=['Bomb']）。
+            _hand = game_state.get("handCards", []) or []
+            _team_rem = (ec.get("teammate") or {}).get("remaining")
+            if _team_rem == 0 and self._is_bomb_plus_pair_two_hands(_hand):
+                banned_set.discard(ACTION_TYPE_PAIR)
 
         if not banned_set:
             return action_list, False
@@ -1190,6 +1221,12 @@ class EndgameDecider:
                     continue
                 if banned_type not in protected_types:
                     banned_set.add(banned_type)
+        # GUA-244：自由领出 + 主敌剩 ≤3 + 池存在 + 单被接风险高且对子风险低
+        # → 豁免报双/报三的 Pair 禁封。否则对子被删 → 决策层兜底出低单送敌人
+        # （match 6a8003e6 #17：手 D5 C6 66 77，p1 报双 Pair 被删 →
+        # 兜底出 Single/C6 被级牌 D2 接走丢头游）。
+        if self._gua244_pair_lead_safe(game_state, ec):
+            banned_set.discard(ACTION_TYPE_PAIR)
         return banned_set
 
     def _should_relax_single_ban_for_enemy_five(
@@ -1484,6 +1521,15 @@ class EndgameDecider:
     #  Q0: 自己冲刺
     # ═══════════════════════════════════════════════════
 
+    def _is_bomb_plus_pair_two_hands(self, hand_cards: List[str]) -> bool:
+        """GUA-243: 本方是否恰好两手整牌 = 炸弹 + 对子（如 4星8炸 + 对A）。"""
+        if not hand_cards:
+            return False
+        counts = sorted(
+            Counter(get_card_rank(str(c)) for c in hand_cards).values()
+        )
+        return len(counts) == 2 and counts[0] == 2 and counts[1] >= 4
+
     def _q0_self_sprint(
         self, game_state: Dict[str, Any], action_list: List, ec: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
@@ -1694,6 +1740,36 @@ class EndgameDecider:
                         _p0 if weaker_idx == 0 else _p1,
                     )
                     return weaker_item
+
+            # GUA-243：本方仅剩「炸弹 + 对子」两手整牌且队友未头游时，
+            # 若下家剩两张（报双）→ 拆对子打单（炸留作回手），不拆炸弹打单。
+            # 队友未头游时对子冲刺主动权不如炸稳，拆对单试探、炸控回手。
+            hand_cards = game_state.get("handCards", []) or []
+            if bombs and self._is_bomb_plus_pair_two_hands(hand_cards):
+                _team_rem = (ec.get("teammate") or {}).get("remaining")
+                if _team_rem not in (None, 0):
+                    _next_pos = (my_pos + 1) % 4
+                    _next_rem = (enemies.get(_next_pos) or {}).get("remaining")
+                    if _next_rem == 2:
+                        _pair_rank = None
+                        for _rank, _cnt in Counter(
+                            get_card_rank(str(c)) for c in hand_cards
+                        ).items():
+                            if _cnt == 2:
+                                _pair_rank = _rank
+                                break
+                        if _pair_rank is not None:
+                            for _i, _a in non_bombs:
+                                if (
+                                    _get_declared_action_type(_a) == ACTION_TYPE_SINGLE
+                                    and len(_get_cards(_a)) == 1
+                                    and get_card_rank(str(_get_cards(_a)[0])) == _pair_rank
+                                ):
+                                    logger.info(
+                                        "Q0 GUA-243 拆对打单: 队友未头游下家剩2 idx=%d card=%s",
+                                        _i, _get_cards(_a),
+                                    )
+                                    return _i, _a
 
             # 先整后炸：两手冲刺优先整组（TwoTrips/ThreePair/TWT…），禁半组 Trips
             all_cands = [(i, a) for i, a in enumerate(action_list)]
@@ -2019,6 +2095,16 @@ class EndgameDecider:
         )
         if lead_feed is not None:
             return lead_feed
+
+        # GUA-244：领出 + 主敌剩 ≤3 + 池存在 + 本方多对低单 → 池风险
+        # 「单被接 ≥0.7 且对子被接 <0.3」时对子先于单/整牌锁。
+        # 须在 _q1_enemy_critical_lead_special 之前：match 6a8003e6 #16/#17
+        # 原 TWT 锁敌后兜底出 Single/C6 被级牌 D2 接走丢头游，应 77→66→TWT。
+        pool_pair_first = self._q1_pool_pair_first_special(
+            game_state, non_banned_candidates, ec, main_pos, main_enemy,
+        )
+        if pool_pair_first is not None:
+            return pool_pair_first
 
         enemy_one_lead = self._q1_enemy_critical_lead_special(
             game_state, non_banned_candidates, ec, main_pos, main_enemy,
@@ -3734,6 +3820,201 @@ class EndgameDecider:
 
         return min(safe, key=_key)
 
+    def _pool_single_beat_risk(
+        self, game_state: Dict[str, Any], seat: int, target_rank: str,
+    ) -> Optional[float]:
+        """GUA-244：P(该席剩余牌含 ≥1 张能压 target_rank 单张，含级牌)。
+
+        池 ≤GUA244_ENUM_POOL_MAX 且该席剩 ≤GUA244_ENUM_SEAT_MAX → 精确 C(n,rem)；
+        否则按池构成边际近似。无池返回 None，该席剩 0 返回 0.0。
+        """
+        pool = game_state.get("_remaining_pool_cards")
+        if not pool:
+            return None
+        nop = game_state.get("numofplayers", [27, 27, 27, 27])
+        rem = int(nop[seat]) if len(nop) > seat else 27
+        if rem <= 0:
+            return 0.0
+        cur_rank = str(game_state.get("curRank", "2"))
+        n_pool = len(pool)
+        if rem > n_pool:
+            return 1.0
+        beaters = sum(1 for c in pool if _pool_card_beats_single(c, target_rank, cur_rank))
+        if n_pool <= GUA244_ENUM_POOL_MAX and rem <= GUA244_ENUM_SEAT_MAX:
+            from math import comb
+            return 1.0 - comb(n_pool - beaters, rem) / comb(n_pool, rem)
+        return 1.0 - ((n_pool - beaters) / n_pool) ** rem
+
+    def _pool_pair_beat_risk(
+        self, game_state: Dict[str, Any], seat: int, pair_rank: str,
+    ) -> Optional[float]:
+        """GUA-244：P(该席剩余牌含 >pair_rank 对子)。
+
+        枚举精确：C(n_pool, rem) 组合中含「某 >pair_rank rank 的两张副本」；
+        超限 → 边际（union bound 上界）近似。无池返回 None。
+        """
+        pool = game_state.get("_remaining_pool_cards")
+        if not pool:
+            return None
+        nop = game_state.get("numofplayers", [27, 27, 27, 27])
+        rem = int(nop[seat]) if len(nop) > seat else 27
+        if rem <= 0:
+            return 0.0
+        cur_rank = str(game_state.get("curRank", "2"))
+        n_pool = len(pool)
+        if rem > n_pool:
+            return 1.0
+        if n_pool <= GUA244_ENUM_POOL_MAX and rem <= GUA244_ENUM_SEAT_MAX:
+            from math import comb
+            from itertools import combinations
+            rank_counts: Counter = Counter()
+            for c in pool:
+                r = _pool_card_rank(c)
+                if r not in ("SB", "HR"):
+                    rank_counts[r] += 1
+            qualifying = [
+                r for r, n in rank_counts.items()
+                if n >= 2 and _rank_beats_same_type(pair_rank, r, cur_rank)
+            ]
+            if not qualifying:
+                return 0.0
+            qual_set = set(qualifying)
+            total = comb(n_pool, rem)
+            cnt = 0
+            for combo in combinations(range(n_pool), rem):
+                drawn: Dict[str, int] = {}
+                for i in combo:
+                    r = _pool_card_rank(pool[i])
+                    drawn[r] = drawn.get(r, 0) + 1
+                if any(drawn.get(r, 0) >= 2 for r in qual_set):
+                    cnt += 1
+            return cnt / total
+        # 边际上界（union bound）：P(抽到某 >pair_rank rank 两张副本) 之和
+        rank_counts = Counter()
+        for c in pool:
+            r = _pool_card_rank(c)
+            if r not in ("SB", "HR"):
+                rank_counts[r] += 1
+        risk = 0.0
+        for r, n in rank_counts.items():
+            if n < 2 or not _rank_beats_same_type(pair_rank, r, cur_rank):
+                continue
+            p = 1.0
+            for k in range(2):
+                p *= (n - k) / (n_pool - k)
+            risk += p
+        return min(1.0, risk)
+
+    def _gua244_pair_lead_safe(self, game_state: Dict[str, Any], ec: Dict[str, Any]) -> bool:
+        """GUA-244：自由领出 + 存在 ≤3 张主敌 + 池存在 + 本方 ≥2 对 + 低单 +
+        池风险「单被接 ≥0.7 且对子被接 <0.3」→ 豁免报双/报三的 Pair 禁封。
+
+        match 6a8003e6 #17：手 D5 C6 66 77，p1 报双，池 15 张含级牌 D2，
+        单被接 104/105=0.99、对子被接 6/105=0.057 → Pair 解禁 → 决策层出对子。
+        """
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if not self._is_my_q1_lead_turn(game_state, my_pos):
+            return False
+        pool = game_state.get("_remaining_pool_cards")
+        if not pool:
+            return False
+        hand_cards = list(game_state.get("handCards", []) or [])
+        if not hand_cards:
+            return False
+        cnt: Counter = Counter()
+        for c in hand_cards:
+            r = _pool_card_rank(c)
+            if r not in ("SB", "HR"):
+                cnt[r] += 1
+        pair_count = sum(1 for n in cnt.values() if n >= 2)
+        low_singles = [r for r, n in cnt.items() if n == 1]
+        if pair_count < 2 or not low_singles:
+            return False
+        # 独立对子（计数==2；计数==3 是 TWT/Trips 核心，拆它会破坏整牌锁）
+        independent_pairs = [r for r, n in cnt.items() if n == 2]
+        if not independent_pairs:
+            return False
+        enemies = ec.get("enemies") or {}
+        cur_rank = str(game_state.get("curRank", "2"))
+        lowest_single = min(low_singles, key=lambda r: CARD_RANK_ORDER.get(r, 99))
+        highest_pair = max(
+            independent_pairs, key=lambda r: CARD_RANK_ORDER.get(r, -1),
+        )
+        for pos, e in enemies.items():
+            rem = int(e.get("remaining", 27) or 27)
+            if rem not in (1, 2, 3):
+                continue
+            sr = self._pool_single_beat_risk(game_state, pos, lowest_single)
+            pr = self._pool_pair_beat_risk(game_state, pos, highest_pair)
+            if (sr is not None and pr is not None
+                    and sr >= GUA244_SINGLE_RISK and pr < GUA244_PAIR_RISK):
+                return True
+        return False
+
+    def _q1_pool_pair_first_special(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-244：领出 + 主敌剩 ≤3 + 池存在 + 本方 ≥2 对 + 低单 +
+        池风险「单被接 ≥0.7 且对子被接 <0.3」→ 出最高对子（对子先于单/整牌锁）。
+
+        match 6a8003e6 #17：手 D5 C6 66 77，主敌 p1 剩 2，池 15 张含级牌 D2，
+        单被接 104/105=0.99、对子被接 6/105=0.057 → 出 77 而非 Single/C6
+        （原 C6 被级牌 D2 接走 → p1 S8 走完头游，V8 末游）。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if not self._is_my_q1_lead_turn(game_state, my_pos):
+            return None
+        rem = int(main_enemy.get("remaining", 27) or 27)
+        if rem not in (1, 2, 3):
+            return None
+        pool = game_state.get("_remaining_pool_cards")
+        if not pool:
+            return None
+        hand_cards = list(game_state.get("handCards", []) or [])
+        cur_rank = str(game_state.get("curRank", "2"))
+        cnt: Counter = Counter()
+        for c in hand_cards:
+            r = _pool_card_rank(c)
+            if r not in ("SB", "HR"):
+                cnt[r] += 1
+        pair_ranks = [r for r, n in cnt.items() if n >= 2]
+        low_singles = [r for r, n in cnt.items() if n == 1]
+        if len(pair_ranks) < 2 or not low_singles:
+            return None
+        lowest_single = min(low_singles, key=lambda r: CARD_RANK_ORDER.get(r, 99))
+        sr = self._pool_single_beat_risk(game_state, main_pos, lowest_single)
+        if sr is None or sr < GUA244_SINGLE_RISK:
+            return None
+        pairs = [
+            (i, a) for i, a in candidates
+            if _get_cards(a) and get_action_type(a) == ACTION_TYPE_PAIR
+            and not self._is_bomb_destroying_action(a, hand_cards, game_state)
+            # GUA-244：排除拆 TWT/Trips 三同张核心的对子（AAA+JJ 的 AAA）
+            # ——组牌把 TWT 拆成 trip 子组 + 独立 pair 子组，GUA-219 只查
+            # Bomb/SF 组；此处按 rank 计数==3 拦截拆 triple。
+            and cnt.get(_pool_card_rank(_get_cards(a)[0]), 0) != 3
+        ]
+        if not pairs:
+            return None
+        cand_ranks = [_pool_card_rank(_get_cards(a)[0]) for _, a in pairs]
+        highest_pair = max(cand_ranks, key=lambda r: CARD_RANK_ORDER.get(r, -1))
+        pr = self._pool_pair_beat_risk(game_state, main_pos, highest_pair)
+        if pr is None or pr >= GUA244_PAIR_RISK:
+            return None
+        best = max(pairs, key=lambda it: get_card_value(_get_cards(it[1])[0], cur_rank))
+        logger.info(
+            "Q1 池推理对子优先(GUA-244): idx=%d rank=%s single_risk=%.2f pair_risk=%.2f",
+            best[0], get_action_rank(best[1]), sr, pr,
+        )
+        return best
+
     def _select_enemy_one_strongest_single(
         self, singles: List[Tuple[int, List]], game_state: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
@@ -3913,6 +4194,14 @@ class EndgameDecider:
         self, game_state: Dict[str, Any], seat: int, target_rank: str, cur_rank: str,
     ) -> bool:
         """某席是否仍可能持有高于 target_rank 的单张。"""
+        # GUA-244：有剩余池时池优先（确定性残牌全集），无池回退 MemoryTracker
+        pool = game_state.get("_remaining_pool_cards")
+        if pool:
+            nop = game_state.get("numofplayers", [27, 27, 27, 27])
+            rem = int(nop[seat]) if len(nop) > seat else 27
+            if rem <= 0:
+                return False
+            return any(_pool_card_beats_single(c, target_rank, cur_rank) for c in pool)
         tracker = game_state.get("_memory_tracker")
         if tracker is None or not target_rank:
             return True
