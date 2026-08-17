@@ -29,7 +29,7 @@
 | 1 | 当前分支 = 目标分支（v8-dev） | `git branch --show-current` = `v8-dev` |
 | 2 | 本地代码 = 要生效的版本 | 已 `git pull`，或已明确要加载本地未推送改动 |
 | 3 | 相关回归通过 | `tests/test_botzone_adapter.py` 绿（+ 相关 GUA 测试） |
-| 4 | 凭证可用（user_id / api_key / opponent_bot_id） | §2.2 获取成功 |
+| 4 | 凭证可用（user_id / api_key / opponent_bot_id） | §2.2 固定值已写入，无需额外获取 |
 | 5 | 精确锁定待杀进程 | §2.3 用命令行匹配确认，**禁止** `Stop-Process` 全杀 python |
 
 ### 2.1 拉取最新代码（可选但推荐）
@@ -45,17 +45,21 @@ git pull origin v8-dev
 
 启动脚本 `scripts/launchers/v8/run_v8_vs_botzone.py` **必填** `--user-id` / `--api-key`（仓库不落盘凭证，见下）。
 
-**凭证来源**（按优先级）：
-1. 会话上下文已有（用户提供 / 上一命令复述）。
-2. Botzone 控制台「My Bots → Local AI Config」查看 user_id / api_key / secret。
+**固定地址**（2026-08-17 起生效）：
+
+| 参数 | 固定值 |
+|------|--------|
+| `--base-url` | `https://www.botzone.org.cn/api` |
+| `--user-id` | `2897963415` |
+| `--api-key` | `2897963415` |
+| `--opponent-bot-id` | `6a6411aa27e7bf01db0291c5` |
+| `--teammate-bot-id` | `686264afa4349e61674f526a`（Joker） |
 
 **常用参数**：
 
 | 参数 | 说明 |
 |------|------|
-| `--base-url` | 默认 `https://www.botzone.org.cn/api` |
 | `--opponent-bot-id` | 指定则自动建对局；**不指定则只监听手动创建的对局** |
-| `--teammate-bot-id` | 队友 Bot（默认同对手；推荐 Joker `686264afa4349e61674f526a`） |
 | `--games N` | 自动建 N 局（仅对手模式生效） |
 
 ### 2.3 停止旧监听（精确杀）
@@ -94,12 +98,11 @@ taskkill //PID <PID> //F
 # 后台启动（-PassThru 拿到进程对象；脚本自带时间戳日志，无需手动重定向）
 $proc = Start-Process -FilePath "python" -ArgumentList @(
   "scripts/launchers/v8/run_v8_vs_botzone.py",
-  "--user-id", "<USER_ID>",
-  "--api-key", "<API_KEY>",
+  "--user-id", "2897963415",
+  "--api-key", "2897963415",
   "--base-url", "https://www.botzone.org.cn/api",
-  "--opponent-bot-id", "<OPPONENT_BOT_ID>",
-  "--teammate-bot-id", "686264afa4349e61674f526a",
-  "--games", "3"
+  "--opponent-bot-id", "6a6411aa27e7bf01db0291c5",
+  "--teammate-bot-id", "686264afa4349e61674f526a"
 ) -WorkingDirectory (Get-Location) -RedirectStandardOutput "logs\_listener_stdout.log" `
   -RedirectStandardError "logs\_listener_stderr.log" -PassThru -WindowStyle Hidden
 $proc.Id
@@ -109,11 +112,11 @@ $proc.Id
 
 ```bash
 nohup python scripts/launchers/v8/run_v8_vs_botzone.py \
-  --user-id <USER_ID> \
-  --api-key <API_KEY> \
+  --user-id 2897963415 \
+  --api-key 2897963415 \
   --base-url https://www.botzone.org.cn/api \
-  --opponent-bot-id <OPPONENT_BOT_ID> \
-  --games 3 \
+  --opponent-bot-id 6a6411aa27e7bf01db0291c5 \
+  --teammate-bot-id 686264afa4349e61674f526a \
   > logs/v8_vs_botzone_$(date +%Y%m%d_%H%M%S).log 2>&1 &
 echo "PID=$!"
 ```
