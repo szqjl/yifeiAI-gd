@@ -50,10 +50,11 @@ git pull origin v8-dev
 | 参数 | 固定值 |
 |------|--------|
 | `--base-url` | `https://www.botzone.org.cn/api` |
-| `--user-id` | `2897963415` |
+| `--user-id` | `6a6411aa27e7bf01db0291c5`（Local AI bot_id） |
 | `--api-key` | `2897963415` |
-| `--opponent-bot-id` | `6a6411aa27e7bf01db0291c5` |
 | `--teammate-bot-id` | `686264afa4349e61674f526a`（Joker） |
+
+> **URL 格式**：`{base_url}/{user_id}/{api_key}/localai` → `https://www.botzone.org.cn/api/6a6411aa27e7bf01db0291c5/2897963415/localai`
 
 **常用参数**：
 
@@ -98,10 +99,9 @@ taskkill //PID <PID> //F
 # 后台启动（-PassThru 拿到进程对象；脚本自带时间戳日志，无需手动重定向）
 $proc = Start-Process -FilePath "python" -ArgumentList @(
   "scripts/launchers/v8/run_v8_vs_botzone.py",
-  "--user-id", "2897963415",
+  "--user-id", "6a6411aa27e7bf01db0291c5",
   "--api-key", "2897963415",
   "--base-url", "https://www.botzone.org.cn/api",
-  "--opponent-bot-id", "6a6411aa27e7bf01db0291c5",
   "--teammate-bot-id", "686264afa4349e61674f526a"
 ) -WorkingDirectory (Get-Location) -RedirectStandardOutput "logs\_listener_stdout.log" `
   -RedirectStandardError "logs\_listener_stderr.log" -PassThru -WindowStyle Hidden
@@ -112,10 +112,9 @@ $proc.Id
 
 ```bash
 nohup python scripts/launchers/v8/run_v8_vs_botzone.py \
-  --user-id 2897963415 \
+  --user-id 6a6411aa27e7bf01db0291c5 \
   --api-key 2897963415 \
   --base-url https://www.botzone.org.cn/api \
-  --opponent-bot-id 6a6411aa27e7bf01db0291c5 \
   --teammate-bot-id 686264afa4349e61674f526a \
   > logs/v8_vs_botzone_$(date +%Y%m%d_%H%M%S).log 2>&1 &
 echo "PID=$!"
