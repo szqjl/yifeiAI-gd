@@ -2151,6 +2151,16 @@ class EndgameDecider:
         if enemy_one_press is not None:
             return enemy_one_press
 
+        # GUA-245: 残局 Q1 级牌压单策略缺失。
+        # 对手剩 ≤5 张出单 + 本方持有级牌单张 + 本方有冲刺路径 →
+        # 主动压单夺回领出权（而非 PASS 让对手跑完）。
+        # 须在 ④ recommended 之前：match 6a83177a V8 含 D2×2+S2 连续 8 次 PASS。
+        level_card_press = self._q1_level_card_press_single(
+            game_state, non_banned_candidates, ec, main_pos, main_enemy,
+        )
+        if level_card_press is not None:
+            return level_card_press
+
         # ④ 走 recommended 优先（主目标）
         rec_types = main_enemy.get("recommended_types", [])
         if rec_types:
@@ -3398,6 +3408,108 @@ class EndgameDecider:
             "GUA-222 enemy-one single press: idx=%d type=%s",
             picked[0],
             _get_declared_action_type(picked[1]),
+        )
+        return picked
+
+    def _q1_level_card_press_single(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        GUA-245：残局 Q1 级牌压单策略缺失。
+
+        Gate：
+          1. greaterAction == Single（对手出单）
+          2. 任一敌人 remaining ≤ 5（残局冲刺阶段）
+          3. 本方持有级牌单张（cur_rank rank 的单张，非逢人配 H{curRank}）
+          4. 本方有冲刺路径（_has_structure_sprint_path 含顺子/整牌/炸弹）
+
+        命中 → 取最小级牌压（保留大级牌回手）。
+        不命中任一 gate 返回 None 让老逻辑继续。
+
+        实测 match 6a83177a（logs/v8_vs_botzone_20260817_211528.log）：
+        V8 含 D2×2 + S2（三张级牌 2，curRank=2），对手多次出 Single，
+        Q1 连续 8 次 PASS on Single（22:15:59~22:16:41）。
+        根因：_q1_block_enemy 通用路径在「非报单对手出单 + 非领出」场景下，
+        候选排序优先「回收优先」/「拆核心保护」/「级牌保留」，
+        未考虑「级牌压单 → 夺回领出权 → 顺子冲刺」路径。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+
+        # Gate 1: greaterAction == Single
+        greater_action = game_state.get("greaterAction")
+        if not greater_action:
+            return None
+        try:
+            gtype = get_action_type(greater_action)
+        except Exception:
+            return None
+        if gtype != ACTION_TYPE_SINGLE:
+            return None
+
+        # 我方非领出（对手出单我方跟牌）
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if game_state.get("curPos", my_pos) == my_pos:
+            return None
+
+        # Gate 2: 任一敌人 remaining ≤ 5
+        enemies = ec.get("enemies", {}) or {}
+        has_low_enemy = False
+        for e in enemies.values():
+            if isinstance(e, dict) and int(e.get("remaining", 27) or 27) <= 5:
+                has_low_enemy = True
+                break
+        if not has_low_enemy:
+            return None
+
+        hand_cards = list(game_state.get("handCards", []) or [])
+        if not hand_cards:
+            return None
+        cur_rank = str(game_state.get("curRank", "2"))
+
+        # Gate 3: 本方持有级牌单张（cur_rank rank 的单张，非逢人配 H{curRank}）
+        # 级牌单张 = rank == cur_rank 且 suit != H（H{curRank} 是逢人配）
+        level_singles: List[Tuple[int, List]] = []
+        for idx, act in candidates:
+            try:
+                atype = get_action_type(act)
+            except Exception:
+                continue
+            if atype != ACTION_TYPE_SINGLE:
+                continue
+            cards = _get_cards(act)
+            if len(cards) != 1:
+                continue
+            card = str(cards[0])
+            # 排除逢人配 H{curRank}
+            if _is_wild_level_card(card, cur_rank):
+                continue
+            # rank == cur_rank（级牌）
+            try:
+                if get_card_rank(card) != cur_rank:
+                    continue
+            except Exception:
+                continue
+            level_singles.append((idx, act))
+
+        if not level_singles:
+            return None
+
+        # Gate 4: 本方有冲刺路径（顺子/整牌/炸弹）
+        if not self._has_structure_sprint_path(hand_cards):
+            return None
+
+        # 取最小级牌压（保留大级牌回手）
+        picked = min(level_singles, key=lambda item: _max_card_value(item[1], cur_rank))
+        logger.info(
+            "GUA-245 level-card press single: idx=%d card=%s sprint=True",
+            picked[0],
+            _get_cards(picked[1])[0] if _get_cards(picked[1]) else "?",
         )
         return picked
 
