@@ -338,18 +338,27 @@ class UltimateWinRateEngineV7:
         if chosen[0] != "Straight" or not isinstance(chosen[2], list):
             return act_index
 
-        # GUA-232: 自由领出禁升级（同花顺=炸弹，R10 领出禁炸）
+        # GUA-232: 自由领出禁升级自然同花顺（同花顺=炸弹，R10 领出禁炸）。
+        # 野生同花顺（含逢人配 H{cur_rank}）牌力等同自然同花顺，允许升级。
         if game_state is not None:
             my_pos = game_state.get("myPos", self.player_id)
             greater_pos = game_state.get("greaterPos", -1)
             cur_pos = game_state.get("curPos", -1)
             is_free_lead = (cur_pos == -1) or (greater_pos in (-1, my_pos))
             if is_free_lead:
+                cur_rank = game_state.get("curRank", "")
+                wild_card = f"H{cur_rank}" if cur_rank else ""
+                chosen_has_wild = wild_card and wild_card in [str(c) for c in chosen[2]]
+                if not chosen_has_wild:
+                    self.logger.info(
+                        "GUA-232 自由领出禁升级自然同花顺: Straight idx=%d → 保持 Straight",
+                        act_index,
+                    )
+                    return act_index
                 self.logger.info(
-                    "GUA-232 自由领出禁升级同花顺: Straight idx=%d → 保持 Straight",
-                    act_index,
+                    "GUA-232 野生同花顺允许升级: Straight idx=%d 含 %s，继续升级",
+                    act_index, wild_card,
                 )
-                return act_index
 
         from collections import Counter
 
