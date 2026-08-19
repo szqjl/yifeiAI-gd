@@ -1806,6 +1806,22 @@ class EndgameDecider:
                 )
                 if keep_bomb is not None:
                     return keep_bomb
+                # GUA-248: greater 来自队友（不 close 场景）→ 不兜底炸队友
+                # 队友剩牌多不 close 时 GUA-212 不强制让道，但队友出牌（含顶大单 A）
+                # 属队友节奏；Q0 兜底 _select_best_bomb 会把队友当敌方反压，浪费炸弹
+                # 且坑队友拿圈。实测 match 6a85a735 20:53:40 V8 Bomb/T 压队友 DA。
+                # 例外：敌人 ≤2 张（imminent）接管拦截除外（与 GUA-212 语义一致）。
+                greater_pos = game_state.get("greaterPos", -1)
+                if greater_pos not in (-1, None) and greater_pos == (my_pos + 2) % 4:
+                    enemy_imminent = any(
+                        e.get("remaining", 99) <= 2 for e in enemies.values()
+                    ) if enemies else False
+                    if not enemy_imminent:
+                        logger.info(
+                            "GUA-248: greaterPos=teammate(%d) → Q0 被动不兜底炸队友",
+                            greater_pos,
+                        )
+                        return None
                 if bombs:
                     return self._select_best_bomb(bombs, action_list)
                 return None
@@ -2127,6 +2143,16 @@ class EndgameDecider:
         if gua239 is not None:
             game_state["_gua239_single_probe"] = True
             return gua239
+
+        # GUA-249: 自由领出 + 下家敌方剩 6/7 张 + 本方仅单/对（候选只含 Single/Pair/PASS）
+        # + 对子 ≥1 → 先探后克：有天然单出最小天然单试探（保留对子回手）；
+        # 无天然单（全对）直接出最小对子（对子克 5 张起点）。实测敌7 领出全对四手
+        # （33 44 88 99）原兜底拆对 Single/8 拆散对子结构，应出最小对子。
+        gua249 = self._q1_only_single_pair_lead_probe(
+            game_state, non_banned_candidates, ec,
+        )
+        if gua249 is not None:
+            return gua249
 
         # GUA-210: 封锁候选过滤「拆核心」动作——级牌单张若在 StraightFlush /
         # straight / 炸弹核心组内（如 SF S2-S6 的 S2），Q1 通用路径会优先选级牌
@@ -3327,6 +3353,102 @@ class EndgameDecider:
         logger.info(
             "GUA-239 multi_hand lead single_first: idx=%d type=%s",
             picked[0], ACTION_TYPE_SINGLE,
+        )
+        return picked
+
+    def _q1_only_single_pair_lead_probe(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        GUA-249：自由领出 + 下家敌方剩 6/7 张 + 本方仅单/对（候选只含 Single/Pair/PASS）
+        + 对子 ≥1 → 先探后克：有天然单出最小天然单试探（保留对子回手）；
+        无天然单（全对）直接出最小对子（对子克 5 张起点）。
+
+        背景（用户 2026-08-19 定音，本地 demo 实测）：敌剩 6/7 张时 endgame_rule
+        推荐全是整牌型（6 → [ThreePair,TwoTrips,Straight,Trips]；7 →
+        [Straight,TwoTrips,ThreePair]），本方仅单/对时 ④ recommended 过滤空 →
+        ⑤ baoshu 无 → ⑥ 任意 non_banned 回收优先兜底。实测敌7 领出全对四手
+        （33 44 88 99）拆对 Single/8（留 8 回收）——拆散对子结构、非对子克 5 张
+        起点。正确：有天然单先出最小天然单（先探后克，保留对子回手）；全对直接
+        出最小对子（对子克 5 张）。插 GUA-239 之后、_filter_q1_core_break_candidates
+        之前（全对场景不会拆核心，无拆核心拦截豁免需求）。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if not self._is_my_q1_lead_turn(game_state, my_pos):
+            return None
+
+        # 下家（(my_pos+1)%4）敌方剩 6 或 7 张（对子克 5 张的窗口）
+        enemies = ec.get("enemies", {}) or {}
+        down_pos = (my_pos + 1) % 4
+        down_enemy = enemies.get(down_pos)
+        if not isinstance(down_enemy, dict):
+            return None
+        if int(down_enemy.get("remaining", 0) or 0) not in (6, 7):
+            return None
+
+        # 本方候选仅 Single/Pair/PASS（无炸/无整牌结构）
+        non_pass_types = set()
+        pair_items: List[Tuple[int, List]] = []
+        single_items: List[Tuple[int, List]] = []
+        for i, a in candidates:
+            try:
+                atype = _get_declared_action_type(a)
+            except Exception:
+                return None
+            if atype in (ACTION_TYPE_PASS, "PASS"):
+                continue
+            if atype not in (ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR):
+                return None
+            non_pass_types.add(atype)
+            if atype == ACTION_TYPE_PAIR:
+                pair_items.append((i, a))
+            else:
+                single_items.append((i, a))
+        if not pair_items:
+            return None
+
+        hand_cards = list(game_state.get("handCards", []) or [])
+        cur_rank = str(game_state.get("curRank", "2"))
+
+        # 有天然单（rank 在手牌仅 1 张；大小王排除，留作回手）→ 先探后克
+        cnt = Counter(get_card_rank(c) for c in hand_cards)
+        natural_singles: List[Tuple[int, List]] = []
+        for i, a in single_items:
+            cards = _get_cards(a)
+            if len(cards) != 1:
+                continue
+            card = cards[0]
+            rk = get_card_rank(card)
+            if rk in ("SB", "HR"):
+                continue
+            if cnt.get(rk, 0) != 1:
+                continue
+            natural_singles.append((i, a))
+        if natural_singles:
+            picked = min(
+                natural_singles,
+                key=lambda item: get_card_value(_get_cards(item[1])[0], cur_rank),
+            )
+            logger.info(
+                "GUA-249 only_single_pair lead probe: idx=%d type=%s",
+                picked[0], ACTION_TYPE_SINGLE,
+            )
+            return picked
+
+        # 无天然单（全对）→ 直接出最小对子（对子克 5 张起点）
+        picked = min(
+            pair_items,
+            key=lambda item: _max_card_value(item[1], cur_rank),
+        )
+        logger.info(
+            "GUA-249 only_single_pair lead probe: idx=%d type=%s",
+            picked[0], ACTION_TYPE_PAIR,
         )
         return picked
 
