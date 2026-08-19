@@ -4113,6 +4113,16 @@ class UltimateWinRateEngineV7:
         is_upper = (greater_pos == opp_right)
         is_lower = (greater_pos == xia_jia)
 
+        # ── DIAG-001: 场景诊断（GUA-091 队友炸弹根因排查）──
+        self.logger.info(
+            "DIAG-001 场景: myPos=%d greaterPos=%d teammatePos=%d "
+            "curPos=%d is_teammate=%s is_upper=%s is_lower=%s is_lead=%s "
+            "stage=%s role=%s",
+            my_pos, greater_pos, teammate_pos, cur_pos,
+            is_teammate, is_upper, is_lower, is_lead,
+            current_stage, self._current_role,
+        )
+
         greater_type = ""
         greater_rank = ""
         if greater_action and greater_action[0] != "PASS":

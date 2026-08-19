@@ -909,6 +909,20 @@ def _rank_to_value(rank_char: str) -> int:
     return idx_map.get(rank_char, 0)
 
 
+def _cards_high_rank_value(cards: List[str]) -> int:
+    """一组牌的高端普通 rank 值（不含级牌特殊 15）。
+
+    用于 _score_power 小顺子/小三连对减分判断：A 在 wrap 顺子（含 2）中当 1，
+    避免级牌算 15、A 算 14 绕过「≤6 小牌型减分」（A2345 → 5，TJQKA → 14）。
+    """
+    ranks = [_parse_rank(c) for c in cards]
+    if "A" in ranks and "2" in ranks:
+        vals = [1 if r == "A" else _rank_to_value(r) for r in ranks]
+    else:
+        vals = [_rank_to_value(r) for r in ranks]
+    return max(vals)
+
+
 # ── 顺子检测 ──────────────────────────────────────────────
 
 def _detect_straights(
@@ -1545,15 +1559,15 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     # 组合：6及以下小顺子 / 小木板 / 小钢板，每组 -1
     rank6_limit = _rank_to_value("6")
     for s in plan.straights:
-        max_val = max(_card_rank_value(c, cur_rank) for c in s)
-        if max_val <= rank6_limit:
+        # 用普通 rank 高端值判小顺子：A2345 wrap 顺子 A 当 1（高端=5），
+        # 级牌在顺子中不享受 15 特殊值，避免小顺子减分被绕过
+        if _cards_high_rank_value(s) <= rank6_limit:
             score -= 1
 
     for tp in plan.three_pairs:
         # tp = [[pair1], [pair2], [pair3]] — 每个对子 2 张，共 6 张
         all_cards = [c for pair in tp for c in pair]
-        max_val = max(_card_rank_value(c, cur_rank) for c in all_cards)
-        if max_val <= rank6_limit:
+        if _cards_high_rank_value(all_cards) <= rank6_limit:
             score -= 1
 
     # GUA-070: 移除小钢板减分 — 钢板不论大小都是加分项（稀有牌型，天然难被压制）
