@@ -1971,6 +1971,14 @@ class EndgameDecider:
                 continue
             if not _action_beats_greater(act, greater_action, cur_rank):
                 continue
+            # GUA-254: 不拆核心整牌当散牌压——手牌 = 炸 + 散牌时，散牌候选里若含
+            # 炸弹/顺子/trips 等核心组成员（如 9999 拆出 C9、AAAA 拆出 SA），单出会
+            # 拆掉回手炸弹，后续只剩 trips+散牌被 Q1「拆整牌」拦截只能全 PASS
+            # （match=6a86911a 残局拆 9999/AAAA 双炸后连 PASS 负）。此处一律跳过
+            # 拆核心动作（不做 GUA-252 豁免——敌≤5 出单拆最大单压牌由 Q1
+            # `_q1_enemy_five_single_special` 处理，其选最大单而非 Q0 的最小可压单）。
+            if self._action_breaks_core_structure(act, game_state):
+                continue
             scatter_plays.append((idx, act))
 
         if not scatter_plays:
@@ -3329,7 +3337,10 @@ class EndgameDecider:
         if hands < 4 or pair_groups < 2:
             return None
 
-        # 找最小天然单（rank 在手牌中仅 1 张；大小王排除，留作回手）
+        # 找最小天然单（rank 在手牌中仅 1 张；大小王排除留作回手；
+        # 逢人配 H{curRank} 排除——它是炸弹/整牌配子，裸出等于拆结构
+        # 浪费万能牌，应保留配炸/配 TWT）
+        cur_rank = str(game_state.get("curRank", "2"))
         cnt = Counter(get_card_rank(c) for c in hand_cards)
         natural_singles: List[Tuple[int, List]] = []
         for i, a in candidates:
@@ -3345,13 +3356,14 @@ class EndgameDecider:
             rk = get_card_rank(card)
             if rk in ("SB", "HR"):
                 continue
+            if _is_wild_level_card(str(card), cur_rank):
+                continue
             if cnt.get(rk, 0) != 1:
                 continue
             natural_singles.append((i, a))
         if not natural_singles:
             return None
 
-        cur_rank = str(game_state.get("curRank", "2"))
         picked = min(
             natural_singles,
             key=lambda item: get_card_value(_get_cards(item[1])[0], cur_rank),

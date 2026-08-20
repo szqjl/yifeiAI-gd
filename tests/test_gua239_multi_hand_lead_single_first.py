@@ -244,3 +244,101 @@ def test_engine_filter_exempts_gua239_single_probe():
     gs_no_marker.pop("_gua239_single_probe", None)
     filtered2, fmap2 = engine._group_consistency_filter(actions, gs_no_marker)
     assert fmap2[0] == -1, f"无标记应拦截拆 SF 的 Single/7；fmap={fmap2}"
+
+
+# ---- GUA-253：GUA-239 天然单过滤排除逢人配 H{curRank}（match 6a86823d） ----
+
+def build_gs_bomb_wild():
+    """match 6a86823d 12:27:58 领出轮：手 666777JJKK+H2，
+    组牌 H2 配成 G0(Bomb)=6666，下家剩 6 张。修复前 H2 被当天然单单出。"""
+    return {
+        "curRank": "2",
+        "handCards": [
+            "C6", "S6", "C6", "H2", "CK", "DK", "D7", "H7", "S7", "CJ", "HJ",
+        ],
+        "myPos": 0,
+        "curPos": 0,
+        "greaterPos": 0,
+        "greaterAction": ["Pair", "A", ["HA", "DA"]],
+        "curAction": ["Pair", "A", ["HA", "DA"]],
+        "numofplayers": [11, 6, 8, 5],
+        "publicInfo": [
+            {"rest": 11}, {"rest": 6}, {"rest": 8}, {"rest": 5},
+        ],
+        "done": [],
+        "stage": "play",
+        "selfRank": "2",
+        "oppoRank": "2",
+        "_botzone_mode": True,
+        "_group_members": {
+            0: ["C6", "S6", "C6", "H2"],
+            1: ["CK", "DK"],
+            2: ["D7", "H7", "S7"],
+            3: ["CJ", "HJ"],
+        },
+        "_group_gid_type_map": {
+            0: "Bomb",
+            1: "pair",
+            2: "trip_in_three_with_two",
+            3: "pair_in_three_with_two",
+        },
+    }
+
+
+def build_ec_bomb_wild():
+    return {
+        "my_pos": 0,
+        "cur_pos": 0,
+        "cur_rank": "2",
+        "numofplayers": [11, 6, 8, 5],
+        "enemies": {
+            1: {"remaining": 6, "danger_level": "中",
+                "recommended_types": ["ThreePair", "TwoTrips", "Straight", "Trips"],
+                "banned_types": [], "baoshu": {}},
+            3: {"remaining": 5, "danger_level": "低",
+                "recommended_types": ["Straight", "TwoTrips", "ThreePair"],
+                "banned_types": [], "baoshu": {}},
+        },
+        "teammate": {"remaining": 8, "is_close": False, "assist_prefer": []},
+        "self": {"remaining": 11, "has_two_clean_hands": False,
+                 "has_bomb": True, "should_sprint": False},
+        "finished": [],
+    }
+
+
+def build_action_list_bomb_wild():
+    return [
+        ["PASS", "PASS", "PASS"],
+        ["Single", "2", ["H2"]],
+        ["Single", "7", ["D7"]],
+        ["Pair", "J", ["CJ", "HJ"]],
+        ["Pair", "K", ["CK", "DK"]],
+        ["Trips", "7", ["D7", "H7", "S7"]],
+        ["Bomb", "6", ["C6", "S6", "C6", "H2"]],
+        ["ThreeWithTwo", "7", ["D7", "H7", "S7", "CK", "DK"]],
+    ]
+
+
+def test_gua253_wild_level_card_excluded_from_natural_single():
+    """逢人配 H2（组进炸弹配子）不得当天然单试探——单出即拆炸弹，浪费万能牌。"""
+    gs = build_gs_bomb_wild()
+    d = EndgameDecider()
+    result = d._q1_multi_hand_lead_single_first(
+        gs, list(enumerate(build_action_list_bomb_wild())), build_ec_bomb_wild())
+    # 修复前：唯一天然单候选 = H2 → 返回 Single/H2（bug）
+    # 修复后：H2 排除 → 无天然单 → 返回 None，落 Q1 正常路径（组炸/整牌）
+    assert result is None, f"H2 应被排除，GUA-239 不触发（无天然单）；实际 {result}"
+
+
+def test_gua253_decide_not_single_h2():
+    """decide() 集成：手 666777JJKK+H2 领出，不得单出 H2 拆炸弹核心。"""
+    gs = build_gs_bomb_wild()
+    gs["_endgame_context"] = build_ec_bomb_wild()
+    gs["_endgame_context"]["is_active"] = True
+    d = EndgameDecider()
+    idx, act = d.decide(gs, build_action_list_bomb_wild())
+    assert act is not None, "decide 应命中"
+    assert act[0] != "Single" or act[2] != ["H2"], \
+        f"不得单出逢人配 H2（拆炸弹 6666）；实际 {act}"
+    assert act[0] in ("Bomb", "ThreeWithTwo", "Pair", "Trips"), \
+        f"应组炸/整牌/对子，而非单出 H2；实际 {act}"
