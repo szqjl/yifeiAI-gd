@@ -5288,11 +5288,24 @@ class UltimateWinRateEngineV7:
             return None
 
         # GUA-075：用 get_card_value 比较（考虑级牌 cur_rank 提升）
-        greater_cards = _extract_action_cards(greater_action)
-        if greater_cards:
-            greater_val = get_card_value(str(greater_cards[0]), cur_rank)
+        # GUA-255：greater_val 必须用「主牌 rank」而非 greater_cards[0]——
+        # 平台 TWT 动作 [type,rank,[cards]] 的 cards 首位常为带牌（如
+        # TWT/7 ['C5','H7','D5','S7','C7'] 首位 C5 是带牌，value=3），
+        # 若按首位算会误以为 666 能压 777 → 推荐 666+KK 被 actionList 拒
+        # → PASS，真正可压的 JJJ+KK 从未考虑（match=6a86911a L370-377）。
+        # 普通同型（Pair/Trips/Straight/ThreePair/TwoTrips）也一律用主牌 rank。
+        greater_rank = get_action_rank(greater_action)
+        if not greater_rank:
+            return None
+        if greater_rank in ("B", "R"):
+            # 大小王主牌（Single 场景），用实际牌面取值，避免 'HB'/'HR' 误判
+            greater_cards = _extract_action_cards(greater_action)
+            if greater_cards:
+                greater_val = get_card_value(str(greater_cards[0]), cur_rank)
+            else:
+                greater_val = self.RANK_ORDER.get(greater_rank, 0)
         else:
-            greater_val = self.RANK_ORDER.get(greater_rank, 0)
+            greater_val = get_card_value(f"H{greater_rank}", cur_rank)
 
         groups = self._build_group_index(card_mask)
 
