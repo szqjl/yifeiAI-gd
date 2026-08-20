@@ -2191,6 +2191,17 @@ class EndgameDecider:
         if enemy_one_press is not None:
             return enemy_one_press
 
+        # GUA-256: 压单时手牌有 ≥2 个可压普通散单（非级牌）且无炸弹 →
+        # 出「倒数第二小」的散单，不用级牌大单拦。实测 match 6a869e90
+        # （logs/v8_vs_botzone_20260820_142630.log L108-115）：手牌散单 D8/CJ/DQ
+        # + 级牌 C2 + 对子 SA/HA，压 Single/7 被 GUA-122 排序把 C2 提到最前 → 出
+        # 级牌 C2 拦小单浪费大牌；应出倒数第二小散单 CJ（保留最小 D8 / 级牌 C2）。
+        scatter_second = self._q1_scatter_single_second_smallest_press(
+            game_state, non_banned_candidates, ec, main_pos, main_enemy,
+        )
+        if scatter_second is not None:
+            return scatter_second
+
         # GUA-245: 残局 Q1 级牌压单策略缺失。
         # 对手剩 ≤5 张出单 + 本方持有级牌单张 + 本方有冲刺路径 →
         # 主动压单夺回领出权（而非 PASS 让对手跑完）。
@@ -3548,6 +3559,109 @@ class EndgameDecider:
             "GUA-222 enemy-one single press: idx=%d type=%s",
             picked[0],
             _get_declared_action_type(picked[1]),
+        )
+        return picked
+
+    def _q1_scatter_single_second_smallest_press(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """
+        GUA-256：压单时手牌有 ≥2 个可压普通散单（非级牌）且无炸弹 →
+        出「倒数第二小」的散单，不用级牌大单拦。
+
+        Gate：
+          1. greaterAction == Single（跟牌压单，非领出）
+          2. 手牌无炸弹（Bomb/SF 不在候选）
+          3. 可压 greater 的普通散单 ≥2 张（排除级牌单张与逢人配 H{curRank}）
+          4. 取按牌力升序倒数第二小的散单
+
+        不命中任一 gate 返回 None 让老逻辑继续（含 GUA-122 级牌提前排序）。
+
+        实测 match 6a869e90（logs/v8_vs_botzone_20260820_142630.log L108-115，
+        第46回合）：V8 手牌 6 = 散单 D8/CJ/DQ/C2 + 对子 SA/HA，greater=Single/7，
+        无炸弹。修复前 GUA-122 把非逢人配级牌 C2 提到最前 → 出 Single/C2 拦小单，
+        浪费级牌回手；应出倒数第二小散单 CJ。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+
+        greater_action = game_state.get("greaterAction")
+        if not greater_action:
+            return None
+        try:
+            gtype = get_action_type(greater_action)
+        except Exception:
+            return None
+        if gtype != ACTION_TYPE_SINGLE:
+            return None
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if game_state.get("curPos", my_pos) == my_pos:
+            return None
+
+        hand_cards = list(game_state.get("handCards", []) or [])
+        if not hand_cards:
+            return None
+        cur_rank = str(game_state.get("curRank", "2"))
+
+        # Gate 2: 手牌无炸弹（Bomb/SF 不在候选）
+        if any(
+            _is_bomb_like_action(item[1] if isinstance(item, tuple) and len(item) == 2 else item)
+            for item in candidates
+        ):
+            return None
+
+        # Gate 3+4: 可压 greater 的普通散单（排除级牌单张与逢人配）
+        group_members = game_state.get("_group_members") or {}
+        group_gid_type = game_state.get("_group_gid_type_map") or {}
+        core_members: set = set()
+        for gid, members in group_members.items():
+            gtype = group_gid_type.get(gid) or group_gid_type.get(str(gid), "")
+            if gtype in ("scatter", "Scatter"):
+                continue  # 散单组本身
+            if isinstance(members, (list, tuple)):
+                core_members.update(str(c) for c in members)
+
+        beaters: List[Tuple[int, List]] = []
+        for idx, act in candidates:
+            try:
+                atype = get_action_type(act)
+            except Exception:
+                continue
+            if atype != ACTION_TYPE_SINGLE:
+                continue
+            cards = _get_cards(act)
+            if len(cards) != 1:
+                continue
+            card = str(cards[0])
+            if _is_wild_level_card(card, cur_rank):
+                continue  # 逢人配 H{curRank} 不拆
+            try:
+                if get_card_rank(card) == cur_rank:
+                    continue  # 非逢人配级牌（如 C2）不参与散单
+            except Exception:
+                continue
+            if core_members and card in core_members:
+                continue  # 核心组（pair/trips/Bomb等）成员不算普通散单
+            if not _action_beats_greater(act, greater_action, cur_rank):
+                continue
+            beaters.append((idx, act))
+
+        if len(beaters) < 2:
+            return None
+
+        # 按牌力升序取倒数第二小（第二小）
+        beaters.sort(key=lambda item: _max_card_value(item[1], cur_rank))
+        picked = beaters[1]
+        logger.info(
+            "GUA-256 scatter single second-smallest press: idx=%d card=%s",
+            picked[0],
+            _get_cards(picked[1])[0] if _get_cards(picked[1]) else "?",
         )
         return picked
 
