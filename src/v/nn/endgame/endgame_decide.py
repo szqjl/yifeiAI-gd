@@ -3964,7 +3964,8 @@ class EndgameDecider:
             if residue_type == ACTION_TYPE_SINGLE:
                 safe_residue = self._select_enemy_one_safe_single([residue_item], game_state, ec)
                 residue_bucket = 1 if safe_residue is not None else 2
-            elif residue_type == ACTION_TYPE_TRIPS:
+            elif residue_type in (ACTION_TYPE_TRIPS, ACTION_TYPE_THREE_PAIR,
+                                  ACTION_TYPE_TWO_TRIPS, ACTION_TYPE_STRAIGHT):
                 # GUA-240: 残手 Trips 无法压 Single 回收——「先出散单留整牌」对 Trips
                 # 不成立（出单后 Trips 只能等下圈同型，本圈单权回收不了），视为风险
                 # 残手排后，让整牌 Trips 冲刺优先（match=6a7f1a17 21:37:58：
@@ -3972,6 +3973,12 @@ class EndgameDecider:
                 # 注：TWT 残手不在此列——TWT+单已由 GUA-238 twt_sprint_boost 处理
                 # （有弱点先 TWT，无弱点维持先单）；Straight↔TWT 互拼走 GUA-236
                 # 领出顺优先（Straight=0 < TWT=1，两候选均 bucket=0 时顺序不变）。
+                # GUA-257（同源扩展，match=6a86e9540fbd680d7c7c6318 第58回合）：
+                # 残手为 ThreePair/TwoTrips/Straight 整牌结构时同样视为风险——「先出
+                # 单张留整牌」单被压后整牌烂手（本局 Single/T 被 Bomb/9 压死，445566
+                # 整牌此后一直无法出手）。两手整牌语义下应「先出整牌特殊牌型、单留
+                # 最后」。与 Trips 同 bucket=2，让「先出整牌」候选凭 structure_priority
+                # 排前（ThreePair=3 < Single=99、TwoTrips=2、Straight=0）。
                 residue_bucket = 2
 
             act_type = _effective_structure_type(act)
