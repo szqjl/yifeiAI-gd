@@ -2459,6 +2459,40 @@ class EndgameDecider:
             or EndgameDecider._find_high_straight_cards(hand_cards)
         )
 
+    @staticmethod
+    def _action_breaks_bomb_family(
+        action: List, hand_cards: List[str],
+    ) -> bool:
+        """检查出牌是否拆了 ≥4 同点炸弹（部分取走但非全部）。
+
+        GUA-258：GUA-142 自由领出 ThreePair/TwoTrips 冲刺时，若候选动作从炸弹
+        （≥4 同点）中取走部分张数，视为拆炸——出完后无炸弹回手，冲刺路径为假，
+        应过滤。GUA-154 只在 adapter 层事后标记 broken，拦不住。
+        例：手牌 6666+8888+77+顺9-K，ThreePair 667788 从 6666 取 2、8888 取 2
+        → 拆双炸（match 6a87081b）。
+        不误伤：GUA-142 正常用例从 SF（5 个不同点）或 trips（3 张）取牌凑 ThreePair。
+        """
+        if not hand_cards or not GUARD_TOOLS_OK:
+            return False
+        from collections import Counter
+        hand_rank: Counter = Counter()
+        for c in hand_cards:
+            rk = get_card_rank(str(c))
+            if rk in ("HR", "SB"):
+                continue
+            hand_rank[rk] += 1
+        action_used: Counter = Counter()
+        for c in _get_cards(action):
+            rk = get_card_rank(str(c))
+            if rk in ("HR", "SB"):
+                continue
+            action_used[rk] += 1
+        for rk, n_used in action_used.items():
+            n_hand = hand_rank.get(rk, 0)
+            if n_hand >= 4 and 0 < n_used < n_hand:
+                return True
+        return False
+
     @classmethod
     def _has_structure_sprint_path(cls, hand_cards: List[str]) -> bool:
         """
@@ -2518,6 +2552,9 @@ class EndgameDecider:
             except Exception:
                 continue
             if atype not in structure_types:
+                continue
+            # GUA-258：排除拆 ≥4 同点炸弹的动作（拆炸后无炸弹回手=假冲刺路径）
+            if self._action_breaks_bomb_family(act, hand_cards):
                 continue
             remainder = self._remainder_after_action(hand_cards, act)
             if remainder is None:
