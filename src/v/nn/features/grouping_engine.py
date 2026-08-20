@@ -1416,18 +1416,20 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     加分项：
       - 同花顺 +3（牌面最大）
       - 五星炸 +2
-      - 四头炸 +2
+      - 四头炸 +2（含 1 个级牌的四头炸）
+      - 4 个级牌炸弹 +1（2026-08-20 下调：级牌组炸不及拆成对子/单/TWT 灵活）
       - 6张及以上炸弹 +3
       - 四大天王（2大王+2小王） +4/组
       - 逢人配（百搭）+1/张（配成炸弹/同花顺不再重复加分）
-      - 登基牌 +1（大王 / 对级牌）
-      - 稀有牌型 +1（三连对）
+      - 登基牌 +1（大王 / 对级牌——对级牌不含红桃配，红桃配已单独加分）
+      - 稀有牌型 +1（三连对 / 钢板）
 
     减分项（每满足一类扣 1 分，多张多组叠加扣）：
       - 单张：＜10 的孤立单张，每张 -1
       - 对子：＜对6 孤立小对子（无三带二组合），每组 -1
       - 三带二：＜4 小三头带对，每组 -1
-      - 组合：6及以下小顺子 / 小木板 / 小钢板，每组 -1
+      - 组合：6及以下小顺子，每组 -1
+      （2026-08-20 移除小木板/小钢板减分：三连对/钢板已是加分项，再减分自相矛盾）
     """
     score = 0
 
@@ -1438,7 +1440,9 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     # 登基牌炸弹 +3：同花顺（牌面最大）
     score += len(plan.straight_flushes) * 3
 
-    # 炸弹计分：五星炸+2，四头炸+2（级牌四头不再额外加分）
+    # 炸弹计分：五星炸+2，四头炸+2
+    # 2026-08-20 评分体系调整：4个级牌炸弹 +1（级牌组炸不及拆成对子/单/TWT 灵活）；
+    # 含1个级牌或普通四头炸 +2
     for b in plan.bombs:
         n = len(b)
         if n >= 6:
@@ -1446,7 +1450,10 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
         elif n == 5:
             score += 2          # 五星炸
         elif n == 4:
-            score += 2          # 四头炸
+            if all(_parse_rank(c) == cur_rank for c in b):
+                score += 1      # 4个级牌炸弹（2026-08-20 下调）
+            else:
+                score += 2      # 含1个级牌或普通四头炸
 
     # 四大天王 +4：2大王 + 2小王（统计方案中所有 JOKER 牌）
     def _count_jokers(plan: "GroupingPlan") -> tuple:
@@ -1490,9 +1497,11 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     # 登基牌 +1：大王（每张 +1）
     score += rj_count
 
-    # 登基牌 +1：对级牌
+    # 登基牌 +1：对级牌（不含红桃配，红桃配已单独有加分，2026-08-20 调整）
     for p in plan.pairs:
-        if _parse_rank(p[0]) == cur_rank:
+        if _parse_rank(p[0]) == cur_rank and not (
+            _is_wild(p[0], cur_rank) or _is_wild(p[1], cur_rank)
+        ):
             score += 1
 
     # 稀有牌型 +1：三连对
@@ -1505,12 +1514,13 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
 
     # 整牌型结构加分：每个顺子 +1，每个三带二 +1
     # 抵消小牌罚分对结构强度手牌的误杀（如 SF+炸+2顺+TWT 不应因散5被打到助攻）
+    # 钢板已在上面（GUA-069 稀有牌型）计过一次 +1，此处不重复
     score += len(plan.straights)
     score += len(plan.three_with_twos)
-    score += len(plan.steel_plates)
 
     # 多炸加分：双炸及更多时额外 +2，反映多炸防守深度优势
-    # 双炸 4+4 > 单炸 5+TWT 的结构强度，弥补小对子罚分对手数的误杀
+    # GUA-184（2026-07-29）：双炸 vs 单炸+结构方案评分倒挂（Plan1 2炸+顺 5+2 > Plan0 1炸+顺+TWT 4）
+    # 意图：双炸 4+4 > 单炸 5+TWT 的结构强度，弥补小对子罚分对手数的误杀
     if len(plan.bombs) >= 2:
         score += 2
 
@@ -1556,7 +1566,7 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
         if _card_rank_value(trip[0], cur_rank) < rank4_threshold:
             score -= 1
 
-    # 组合：6及以下小顺子 / 小木板 / 小钢板，每组 -1
+    # 组合：6及以下小顺子，每组 -1
     rank6_limit = _rank_to_value("6")
     for s in plan.straights:
         # 用普通 rank 高端值判小顺子：A2345 wrap 顺子 A 当 1（高端=5），
@@ -1564,13 +1574,8 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
         if _cards_high_rank_value(s) <= rank6_limit:
             score -= 1
 
-    for tp in plan.three_pairs:
-        # tp = [[pair1], [pair2], [pair3]] — 每个对子 2 张，共 6 张
-        all_cards = [c for pair in tp for c in pair]
-        if _cards_high_rank_value(all_cards) <= rank6_limit:
-            score -= 1
-
-    # GUA-070: 移除小钢板减分 — 钢板不论大小都是加分项（稀有牌型，天然难被压制）
+    # 2026-08-20 移除小木板（三连对最高牌≤6）减分 — 木板即三连对，与加分项（稀有牌型+1）冲突
+    # 2026-08-20 移除小钢板减分 — 钢板不论大小都是加分项（稀有牌型，天然难被压制）
     return score
 
 
@@ -2220,6 +2225,47 @@ def _enumerate_plans(
                 [], [], sf_n1, sf_p1, sf_t1, wilds_all[:], all_bombs,
                 "STRAIGHT_BRIDGE", break_bombs=False, double_st=False,
                 large_bomb_peel=0, bridge_bomb_idx=bridge_idx)
+
+    # ═══════════════════════════════════
+    # GUA-251: NO_SF_DOUBLE_BOMB — 无同花顺/顺子优先的双炸流候选
+    # 背景（2026-08-20）：match 6a865b7d（curRank=2，H2×2 配子 + TTT + QQQ）
+    #   枚举强制每个方案含 SF，SF 消耗 1 配子 → 剩 1 配子只能升 1 炸，
+    #   「放弃 SF、2 配子组双炸」方案从未生成 → 多炸+2 评分形同虚设。
+    #   实测：NO_SF_DOUBLE_BOMB score=0.6422 > 引擎最优 THREE_PAIR_FIRST 0.5487。
+    # 实现：不经过 SF 检测，全部配子优先 `_upgrade_bombs_with_wilds` 升炸（可多炸），
+    #   剩余牌走多 pass 循环组顺子/三连对/TWT，双炸方案进候选参与评分。
+    # ═══════════════════════════════════
+    no_sf_s = list(singles)
+    no_sf_p = [p_[:] for p_ in pairs]
+    no_sf_t = [t_[:] for t_ in trips]
+    no_sf_w = list(wilds_all)
+    no_sf_bombs = [b_[:] for b_ in bombs]
+    # 拆弹保护同 SF 流程：≤10 小炸可拆（GUA-072），J/Q/K/A 炸保护
+    no_sf_rem_bombs, no_sf_peeled = _break_bombs_into_pool(
+        no_sf_bombs, break_bombs=True, cur_rank=cur_rank,
+        large_bomb_peel=0, safe_to_break_fn=_safe_to_break_bomb,
+    )
+    no_sf_s.extend(no_sf_peeled)
+    # 全部配子优先升炸（可组多个炸弹）
+    no_sf_up, no_sf_t, no_sf_w = _upgrade_bombs_with_wilds(
+        no_sf_t, no_sf_w, cur_rank)
+    no_sf_rem_bombs = no_sf_rem_bombs + no_sf_up
+    no_sf_core = _bomb_core_ranks(no_sf_rem_bombs)
+    # 剩余牌组顺子/三连对/TWT（double_st 关，让三连对/TWT 优先）
+    no_sf_s, no_sf_p, no_sf_t, no_sf_w, no_sf_st, no_sf_tp, no_sf_sp, no_sf_twt = _run_multi_pass_loop(
+        no_sf_s, no_sf_p, no_sf_t, no_sf_w, cur_rank, False, no_sf_core,
+        three_pair_first=True, straight_before_twt=False)
+    # 剩余牌重分类（可能识别出新炸弹）
+    no_sf_rem = no_sf_s + [x for px in no_sf_p for x in px] + [x for tx in no_sf_t for x in tx]
+    no_sf_rg = _rank_groups(no_sf_rem, cur_rank)
+    del no_sf_rg["__wild__"]
+    no_sf_rs, no_sf_rp, no_sf_rt, no_sf_newb = _basic_classify(no_sf_rg)
+    no_sf_rem_bombs = no_sf_rem_bombs + no_sf_newb
+    plans.append(_build_plan(
+        no_sf_rs, no_sf_rp, no_sf_rt, no_sf_rem_bombs,
+        no_sf_st, [], no_sf_tp, no_sf_w, cur_rank,
+        "NO_SF_DOUBLE_BOMB",
+        three_with_twos=no_sf_twt, steel_plates=no_sf_sp))
 
     # ═══════════════════════════════════
     # 去重：相同得分相同结构的方案只保留一个

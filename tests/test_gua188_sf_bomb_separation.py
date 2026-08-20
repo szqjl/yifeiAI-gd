@@ -12,12 +12,16 @@ CUR_RANK = "4"  # H4 是百搭
 
 
 def test_gua188_grouping_engine_always_prefers_sf():
-    """组牌引擎产出全是 SF + Trips/A，无 Bomb/A 方案。"""
+    """组牌引擎 SF 方案存在且结构正确（C7-J SF + Trips/A，无 Bomb）。
+    GUA-251 新增 NO_SF_DOUBLE_BOMB 候选后，不再要求「所有方案都含 SF」，
+    只验证 SF 方案本身仍正确生成。"""
     plans = _enumerate_plans(HAND_8, CUR_RANK)
     assert len(plans) > 0
 
-    for p in plans:
-        # 每个方案都包含 SF
+    sf_plans = [p for p in plans if p.straight_flushes]
+    assert sf_plans, "应存在含 SF 的方案"
+    for p in sf_plans:
+        # 每个 SF 方案恰好含 1 个同花顺
         assert len(p.straight_flushes) == 1, \
             f"方案 {p.strategy} 应含 1 个同花顺，实际含 {len(p.straight_flushes)}"
         # 每个方案的 SF 是 Clubs 7-J
@@ -49,16 +53,26 @@ def test_gua188_champion_is_sf_not_bomb():
 
 
 def test_gua188_all_six_plans_identical_structure():
-    """全部 6 个策略方案结构一致（SF+Trips，无 Bomb）。"""
+    """SF 相关策略方案结构一致（SF+Trips，无 Bomb）。
+    GUA-251 新增 NO_SF_DOUBLE_BOMB 候选后，SF 策略方案仍保持原结构，
+    但不再限定「恰好 6 个方案」。"""
     plans = _enumerate_plans(HAND_8, CUR_RANK)
-    assert len(plans) == 6, f"预期 6 个方案，实际 {len(plans)}"
 
-    for p in plans:
+    sf_plans = [p for p in plans if p.straight_flushes]
+    assert len(sf_plans) >= 6, f"SF 方案应 ≥6，实际 {len(sf_plans)}"
+
+    for p in sf_plans:
         key = (len(p.singles), len(p.pairs), len(p.trips),
                len(p.bombs), len(p.straights), len(p.straight_flushes),
                len(p.three_pairs), len(p.three_with_twos), len(p.steel_plates))
         assert key == (0, 0, 1, 0, 0, 1, 0, 0, 0), \
             f"方案 {p.strategy} 结构不符: {key}"
+
+    # GUA-251：无 SF 双炸候选应存在（即使本手牌非最优，也是合法候选）
+    no_sf = [p for p in plans if not p.straight_flushes]
+    assert no_sf, "GUA-251 应生成无 SF 候选"
+    assert any(len(p.bombs) >= 1 for p in no_sf), \
+        "无 SF 候选应含炸弹（配子升炸流）"
 
 
 def test_gua188_hand5_only_bomb_no_sf():
@@ -76,9 +90,13 @@ def test_gua188_grouping_independent_of_decision_logging():
     
     方法：直接断言组牌引擎内部评分函数（_score_power, _score_plan_v2）
     不引用任何决策层函数。两模块零耦合。
+    GUA-251 新增 NO_SF_DOUBLE_BOMB 后，SF 方案仍保持 power=3；
+    无 SF 候选（配子升炸流）power 合法偏低，不参与本断言。
     """
     plans = _enumerate_plans(HAND_8, "4")
-    for p in plans:
+    sf_plans = [p for p in plans if p.straight_flushes]
+    assert sf_plans, "应存在 SF 方案"
+    for p in sf_plans:
         assert p.power_score == 3, \
             f"方案 {p.strategy} power_score={p.power_score}（应有 3）"
         assert p.score > 0.4, \
