@@ -1485,16 +1485,22 @@ class EndgameDecider:
                 if _get_declared_action_type(action) not in ("PASS",):
                     # GUA-239：多手自由领出先单试探有意拆 SF/顺子核心 → 豁免拆核心转 PASS
                     if not should_allow_gua239_single_probe(game_state):
-                        if self._action_breaks_core_structure(action, game_state):
-                            pidx = next(
-                                (i for i, a in enumerate(action_list)
-                                 if _get_declared_action_type(a) in ("PASS",)),
-                                None,
-                            )
-                            if pidx is not None:
-                                logger.info("Q1 封锁拆整牌(%s) → PASS",
-                                            _get_declared_action_type(action))
-                                return (pidx, action_list[pidx])
+                        # GUA-252：敌方 ≤5 张且出单时，拆 TWT/整牌出最大单压牌是残局正确打法，
+                        # 豁免「拆核心转 PASS」拦截（match=6a86823d 残局 777+KK 对手打 S8，
+                        # Q1 已找到 K 要压，却被 _action_breaks_core_structure 误杀成 PASS）。
+                        if not self._should_exempt_break_core_for_enemy_five_single(
+                            game_state, ec, action,
+                        ):
+                            if self._action_breaks_core_structure(action, game_state):
+                                pidx = next(
+                                    (i for i, a in enumerate(action_list)
+                                     if _get_declared_action_type(a) in ("PASS",)),
+                                    None,
+                                )
+                                if pidx is not None:
+                                    logger.info("Q1 封锁拆整牌(%s) → PASS",
+                                                _get_declared_action_type(action))
+                                    return (pidx, action_list[pidx])
                 logger.info("Q1 封锁敌方: idx=%d type=%s", idx, get_action_type(action) if GUARD_TOOLS_OK else "?")
                 return idx, action
 
@@ -4594,6 +4600,72 @@ class EndgameDecider:
         # 同型内按 rank 值最小（最省）
         candidates.sort(key=lambda x: _min_card_value(x[1], cur_rank))
         return candidates[0]
+
+    @staticmethod
+    def _should_exempt_break_core_for_enemy_five_single(
+        game_state: Dict[str, Any], ec: Dict[str, Any],
+        action: Optional[List] = None,
+    ) -> bool:
+        """GUA-252：敌方 ≤5 张且出单 → 豁免「拆核心转 PASS」拦截。
+
+        残局敌剩 ≤5 张打单时，拆 TWT/整牌出最大合法单张压牌是正确的夺权打法
+        （match=6a86823d 残局 777+KK 对手打 S8：Q1 已找到 K 要压，
+        却被 _action_breaks_core_structure 误杀成 PASS，导致对手连续控牌）。
+        仅当全部满足才豁免：
+          1. greaterAction 是 Single
+          2. 出牌者是敌人（非我方、非队友）
+          3. 该敌人剩余 ≤5
+          4. 待出的 action 是 Single 且能压过当前单（拆出压不过的单=送菜）
+        """
+        try:
+            greater_action = game_state.get("greaterAction")
+            if not greater_action or get_action_type(greater_action) != ACTION_TYPE_SINGLE:
+                return False
+            greater_pos = game_state.get("greaterPos", -1)
+            if greater_pos in (-1, None):
+                return False
+            my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+            teammate_pos = (my_pos + 2) % 4
+            if greater_pos == my_pos or greater_pos == teammate_pos:
+                return False
+            enemies = ec.get("enemies", {}) or {}
+            if greater_pos not in enemies:
+                # 未识别为敌人时，按 seat 判（非我、非队友即敌）
+                if greater_pos not in ((my_pos + 1) % 4, (my_pos + 3) % 4):
+                    return False
+            enemy_ctx = enemies.get(greater_pos, {}) or {}
+            remaining = enemy_ctx.get("remaining", -1)
+            if not (isinstance(remaining, int) and remaining >= 0):
+                # 敌人剩余未知时用 numofplayers 估算
+                numofplayers = (
+                    ec.get("numofplayers")
+                    or game_state.get("numofplayers")
+                    or []
+                )
+                if (
+                    isinstance(numofplayers, (list, tuple))
+                    and 0 <= greater_pos < len(numofplayers)
+                    and isinstance(numofplayers[greater_pos], int)
+                ):
+                    remaining = numofplayers[greater_pos]
+            if not (isinstance(remaining, int) and 0 <= remaining <= 5):
+                return False
+            # 4. 拆出的 Single 必须能压过当前单
+            if action is not None:
+                if get_action_type(action) != ACTION_TYPE_SINGLE:
+                    return False
+                greater_cards = _get_cards(greater_action)
+                action_cards = _get_cards(action)
+                if not greater_cards or not action_cards:
+                    return False
+                cur_rank = str(game_state.get("curRank", "2"))
+                greater_value = get_card_value(greater_cards[0], cur_rank)
+                action_value = get_card_value(action_cards[0], cur_rank)
+                if action_value <= greater_value:
+                    return False
+            return True
+        except Exception:
+            return False
 
     @staticmethod
     def _action_breaks_core_structure(
