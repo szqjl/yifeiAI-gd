@@ -2182,6 +2182,17 @@ class EndgameDecider:
         if dsp is not None:
             return dsp
 
+        # GUA-264: 跟压单散单 vs 拆对平衡（牌力差≤2 不拆）。
+        # 须在 enemy_five_single（敌剩5→最大单）与 recommended 大单张之前，
+        # 否则下家剩5会直接拆 A，已散的 Q 被浪费（match 6a880831）。
+        structure_bal = self._q1_structure_balanced_single_press(
+            game_state,
+            [(i, a) for i, a in enumerate(action_list)],
+            ec, main_pos, main_enemy,
+        )
+        if structure_bal is not None:
+            return structure_bal
+
         special = self._q1_enemy_five_single_special(game_state, action_list, ec, main_pos, main_enemy)
         if special is not None:
             return special
@@ -3657,6 +3668,127 @@ class EndgameDecider:
         trips = sum(1 for r, c in cnt.items() if c == 3)
         quads = sum(1 for r, c in cnt.items() if c == 4)
         return singles + pairs + trips + quads * 2, pairs
+
+    def _q1_structure_balanced_single_press(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-264：跟压 Single 时，散单与拆对单做结构平衡。
+
+        定音（match ``6a880831``）：
+          ① 真散单（该 rank 手牌仅 1 张）与拆对单牌力差 ≤2 → 不拆，出散单
+          ② 已拆留下的散单能压 → 优先于再拆新对（同上，差≤2）
+          ③ 差 >2 仍可拆；敌方任一方报单剩 1 → 不介入（交给 GUA-222 / 最大单）
+
+        从完整 non_banned 候选取散单（含低于「大单张」门槛的 CQ），
+        避免 recommended 滤掉够压牌后再逼拆 AA。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+
+        enemies = ec.get("enemies", {}) or {}
+        if any(
+            int(e.get("remaining", 27) or 27) == 1
+            for e in enemies.values()
+            if isinstance(e, dict)
+        ):
+            return None
+
+        greater_action = game_state.get("greaterAction")
+        if not greater_action:
+            return None
+        try:
+            gtype = get_action_type(greater_action)
+        except Exception:
+            gtype = None
+        if gtype != ACTION_TYPE_SINGLE:
+            return None
+
+        # 领出轮不套用（只处理跟压）
+        my_pos = int(ec.get("my_pos", game_state.get("myPos", 0)) or 0)
+        if self._is_my_q1_lead_turn(game_state, my_pos):
+            return None
+
+        hand_cards = list(game_state.get("handCards", []) or [])
+        if not hand_cards:
+            return None
+        rank_counts = Counter(
+            get_card_rank(str(c)) for c in hand_cards if c
+        )
+
+        singles: List[Tuple[int, List]] = [
+            (i, a) for i, a in candidates
+            if _get_declared_action_type(a) == ACTION_TYPE_SINGLE
+        ]
+        if len(singles) < 2:
+            return None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+
+        def _act_rank(act: List) -> str:
+            rk = get_action_rank(act) if GUARD_TOOLS_OK else ""
+            if rk:
+                return str(rk)
+            cards = _get_cards(act)
+            if cards:
+                return str(get_card_rank(str(cards[0])))
+            return ""
+
+        scatters: List[Tuple[int, List]] = []
+        pair_splits: List[Tuple[int, List]] = []
+        for item in singles:
+            rk = _act_rank(item[1])
+            if not rk:
+                continue
+            if rank_counts.get(rk, 0) >= 2:
+                pair_splits.append(item)
+            elif rank_counts.get(rk, 0) == 1:
+                scatters.append(item)
+
+        if not scatters or not pair_splits:
+            return None
+
+        def _val(item: Tuple[int, List]) -> int:
+            return _max_card_value(item[1], cur_rank)
+
+        # 仅当「当前最大可压单」本身是拆对时才介入。
+        # 若最大已是散单（含级牌 C2），交给 GUA-256 等后续逻辑，避免误伤。
+        max_item = max(singles, key=_val)
+        max_rk = _act_rank(max_item[1])
+        if rank_counts.get(max_rk, 0) < 2:
+            return None
+
+        # 存在「某拆对单 − 某散单 ≤2」→ 该散单可替代拆对（不因 +1/+2 优势去拆）
+        # 例：J 对 Q（差1）不拆；CQ 对 A（差2）不拆；J 对 A（差3）仍可拆 A
+        eligible: List[Tuple[int, List]] = []
+        seen_idx = set()
+        for s in scatters:
+            sv = _val(s)
+            for p in pair_splits:
+                if _val(p) - sv <= 2:
+                    if s[0] not in seen_idx:
+                        eligible.append(s)
+                        seen_idx.add(s[0])
+                    break
+
+        if not eligible:
+            return None
+
+        # 多个可替代散单：取牌力最大（已拆剩 Q 优于更小散 J，兼顾防守）
+        picked = max(eligible, key=_val)
+        ref_split = max(pair_splits, key=_val)
+        logger.info(
+            "GUA-264 structure-balanced single: idx=%d scatter=%s "
+            "vs split=%s (gap<=2)",
+            picked[0],
+            _act_rank(picked[1]),
+            _act_rank(ref_split[1]),
+        )
+        return picked
 
     def _q1_enemy_one_single_press_max(
         self,
