@@ -142,6 +142,8 @@ class MemoryTracker:
         self._processed_anti_keys: Set[str] = set()
         self._anti_tribute_pos: List[int] = []
         self._tribute_sync_fingerprint: Optional[str] = None
+        # 当前级牌 rank（GUA-262 PASS 负证据用）
+        self.level_rank: str = "2"
 
     # ── 初始化 ──────────────────────────────────────────
 
@@ -261,13 +263,27 @@ class MemoryTracker:
                 logger.warning("排除法推断耗时 %.0fms (seat=%d, cards=%s)",
                                elapsed_ms, seat, cards[:3])
 
-    def record_pass(self, seat: int, target_type: str) -> None:
-        """记录某席因无法压制某牌型而 PASS。"""
+    def record_pass(
+        self,
+        seat: int,
+        target_type: str,
+        *,
+        greater_action: Optional[List[Any]] = None,
+        greater_pos: Optional[int] = None,
+    ) -> None:
+        """记录某席因无法压制某牌型而 PASS。
+
+        GUA-262：若为队友对敌控「该压不压」，据此推断大小王归属。
+        """
         if target_type and target_type.upper() not in ("PASS", ""):
             if seat not in self.type_weakness:
                 self.type_weakness[seat] = {}
             self.type_weakness[seat][target_type] = (
                 self.type_weakness[seat].get(target_type, 0) + 1
+            )
+        if greater_action is not None and greater_pos is not None:
+            self._infer_joker_from_partner_pass_on_enemy(
+                seat, greater_action, greater_pos,
             )
 
     def get_type_weakness(self, seat: int) -> Dict[str, int]:
@@ -284,9 +300,10 @@ class MemoryTracker:
 
     def set_level_rank(self, rank: str) -> None:
         """设置当前级牌并初始化剩余级牌。"""
+        self.level_rank = str(rank or "2").upper()
         self.level_cards_remaining.clear()
         for suit in SUITS:
-            self.level_cards_remaining.add(f"{suit}{rank}")
+            self.level_cards_remaining.add(f"{suit}{self.level_rank}")
 
     def record_hand_update(self, seat: int, hand_count: int) -> None:
         """外部更新手牌计数（如贡还后）。"""
@@ -564,6 +581,86 @@ class MemoryTracker:
                         copies[i] = self.OPPONENT_HAND
                     elif opp_held > 0 and partner_held == 0:
                         copies[i] = self.PARTNER_HAND
+
+    def _infer_joker_from_partner_pass_on_enemy(
+        self,
+        pass_seat: int,
+        greater_action: List[Any],
+        greater_pos: Any,
+    ) -> None:
+        """GUA-262：队友对敌控 PASS → 大小王归敌侧（该压不压负证据）。
+
+        ① 敌 Single 级牌 + 队友未压 + 我无 SB → 未定位 SB 归敌
+        ② 敌 Single SB + 队友未压 + 我无 HR → 未定位 HR 全归敌
+        ③ 敌 Single SB + 队友未压 + 我有 1 HR → 剩 1 未定位 HR 归敌
+        """
+        if pass_seat != self.partner_pos:
+            return
+        try:
+            gpos = int(greater_pos)
+        except (TypeError, ValueError):
+            return
+        if gpos not in self.opponents:
+            return
+        if not isinstance(greater_action, list) or len(greater_action) < 1:
+            return
+        if str(greater_action[0]).upper() != "SINGLE":
+            return
+        cards = (
+            greater_action[2]
+            if len(greater_action) >= 3 and isinstance(greater_action[2], list)
+            else []
+        )
+        if not cards:
+            return
+        card = str(cards[0])
+        ct = self._canonical_type(card)
+        cur_rank = getattr(self, "level_rank", "2") or "2"
+
+        my_sb = sum(1 for c in self.card_state["SB"] if c == self.MY_HAND)
+        my_hr = sum(1 for c in self.card_state["HR"] if c == self.MY_HAND)
+        unk_sb = sum(1 for c in self.card_state["SB"] if c == -1)
+        unk_hr = sum(1 for c in self.card_state["HR"] if c == -1)
+
+        # ① 敌出级牌单 → 推断 SB（只填 unknown，不覆盖我手）
+        if self._is_level_card(card, cur_rank) and my_sb == 0 and unk_sb > 0:
+            n = self._assign_unknown_jokers_to_opponents("SB", unk_sb)
+            logger.debug(
+                "GUA-262: 敌级牌单+队友PASS+我无SB → SB×%d 归敌",
+                n,
+            )
+            return
+
+        # ②③ 敌出小王 → 推断 HR
+        if ct == "SB" and unk_hr > 0:
+            if my_hr == 0:
+                n = self._assign_unknown_jokers_to_opponents("HR", unk_hr)
+                logger.debug(
+                    "GUA-262: 敌SB+队友PASS+我无HR → HR×%d 归敌",
+                    n,
+                )
+            elif my_hr == 1:
+                n = self._assign_unknown_jokers_to_opponents("HR", min(1, unk_hr))
+                logger.debug(
+                    "GUA-262: 敌SB+队友PASS+我有1HR → HR×%d 归敌",
+                    n,
+                )
+
+    def _assign_unknown_jokers_to_opponents(
+        self, joker_type: str, count: int,
+    ) -> int:
+        """仅将 unknown(-1) 副本标为 OPPONENT_HAND，永不覆盖 MY_HAND/PLAYED。"""
+        if joker_type not in JOKERS or count <= 0:
+            return 0
+        copies = self.card_state[joker_type]
+        assigned = 0
+        for i in range(2):
+            if assigned >= count:
+                break
+            if copies[i] == -1:
+                copies[i] = self.OPPONENT_HAND
+                assigned += 1
+        return assigned
 
     def _infer_joker_from_tribute_rules(self, cur_rank: str = "2") -> None:
         """贡牌阶段算王：04_calculation_skills §二.1 + 06_game_flow 抗贡。"""

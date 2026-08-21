@@ -1859,16 +1859,21 @@ class BotzoneAdapter:
         # （引擎据此 record_pass 记牌），而非本条 request 的最终 greater。
         history_actions = []
         running_greater = None
+        running_greater_pos = -1
         for player, action_cards, claim_cards in parsed_history:
             v8_action = self._bz_response_to_v8_action(
                 action_cards, bz_claim_cards=claim_cards, cur_rank=cur_rank)
             entry: Dict[str, Any] = {"pos": player, "action": v8_action}
             if v8_action and v8_action[0] == "PASS":
+                # GUA-262：PASS context 须带 greaterPos，队友该压不压才能归王到敌侧
                 entry["context"] = {
                     "greaterAction": running_greater or ["PASS", "PASS", "PASS"],
+                    "greaterPos": running_greater_pos,
                 }
             else:
                 running_greater = v8_action or running_greater
+                if v8_action and v8_action[0] != "PASS":
+                    running_greater_pos = player
             history_actions.append(entry)
 
         # numofplayers: 各席剩余张数 = 27 - 已出张数；done 玩家为 0；

@@ -1536,6 +1536,107 @@ class EndgameDecider:
         )
         return len(counts) == 2 and counts[0] == 2 and counts[1] >= 4
 
+    @staticmethod
+    def _outside_jokers_remain(game_state: Dict[str, Any]) -> Optional[bool]:
+        """GUA-261：外面（非我手）是否仍有未出大小王。
+
+        优先 `_belief.joker_signal`；否则 MemoryTracker.get_joker_tracking。
+        无记牌证据时返回 None（不强制冲刺对）。
+        """
+        joker = (game_state.get("_belief") or {}).get("joker_signal") or {}
+        if joker:
+            out = (
+                int(joker.get("hr_remain") or 0)
+                - int(joker.get("hr_in_my_hand") or 0)
+                + int(joker.get("sb_remain") or 0)
+                - int(joker.get("sb_in_my_hand") or 0)
+            )
+            return out > 0
+        tracker = game_state.get("_memory_tracker")
+        if tracker is not None and hasattr(tracker, "get_joker_tracking"):
+            try:
+                tr = tracker.get_joker_tracking()
+                out = int(
+                    (tr.get("HR") or {}).get("outside_my_hand", 0)
+                ) + int(
+                    (tr.get("SB") or {}).get("outside_my_hand", 0)
+                )
+                return out > 0
+            except Exception:
+                return None
+        return None
+
+    @staticmethod
+    def _hand_pair_plus_singles_no_joker(
+        hand_cards: List[str],
+    ) -> Optional[str]:
+        """手牌恰为「一对 + 若干单」且无大小王 → 返回对子 rank；否则 None。"""
+        if not hand_cards:
+            return None
+        ranks: List[str] = []
+        for c in hand_cards:
+            s = str(c)
+            if s in ("SB", "HR", "BJ", "RJ"):
+                return None
+            rk = get_card_rank(s)
+            if rk in ("SB", "HR", "BJ", "RJ"):
+                return None
+            ranks.append(rk)
+        cnt = Counter(ranks)
+        if any(v >= 3 for v in cnt.values()):
+            return None
+        pairs = [r for r, v in cnt.items() if v == 2]
+        singles = [r for r, v in cnt.items() if v == 1]
+        if len(pairs) != 1 or not singles:
+            return None
+        return pairs[0]
+
+    def _q0_pair_plus_singles_sprint_lead(
+        self,
+        game_state: Dict[str, Any],
+        non_bombs: List[Tuple[int, List]],
+        action_list: List,
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-261：无王在手 + 外面有王 + 对>K → 领出冲刺出对。
+
+        用户定音（match=6a87fb05）：手牌级牌对2+单T、下家亦剩3，出单T被压致败；
+        合理打法出级牌对冲刺。外面无大小王时可出单、拆级牌对回收（本分支不命中）。
+        """
+        hand_cards = list(game_state.get("handCards") or [])
+        pair_rank = self._hand_pair_plus_singles_no_joker(hand_cards)
+        if pair_rank is None:
+            return None
+        outside = self._outside_jokers_remain(game_state)
+        if outside is not True:
+            return None
+        cur_rank = str(game_state.get("curRank", "2"))
+        # 对子牌力：用同点任一牌面 + get_card_value（级牌=15 > K=11）
+        sample = next(
+            (c for c in hand_cards if get_card_rank(str(c)) == pair_rank),
+            None,
+        )
+        if sample is None:
+            return None
+        pair_val = get_card_value(str(sample), cur_rank) if GUARD_TOOLS_OK else 0
+        k_val = CARD_RANK_ORDER.get("K", 11)
+        if pair_val <= k_val:
+            return None
+        pair_acts = [
+            (i, a) for i, a in non_bombs
+            if (
+                _get_declared_action_type(a) == ACTION_TYPE_PAIR
+                and len(_get_cards(a)) == 2
+                and get_card_rank(str(_get_cards(a)[0])) == pair_rank
+            )
+        ]
+        if not pair_acts:
+            return None
+        logger.info(
+            "Q0 GUA-261 高对冲刺: pair=%s val=%d outside_jokers=1 idx=%d",
+            pair_rank, pair_val, pair_acts[0][0],
+        )
+        return self._select_best_index(pair_acts, action_list, game_state)
+
     def _q0_self_sprint(
         self, game_state: Dict[str, Any], action_list: List, ec: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
@@ -1623,6 +1724,14 @@ class EndgameDecider:
                                 reverse=True,
                             )
                             return self._select_best_index(structured_acts, action_list, game_state)
+                # GUA-261: 无王在手 + 外面有大小王 + 手牌=对+单(们) + 对>K
+                # → 领出冲刺出对（禁先出单被王压后级牌对烂手）。
+                # 外面无王时不命中，落回两手冲刺（可先单、拆级牌对回收）。
+                pair_sprint = self._q0_pair_plus_singles_sprint_lead(
+                    game_state, non_bombs, action_list,
+                )
+                if pair_sprint is not None:
+                    return pair_sprint
                 # GUA-236: 仅剩顺+TWT（或任意两手整牌）→ 两手冲刺择优，顺优先于 TWT
                 all_cands = [(i, a) for i, a in enumerate(action_list)]
                 sprint_lead = self._select_two_turn_sprint_structure(
@@ -3916,6 +4025,28 @@ class EndgameDecider:
         scatter_only = 0 if structured > 0 else 1
         return hands, scatter_only
 
+    def _straight_outside_safe_sort_key(
+        self, act: List, game_state: Dict[str, Any],
+    ) -> int:
+        """GUA-263 §六：外面 5/10 打光 → 对应起点 Straight 优先（键越小越好）。
+
+        0 = 安全顺（对手组不出同型窗）；1 = 其它动作/非安全顺。
+        """
+        if _get_declared_action_type(act) != ACTION_TYPE_STRAIGHT:
+            return 1
+        safe = set(
+            (
+                (game_state.get("_belief") or {}).get("straight_skeleton") or {}
+            ).get("safe_straight_windows")
+            or []
+        )
+        if not safe:
+            return 1
+        rank = ""
+        if isinstance(act, list) and len(act) >= 2:
+            rank = str(act[1] or "")
+        return 0 if rank in safe else 1
+
     def _select_enemy_one_locking_structure(
         self, candidates: List[Tuple[int, List]], game_state: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
@@ -3926,6 +4057,7 @@ class EndgameDecider:
         Trips/555 留下 Trips/777+单。统一评分（越小越好）：
         ① 不拆核心组（``_action_breaks_core_structure``）
         ② 不拆炸（``_is_bomb_destroying_action``）
+        ②b GUA-263：外面 5/10 打光时优先安全顺（对手无法同型压制）
         ③ 残手手数少
         ④ 残手保留整结构（非全散单）
         ⑤ 牌型优先级仅作软并列打破
@@ -3947,6 +4079,7 @@ class EndgameDecider:
             return (
                 1 if breaks_core else 0,
                 1 if bomb_destroy else 0,
+                self._straight_outside_safe_sort_key(act, game_state),
                 residue_hands,
                 scatter_only,
                 _q1_structure_priority(atype),
@@ -4030,7 +4163,7 @@ class EndgameDecider:
         # （memory_tracker 弱点证据，如 match=6a7dcf31 连打两个 TWT 对手全 PASS）→
         # 先出 TWT 冲刺，避免「保留 TWT 后出单」被对手压单后 TWT 卡死。
         opponent_twt_weakness = self._opponents_twt_weak(game_state, ec)
-        sprint_candidates: List[Tuple[Tuple[int, int, int, int, int], Tuple[int, List]]] = []
+        sprint_candidates: List[Tuple[Tuple[int, int, int, int, int, int], Tuple[int, List]]] = []
         for item in structured:
             idx, act = item
             cards = _get_cards(act)
@@ -4098,9 +4231,14 @@ class EndgameDecider:
                 and opponent_twt_weakness
             ):
                 twt_sprint_boost = 0
+            # GUA-263：外面 5/10 打光 → 对应起点 Straight 优先冲（对手难同型压）
+            straight_safe_boost = self._straight_outside_safe_sort_key(
+                act, game_state,
+            )
             sprint_candidates.append((
                 (
                     twt_sprint_boost,
+                    straight_safe_boost,
                     residue_bucket,
                     bomb_sprint_rank,
                     _q1_structure_priority(act_type),

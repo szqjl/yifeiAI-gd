@@ -1404,7 +1404,12 @@ class UltimateWinRateEngineV7:
                     if isinstance(ga, list) and len(ga) >= 3:
                         ga_type = str(ga[0])
                         if ga_type.upper() not in ("PASS", ""):
-                            self._tracker.record_pass(seat, ga_type)
+                            self._tracker.record_pass(
+                                seat,
+                                ga_type,
+                                greater_action=ga,
+                                greater_pos=ctx.get("greaterPos"),
+                            )
                 else:
                     self._tracker.record_play(seat, action, context=ctx)
         self._tracker_history_replayed = len(history)

@@ -636,6 +636,185 @@ class RuleCardCounter:
             "level_threat": opp_threat,
         }
 
+    # ── GUA-263：文章第六～九节推理信号（5/10 顺骨架、断张炸、A/K、牌路）──
+
+    def _rank_copy_stats(self, rank: str) -> Dict[str, int]:
+        """某 rank 的已出/我手/剩余（未出）张数。普通点 8 张，王 2 张。"""
+        tracker = self._t
+        played = 0
+        mine = 0
+        if rank in ("SB", "HR"):
+            copies = tracker.card_state.get(rank, [-1, -1])
+            played = sum(1 for c in copies if c == tracker.PLAYED)
+            mine = sum(1 for c in copies if c == tracker.MY_HAND)
+            total = 2
+        else:
+            total = 8
+            for suit in SUITS:
+                copies = tracker.card_state.get(f"{suit}{rank}", [-1, -1])
+                played += sum(1 for c in copies if c == tracker.PLAYED)
+                mine += sum(1 for c in copies if c == tracker.MY_HAND)
+        remain = max(0, total - played)
+        return {
+            "played": played,
+            "in_my_hand": mine,
+            "remain": remain,
+            "outside_my_hand": max(0, remain - mine),
+        }
+
+    def get_straight_skeleton_signal(self) -> Dict[str, Any]:
+        """GUA-263 §六：5/10 是顺子骨架。
+
+        定音（用户校正）：**外面** 5/10 打光（outside_my_hand==0）时，
+        对手组不出依赖该骨架的顺 → 我方对应起点的 Straight **更安全、应优先出**，
+        而非当作「死窗剔除」。
+        """
+        five = self._rank_copy_stats("5")
+        ten = self._rank_copy_stats("T")
+        # 窗口用起点 rank 标记（平台 Straight rank 多为窗口最低点）
+        windows_need_five = ["A", "2", "3", "4", "5"]  # A2345 … 56789
+        windows_need_ten = ["6", "7", "8", "9", "T"]   # 6789T … TJQKA
+        safe: List[str] = []
+        if five["outside_my_hand"] <= 0:
+            safe.extend(windows_need_five)
+        if ten["outside_my_hand"] <= 0:
+            safe.extend(windows_need_ten)
+        return {
+            "five_remain": five["remain"],
+            "ten_remain": ten["remain"],
+            "five_outside": five["outside_my_hand"],
+            "ten_outside": ten["outside_my_hand"],
+            "five_outside_depleted": five["outside_my_hand"] <= 0,
+            "ten_outside_depleted": ten["outside_my_hand"] <= 0,
+            # 对手无法组这些窗 → 我出这些起点的顺更难被同型压制
+            "safe_straight_windows": sorted(set(safe)),
+        }
+
+    def is_straight_window_outside_safe(self, window_start_rank: str) -> bool:
+        """Straight 起点是否因外面 5/10 打光而对敌不可组（我方可放心冲）。"""
+        sig = self.get_straight_skeleton_signal()
+        return str(window_start_rank) in sig["safe_straight_windows"]
+
+    def get_gap_bomb_risk_signal(self) -> Dict[str, Any]:
+        """GUA-263 §七：我断张 + 邻点多出单 → 外炸预警。"""
+        tracker = self._t
+        my_rank_cnt: Counter = Counter()
+        for ct, copies in tracker.card_state.items():
+            if ct in ("SB", "HR"):
+                continue
+            rk = _parse_card_rank_fast(ct)
+            if rk not in RANK_VALUE:
+                continue
+            my_rank_cnt[rk] += sum(1 for c in copies if c == tracker.MY_HAND)
+
+        # 邻点散单次数（全场 Single 出牌）
+        neighbor_singles: Dict[str, int] = defaultdict(int)
+        for entry in tracker.play_history:
+            if str(entry.get("action_type") or "").upper() != "SINGLE":
+                continue
+            for card in entry.get("cards") or []:
+                rk = _parse_card_rank_fast(
+                    tracker._canonical_type(str(card))
+                    if hasattr(tracker, "_canonical_type")
+                    else str(card)
+                )
+                if rk in RANK_VALUE:
+                    neighbor_singles[rk] += 1
+
+        gap_ranks: List[str] = []
+        high_risk: List[str] = []
+        risk_scores: Dict[str, float] = {}
+        for rk in RANKS:
+            if my_rank_cnt.get(rk, 0) > 0:
+                continue
+            outside = self._rank_copy_stats(rk)["outside_my_hand"]
+            if outside <= 0:
+                continue
+            gap_ranks.append(rk)
+            val = RANK_VALUE[rk]
+            adj = 0
+            for other, ov in RANK_VALUE.items():
+                if abs(ov - val) == 1:
+                    adj += neighbor_singles.get(other, 0)
+            # 邻点散单 ≥3 → 高风险；按次数归一
+            score = min(1.0, adj / 3.0) if adj > 0 else 0.0
+            if outside >= 4:
+                score = max(score, 0.4)
+            risk_scores[rk] = score
+            if score >= 0.7:
+                high_risk.append(rk)
+
+        max_risk = max(risk_scores.values()) if risk_scores else 0.0
+        return {
+            "gap_ranks": gap_ranks,
+            "high_bomb_gap_ranks": high_risk,
+            "gap_bomb_risk_by_rank": dict(risk_scores),
+            "gap_bomb_risk_max": float(max_risk),
+        }
+
+    def get_ak_power_signal(self) -> Dict[str, Any]:
+        """GUA-263 §八：A/K 剩余与登基潜力。"""
+        a = self._rank_copy_stats("A")
+        k = self._rank_copy_stats("K")
+        return {
+            "a_remain": a["remain"],
+            "a_in_my_hand": a["in_my_hand"],
+            "a_outside": a["outside_my_hand"],
+            "k_remain": k["remain"],
+            "k_in_my_hand": k["in_my_hand"],
+            "k_outside": k["outside_my_hand"],
+            # 外面无 A 且我有 A → 非王/级牌体系下 A 可登基（忽略王时的软信号）
+            "my_a_crowns": a["in_my_hand"] > 0 and a["outside_my_hand"] <= 0,
+            "my_k_crowns": (
+                k["in_my_hand"] > 0
+                and k["outside_my_hand"] <= 0
+                and a["outside_my_hand"] <= 0
+                and a["in_my_hand"] <= 0
+            ),
+        }
+
+    def get_line_read_signal(self) -> Dict[str, Any]:
+        """GUA-263 §九：牌路读心——连出单≈缺对；队友送小≈求大单。"""
+        tracker = self._t
+        seats: Dict[int, Dict[str, Any]] = {}
+        for seat in range(4):
+            singles = 0
+            pairs = 0
+            small_singles = 0
+            for entry in tracker.play_history:
+                if int(entry.get("seat", -1)) != seat:
+                    continue
+                at = str(entry.get("action_type") or "").upper()
+                cards = entry.get("cards") or []
+                if at == "SINGLE":
+                    singles += 1
+                    if cards:
+                        rk = _parse_card_rank_fast(str(cards[0]))
+                        if RANK_VALUE.get(rk, 99) <= RANK_VALUE.get("9", 7):
+                            small_singles += 1
+                elif at == "PAIR":
+                    pairs += 1
+            likely_short_pair = singles >= 3 and pairs == 0
+            seats[seat] = {
+                "single_plays": singles,
+                "pair_plays": pairs,
+                "small_single_plays": small_singles,
+                "likely_short_pair": likely_short_pair,
+            }
+
+        tm = tracker.partner_pos
+        down = (tracker.my_pos + 1) % 4
+        tm_info = seats.get(tm, {})
+        down_info = seats.get(down, {})
+        return {
+            "seats": seats,
+            "teammate_wants_big_single": (
+                int(tm_info.get("small_single_plays", 0)) >= 2
+            ),
+            "downseat_short_pair": bool(down_info.get("likely_short_pair")),
+            "teammate_short_pair": bool(tm_info.get("likely_short_pair")),
+        }
+
     # ── 信念字典（完整 ────────────────────────────────
 
     def get_belief(self, game_state=None) -> Dict[str, Any]:
@@ -654,6 +833,7 @@ class RuleCardCounter:
           - bomb_stats: get_bomb_stats() 返回值
           - level_signal: get_level_signal() 返回值
           - unknown_rank_stats: get_unknown_rank_stats() 返回值
+          - GUA-263: straight_skeleton / gap_bomb_risk / ak_power / line_read
         """
         tracker = self._t
         joker = self.get_joker_signal()
@@ -665,10 +845,14 @@ class RuleCardCounter:
                 copies = tracker.card_state.get(lc, [])
                 level_left += sum(1 for c in copies if c != 4)
 
-        # 对手炸弹风险
+        gap_sig = self.get_gap_bomb_risk_signal()
+        gap_boost = float(gap_sig.get("gap_bomb_risk_max") or 0.0)
+
+        # 对手炸弹风险（基线 + §七断张炸抬升）
         opp_risks = {}
         for opp in tracker.opponents:
-            opp_risks[opp] = tracker.get_opponent_bomb_risk(opp)
+            base = tracker.get_opponent_bomb_risk(opp)
+            opp_risks[opp] = min(1.0, max(base, gap_boost * 0.85))
 
         # 已完全耗尽的 rank（所有 8 张均已出或归属已知且不在对手未知里）
         depleted: List[str] = []
@@ -719,6 +903,10 @@ class RuleCardCounter:
             "bomb_stats": self.get_bomb_stats(),
             "level_signal": self.get_level_signal(),
             "unknown_rank_stats": self.get_unknown_rank_stats(),
+            "straight_skeleton": self.get_straight_skeleton_signal(),
+            "gap_bomb_risk": gap_sig,
+            "ak_power": self.get_ak_power_signal(),
+            "line_read": self.get_line_read_signal(),
         }
 
 
