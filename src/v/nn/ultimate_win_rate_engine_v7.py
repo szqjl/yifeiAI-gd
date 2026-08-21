@@ -4356,17 +4356,19 @@ class UltimateWinRateEngineV7:
                 "GUA-075 推荐: 跟上家无同型 → R11决定PASS(%s)", reason)
             return {"type": "PASS", "rank": "", "cards": []}
 
-        # ── ④ 卡下家：下家 greaterPos 出牌 → 最大同型压；无同型时 R11 预检改炸 ──
+        # ── ④ 卡下家：按牌力/危急分档（顺势 min / 卡点≈J / 危急 max）──
+        # 人类定音见 docs/guandan-brain/issues/GUA-075-卡下家.md
         if is_lower and greater_action and greater_action[0] != "PASS":
             rec_impl = self._recommend_max_press_impl(
                 game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank)
             if rec_impl:
+                mode_tag = rec_impl.pop("_xiajia_mode", "press")
                 rec = _ensure_valid(rec_impl, f"卡下家(greater={greater_type}/{greater_rank})")
                 if rec:
                     self.logger.info(
-                        "GUA-075 推荐: 卡下家(greater=%s/%s) → type=%s rank=%s cards=%s",
-                        greater_type, greater_rank, rec.get("type"), rec.get("rank"),
-                        rec.get("cards"))
+                        "GUA-075 推荐: 卡下家-%s(greater=%s/%s) → type=%s rank=%s cards=%s",
+                        mode_tag, greater_type, greater_rank,
+                        rec.get("type"), rec.get("rank"), rec.get("cards"))
                     return rec
                 # GUA-083: 有推荐但 actionList 无匹配 → 回退，勿误当「无同型 PASS」
                 self.logger.warning(
@@ -5730,13 +5732,106 @@ class UltimateWinRateEngineV7:
             candidates.sort(key=lambda c: -get_card_value(c["cards"][0], cur_rank))
         return candidates[0]
 
+    # 卡下家「脖子位」点数档（全牌型主牌/顶牌）
+    _XIAJIA_NECK_RANKS = frozenset({"9", "T", "J"})
+
+    def _xia_jia_remaining(self, game_state: Dict[str, Any]) -> int:
+        """下家剩余张数；缺省按 27（未危急）。"""
+        my_pos = int(game_state.get("myPos", self.player_id) or 0)
+        xia = (my_pos + 1) % 4
+        nop = game_state.get("numofplayers") or []
+        if isinstance(nop, (list, tuple)) and len(nop) > xia:
+            try:
+                return int(nop[xia])
+            except (TypeError, ValueError):
+                pass
+        public = game_state.get("publicInfo") or []
+        if isinstance(public, list) and len(public) > xia:
+            try:
+                return int((public[xia] or {}).get("rest", 27))
+            except (TypeError, ValueError):
+                pass
+        return 27
+
+    def _resolve_xiajia_press_mode(
+        self,
+        game_state: Dict[str, Any],
+        hand_cards: List[str],
+        n_pressable: int,
+    ) -> str:
+        """GUA-075 卡下家分档：critical_max / follow_min / neck。
+
+        - 下家 rest≤5 或残局 → 危急 max
+        - 强牌(主攻/超强主攻)且可压同型≥2 → 顺势 min
+        - 否则弱牌卡点（优先 9/T/J，再全体 min）
+        """
+        if n_pressable <= 0:
+            return "follow_min"
+        rest = self._xia_jia_remaining(game_state)
+        # 危急只看下家短牌（≤5）；不因「本方手数少」误判——否则开局试探后
+        # hand=6 会被 _is_in_endgame_state 打成 critical_max 仍出大王。
+        if rest <= 5:
+            return "critical_max"
+        role = self._current_role or ""
+        if role in ("主攻", "超强主攻") and n_pressable >= 2:
+            return "follow_min"
+        return "neck"
+
+    @staticmethod
+    def _pick_xiajia_press_candidate(
+        candidates: List[Tuple],
+        mode: str,
+        *,
+        wild_card: Optional[str] = None,
+        rank_index: int = 2,
+        value_index: int = 0,
+        payload_index: int = 1,
+    ) -> Optional[Tuple]:
+        """从 (value, payload, rank, ...) 候选中按卡下家 mode 取一条。"""
+        if not candidates:
+            return None
+
+        def _wild_key(item: Tuple) -> int:
+            if wild_card is None:
+                return 0
+            payload = item[payload_index]
+            card = payload if isinstance(payload, str) else (
+                payload[0] if isinstance(payload, (list, tuple)) and payload else ""
+            )
+            return 1 if card == wild_card else 0
+
+        if mode == "critical_max":
+            ordered = sorted(
+                candidates,
+                key=lambda x: (_wild_key(x), -x[value_index]),
+            )
+            return ordered[0]
+
+        pool = list(candidates)
+        if mode == "neck":
+            neck = [
+                c for c in candidates
+                if str(c[rank_index]) in UltimateWinRateEngineV7._XIAJIA_NECK_RANKS
+            ]
+            if neck:
+                pool = neck
+        # follow_min 与 neck（无卡点档时）均为最小够压；百搭靠后
+        ordered = sorted(
+            pool,
+            key=lambda x: (_wild_key(x), x[value_index]),
+        )
+        return ordered[0]
+
     def _recommend_max_press_impl(
         self, game_state, card_mask, greater_action, greater_type,
         hand_cards, cur_rank
     ) -> Optional[Dict[str, Any]]:
         """
-        卡下家牌：找同型可压中**最大的**（不留余地，卡死下家）。
-        如果无同型可压 → 返回 None。
+        卡下家同型压制（GUA-075 定音修订）：
+          critical_max — 下家短牌/残局，同型最大
+          follow_min   — 强牌+多可压，顺势最小够压
+          neck         — 弱牌卡点≈J（9/T/J），否则最小够压
+        无同型可压 → 返回 None。成功时附带 ``_xiajia_mode`` 供日志（调用方应 pop）。
         """
         from src.v.nn.guards.v7_guards import (
             get_action_type, get_action_rank, get_card_rank, get_card_value,
@@ -5751,17 +5846,33 @@ class UltimateWinRateEngineV7:
         greater_rank = get_action_rank(greater_action)
         if not greater_rank:
             return None
-        greater_cards = greater_action[2] if len(greater_action) >= 3 else []
-        greater_val = get_card_value(
-            str(greater_cards[0]) if greater_cards else greater_rank, cur_rank)
+        # GUA-255：主牌 rank 算牌力（Single/Pair/Trips/Straight 等）；TWT 另支
+        try:
+            greater_val = get_card_value(
+                f"S{greater_rank}" if greater_rank not in ("B", "R") else (
+                    "SB" if greater_rank == "B" else "HR"
+                ),
+                cur_rank,
+            )
+        except Exception:
+            greater_cards = greater_action[2] if len(greater_action) >= 3 else []
+            greater_val = get_card_value(
+                str(greater_cards[0]) if greater_cards else greater_rank, cur_rank)
 
-        # ── 收集组信息 ──
         groups = self._build_group_index(card_mask)
 
         def _to_platform_rank(internal_rank: str) -> str:
             return self.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
 
-        # 单张处理
+        def _tag(rec: Dict[str, Any], mode: str) -> Dict[str, Any]:
+            rec["_xiajia_mode"] = {
+                "critical_max": "危急",
+                "follow_min": "顺势",
+                "neck": "卡点",
+            }.get(mode, mode)
+            return rec
+
+        # 单张
         if greater_type == "Single":
             natural_singles = list(self._scatter_singles(card_mask))
             wild_card_gua165 = f"H{cur_rank}"
@@ -5790,72 +5901,102 @@ class UltimateWinRateEngineV7:
                     for ginfo in groups.values()
                 )
                 if not has_borrowable_pair:
-                    return None  # GUA-165 让出
+                    return None
             singles = self._collect_single_follow_candidates(
                 card_mask, groups, hand_cards, cur_rank)
-            if singles:
-                candidates = []
-                for c in singles:
-                    c_rank = get_card_rank(str(c))
-                    c_val = get_card_value(str(c), cur_rank)
-                    if c_val > greater_val:
-                        candidates.append((c_val, c, c_rank))
-                if candidates:
-                    # GUA-165: 百搭排最后
-                    candidates.sort(key=lambda x: (1 if x[1] == wild_card_gua165 else 0, -x[0]))
-                    _, best, best_rank = candidates[0]
-                    return {
-                        "type": "Single",
-                        "rank": _to_platform_rank(best_rank),
-                        "cards": [str(best)],
-                    }
+            if not singles:
                 return None
+            candidates = []
+            for c in singles:
+                c_rank = get_card_rank(str(c))
+                c_val = get_card_value(str(c), cur_rank)
+                if c_val > greater_val:
+                    candidates.append((c_val, c, c_rank))
+            if not candidates:
+                return None
+            mode = self._resolve_xiajia_press_mode(
+                game_state, hand_cards, len(candidates))
+            picked = self._pick_xiajia_press_candidate(
+                candidates, mode, wild_card=wild_card_gua165)
+            if not picked:
+                return None
+            _, best, best_rank = picked
+            return _tag({
+                "type": "Single",
+                "rank": _to_platform_rank(best_rank),
+                "cards": [str(best)],
+            }, mode)
 
-        # ── 三带二（ThreeWithTwo）──
+        # 三带二：按 mode 选 min/max（卡点/顺势用 min；危急用 max）
         if greater_type == "ThreeWithTwo":
+            # 先估可压 trips 数以定 mode
+            from src.v.nn.guards.v7_guards import get_card_rank as _gr
+            rc: Dict[str, int] = {}
+            for c in hand_cards:
+                r = _gr(str(c))
+                rc[r] = rc.get(r, 0) + 1
+            n_trip_press = 0
+            for r, n in rc.items():
+                if n < 3:
+                    continue
+                try:
+                    sample = "SB" if r == "B" else ("HR" if r == "R" else f"S{r}")
+                    if get_card_value(sample, cur_rank) > greater_val:
+                        n_trip_press += 1
+                except Exception:
+                    n_trip_press += 1
+            mode = self._resolve_xiajia_press_mode(
+                game_state, hand_cards, max(n_trip_press, 1))
+            twt_strategy = "max" if mode == "critical_max" else "min"
             rec = self._build_three_with_two_press(
                 hand_cards,
                 greater_val,
                 cur_rank,
-                "min",
+                twt_strategy,
                 card_mask=card_mask,
                 group_type_map=self._group_type_map,
                 group_members=self._group_members,
             )
             if rec:
-                return rec
+                return _tag(rec, mode)
             if self._should_force_three_with_two_counter_press(game_state, greater_action):
-                return self._build_three_with_two_press(
+                forced = self._build_three_with_two_press(
                     hand_cards,
                     greater_val,
                     cur_rank,
-                    "min",
+                    twt_strategy,
                     card_mask=card_mask,
                     group_type_map=self._group_type_map,
                     group_members=self._group_members,
                     allow_break_protected_core=True,
                 )
+                if forced:
+                    return _tag(forced, mode)
             return None
 
-        # ── 三连对 / 钢板：从子结构重建连续结构 ──
+        # 三连对 / 钢板
         if greater_type == "ThreePair":
+            mode = self._resolve_xiajia_press_mode(game_state, hand_cards, 2)
+            strat = "max" if mode == "critical_max" else "min"
             rec = self._build_consecutive_structure_press(
-                groups, "pair_in_three_pair", 3, greater_val, cur_rank, "max",
+                groups, "pair_in_three_pair", 3, greater_val, cur_rank, strat,
             )
             if rec:
                 rec["rank"] = _to_platform_rank(rec["rank"])
-                return rec
+                return _tag(rec, mode)
             return None
         if greater_type == "TwoTrips":
+            mode = self._resolve_xiajia_press_mode(game_state, hand_cards, 2)
+            strat = "max" if mode == "critical_max" else "min"
             rec = self._build_consecutive_structure_press(
-                groups, "trip_in_steel_plate", 2, greater_val, cur_rank, "max",
+                groups, "trip_in_steel_plate", 2, greater_val, cur_rank, strat,
             )
             if rec:
                 rec["rank"] = _to_platform_rank(rec["rank"])
-                return rec
+                return _tag(rec, mode)
             return None
 
-        # 同型匹配（选最大）
+        # Pair / Trips / Straight
         GTYPE_MAP = {
             "Pair": ("pair", "pair_in_three_pair", "pair_in_three_with_two"),
             "Trips": ("trips", "trip_in_three_with_two", "trip_in_steel_plate"),
@@ -5872,22 +6013,31 @@ class UltimateWinRateEngineV7:
             cards = ginfo["cards"]
             if not cards:
                 continue
-            c_rank = get_card_rank(str(cards[0]))
-            c_val = self.RANK_ORDER.get(c_rank, 0)
+            # Straight：用声明/顶牌；其余用主牌第一张
+            if greater_type == "Straight":
+                c_rank = get_card_rank(str(cards[-1])) if cards else get_card_rank(str(cards[0]))
+            else:
+                c_rank = get_card_rank(str(cards[0]))
+            c_val = get_card_value(str(cards[0] if greater_type != "Straight" else cards[-1]), cur_rank)
             c_type = self._group_type_to_platform_action(ginfo["type"])
             if c_type == greater_type and c_val > greater_val:
-                candidates.append((c_val, gid, ginfo, c_rank, c_type))
+                candidates.append((c_val, sorted(ginfo["cards"]), c_rank, c_type))
 
         if not candidates:
             return None
 
-        candidates.sort(key=lambda x: -x[0])  # 最大值优先
-        _, gid, ginfo, c_rank, c_type = candidates[0]
-        return {
+        mode = self._resolve_xiajia_press_mode(
+            game_state, hand_cards, len(candidates))
+        picked = self._pick_xiajia_press_candidate(
+            candidates, mode, rank_index=2, value_index=0, payload_index=1)
+        if not picked:
+            return None
+        _, cards_out, c_rank, c_type = picked
+        return _tag({
             "type": c_type,
             "rank": _to_platform_rank(c_rank),
-            "cards": sorted(ginfo["cards"]),
-        }
+            "cards": list(cards_out),
+        }, mode)
 
     # ── R11 改炸预检 + 炸弹推荐（GUA-075 扩展）────────────
 
