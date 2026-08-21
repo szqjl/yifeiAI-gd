@@ -1878,6 +1878,13 @@ class BotzoneAdapter:
         numofplayers = self._compute_numofplayers(game, hand_cards, known_done)
         public_info = [{"rest": n} for n in numofplayers]
 
+        # GUA-259：领出/接风领出（must_play）时 greaterPos 置 -1。
+        # history 里最后非 PASS 常为已 done 的队友（接风），若原样传入
+        # greaterPos=队友 → R10 不判 is_lead → 领出开炸（match 6a87ca4d
+        # 队友 Pair/2 头游后接风打 Bomb/8）。greaterAction/curAction 本就在
+        # must_play 时置 PASS 占位；greaterPos 必须同步成自由领出语义。
+        engine_greater_pos = -1 if must_play else greater_pos
+
         game_state = {
             "actionList": action_list,
             "handCards": hand_cards,
@@ -1889,7 +1896,7 @@ class BotzoneAdapter:
             "numofplayers": numofplayers,
             "remainingPool": self._compute_remaining_pool(game, hand_cards),
             "curPos": cur_pos,
-            "greaterPos": greater_pos,
+            "greaterPos": engine_greater_pos,
             "greaterAction": (["PASS", "PASS", "PASS"]
                               if must_play else (greater_action_str or ["PASS", "PASS", "PASS"])),
             "curAction": (["PASS", "PASS", "PASS"]
