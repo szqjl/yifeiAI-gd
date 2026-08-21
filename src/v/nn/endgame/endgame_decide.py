@@ -3882,10 +3882,54 @@ class EndgameDecider:
                     return True
         return False
 
+    @staticmethod
+    def _locking_residue_metrics(
+        act: List, hand_cards: List[str],
+    ) -> Tuple[int, int]:
+        """GUA-260：估算出牌后残手「手数」与「是否仅散牌」。
+
+        用点数计数粗估（不重跑组牌）：同点 2/3/≥4 各算一手整结构，
+        同点 1 算一手散单。返回 ``(residue_hands, scatter_only)``，
+        ``scatter_only=1`` 表示残手全是散单（无对/三/炸可回手）。
+        """
+        played = Counter(_get_cards(act))
+        if not played:
+            return 99, 1
+        hand_cnt = Counter(hand_cards)
+        if any(played[c] > hand_cnt[c] for c in played):
+            return 99, 1
+        residue = hand_cnt - played
+        if not residue:
+            return 0, 0
+        rank_cnt: Counter = Counter()
+        for card, n in residue.items():
+            try:
+                rank_cnt[get_card_rank(str(card))] += n
+            except Exception:
+                rank_cnt[str(card)] += n
+        hands = 0
+        structured = 0
+        for n in rank_cnt.values():
+            hands += 1
+            if n >= 2:
+                structured += 1
+        scatter_only = 0 if structured > 0 else 1
+        return hands, scatter_only
+
     def _select_enemy_one_locking_structure(
         self, candidates: List[Tuple[int, List]], game_state: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
-        """敌方报单时，优先选能直接锁死其 1 张跟牌窗口的整牌型。"""
+        """敌方报单/报双领出锁敌：按残手质量选整牌，而非牌型名硬排优先级。
+
+        GUA-260（match `6a87e5a3`）：旧键 ``structure_priority`` 把 TWT(1)
+        排在 Trips(4) 前 → 拆 777 打 55577，残手两张散单；应先出完整
+        Trips/555 留下 Trips/777+单。统一评分（越小越好）：
+        ① 不拆核心组（``_action_breaks_core_structure``）
+        ② 不拆炸（``_is_bomb_destroying_action``）
+        ③ 残手手数少
+        ④ 残手保留整结构（非全散单）
+        ⑤ 牌型优先级仅作软并列打破
+        """
         if not candidates:
             return None
 
@@ -3895,10 +3939,17 @@ class EndgameDecider:
         def _key(item: Tuple[int, List]):
             _, act = item
             atype = get_action_type(act)
+            breaks_core = self._action_breaks_core_structure(act, game_state)
             bomb_destroy = self._is_bomb_destroying_action(act, hand_cards, game_state)
+            residue_hands, scatter_only = self._locking_residue_metrics(
+                act, hand_cards,
+            )
             return (
+                1 if breaks_core else 0,
+                1 if bomb_destroy else 0,
+                residue_hands,
+                scatter_only,
                 _q1_structure_priority(atype),
-                0 if not bomb_destroy else 1,
                 -len(_get_cards(act)),
                 _max_card_value(act, cur_rank),
             )
