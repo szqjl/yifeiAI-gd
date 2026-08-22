@@ -2330,6 +2330,15 @@ class EndgameDecider:
         if scatter_second is not None:
             return scatter_second
 
+        # GUA-266: 敌方处在 6/7/8 张结构区时，拦截要看「可能牌型 + 拦完能否再拦」，
+        # 禁止机械打最大单（大王/级牌/A）。领出优先整牌锁；跟压单若只剩贵单且
+        # 打出后没有干净回手 → PASS。
+        gua266 = self._q1_structured_zone_lookahead(
+            game_state, non_banned_candidates, ec, main_pos, main_enemy,
+        )
+        if gua266 is not None:
+            return gua266
+
         # GUA-245: 残局 Q1 级牌压单策略缺失。
         # 对手剩 ≤5 张出单 + 本方持有级牌单张 + 本方有冲刺路径 →
         # 主动压单夺回领出权（而非 PASS 让对手跑完）。
@@ -3840,6 +3849,202 @@ class EndgameDecider:
             if str(a[1]) == trip_rank:
                 return (i, a)
         return None
+
+    _STRUCTURED_ZONE_REMAINING = frozenset({6, 7, 8})
+    _STRUCTURE_LOCK_TYPES = frozenset({
+        ACTION_TYPE_STRAIGHT,
+        ACTION_TYPE_THREE_WITH_TWO,
+        ACTION_TYPE_TWO_TRIPS,
+        ACTION_TYPE_THREE_PAIR,
+    })
+
+    def _q1_structured_zone_lookahead(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+        main_pos: int,
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-266：6/7/8 张结构区不机械打最大单。
+
+        用户定音（match ``6a890699`` / ``6a890546``）：下家剩 7 张时要先判断
+        对手可能牌型（顺/钢板/连对），以及拦截后自己后续还能不能拦住。
+        机械出大王/级牌单拦小单，拦完没有回手 = 白送控牌。
+
+        - 领出：有 Straight/TWT/钢板/连对 → 出整牌，不出级牌/王/A 单。
+        - 跟压 Single：有非贵散单 → 最小够压；只剩贵单且打出后无干净回手 → PASS。
+        报单剩 1 / 敌剩 ≤5 不介入（GUA-222 / GUA-252 / GUA-245）。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        down_pos = (my_pos + 1) % 4
+        enemies = ec.get("enemies", {}) or {}
+        down_rem = int((enemies.get(down_pos) or {}).get("remaining", 0) or 0)
+        main_rem = int((main_enemy or {}).get("remaining", 0) or 0)
+        in_zone = (
+            down_rem in self._STRUCTURED_ZONE_REMAINING
+            or main_rem in self._STRUCTURED_ZONE_REMAINING
+        )
+        if not in_zone:
+            return None
+        if main_rem == 1 or down_rem == 1:
+            return None
+
+        if self._is_my_q1_lead_turn(game_state, my_pos):
+            if down_rem and down_rem <= 5:
+                return None
+            return self._q1_lead_structure_not_precious_single(candidates, game_state)
+
+        greater = game_state.get("greaterAction")
+        try:
+            if not greater or get_action_type(greater) != ACTION_TYPE_SINGLE:
+                return None
+        except Exception:
+            return None
+        greater_pos = game_state.get("greaterPos")
+        try:
+            g_rem = int((enemies.get(int(greater_pos)) or {}).get("remaining", 0) or 0)
+        except (TypeError, ValueError):
+            g_rem = 0
+        if g_rem and g_rem <= 5:
+            return None
+        return self._q1_follow_no_dump_precious_single(
+            game_state, candidates, greater,
+        )
+
+    def _q1_lead_structure_not_precious_single(
+        self,
+        candidates: List[Tuple[int, List]],
+        game_state: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """领出：有整牌锁则出整牌，禁止级牌/王/A 单。"""
+        structures: List[Tuple[int, List, int]] = []
+        for i, a in candidates:
+            try:
+                atype = get_action_type(a)
+            except Exception:
+                continue
+            if atype in self._STRUCTURE_LOCK_TYPES:
+                if self._action_breaks_core_structure(a, game_state):
+                    continue
+                structures.append((i, a, _q1_structure_priority(atype)))
+        if not structures:
+            return None
+        structures.sort(key=lambda x: (x[2], -len(_get_cards(x[1]))))
+        picked = (structures[0][0], structures[0][1])
+        logger.info(
+            "GUA-266 lead structure lock: idx=%d type=%s",
+            picked[0], get_action_type(picked[1]),
+        )
+        return picked
+
+    def _q1_follow_no_dump_precious_single(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        greater: List,
+    ) -> Optional[Tuple[int, List]]:
+        """跟压单：非贵散单最小够压；只剩贵单且无干净回手 → PASS。"""
+        cur_rank = str(game_state.get("curRank", "2"))
+        hand_cards = list(game_state.get("handCards", []) or [])
+        cnt = Counter(get_card_rank(c) for c in hand_cards)
+        g_cards = _get_cards(greater)
+        if not g_cards:
+            return None
+        g_val = get_card_value(g_cards[0], cur_rank)
+        beaters: List[Tuple[int, List, int, bool]] = []
+        pass_item = None
+        for i, a in candidates:
+            try:
+                atype = get_action_type(a)
+            except Exception:
+                continue
+            if atype in (ACTION_TYPE_PASS, "PASS"):
+                pass_item = (i, a)
+                continue
+            if atype != ACTION_TYPE_SINGLE:
+                continue
+            cards = _get_cards(a)
+            if len(cards) != 1:
+                continue
+            val = get_card_value(cards[0], cur_rank)
+            if val <= g_val:
+                continue
+            # 只认天然散单（该点在手仅 1 张）；拆对/拆三头不算「便宜拦截」
+            rk = get_card_rank(cards[0])
+            if cnt.get(rk, 0) != 1:
+                continue
+            precious = self._is_precious_single_card(cards[0], cur_rank)
+            beaters.append((i, a, val, precious))
+        if not beaters:
+            return None
+
+        cheap = [b for b in beaters if not b[3]]
+        if cheap:
+            picked = min(cheap, key=lambda x: x[2])
+            logger.info(
+                "GUA-266 follow min non-precious: idx=%d card=%s",
+                picked[0], _get_cards(picked[1])[0],
+            )
+            return (picked[0], picked[1])
+
+        # 只剩贵单：打出后若还有不拆核心的贵单/炸可回手，则交给后续最大单路径
+        if self._has_clean_followup_stopper(game_state, candidates, beaters[0][1]):
+            return None
+        if pass_item is None:
+            return None
+        logger.info("GUA-266 follow dump-precious-no-stopper → PASS")
+        return pass_item
+
+    @staticmethod
+    def _is_precious_single_card(card: str, cur_rank: str) -> bool:
+        rk = get_card_rank(card)
+        if rk in ("SB", "HR"):
+            return True
+        if rk == str(cur_rank):
+            return True
+        if rk == "A":
+            return True
+        return get_card_value(card, cur_rank) >= 14
+
+    def _has_clean_followup_stopper(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        played: List,
+    ) -> bool:
+        """打出 played 后，是否还剩不拆核心的炸弹或天然贵散单可再拦。"""
+        played_list = _get_cards(played)
+        left = list(game_state.get("handCards") or [])
+        for c in played_list:
+            try:
+                left.remove(c)
+            except ValueError:
+                pass
+        cnt_left = Counter(get_card_rank(c) for c in left)
+        cur_rank = str(game_state.get("curRank", "2"))
+        played_set = set(played_list)
+        for _, a in candidates:
+            try:
+                atype = get_action_type(a)
+            except Exception:
+                continue
+            cards = _get_cards(a)
+            if not cards or any(c in played_set for c in cards):
+                continue
+            if atype in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH, "JokerBomb"):
+                return True
+            if atype != ACTION_TYPE_SINGLE or len(cards) != 1:
+                continue
+            rk = get_card_rank(cards[0])
+            if cnt_left.get(rk, 0) != 1:
+                continue
+            if not self._is_precious_single_card(cards[0], cur_rank):
+                continue
+            return True
+        return False
 
     @staticmethod
     def _count_hand_structure(
