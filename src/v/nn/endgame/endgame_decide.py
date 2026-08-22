@@ -2288,6 +2288,14 @@ class EndgameDecider:
         if gua249 is not None:
             return gua249
 
+        # GUA-265: 无炸 + TWT/三张 + 多对 + 下家剩 6/7 → 按记牌先 TWT 或第二小对，
+        # 禁止机械拆级牌打最大单（最大单仅当自己还有炸弹）。
+        gua265 = self._q1_no_bomb_twt_pairs_lead(
+            game_state, non_banned_candidates, ec,
+        )
+        if gua265 is not None:
+            return gua265
+
         # GUA-210: 封锁候选过滤「拆核心」动作——级牌单张若在 StraightFlush /
         # straight / 炸弹核心组内（如 SF S2-S6 的 S2），Q1 通用路径会优先选级牌
         # 压牌，被 decide 层 _action_breaks_core_structure 拦截后直接 PASS，
@@ -3637,6 +3645,201 @@ class EndgameDecider:
             picked[0], ACTION_TYPE_PAIR,
         )
         return picked
+
+    def _q1_no_bomb_twt_pairs_lead(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-265：无炸领出 + TWT/三张 + 多对 + 下家剩 6/7。
+
+        用户定音（match ``6a884eac``，手牌 88+TT+KKK+22）：
+          ① 记牌能判断三张/TWT 最大 → 先出 TWT，剩 4 张让对手误以为炸弹；
+          ② 不确定是否最大 → 打第二小对子，级牌对回收；
+          ③ 打最大单仅当自己还有炸弹——本手无炸不得机械拆级牌出最大单。
+
+        插在 GUA-249 之后：249 只覆盖「仅单/对」；本手有 TWT 时 249 不触发，
+        endgame_rule[7] 推荐 Straight/钢板对不上 → ⑥ 回收排序拆级牌出 Single/2。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if not self._is_my_q1_lead_turn(game_state, my_pos):
+            return None
+        if self._self_has_bomb_family(game_state, candidates, ec):
+            return None
+
+        enemies = ec.get("enemies", {}) or {}
+        down_pos = (my_pos + 1) % 4
+        down_enemy = enemies.get(down_pos)
+        if not isinstance(down_enemy, dict):
+            return None
+        if int(down_enemy.get("remaining", 0) or 0) not in (6, 7):
+            return None
+
+        twt_items: List[Tuple[int, List]] = []
+        trips_items: List[Tuple[int, List]] = []
+        pair_items: List[Tuple[int, List]] = []
+        for i, a in candidates:
+            try:
+                atype = get_action_type(a)
+            except Exception:
+                continue
+            if atype == ACTION_TYPE_THREE_WITH_TWO:
+                twt_items.append((i, a))
+            elif atype == ACTION_TYPE_TRIPS:
+                trips_items.append((i, a))
+            elif atype == ACTION_TYPE_PAIR:
+                pair_items.append((i, a))
+        if not twt_items and not trips_items:
+            return None
+
+        hand_cards = list(game_state.get("handCards", []) or [])
+        cur_rank = str(game_state.get("curRank", "2"))
+        cnt = Counter(get_card_rank(c) for c in hand_cards)
+        complete_pairs = []
+        for i, a in pair_items:
+            cards = _get_cards(a)
+            if len(cards) != 2:
+                continue
+            rk = get_card_rank(cards[0])
+            if cnt.get(rk, 0) != 2:
+                continue
+            complete_pairs.append((i, a, rk, get_card_value(cards[0], cur_rank)))
+        if len(complete_pairs) < 2:
+            return None
+
+        trip_rank = self._core_trip_rank_for_gua265(game_state, trips_items, twt_items)
+        if not trip_rank:
+            return None
+
+        if self._twt_or_trips_likely_max(game_state, trip_rank, cur_rank):
+            picked = self._pick_twt_or_trips_for_gua265(
+                twt_items, trips_items, trip_rank, cur_rank,
+            )
+            if picked is not None:
+                logger.info(
+                    "GUA-265 twt_max lead: idx=%d type=%s rank=%s",
+                    picked[0], get_action_type(picked[1]), trip_rank,
+                )
+                return picked
+
+        complete_pairs.sort(key=lambda x: x[3])
+        # 第二小对子；若正好是级牌对则改取最小非级牌对（级牌对回收）
+        chosen = complete_pairs[1]
+        if chosen[2] == cur_rank:
+            non_level = [p for p in complete_pairs if p[2] != cur_rank]
+            if not non_level:
+                return None
+            chosen = non_level[0] if len(non_level) == 1 else non_level[min(1, len(non_level) - 1)]
+        logger.info(
+            "GUA-265 second_pair lead: idx=%d type=Pair rank=%s",
+            chosen[0], chosen[2],
+        )
+        return (chosen[0], chosen[1])
+
+    @staticmethod
+    def _self_has_bomb_family(
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+    ) -> bool:
+        if (ec.get("self") or {}).get("has_bomb"):
+            return True
+        for gtype in (game_state.get("_group_gid_type_map") or {}).values():
+            gt = str(gtype).lower()
+            if gt in ("bomb", "straightflush", "jokerbomb") or "bomb" in gt:
+                return True
+        for _, a in candidates:
+            try:
+                atype = get_action_type(a)
+            except Exception:
+                continue
+            if atype in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH, "JokerBomb"):
+                return True
+        return False
+
+    @staticmethod
+    def _core_trip_rank_for_gua265(
+        game_state: Dict[str, Any],
+        trips_items: List[Tuple[int, List]],
+        twt_items: List[Tuple[int, List]],
+    ) -> Optional[str]:
+        cur_rank = str(game_state.get("curRank", "2"))
+        members = game_state.get("_group_members") or {}
+        types = game_state.get("_group_gid_type_map") or {}
+        ranks: List[str] = []
+        for gid, mems in members.items():
+            gt = str(types.get(gid, "")).lower()
+            if "trip" in gt and mems:
+                ranks.append(get_card_rank(mems[0]))
+        if not ranks:
+            for _, a in list(trips_items) + list(twt_items):
+                rk = str(a[1]) if len(a) > 1 else ""
+                if rk and rk not in ("PASS", "Free"):
+                    ranks.append(rk)
+        if not ranks:
+            return None
+        return max(ranks, key=lambda r: get_card_value(f"S{r}", cur_rank))
+
+    @staticmethod
+    def _tracker_outside_rank(tracker: Any, rank: str) -> int:
+        if tracker is None:
+            return 99
+        played = getattr(tracker, "PLAYED", 4)
+        mine = getattr(tracker, "MY_HAND", 1)
+        if rank in ("SB", "HR"):
+            copies = (tracker.card_state or {}).get(rank, [-1, -1])
+            return sum(1 for c in copies if c not in (played, mine))
+        n = 0
+        for suit in ("S", "H", "D", "C"):
+            copies = (tracker.card_state or {}).get(f"{suit}{rank}", [-1, -1])
+            n += sum(1 for c in copies if c not in (played, mine))
+        return n
+
+    def _twt_or_trips_likely_max(
+        self,
+        game_state: Dict[str, Any],
+        trip_rank: str,
+        cur_rank: str,
+    ) -> bool:
+        """外面没有任何更高点能凑出三张（≥3 张未知）→ 本手 TWT/三张可视为最大。"""
+        tracker = game_state.get("_memory_tracker")
+        if tracker is None:
+            return False
+        trip_val = get_card_value(f"S{trip_rank}", cur_rank)
+        for rk in CARD_RANK_ORDER:
+            if get_card_value(f"S{rk}", cur_rank) <= trip_val:
+                continue
+            if self._tracker_outside_rank(tracker, rk) >= 3:
+                return False
+        return True
+
+    @staticmethod
+    def _pick_twt_or_trips_for_gua265(
+        twt_items: List[Tuple[int, List]],
+        trips_items: List[Tuple[int, List]],
+        trip_rank: str,
+        cur_rank: str,
+    ) -> Optional[Tuple[int, List]]:
+        matched_twt = []
+        for i, a in twt_items:
+            if str(a[1]) != trip_rank:
+                continue
+            cards = _get_cards(a)
+            kickers = [c for c in cards if get_card_rank(c) != trip_rank]
+            kicker_val = get_card_value(kickers[0], cur_rank) if kickers else 99
+            matched_twt.append((kicker_val, i, a))
+        if matched_twt:
+            matched_twt.sort(key=lambda x: x[0])
+            _, i, a = matched_twt[0]
+            return (i, a)
+        for i, a in trips_items:
+            if str(a[1]) == trip_rank:
+                return (i, a)
+        return None
 
     @staticmethod
     def _count_hand_structure(
