@@ -1089,6 +1089,11 @@ class EndgameDecider:
         # 若硬删 Trips/AAA，Q0 冲刺只剩 Single+Pair 被 GUA-182 误判两对拆 AAA
         # （match=6a7f1a17，手牌 AAA+9 拆 Pair/A）。自由领出是进攻非跟压，豁免。
         my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        # GUA-267：火+一手整牌跟压报四 → 仍保留 Bomb/SF 供开炸冲刺
+        # （match=6a8c3452 拆 Q 炸：禁炸后只剩 Trips/Q）。
+        if self._q1_allow_bomb_vs_four_card_enemy_exception(game_state, ec):
+            banned_set.discard(ACTION_TYPE_BOMB)
+            banned_set.discard(ACTION_TYPE_STRAIGHT_FLUSH)
         if self._is_my_q1_lead_turn(game_state, my_pos):
             banned_set.discard(ACTION_TYPE_BOMB)
             banned_set.discard(ACTION_TYPE_STRAIGHT_FLUSH)
@@ -1535,6 +1540,71 @@ class EndgameDecider:
             Counter(get_card_rank(str(c)) for c in hand_cards).values()
         )
         return len(counts) == 2 and counts[0] == 2 and counts[1] >= 4
+
+    @classmethod
+    def _is_bomb_plus_one_structure_hand(cls, hand_cards: List[str]) -> bool:
+        """GUA-267：恰好「火 + 一手整牌」。
+
+        火 = ≥4 同点炸或同花顺。第二手仅限：单 / 对 / 顺 / TWT / 三张 /
+        三连对 / 钢板。炸+两张散单等不算。
+        """
+        cards = [str(c) for c in (hand_cards or [])]
+        if not cards or not GUARD_TOOLS_OK:
+            return False
+        fire = cls._find_bomb_family_cards(cards) or cls._find_straight_flush_cards(cards)
+        if not fire:
+            return False
+        left = list(cards)
+        for card in fire:
+            try:
+                left.remove(card)
+            except ValueError:
+                return False
+        return cls._remainder_is_named_second_hand(left)
+
+    @classmethod
+    def _remainder_is_named_second_hand(cls, cards: List[str]) -> bool:
+        """第二手是否为单/对/顺/TWT/三张/三连对/钢板。"""
+        left = [str(c) for c in (cards or [])]
+        n = len(left)
+        if n == 0 or not GUARD_TOOLS_OK:
+            return False
+        ranks = [get_card_rank(c) for c in left]
+        counts = sorted(Counter(ranks).values())
+        if n == 1:
+            return True
+        if n == 2:
+            if counts == [2]:
+                return True
+            jokers = {"HR", "SB", "R", "B"}
+            return all(r in jokers for r in ranks)
+        if n == 3:
+            return counts == [3]
+        if n == 5:
+            if counts == [2, 3]:
+                return True
+            return cls._is_five_card_straight(left)
+        if n == 6:
+            two_trips = cls._find_two_trips_cards(left)
+            if two_trips and len(two_trips) == 6:
+                return True
+            three_pair = cls._find_three_pair_cards(left)
+            return bool(three_pair and len(three_pair) == 6)
+        return False
+
+    @staticmethod
+    def _is_five_card_straight(cards: List[str]) -> bool:
+        """5 张是否官方顺子窗口（A2345…TJQKA），级牌当自然点。"""
+        if len(cards) != 5 or not GUARD_TOOLS_OK:
+            return False
+        ranks = [get_card_rank(str(c)) for c in cards]
+        if len(set(ranks)) != 5:
+            return False
+        natural = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K"]
+        windows = [natural[i:i + 5] for i in range(len(natural) - 4)]
+        windows.append(["T", "J", "Q", "K", "A"])
+        rank_set = set(ranks)
+        return any(rank_set == set(w) for w in windows)
 
     @staticmethod
     def _outside_jokers_remain(game_state: Dict[str, Any]) -> Optional[bool]:
@@ -2151,6 +2221,12 @@ class EndgameDecider:
         if gua115_pass is not None:
             return gua115_pass
 
+        gua267_bomb = self._q1_bomb_plus_one_sprint_vs_four(
+            game_state, action_list, ec, main_enemy,
+        )
+        if gua267_bomb is not None:
+            return gua267_bomb
+
         counter_bomb = self._q1_counter_enemy_bomb(
             game_state, action_list, ec, main_pos, main_enemy,
         )
@@ -2735,7 +2811,14 @@ class EndgameDecider:
     def _q1_allow_bomb_vs_four_card_enemy_exception(
         self, game_state: Dict[str, Any], ec: Dict[str, Any],
     ) -> bool:
-        """GUA-115 例外：不炸必输且自方两手整牌冲刺时仍允许用炸。"""
+        """火不打四例外：允许用炸。
+
+        GUA-267：自己恰好「火 + 一手整牌」（单/对/顺/TWT/三张/三连对/钢板）
+        → 即使敌剩 4 张也开炸冲刺（match=6a8c3452）。
+        GUA-115：不炸必输且 `has_two_clean_hands`（rest∈{1,2,3,5}）。
+        """
+        if self._is_bomb_plus_one_structure_hand(game_state.get("handCards") or []):
+            return True
         try:
             from .endgame_preprocessor import EndgamePreprocessor as EP
         except ImportError:
@@ -2744,6 +2827,42 @@ class EndgameDecider:
         if not EP._will_lose(game_state):
             return False
         return bool(ec.get("self", {}).get("has_two_clean_hands"))
+
+    def _q1_bomb_plus_one_sprint_vs_four(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Dict[str, Any],
+        main_enemy: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-267：火+一手 vs 报四跟压 → 能压的完整炸抢先冲刺。"""
+        if main_enemy.get("remaining") != 4:
+            return None
+        if not self._is_q1_following_enemy_control(game_state, ec):
+            return None
+        if not self._is_bomb_plus_one_structure_hand(game_state.get("handCards") or []):
+            return None
+        greater_action = game_state.get("greaterAction")
+        if not greater_action:
+            return None
+        cur_rank = str(game_state.get("curRank", "2"))
+        bombs: List[Tuple[int, List]] = []
+        for i, act in enumerate(action_list):
+            if not isinstance(act, list):
+                continue
+            if not _is_bomb_like_action(act):
+                continue
+            if _action_beats_greater(act, greater_action, cur_rank):
+                bombs.append((i, act))
+        if not bombs:
+            return None
+        picked = self._select_best_bomb(bombs, action_list)
+        if picked is not None:
+            logger.info(
+                "GUA-267 火+一手 vs 报四: 开炸冲刺 idx=%d type=%s",
+                picked[0], _get_declared_action_type(picked[1]),
+            )
+        return picked
 
     def _q1_counter_enemy_bomb(
         self,
@@ -5573,8 +5692,8 @@ class EndgameDecider:
         """检查出牌是否会破坏 core 整牌结构。
 
         用 _group_members 逐组扫描：若某 core 类型组的部分成员被 action 使用，
-        但非全部成员，则视为破坏结构。兼容 GUA-154 跨组归属（card 被分配
-        到非核心组时，仍能从 _group_members 检出真正的核心组）。
+        但非全部成员，则视为破坏结构。成员比较用 Counter（同点重复牌不能
+        用 set 塌缩，GUA-267）。兼容 GUA-154 跨组归属。
         """
         # GUA-206: 完整炸弹/同花顺本身就是最高等级核心整牌（同花顺 > 5星炸 > 4星炸，
         # 组牌引擎 _score_power 同花顺 +3、普通炸弹 +2 已体现该大小关系）。
@@ -5589,8 +5708,10 @@ class EndgameDecider:
         gid_type_map = game_state.get("_group_gid_type_map", {})
         if not group_members:
             return False
-        action_cards_set = set(_get_cards(action))
-        if not action_cards_set:
+        # GUA-267：必须用 Counter。4 张 Q 含两张 SQ 时 set 会塌成 3 张，
+        # 三条 Q 被误判为打完整个炸核（match=6a8c3452）。
+        action_cards_counts = Counter(str(c) for c in _get_cards(action))
+        if not action_cards_counts:
             return False
 
         # 核心整牌类型（不包含普通对子/单张）
@@ -5608,11 +5729,11 @@ class EndgameDecider:
             gtype = gid_type_map.get(gid) or gid_type_map.get(str(gid), "")
             if gtype not in CORE_TYPES:
                 continue
-            members_set = set(members)
-            overlap = action_cards_set & members_set
+            members_counts = Counter(str(c) for c in members)
+            overlap = action_cards_counts & members_counts
             if not overlap:
                 continue
-            if overlap != members_set:
+            if overlap != members_counts:
                 return True
         return False
 
