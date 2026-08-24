@@ -1168,8 +1168,10 @@ class BotzoneAdapter:
             self._pending_responses[match_id] = "[]"
         elif stage == "tribute":
             game.current_request = req
+            self._sync_tribute_info_from_global(game, self._extract_global(req))
         elif stage == "return":
             game.current_request = req
+            self._sync_tribute_info_from_global(game, self._extract_global(req))
         elif stage == "play":
             self._handle_play_request(game, req)
             game.current_request = req
@@ -1206,6 +1208,151 @@ class BotzoneAdapter:
             return str(level[team_idx])
         return str(level or "2")
 
+    @staticmethod
+    def _first_bz_card(value) -> Optional[int]:
+        """Botzone global 中单张牌：int 或 [int]。"""
+        if isinstance(value, list):
+            if not value:
+                return None
+            value = value[0]
+        if isinstance(value, int) and value >= 0:
+            return value
+        return None
+
+    def _tribute_card_sort_key(
+        self, card_int: int, cur_rank: str, last_player: int, payer: int,
+    ) -> tuple:
+        v8 = bz_to_v8_card(card_int)
+        order = _card_rank_order(v8, cur_rank)
+        last_bonus = 1 if payer == last_player else 0
+        return (order, last_bonus)
+
+    def _tribute_receiver(self, global_info: dict, payer: int, cur_rank: str) -> int:
+        """进贡接收方（对齐 Botzone 裁判双贡大贡→头游、小贡→二游）。"""
+        first = int(global_info.get("first", -1) if global_info.get("first") is not None else -1)
+        last = int(global_info.get("last", -1) if global_info.get("last") is not None else -1)
+        tc = global_info.get("tribute_cards") or {}
+        items: List[Tuple[int, int]] = []
+        for k, v in tc.items():
+            card_int = self._first_bz_card(v)
+            if card_int is None:
+                continue
+            try:
+                pid = int(k)
+            except (TypeError, ValueError):
+                continue
+            items.append((pid, card_int))
+        if len(items) <= 1:
+            return first
+        items.sort(
+            key=lambda kv: self._tribute_card_sort_key(kv[1], cur_rank, last, kv[0]),
+            reverse=True,
+        )
+        if items[0][0] == payer:
+            return first
+        return (first + 2) % 4
+
+    def _return_receiver(self, global_info: dict, returner: int, cur_rank: str) -> int:
+        """还贡接收方（对齐 Botzone 裁判：头游还大贡、二游还小贡）。"""
+        first = int(global_info.get("first", -1) if global_info.get("first") is not None else -1)
+        last = int(global_info.get("last", -1) if global_info.get("last") is not None else -1)
+        tc = global_info.get("tribute_cards") or {}
+        items: List[Tuple[int, int]] = []
+        for k, v in tc.items():
+            card_int = self._first_bz_card(v)
+            if card_int is None:
+                continue
+            try:
+                pid = int(k)
+            except (TypeError, ValueError):
+                continue
+            items.append((pid, card_int))
+        if len(items) == 1:
+            return items[0][0]
+        if len(items) == 2:
+            items.sort(
+                key=lambda kv: self._tribute_card_sort_key(kv[1], cur_rank, last, kv[0]),
+                reverse=True,
+            )
+            big_payer, small_payer = items[0][0], items[1][0]
+            if returner == first:
+                return big_payer
+            return small_payer
+        return -1
+
+    def _build_open_guandan_tribute_phase(
+        self, global_info: dict, cur_rank: str,
+    ) -> dict:
+        """Botzone global → OpenGuanDan tributeResult/backResult/antiPos（GUA-072）。"""
+        empty = {"tributeResult": None, "backResult": None, "antiPos": None}
+        if not global_info:
+            return empty
+
+        tribute_mode = int(global_info.get("tribute", 0) or 0)
+        last = int(global_info.get("last", -1) if global_info.get("last") is not None else -1)
+        resist = bool(global_info.get("resist", False))
+        tribute_cards = global_info.get("tribute_cards") or {}
+        return_cards = global_info.get("return_cards") or {}
+
+        if resist:
+            anti: Optional[List[int]] = None
+            if tribute_mode == 2 and last >= 0:
+                anti = [last, (last + 2) % 4]
+            elif last >= 0:
+                anti = [last]
+            return {"tributeResult": None, "backResult": None, "antiPos": anti}
+
+        tribute_result: List[List[Any]] = []
+        for payer_s, raw in tribute_cards.items():
+            card_int = self._first_bz_card(raw)
+            if card_int is None:
+                continue
+            try:
+                payer = int(payer_s)
+            except (TypeError, ValueError):
+                continue
+            receiver = self._tribute_receiver(global_info, payer, cur_rank)
+            if receiver < 0:
+                continue
+            tribute_result.append([payer, receiver, bz_to_v8_card(card_int)])
+
+        back_result: List[List[Any]] = []
+        for returner_s, raw in return_cards.items():
+            card_int = self._first_bz_card(raw)
+            if card_int is None:
+                continue
+            try:
+                returner = int(returner_s)
+            except (TypeError, ValueError):
+                continue
+            receiver = self._return_receiver(global_info, returner, cur_rank)
+            if receiver < 0:
+                continue
+            back_result.append([returner, receiver, bz_to_v8_card(card_int)])
+
+        return {
+            "tributeResult": tribute_result or None,
+            "backResult": back_result or None,
+            "antiPos": None,
+        }
+
+    def _sync_tribute_info_from_global(
+        self, game: BotzoneGameState, global_info: dict,
+    ) -> None:
+        """从 Botzone global 刷新本副贡牌阶段记忆（供 MemoryTracker / 信念门控）。"""
+        if not global_info:
+            return
+        has_tribute_data = bool(
+            global_info.get("tribute_cards")
+            or global_info.get("return_cards")
+            or global_info.get("resist")
+        )
+        tribute_mode = int(global_info.get("tribute", 0) or 0)
+        if has_tribute_data or tribute_mode == 0:
+            game.tribute_info = self._build_open_guandan_tribute_phase(
+                global_info, game.cur_rank,
+            )
+
     def _handle_deal(self, game: BotzoneGameState, req: dict) -> None:
         """Handle deal stage: set up hand cards."""
         bz_hand = req.get("deliver", [])
@@ -1221,6 +1368,7 @@ class BotzoneAdapter:
         game.played_cards = {}
         game.pass_on = -1
         game.done = []
+        game.tribute_info = {}
         game.episode_count += 1
         game.current_request = None  # deal needs no response
         # 每副开始重置引擎跨副残留状态（MemoryTracker / 增量回放游标等）。
@@ -1232,6 +1380,7 @@ class BotzoneAdapter:
                 self.decision_engine.on_game_start(game.player_id)
             except Exception:
                 logger.warning("on_game_start 失败 match=%s", game.match_id, exc_info=True)
+        self._sync_tribute_info_from_global(game, global_info)
         logger.info(
             "发牌: match=%s player=%d hand=%d curRank=%s hand=%s",
             game.match_id, game.player_id, len(game.hand_cards), level,
@@ -1252,6 +1401,7 @@ class BotzoneAdapter:
         global_info = self._extract_global(req)
         if "level" in global_info:
             game.cur_rank = self._resolve_level(global_info["level"], game.player_id)
+        self._sync_tribute_info_from_global(game, global_info)
 
     def _accumulate_played_cards(self, game: BotzoneGameState, history: list) -> None:
         """累计各席已出的 Botzone 整数牌（set 去重，跨 request history 重叠安全）。"""
@@ -1890,6 +2040,7 @@ class BotzoneAdapter:
         # must_play 时置 PASS 占位；greaterPos 必须同步成自由领出语义。
         engine_greater_pos = -1 if must_play else greater_pos
 
+        tribute_phase = game.tribute_info or {}
         game_state = {
             "actionList": action_list,
             "handCards": hand_cards,
@@ -1910,6 +2061,9 @@ class BotzoneAdapter:
             "publicInfo": public_info,
             "_botzone_mode": True,
             "history": history_actions,
+            "tributeResult": tribute_phase.get("tributeResult"),
+            "backResult": tribute_phase.get("backResult"),
+            "antiPos": tribute_phase.get("antiPos"),
         }
 
         # 4. Call V8's decision engine

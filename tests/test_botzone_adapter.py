@@ -1580,3 +1580,120 @@ def test_claim_straight_wild_replaces_covering():
     # 配子作自然级牌（H2 当 2）→ 无需替换，claim==action
     chosen_natural = ["Straight", "A", ["HA", "H2", "D3", "D4", "S5"]]
     assert adapter._build_bz_claim(chosen_natural, "2", [0, 1, 2, 3, 4]) == [0, 1, 2, 3, 4]
+
+
+# ── GUA-072 / GUA-234：Botzone 贡牌记忆 + 动态组牌引擎接线 ──────────────
+
+
+def test_build_open_guandan_tribute_phase_single():
+    """单贡：tribute_cards/return_cards → OpenGuanDan [payer, receiver, card]。"""
+    from src.communication.botzone_adapter import BotzoneAdapter
+
+    adapter = BotzoneAdapter.__new__(BotzoneAdapter)
+    # HA=0, S7=22；末游 2 进贡给头游 1，头游还贡给 2
+    global_info = {
+        "tribute": 1,
+        "first": 1,
+        "last": 2,
+        "tribute_cards": {"2": 0},
+        "return_cards": {"1": 26},
+    }
+    phase = adapter._build_open_guandan_tribute_phase(global_info, "2")
+    assert phase["tributeResult"] == [[2, 1, "HA"]]
+    assert phase["backResult"] == [[1, 2, "S7"]]
+    assert phase.get("antiPos") is None
+
+
+def test_build_open_guandan_tribute_phase_double():
+    """双贡：两对进贡/还贡。"""
+    from src.communication.botzone_adapter import BotzoneAdapter
+
+    adapter = BotzoneAdapter.__new__(BotzoneAdapter)
+    # HK=44, HQ=42；S7=22, D8=25
+    global_info = {
+        "tribute": 2,
+        "first": 1,
+        "last": 3,
+        "tribute_cards": {"2": 0, "3": 44},
+        "return_cards": {"1": 22, "3": 25},
+    }
+    phase = adapter._build_open_guandan_tribute_phase(global_info, "A")
+    assert len(phase["tributeResult"]) == 2
+    assert len(phase["backResult"]) == 2
+    payers = {row[0] for row in phase["tributeResult"]}
+    assert payers == {2, 3}
+
+
+def test_build_open_guandan_tribute_phase_anti():
+    """抗贡：resist → antiPos。"""
+    from src.communication.botzone_adapter import BotzoneAdapter
+
+    adapter = BotzoneAdapter.__new__(BotzoneAdapter)
+    global_info = {"tribute": 1, "resist": True, "last": 2}
+    phase = adapter._build_open_guandan_tribute_phase(global_info, "2")
+    assert phase["antiPos"] == [2]
+    assert phase["tributeResult"] is None
+    assert phase["backResult"] is None
+
+
+def test_sync_tribute_info_from_global_on_deal():
+    """deal 阶段 tribute=0 时重置 tribute_info。"""
+    from src.communication.botzone_adapter import BotzoneAdapter, BotzoneGameState
+
+    adapter = BotzoneAdapter.__new__(BotzoneAdapter)
+    game = BotzoneGameState(match_id="m1", player_id=0, cur_rank="2")
+    game.tribute_info = {
+        "tributeResult": [[2, 1, "HA"]],
+        "backResult": [[1, 2, "S7"]],
+        "antiPos": None,
+    }
+    adapter._sync_tribute_info_from_global(game, {"tribute": 0})
+    assert game.tribute_info == {
+        "tributeResult": None,
+        "backResult": None,
+        "antiPos": None,
+    }
+
+
+def test_handle_play_decision_injects_tribute_fields():
+    """play 决策时 game_state 须含 tributeResult/backResult/antiPos（GUA-072）。"""
+    from src.communication.botzone_adapter import BotzoneGameState
+
+    adapter, engine = _make_recording_adapter()
+    game = BotzoneGameState(match_id="m1", player_id=0, cur_rank="2")
+    game.hand_cards = ["S7", "D8", "HA", "HK", "C3", "C4", "C5", "C6", "C7"]
+    global_info = {
+        "level": "2",
+        "tribute": 1,
+        "first": 1,
+        "last": 2,
+        "tribute_cards": {"2": 0},
+        "return_cards": {"1": 26},
+    }
+    adapter._sync_tribute_info_from_global(game, global_info)
+    req = {
+        "stage": "play",
+        "history": [],
+        "done": [],
+        "pass_on": -1,
+        "global": global_info,
+    }
+    _run_play_decision(adapter, game, req)
+
+    gs = engine.last_game_state
+    assert gs is not None
+    assert gs["tributeResult"] == [[2, 1, "HA"]]
+    assert gs["backResult"] == [[1, 2, "S7"]]
+    assert gs.get("antiPos") is None
+
+
+def test_v8_engine_has_memory_and_dynamic_regroup():
+    """Botzone 入口所用 V8 引擎含 GUA-072 记忆 + GUA-234 动态组牌。"""
+    from src.v.nn import UltimateWinRateEngineV7
+
+    engine = UltimateWinRateEngineV7(player_id=0, use_grouping_engine=True)
+    assert hasattr(engine, "_mid_feed_P")
+    assert hasattr(engine, "_inject_belief_vector")
+    assert engine._dynamic_regroup_enabled is True
+
+
