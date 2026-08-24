@@ -349,8 +349,12 @@ class TestReconstructFeatures:
         assert features.shape == (TARGET_FEATURE_DIM,)
         # 前 124 维应非零 (有手牌)
         assert np.any(features[:124] != 0)
-        # 后 388 维应为零
-        assert np.all(features[124:] == 0)
+        # GUA-072 M5：229-240 规则记牌段应有值；241+ 仍为零填充
+        from src.v.nn.training.bc_dataset import EFFECTIVE_FEATURE_DIM, rule_memory_feature_start
+        from src.v.nn.features.rule_card_counter import RULE_MEMORY_DIM
+        rm_start = rule_memory_feature_start(False)
+        assert np.any(features[rm_start:rm_start + RULE_MEMORY_DIM] != 0)
+        assert np.all(features[EFFECTIVE_FEATURE_DIM:] == 0)
 
     def test_from_full_state_empty_hand(self):
         """空手牌特征全零 (前 124 维)。"""

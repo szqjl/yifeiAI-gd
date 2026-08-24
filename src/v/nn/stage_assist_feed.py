@@ -40,7 +40,17 @@ def _resolve_assist_prefer(game_state: Dict[str, Any], teammate_rest: int) -> Li
         prefer = teammate.get("assist_prefer")
         if prefer is not None:
             return list(prefer)
-    return assist_prefer_for(teammate_rest)
+    base = assist_prefer_for(teammate_rest)
+    belief = game_state.get("_belief") or {}
+    route = belief.get("type_route") or {}
+    line = belief.get("line_read") or {}
+    wants_big = bool(
+        route.get("teammate", {}).get("likely_wants_big_single")
+        or line.get("teammate_wants_big_single")
+    )
+    if wants_big and "Single" in base:
+        return ["Single"] + [t for t in base if t != "Single"]
+    return base
 
 
 def _effective_stage(current_stage: str) -> str:
@@ -56,8 +66,11 @@ def _feed_from_prefer(
     intent: str,
     *,
     rank_map: Optional[Dict[str, str]] = None,
+    prefer_override: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
-    prefer = _resolve_assist_prefer(game_state, teammate_rest)
+    prefer = list(prefer_override) if prefer_override else _resolve_assist_prefer(
+        game_state, teammate_rest,
+    )
     if not prefer or not action_list:
         return None
     picked = pick_assist_feed_by_prefer(game_state, action_list, prefer)
@@ -397,6 +410,41 @@ def recommend_assist_lead(
         )
 
     if stage == "stage_2":
+        from src.v.nn.dynamic_regroup import resolve_feed_prefer_types
+        from src.v.nn.stage_main_attack_lead import _try_feed_from_groups
+
+        feed_p = resolve_feed_prefer_types(
+            teammate_rest, game_state.get("_mid_feed_P"),
+        )
+        if feed_p and teammate_rest >= 6:
+            groups = engine._build_group_index(card_mask)
+            group_type_map = engine._group_type_map or {}
+            group_members = engine._group_members or None
+            feed_rec = _try_feed_from_groups(
+                engine,
+                groups,
+                card_mask,
+                hand_cards,
+                cur_rank,
+                feed_p,
+                group_type_map,
+                group_members,
+            )
+            if feed_rec:
+                feed_rec = dict(feed_rec)
+                feed_rec["intent"] = "assist_feed_mid_p"
+                return feed_rec
+            if action_list:
+                prefer_rec = _feed_from_prefer(
+                    game_state,
+                    action_list,
+                    teammate_rest,
+                    "assist_feed_mid_p",
+                    rank_map=rank_map,
+                    prefer_override=feed_p,
+                )
+                if prefer_rec:
+                    return prefer_rec
         return _feed_mid_match_fallback(
             engine, game_state, card_mask, hand_cards, cur_rank,
         )

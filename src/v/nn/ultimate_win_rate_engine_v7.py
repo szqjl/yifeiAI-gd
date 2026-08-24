@@ -115,6 +115,8 @@ class UltimateWinRateEngineV7:
         self._current_role: str = "主攻"                      # 角色（主攻/助攻/超强主攻/超弱）
         self._anchor_role: Optional[str] = None               # GUA-079: 初始 role 锚（主攻以上锁定，不随重算退化）
         self._best_plan = None                                 # 最优方案 GroupingPlan
+        self._all_plans: List[Any] = []                         # GUA-234 C：Top3 缓存
+        self._active_plan = None                                 # GUA-234 C：当前决策 plan
         self._grouping_features: Optional[np.ndarray] = None   # 24 维组牌特征（进 NN）
         self._last_hand_hash: int = -1                         # 手牌 hash，用于判断是否需要重跑引擎
         # GUA-063 中局重分组触发标记
@@ -173,6 +175,8 @@ class UltimateWinRateEngineV7:
         self._current_role = "主攻"
         self._anchor_role = None
         self._best_plan = None
+        self._all_plans = []
+        self._active_plan = None
         self._grouping_features = None
         self._last_hand_hash = -1
         self._core_broken_since_regroup = False
@@ -640,6 +644,8 @@ class UltimateWinRateEngineV7:
         self._update_teammate_last_trick(game_state)
         # ── ③b GUA-234 中期队友需求观测（只写字段/日志，不改出牌）──
         self._update_midgame_teammate_demand(game_state)
+        # ── ③c GUA-234 C：Top3 局面触发重评分（切换 active_plan / card_mask）──
+        self._evaluate_replan_candidates(game_state)
 
         # ── ④ MemoryTracker 注入 ──
         if self._tracker is not None:
@@ -1152,13 +1158,121 @@ class UltimateWinRateEngineV7:
             game_state.pop("_belief", None)
             return
         try:
-            from src.v.nn.features.rule_card_counter import create_counter_from_tracker
+            from src.v.nn.features.rule_card_counter import (
+                create_counter_from_tracker,
+                extract_rule_memory_features,
+            )
             game_state["_belief"] = create_counter_from_tracker(self._tracker).get_belief(
                 game_state
+            )
+            game_state["_rule_memory_vec"] = extract_rule_memory_features(
+                game_state.get("_belief") or {}
             )
         except Exception as e:
             self.logger.debug("belief inject skip: %s", e)
             game_state.pop("_belief", None)
+            game_state.pop("_rule_memory_vec", None)
+
+    def _rule_card_counter_from_state(self, game_state: Dict[str, Any]):
+        """GUA-072 / P0a：从 tracker 或 game_state 取 RuleCardCounter。"""
+        if self._tracker is not None:
+            try:
+                from src.v.nn.features.rule_card_counter import create_counter_from_tracker
+
+                return create_counter_from_tracker(self._tracker)
+            except Exception as e:
+                self.logger.debug("rule counter skip: %s", e)
+        tracker = game_state.get("_memory_tracker")
+        if tracker is not None:
+            try:
+                from src.v.nn.features.rule_card_counter import create_counter_from_tracker
+
+                return create_counter_from_tracker(tracker)
+            except Exception as e:
+                self.logger.debug("rule counter skip (gs): %s", e)
+        return None
+
+    def _belief_gate_counter_press(
+        self,
+        game_state: Dict[str, Any],
+        rec: Dict[str, Any],
+    ) -> bool:
+        """P0a：信念门控跟压。True → 拦截推荐（上游倾向 PASS）。
+
+        设计真源：V8-中期压顺灵活性-组牌-动态重组方案.md §3.4 P0a。
+        """
+        my_pos = int(game_state.get("myPos", self.player_id))
+        teammate_pos = (my_pos + 2) % 4
+        greater_pos = game_state.get("greaterPos", -1)
+        try:
+            greater_pos = int(greater_pos)
+        except (TypeError, ValueError):
+            return False
+        if greater_pos in (-1, my_pos, teammate_pos):
+            return False
+
+        action_type = str(rec.get("type", ""))
+        press_rank = str(rec.get("rank", ""))
+        if not press_rank or action_type in ("PASS", "Bomb", "StraightFlush"):
+            return False
+
+        counter = self._rule_card_counter_from_state(game_state)
+        if counter is None:
+            return False
+        if not counter.can_opponent_form_type(
+            greater_pos, action_type, press_rank, game_state
+        ):
+            return False
+
+        belief = game_state.get("_belief") or {}
+        hand_counts = belief.get("hand_counts") or {}
+        if hand_counts:
+            my_rest = hand_counts.get(my_pos)
+            if my_rest is not None and int(my_rest) <= 5:
+                return False
+            opp_rest = hand_counts.get(greater_pos)
+            if opp_rest is not None and int(opp_rest) <= 5:
+                return False
+
+        cards = rec.get("cards") or []
+        broken = self._get_broken_core_type(
+            [action_type, press_rank, list(cards)],
+            self._card_mask or {},
+            self._group_type_map or {},
+            self._group_members,
+        )
+        if broken is not None and broken not in ("Bomb", "StraightFlush"):
+            self.logger.debug(
+                "P0a belief gate: breaks_core=%s type=%s rank=%s",
+                broken,
+                action_type,
+                press_rank,
+            )
+        opp_risks = belief.get("opp_bomb_risks") or {}
+        risk = float(opp_risks.get(greater_pos, 0) or 0)
+        if risk >= 0.6 and broken is not None:
+            self.logger.debug("P0a belief gate: high bomb risk %.2f", risk)
+        return True
+
+    def _apply_belief_gate_min_press(
+        self,
+        game_state: Dict[str, Any],
+        rec: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """P0a：对 _recommend_min_press_impl 产出做信念门控。"""
+        if not rec:
+            return None
+        if game_state.get("_belief") is None and self._tracker is not None:
+            self._inject_belief_vector(game_state)
+        if self._belief_gate_counter_press(game_state, rec):
+            self.logger.info(
+                "P0a belief gate: skip min_press type=%s rank=%s greaterPos=%s",
+                rec.get("type"),
+                rec.get("rank"),
+                game_state.get("greaterPos"),
+            )
+            return None
+        return rec
 
     def _inject_phase_relation(self, game_state: Dict[str, Any]) -> None:
         """GUA-094：从 MemoryTracker 注入中局可消费的规则版推断标签。"""
@@ -1512,6 +1626,8 @@ class UltimateWinRateEngineV7:
             )
             best_plan, all_plans = enumerate_groupings(hand_cards, cur_rank)
             self._best_plan = best_plan
+            self._all_plans = list(all_plans)
+            self._active_plan = best_plan
 
             # 产出 1: card mask（进前置过滤）+ group_type_map + group_members
             self._card_mask, self._group_type_map, self._group_members = best_plan.to_card_mask()
@@ -1612,7 +1728,317 @@ class UltimateWinRateEngineV7:
                 self._group_members = {}
                 self._current_role = "助攻"
             self._grouping_features = np.zeros(24, dtype=np.float32)
+            self._all_plans = []
+            self._active_plan = None
             self._core_broken_since_regroup = False
+
+    def _replan_opp_consecutive_threshold(self) -> int:
+        """对手连续同型触发阈值：强牌+ / 超强 ≥3，其余 ≥2。"""
+        from src.v.nn.midgame_teammate_demand import TIER_STRONG_PLUS, TIER_SUPER
+
+        tier = self._power_gate_tier or ""
+        if tier in (TIER_SUPER, TIER_STRONG_PLUS):
+            return 3
+        return 2
+
+    @staticmethod
+    def _plan_type_counts(plan) -> Dict[str, int]:
+        """GroupingPlan → 平台牌型计数（供局面加权）。"""
+        return {
+            "Single": len(plan.singles or []),
+            "Pair": len(plan.pairs or []),
+            "Trips": len(plan.trips or []),
+            "Straight": len(plan.straights or []),
+            "ThreeWithTwo": len(plan.three_with_twos or []),
+            "ThreePair": len(plan.three_pairs or []),
+            "TwoTrips": len(plan.steel_plates or []),
+        }
+
+    def _plan_situation_bonus(
+        self,
+        plan,
+        game_state: Dict[str, Any],
+        focus_type: Optional[str] = None,
+    ) -> float:
+        """局面加权：对手连续牌型 / 喂牌 P 与 plan 结构对齐度。"""
+        counts = self._plan_type_counts(plan)
+        bonus = 0.0
+        snap = game_state.get("_mid_feed_snapshot") or {}
+        opp_cons = snap.get("opponent_consecutive") or {}
+
+        if not focus_type:
+            greater_action = game_state.get("greaterAction") or []
+            if (
+                isinstance(greater_action, list)
+                and greater_action
+                and greater_action[0] not in ("PASS",)
+            ):
+                focus_type = str(greater_action[0])
+            elif opp_cons:
+                focus_type = max(
+                    opp_cons,
+                    key=lambda k: int(opp_cons.get(k, 0) or 0),
+                )
+
+        if focus_type and focus_type in counts:
+            streak = int(opp_cons.get(focus_type, 0) or 0)
+            bonus += 0.04 * counts[focus_type]
+            bonus += 0.025 * min(streak, 4)
+
+        feed_p = game_state.get("_mid_feed_P") or []
+        for i, ft in enumerate(feed_p[:3]):
+            if ft in counts:
+                bonus += (0.035 - 0.01 * i) * counts[ft]
+
+        return bonus
+
+    def _replan_trigger_reason(self, game_state: Dict[str, Any]) -> Optional[str]:
+        """GUA-234 阶段 C：是否触发 Top3 重评分。"""
+        if not self._dynamic_regroup_enabled:
+            return None
+        if not self._all_plans or len(self._all_plans) < 2:
+            return None
+
+        hand_cards = game_state.get("handCards") or []
+        if len(hand_cards) <= 10:
+            return None
+
+        my_pos = int(game_state.get("myPos", self.player_id) or 0)
+        teammate = (my_pos + 2) % 4
+        nop = game_state.get("numofplayers") or []
+        if isinstance(nop, (list, tuple)) and len(nop) > teammate:
+            try:
+                if int(nop[teammate]) <= 5:
+                    return "teammate_close"
+            except (TypeError, ValueError):
+                pass
+
+        snap = game_state.get("_mid_feed_snapshot") or {}
+        opp_cons = snap.get("opponent_consecutive") or {}
+        threshold = self._replan_opp_consecutive_threshold()
+        for ptype, streak in opp_cons.items():
+            if int(streak or 0) >= threshold:
+                return f"opponent_consecutive_{ptype}_{streak}"
+
+        return None
+
+    def _apply_active_plan(
+        self,
+        plan,
+        game_state: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """切换 active_plan 并刷新 card_mask 供推荐器消费。"""
+        self._active_plan = plan
+        self._best_plan = plan
+        self._card_mask, self._group_type_map, self._group_members = plan.to_card_mask()
+        if game_state is not None:
+            game_state["_active_plan_strategy"] = getattr(plan, "strategy", "")
+
+    def _evaluate_replan_candidates(self, game_state: Dict[str, Any]) -> None:
+        """GUA-234 阶段 C：局面触发时对 Top3 重评分并可选切换 plan。
+
+        简化权衡（§8.3）：plan_loss 硬上限 + 局面 bonus；不接残手地板（阶段 E）。
+        """
+        reason = self._replan_trigger_reason(game_state)
+        if not reason:
+            return
+
+        active = self._active_plan or self._best_plan
+        if active is None or not self._all_plans:
+            return
+
+        plan_loss_limit = 0.15
+        switch_margin = 0.02
+        best_candidate = active
+        best_ctx = active.score + self._plan_situation_bonus(active, game_state)
+        scored: List[Tuple[str, float, float, float]] = []
+
+        for plan in self._all_plans:
+            delta = active.score - plan.score
+            ctx = plan.score + self._plan_situation_bonus(plan, game_state)
+            scored.append(
+                (
+                    getattr(plan, "strategy", "?"),
+                    round(float(plan.score), 3),
+                    round(ctx, 3),
+                    round(delta, 3),
+                )
+            )
+            if plan is active:
+                continue
+            if delta > plan_loss_limit:
+                continue
+            if ctx > best_ctx + switch_margin:
+                best_ctx = ctx
+                best_candidate = plan
+
+        self.logger.info(
+            "GUA-234 replan: reason=%s active=%s scored=%s pick=%s",
+            reason,
+            getattr(active, "strategy", "?"),
+            scored,
+            getattr(best_candidate, "strategy", "?"),
+        )
+        game_state["_replan_trigger"] = reason
+        game_state["_replan_scores"] = scored
+
+        if best_candidate is not active:
+            self._apply_active_plan(best_candidate, game_state)
+            game_state["_replan_switched"] = True
+        else:
+            game_state["_replan_switched"] = False
+
+    def _collect_regroup_press_candidates(
+        self,
+        game_state: Dict[str, Any],
+        card_mask: Dict[str, tuple],
+        greater_action: List,
+        greater_type: str,
+        hand_cards: List[str],
+        cur_rank: str,
+    ) -> List[Dict[str, Any]]:
+        """GUA-234 E：收集针对性重组压牌候选（含拆结构）。"""
+        from src.v.nn.dynamic_regroup import collect_regroup_target_types, dedupe_recommendations
+        from src.v.nn.guards.v7_guards import (
+            get_action_rank,
+            get_card_value,
+            _extract_action_cards,
+        )
+
+        if not greater_action or greater_action[0] == "PASS":
+            return []
+
+        greater_rank = get_action_rank(greater_action)
+        if not greater_rank:
+            return []
+
+        if greater_rank in ("B", "R"):
+            greater_cards = _extract_action_cards(greater_action)
+            if greater_cards:
+                greater_val = get_card_value(str(greater_cards[0]), cur_rank)
+            else:
+                greater_val = self.RANK_ORDER.get(greater_rank, 0)
+        else:
+            greater_val = get_card_value(f"H{greater_rank}", cur_rank)
+
+        candidates: List[Dict[str, Any]] = []
+        targets = collect_regroup_target_types(game_state, greater_type)
+
+        if greater_type in targets:
+            rec = self._recommend_min_press_impl(
+                game_state,
+                card_mask,
+                greater_action,
+                greater_type,
+                hand_cards,
+                cur_rank,
+                apply_belief_gate=False,
+            )
+            if rec:
+                candidates.append(rec)
+
+        groups = self._build_group_index(card_mask)
+
+        def _prank(internal_rank: str) -> str:
+            return self.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
+
+        if "ThreeWithTwo" in targets:
+            rec = self._build_three_with_two_press(
+                hand_cards,
+                greater_val,
+                cur_rank,
+                "min",
+                card_mask=card_mask,
+                group_type_map=self._group_type_map,
+                group_members=self._group_members,
+                allow_break_protected_core=True,
+            )
+            if rec:
+                candidates.append(rec)
+
+        if "ThreePair" in targets:
+            rec = self._build_consecutive_structure_press(
+                groups, "pair_in_three_pair", 3, greater_val, cur_rank, "min",
+            )
+            if rec:
+                rec["rank"] = _prank(rec["rank"])
+                candidates.append(rec)
+
+        if "TwoTrips" in targets:
+            rec = self._build_consecutive_structure_press(
+                groups, "trip_in_steel_plate", 2, greater_val, cur_rank, "min",
+            )
+            if rec:
+                rec["rank"] = _prank(rec["rank"])
+                candidates.append(rec)
+
+        return dedupe_recommendations(candidates)
+
+    def _recommend_targeted_regroup_press(
+        self,
+        game_state: Dict[str, Any],
+        card_mask: Dict[str, tuple],
+        greater_action: List,
+        greater_type: str,
+        hand_cards: List[str],
+        cur_rank: str,
+    ) -> Optional[Dict[str, Any]]:
+        """GUA-234 E：针对性重组跟压（残手地板 + 信念门控）。"""
+        from src.v.nn.dynamic_regroup import filter_regroup_candidate
+        from src.v.nn.guards.v7_guards import get_card_value, get_card_rank
+
+        if not self._dynamic_regroup_enabled:
+            return None
+
+        raw = self._collect_regroup_press_candidates(
+            game_state,
+            card_mask,
+            greater_action,
+            greater_type,
+            hand_cards,
+            cur_rank,
+        )
+        if not raw:
+            return None
+
+        valid: List[Tuple[Dict[str, Any], str, float]] = []
+        traces: List[Tuple[str, str]] = []
+        for rec in raw:
+            ok, reason = filter_regroup_candidate(
+                self, game_state, rec, hand_cards, cur_rank,
+            )
+            traces.append((str(rec.get("type")), reason))
+            if not ok:
+                continue
+            cards = rec.get("cards") or []
+            val = get_card_value(str(cards[0]), cur_rank) if cards else 99
+            valid.append((rec, reason, val))
+
+        game_state["_regroup_filter_trace"] = traces
+        if not valid:
+            self.logger.info(
+                "GUA-234 regroup: all %d candidates filtered trace=%s",
+                len(raw),
+                traces,
+            )
+            return None
+
+        valid.sort(key=lambda x: x[2])
+        best, reason, _ = valid[0]
+        self.logger.info(
+            "GUA-234 regroup: pick type=%s rank=%s reason=%s from %d/%d",
+            best.get("type"),
+            best.get("rank"),
+            reason,
+            len(valid),
+            len(raw),
+        )
+        game_state["_regroup_selected"] = {
+            "type": best.get("type"),
+            "rank": best.get("rank"),
+            "filter_reason": reason,
+        }
+        return best
 
     # ── GUA-065: 注入 numofplayers ────────────────────
 
@@ -3352,7 +3778,16 @@ class UltimateWinRateEngineV7:
 
     def _feeding_target_types(self, teammate_rest: int,
                                game_state: Dict[str, Any]) -> List[str]:
-        """按队友余牌数映射目标投喂牌型。"""
+        """按队友余牌映射投喂牌型；中期优先 _mid_feed_P（GUA-234 D）。"""
+        from src.v.nn.dynamic_regroup import resolve_feed_prefer_types
+
+        prefer = resolve_feed_prefer_types(
+            teammate_rest,
+            game_state.get("_mid_feed_P"),
+        )
+        if prefer:
+            return prefer
+
         from src.v.nn.guards.v7_guards import (ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR,
                                                 ACTION_TYPE_TRIPS,
                                                 ACTION_TYPE_THREE_WITH_TWO,
@@ -3435,7 +3870,8 @@ class UltimateWinRateEngineV7:
           0-123:   extract_static_features (124)
           124-187: extract_dynamic_features (64)
           188-195: extract_state_belief (8)  — GUA-050
-          196+:     MemoryTracker.state_vector — GUA-052 + GUA-054/061
+          196-228/243: MemoryTracker.state_vector — GUA-052 + GUA-054/061
+          229-240/244-255: rule_memory (12) — GUA-072 M5
         """
         try:
             if not FEATURE_IMPORT_OK:
@@ -3480,6 +3916,24 @@ class UltimateWinRateEngineV7:
                     features[mt_start:mt_start + mt_dim] = mt_state[:mt_dim]
                 except Exception:
                     pass
+
+            try:
+                from src.v.nn.training.bc_dataset import rule_memory_feature_start
+                from src.v.nn.features.rule_card_counter import (
+                    RULE_MEMORY_DIM,
+                    extract_rule_memory_features,
+                    create_counter_from_tracker,
+                )
+                if self._tracker is not None:
+                    rm_vec = extract_rule_memory_features(
+                        create_counter_from_tracker(self._tracker).get_belief(game_state)
+                    )
+                else:
+                    rm_vec = game_state.get("_rule_memory_vec") or [0.0] * RULE_MEMORY_DIM
+                rm_start = rule_memory_feature_start(self.use_grouping_engine)
+                features[rm_start:rm_start + RULE_MEMORY_DIM] = rm_vec[:RULE_MEMORY_DIM]
+            except Exception:
+                pass
 
             return features
 
@@ -4308,6 +4762,15 @@ class UltimateWinRateEngineV7:
         if is_upper and greater_action and greater_action[0] != "PASS":
             rec_impl = self._recommend_min_press_impl(
                 game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank)
+            if not rec_impl:
+                rec_impl = self._recommend_targeted_regroup_press(
+                    game_state,
+                    card_mask,
+                    greater_action,
+                    greater_type,
+                    hand_cards,
+                    cur_rank,
+                )
             if rec_impl:
                 rec = _ensure_valid(rec_impl, f"跟上家(greater={greater_type}/{greater_rank})")
                 if rec:
@@ -4864,6 +5327,15 @@ class UltimateWinRateEngineV7:
             rec = self._recommend_min_press_impl(
                 game_state, card_mask, greater_action, greater_type, hand_cards, cur_rank
             )
+            if not rec:
+                rec = self._recommend_targeted_regroup_press(
+                    game_state,
+                    card_mask,
+                    greater_action,
+                    greater_type,
+                    hand_cards,
+                    cur_rank,
+                )
             if rec:
                 if (
                     hr_with_opponents >= 2
@@ -5268,7 +5740,9 @@ class UltimateWinRateEngineV7:
 
     def _recommend_min_press_impl(
         self, game_state, card_mask, greater_action, greater_type,
-        hand_cards, cur_rank
+        hand_cards, cur_rank,
+        *,
+        apply_belief_gate: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """
         跟上家牌：找同型可压中最小的（节牌力）。
@@ -5315,6 +5789,11 @@ class UltimateWinRateEngineV7:
             greater_val = get_card_value(f"H{greater_rank}", cur_rank)
 
         groups = self._build_group_index(card_mask)
+
+        def _gate(rec: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+            if not apply_belief_gate:
+                return rec
+            return self._apply_belief_gate_min_press(game_state, rec)
 
         def _to_platform_rank(internal_rank: str) -> str:
             """将内部 rank 转成平台 actionList 中使用的 rank 名。"""
@@ -5390,11 +5869,11 @@ class UltimateWinRateEngineV7:
                     wild_card_sort = f"H{cur_rank}"
                     candidates.sort(key=lambda x: (1 if x[1] == wild_card_sort else 0, x[0]))
                     _, best, best_rank = candidates[0]
-                    return {
+                    return _gate({
                         "type": "Single",
                         "rank": _to_platform_rank(best_rank),
                         "cards": [str(best)],
-                    }
+                    })
                 return None
 
         # ── 三带二（ThreeWithTwo）：从手牌直接建，不用组引擎子结构 ──
@@ -5409,17 +5888,19 @@ class UltimateWinRateEngineV7:
                 group_members=self._group_members,
             )
             if rec:
-                return rec
+                return _gate(rec)
             if self._should_force_three_with_two_counter_press(game_state, greater_action):
-                return self._build_three_with_two_press(
-                    hand_cards,
-                    greater_val,
-                    cur_rank,
-                    "min",
-                    card_mask=card_mask,
-                    group_type_map=self._group_type_map,
-                    group_members=self._group_members,
-                    allow_break_protected_core=True,
+                return _gate(
+                    self._build_three_with_two_press(
+                        hand_cards,
+                        greater_val,
+                        cur_rank,
+                        "min",
+                        card_mask=card_mask,
+                        group_type_map=self._group_type_map,
+                        group_members=self._group_members,
+                        allow_break_protected_core=True,
+                    )
                 )
             return None
 
@@ -5430,7 +5911,7 @@ class UltimateWinRateEngineV7:
             )
             if rec:
                 rec["rank"] = _to_platform_rank(rec["rank"])
-                return rec
+                return _gate(rec)
             return None
         if greater_type == "TwoTrips":
             rec = self._build_consecutive_structure_press(
@@ -5438,7 +5919,7 @@ class UltimateWinRateEngineV7:
             )
             if rec:
                 rec["rank"] = _to_platform_rank(rec["rank"])
-                return rec
+                return _gate(rec)
             return None
 
         # ── 普通同型匹配（Pair / Trips / Straight）──
@@ -5499,11 +5980,11 @@ class UltimateWinRateEngineV7:
         else:
             out_cards = sorted(ginfo["cards"])
 
-        return {
+        return _gate({
             "type": c_type,
             "rank": _to_platform_rank(c_rank),
             "cards": out_cards,
-        }
+        })
 
     def _build_three_with_two_press(
         self,

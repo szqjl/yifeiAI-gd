@@ -101,6 +101,7 @@
 | 脚本 | 用途 |
 |------|------|
 | `run_bc_training.py` | **V7 BC 训练启动器** |
+| `run_fd_dmc_selfplay.py` | **GUA-039a fd_native DMC 自对弈**（FableDan engine + NumPy MLP） |
 | `start_v7_complete.py` | V7 完整流程启动（客户端+训练一条龙） |
 | `start_v7_gui.py` | V7 GUI 启动器 |
 
@@ -149,6 +150,9 @@
 | `analyze_practical_records_for_training.py` | 实战记录训练分析 |
 | `analyze_grouping_engine_freq.py` | 组牌引擎出牌频率统计 |
 | `compare_sf_detection_vs_multipass.py` | 同花顺检测：单轮 vs 多轮对比 |
+| `fabledan_v8_sim_compare.py` | **FableDan vs V8 规则对照**（step-b）：采样决策点，比合法着数量/签名/beats |
+| `fabledan_v8_selfplay_poc.py` | **V8 自学习 step-c**：FableDan 仿真 + V8 actionList 双路径自对弈吞吐 PoC |
+| `run_fd_dmc_eval.py` | **DMC 评估**：加载 `.npz` 权重，`fd_native` 或 `fd_v8_bridge`（V8 actionList）推理 vs RuleAgent |
 | `dump_grouping_plans_scores.py` | 组牌方案分数导出 |
 | `simulate_gua072_delay.py` | GUA-072 延迟效应模拟 |
 | `trace_grouping_order.py` | 组牌引擎出牌顺序追踪 |
@@ -339,6 +343,14 @@
 | `package_v8_online.py` | **在线 Bot 打包脚本** — 复制 `src/` + 入口 `__main__.py` 成 zip（`data/eval/botzone/v8_online_bot_YYYYMMDD_vN.zip`）；版本自动 +1（`--rev` 指定）、`--check` 校验、`--dry-run` 预览、`--keep` 保留旧版；第三方库由 Botzone 沙箱预装，数据文件走 `data` 路径 |
 | `fetch_match.py` | **Botzone 对局拉取 + 本地重放** — `GET /match/<id>?lite=true`（公开，无需登录）拉取指定玩家 requests/responses 序列；`--replay` 逐回合喂 `handle_online_turn_sync` 全量重放，决策链落 `logs/fetch_match_<id>.log`，供 WF-13 `check_botzone_trace.py` 分析（含上传的在线 v8 bot 参与的对局） |
 | `README.md` | 打包/上传/本地验证/工作流（本地迭代 → 验收 → 重打包） |
+
+### scripts/launchers/botzone_v9/ — V9 轻量 DMC Botzone 在线 Bot
+
+| 文件 | 说明 |
+|------|------|
+| `__main__.py` | **V9 在线 Bot 入口** — NumPy DMC + V8 `ActionListGenerator`；KEEP_RUNNING 长驻；权重 `data/dmc_v9_weights.npz` |
+| `package_v9_dmc_online.py` | **V9 打包** — `data/eval/botzone/v9_dmc_online_bot_YYYYMMDD_v9_N.zip` |
+| `README.md` | V9 与 V8 分工、权重路径、本地冒烟 |
 
 ### scripts/launchers/m1/ — M1 启动器
 

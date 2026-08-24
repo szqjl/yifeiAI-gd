@@ -28,15 +28,26 @@ import numpy as np
 from src.v.nn.features.static_features import extract_static_features, STATIC_STATE_DIM, extract_state_belief, BELIEF_DIM
 from src.v.nn.features.dynamic_features import extract_dynamic_features, DYNAMIC_HIDDEN_DIM
 from src.v.nn.features.memory_tracker import MemoryTracker, MEMORY_TRACKER_DIM, MEMORY_TRACKER_DIM_V061
+from src.v.nn.features.rule_card_counter import (
+    RULE_MEMORY_DIM,
+    RuleCardCounter,
+    extract_rule_memory_features,
+)
 
 logger = logging.getLogger("bc_dataset")
 
 # GUA-054 升级（2026-06-17）：EFFECTIVE_FEATURE_DIM 220 → 229（24 → 33，含 grouping_score 9 维）
-# 229 = 124(static) + 64(dynamic) + 8(belief) + 24(MT_GUA052) + 9(grouping_GUA054)
-EFFECTIVE_FEATURE_DIM = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM + MEMORY_TRACKER_DIM  # 124 + 64 + 8 + 33 = 229
-# GUA-061 升级（2026-06-18）：229 → 268（grouping_engine 替换 grouping_scanner，+15 维）
-# 268 = 124(static) + 64(dynamic) + 8(belief) + 24(MT_GUA052) + 24(grouping_GUA061) + 24(extra pad)
-EFFECTIVE_FEATURE_DIM_V061 = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM + MEMORY_TRACKER_DIM_V061  # 124+64+8+48=244
+# GUA-072 M5（2026-08-24）：229 → 241（+12 规则记牌 _rule_memory_vec）
+# 241 = 124(static) + 64(dynamic) + 8(belief) + 33(MT) + 12(rule_memory)
+EFFECTIVE_FEATURE_DIM = (
+    STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM
+    + MEMORY_TRACKER_DIM + RULE_MEMORY_DIM
+)
+# GUA-061 升级（2026-06-18）：244 → 256（grouping_engine 48 维 + rule_memory 12 维）
+EFFECTIVE_FEATURE_DIM_V061 = (
+    STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM
+    + MEMORY_TRACKER_DIM_V061 + RULE_MEMORY_DIM
+)
 TARGET_FEATURE_DIM = 512
 TARGET_ACTION_DIM = 512
 RECORD_DIR = Path("game_records")
@@ -76,6 +87,75 @@ def _filter_by_victory_num(game_data: Dict[str, Any]) -> bool:
     return team_a_wins >= 2
 
 
+def rule_memory_feature_start(use_grouping_engine: bool = False) -> int:
+    """512 维特征向量中 rule_memory 段起始下标。"""
+    mt_dim = MEMORY_TRACKER_DIM_V061 if use_grouping_engine else MEMORY_TRACKER_DIM
+    return STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM + mt_dim
+
+
+def _build_tracker_from_game_state(
+    game_state: Dict[str, Any],
+    use_grouping_engine: bool = False,
+) -> MemoryTracker:
+    """从 game_state 回放 history，构建 MemoryTracker（训练/推理共用）。"""
+    my_pos = game_state.get("myPos", 0)
+    hand_cards = game_state.get("handCards", [])
+    cur_rank = str(game_state.get("curRank", "2"))
+
+    tracker = MemoryTracker(
+        my_pos=my_pos,
+        enable_inference=False,
+        max_infer_depth=0,
+        use_grouping_engine=use_grouping_engine,
+    )
+    if hand_cards:
+        tracker.init_from_hand(hand_cards)
+    tracker.set_level_rank(cur_rank)
+
+    history = game_state.get("history", [])
+    for h in history:
+        seat = h.get("pos", h.get("seat", -1))
+        if seat < 0:
+            continue
+        action = h.get("action") or h.get("curAction") or []
+        ctx = h.get("context") or {}
+        if not action:
+            continue
+        action_type = str(action[0] or "")
+        if action_type.upper() == "PASS":
+            ga = ctx.get("greaterAction") or game_state.get("greaterAction")
+            target_type = ""
+            if isinstance(ga, list) and ga:
+                target_type = str(ga[0] or "")
+            tracker.record_pass(
+                seat,
+                target_type,
+                greater_action=ga if isinstance(ga, list) else None,
+                greater_pos=ctx.get("greaterPos", game_state.get("greaterPos")),
+            )
+            continue
+        tracker.record_play(seat, action, context=ctx)
+
+    tracker.sync_tribute_phase_from_state(
+        tribute_result=game_state.get("tributeResult"),
+        back_result=game_state.get("backResult"),
+        anti_pos=game_state.get("antiPos"),
+        cur_rank=cur_rank,
+    )
+
+    recent = game_state.get("recentPlays", [])
+    for rp in recent:
+        seat = rp.get("pos", -1)
+        if seat < 0:
+            continue
+        cards = rp.get("cards", [])
+        if cards:
+            action_type = rp.get("type", "Unknown")
+            tracker.record_play(seat, [action_type, "", cards])
+
+    return tracker
+
+
 def _build_memory_tracker_state(game_state: Dict[str, Any],
                                  use_grouping_engine: bool = False) -> List[float]:
     """
@@ -83,56 +163,26 @@ def _build_memory_tracker_state(game_state: Dict[str, Any],
 
     GUA-054 模式（默认）：33 维（GUA-052 24 + GUA-054 9）
     GUA-061 模式（use_grouping_engine=True）：48 维（GUA-052 24 + GUA-061 24）
-
-    replay 逻辑：
-      1. 初始化 tracker（手牌 + curRank）
-      2. 从 history/recentPlays 回放每步出牌
-      3. get_state_vector(game_state) 拼接组牌特征
     """
     try:
-        my_pos = game_state.get("myPos", 0)
-        hand_cards = game_state.get("handCards", [])
-        cur_rank = str(game_state.get("curRank", "2"))
-
-        tracker = MemoryTracker(my_pos=my_pos, enable_inference=False, max_infer_depth=0,
-                                use_grouping_engine=use_grouping_engine)
-        if hand_cards:
-            tracker.init_from_hand(hand_cards)
-        tracker.set_level_rank(cur_rank)
-
-        # 回放 history
-        history = game_state.get("history", [])
-        for h in history:
-            seat = h.get("pos", h.get("seat", -1))
-            if seat < 0:
-                continue
-            action = h.get("action") or h.get("curAction") or []
-            ctx = h.get("context") or {}
-            if action:
-                tracker.record_play(seat, action, context=ctx)
-
-        tracker.sync_tribute_phase_from_state(
-            tribute_result=game_state.get("tributeResult"),
-            back_result=game_state.get("backResult"),
-            anti_pos=game_state.get("antiPos"),
-            cur_rank=cur_rank,
-        )
-
-        # 回放 recentPlays
-        recent = game_state.get("recentPlays", [])
-        for rp in recent:
-            seat = rp.get("pos", -1)
-            if seat < 0:
-                continue
-            cards = rp.get("cards", [])
-            if cards:
-                action_type = rp.get("type", "Unknown")
-                tracker.record_play(seat, [action_type, "", cards])
-
+        tracker = _build_tracker_from_game_state(game_state, use_grouping_engine)
         return tracker.get_state_vector(game_state=game_state)
     except Exception:
         default_dim = MEMORY_TRACKER_DIM_V061 if use_grouping_engine else MEMORY_TRACKER_DIM
         return [0.0] * default_dim
+
+
+def _build_rule_memory_features(
+    game_state: Dict[str, Any],
+    use_grouping_engine: bool = False,
+) -> List[float]:
+    """GUA-072 M5：12 维规则记牌向量（与引擎 _rule_memory_vec 对齐）。"""
+    try:
+        tracker = _build_tracker_from_game_state(game_state, use_grouping_engine)
+        counter = RuleCardCounter(tracker)
+        return extract_rule_memory_features(counter.get_belief(game_state))
+    except Exception:
+        return [0.0] * RULE_MEMORY_DIM
 
 
 def _reconstruct_features_from_full_state(
@@ -146,12 +196,14 @@ def _reconstruct_features_from_full_state(
       124-187:   extract_dynamic_features (64)
       188-195:   extract_state_belief (8)
       196-228:   _build_memory_tracker_state (33) — GUA-052 24 + GUA-054 9
+      229-240:   _build_rule_memory_features (12) — GUA-072 M5
 
     GUA-061 模式（use_grouping_engine=True）：
       0-123:     extract_static_features (124)
       124-187:   extract_dynamic_features (64)
       188-195:   extract_state_belief (8)
       196-243:   _build_memory_tracker_state (48) — GUA-052 24 + GUA-061 24
+      244-255:   _build_rule_memory_features (12) — GUA-072 M5
     """
     try:
         static_features = extract_static_features(full_state)
@@ -179,6 +231,16 @@ def _reconstruct_features_from_full_state(
             mt_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM
             mt_dim = MEMORY_TRACKER_DIM_V061 if use_grouping_engine else MEMORY_TRACKER_DIM
             features[mt_start:mt_start + mt_dim] = mt_state
+        except Exception:
+            pass
+
+        # GUA-072 M5: 规则记牌 12 维
+        try:
+            rm_state = _build_rule_memory_features(
+                full_state, use_grouping_engine=use_grouping_engine
+            )
+            rm_start = rule_memory_feature_start(use_grouping_engine)
+            features[rm_start:rm_start + RULE_MEMORY_DIM] = rm_state
         except Exception:
             pass
 
@@ -254,6 +316,15 @@ def _reconstruct_features_from_my_decision(
             mt_start = STATIC_STATE_DIM + DYNAMIC_HIDDEN_DIM + BELIEF_DIM
             mt_dim = MEMORY_TRACKER_DIM_V061 if use_grouping_engine else MEMORY_TRACKER_DIM
             features[mt_start:mt_start + mt_dim] = mt_state
+        except Exception:
+            pass
+
+        try:
+            rm_state = _build_rule_memory_features(
+                fake_state, use_grouping_engine=use_grouping_engine
+            )
+            rm_start = rule_memory_feature_start(use_grouping_engine)
+            features[rm_start:rm_start + RULE_MEMORY_DIM] = rm_state
         except Exception:
             pass
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from math import comb
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Set, Set
 
 from src.v.nn.features.memory_tracker import MemoryTracker
 
@@ -34,6 +34,85 @@ RANK_VALUE_WITH_JOKERS: Dict[str, int] = {
     "SB": 13,
     "HR": 14,
 }
+
+ROUTE_ACTION_TYPES = [
+    "Single",
+    "Pair",
+    "Trips",
+    "ThreeWithTwo",
+    "Straight",
+    "ThreePair",
+    "TwoTrips",
+]
+
+# M5：规则记牌 → 固定维向量（不改 BELIEF_DIM，供 NN 训练/日志侧车）
+RULE_MEMORY_DIM = 12
+
+
+def _normalize_platform_action_type(action_type: str) -> str:
+    """平台 action[0] → PascalCase 牌型名。"""
+    raw = str(action_type or "").strip()
+    if not raw or raw.upper() == "PASS":
+        return ""
+    upper = raw.upper()
+    aliases = {
+        "SINGLE": "Single",
+        "PAIR": "Pair",
+        "TRIPS": "Trips",
+        "THREEWITHTWO": "ThreeWithTwo",
+        "STRAIGHT": "Straight",
+        "THREEPAIR": "ThreePair",
+        "TWOTRIPS": "TwoTrips",
+        "BOMB": "Bomb",
+        "STRAIGHTFLUSH": "StraightFlush",
+    }
+    if upper in aliases:
+        return aliases[upper]
+    if raw in ROUTE_ACTION_TYPES:
+        return raw
+    return raw
+
+
+def extract_rule_memory_features(belief: Dict[str, Any]) -> List[float]:
+    """M5：从 ``get_belief()`` 产出 12 维规则记牌向量（侧车，不扩 BC BELIEF_DIM）。"""
+    if not belief:
+        return [0.0] * RULE_MEMORY_DIM
+
+    def _norm01(value: float, scale: float = 1.0) -> float:
+        if scale <= 0:
+            return 0.0
+        return max(0.0, min(float(value) / scale, 1.0))
+
+    key = belief.get("key_card_signal") or belief.get("straight_skeleton") or {}
+    route = belief.get("type_route") or {}
+    head = belief.get("head_bomb_signal") or {}
+    high = belief.get("high_card_signal") or {}
+    line = belief.get("line_read") or {}
+    gap = belief.get("gap_bomb_risk") or {}
+    opp_risks = belief.get("opp_bomb_risks") or {}
+
+    five_out = float(key.get("five_outside", key.get("five_remain", 8)) or 0)
+    ten_out = float(key.get("ten_outside", key.get("ten_remain", 8)) or 0)
+    safe_n = len(key.get("safe_straight_windows") or [])
+
+    down = route.get("downseat") or {}
+    tm = route.get("teammate") or {}
+
+    return [
+        _norm01(five_out, 8.0),
+        _norm01(ten_out, 8.0),
+        _norm01(safe_n, 10.0),
+        1.0 if key.get("five_outside_depleted") else 0.0,
+        1.0 if key.get("ten_outside_depleted") else 0.0,
+        float(gap.get("gap_bomb_risk_max") or 0.0),
+        1.0 if down.get("likely_short_pair") else 0.0,
+        1.0 if tm.get("likely_wants_big_single") else 0.0,
+        _norm01(len(head.get("head_bomb_ranks") or []), 4.0),
+        _norm01(high.get("high_card_outside_total", 0), 24.0),
+        max(float(v) for v in opp_risks.values()) if opp_risks else 0.0,
+        1.0 if belief.get("can_opp_form_type_current") else 0.0,
+    ]
+
 
 STRUCTURED_ACTION_TYPES = {
     "ThreeWithTwo",
@@ -121,6 +200,112 @@ class RuleCardCounter:
             MemoryTracker.OPPONENT_HAND,
         )
 
+    def get_high_card_signal(self) -> Dict[str, Any]:
+        """MEM-M01：王/级/A/K 外出计数（对齐 05_memory_skills §一 + PRINCIPLES §十五）。"""
+        joker = self.get_joker_signal()
+        level = self.get_level_signal()
+        a_stats = self._rank_copy_stats("A")
+        k_stats = self._rank_copy_stats("K")
+        level_rank = str(level.get("level_rank") or "")
+        level_point_stats = (
+            self._rank_copy_stats(level_rank)
+            if level_rank in RANKS
+            else {"played": 0, "in_my_hand": 0, "remain": 0, "outside_my_hand": 0}
+        )
+
+        hr_outside = int(joker.get("hr_with_opponents", 0) or 0) + int(
+            joker.get("hr_unknown", 0) or 0
+        )
+        sb_outside = int(joker.get("sb_with_opponents", 0) or 0) + int(
+            joker.get("sb_unknown", 0) or 0
+        )
+        high_outside = (
+            hr_outside
+            + sb_outside
+            + int(a_stats["outside_my_hand"])
+            + int(k_stats["outside_my_hand"])
+            + int(level_point_stats["outside_my_hand"])
+        )
+
+        return {
+            "hr_played": joker["hr_played"],
+            "hr_remain": joker["hr_remain"],
+            "hr_outside": hr_outside,
+            "sb_played": joker["sb_played"],
+            "sb_remain": joker["sb_remain"],
+            "sb_outside": sb_outside,
+            "level_rank": level_rank,
+            "level_played": max(0, 8 - int(level.get("level_remaining", 0) or 0)),
+            "level_remain": int(level.get("level_remaining", 0) or 0),
+            "level_outside": int(level_point_stats["outside_my_hand"]),
+            "a_played": a_stats["played"],
+            "a_remain": a_stats["remain"],
+            "a_outside": a_stats["outside_my_hand"],
+            "k_played": k_stats["played"],
+            "k_remain": k_stats["remain"],
+            "k_outside": k_stats["outside_my_hand"],
+            "high_card_outside_total": high_outside,
+            "a_depleted": a_stats["outside_my_hand"] <= 0,
+            "k_depleted": k_stats["outside_my_hand"] <= 0,
+        }
+
+    @staticmethod
+    def _infer_bomb_main_rank(cards: List[str]) -> str:
+        """从炸弹牌张推断主 rank（众数）。"""
+        if not cards:
+            return ""
+        counts: Counter[str] = Counter()
+        for card in cards:
+            rk = _parse_card_rank_fast(str(card))
+            if rk in RANKS + ["SB", "HR"]:
+                counts[rk] += 1
+        if not counts:
+            return ""
+        return counts.most_common(1)[0][0]
+
+    @staticmethod
+    def _rank_beats(candidate: str, incumbent: str) -> bool:
+        """candidate rank 是否高于 incumbent（空 incumbent 视为最低）。"""
+        if not candidate:
+            return False
+        if not incumbent:
+            return True
+        cv = RANK_VALUE_WITH_JOKERS.get(candidate, -1)
+        iv = RANK_VALUE_WITH_JOKERS.get(incumbent, -1)
+        return cv > iv
+
+    def _scan_seat_bomb_profile(self) -> Dict[str, Any]:
+        """MEM-M02：逐席是否出过炸 / 最大炸弹 rank / 张数。"""
+        tracker = self._t
+        has_played: Dict[int, bool] = {i: False for i in range(4)}
+        max_rank: Dict[int, str] = {}
+        max_size: Dict[int, int] = {i: 0 for i in range(4)}
+
+        for play in tracker.play_history:
+            action_type = str(play.get("action_type") or "")
+            if action_type not in ("Bomb", "StraightFlush"):
+                continue
+            try:
+                seat = int(play.get("seat", -1))
+            except (TypeError, ValueError):
+                continue
+            if seat < 0:
+                continue
+            cards = play.get("cards") or []
+            has_played[seat] = True
+            size = len(cards)
+            if size > max_size.get(seat, 0):
+                max_size[seat] = size
+            bomb_rank = self._infer_bomb_main_rank(cards)
+            if self._rank_beats(bomb_rank, max_rank.get(seat, "")):
+                max_rank[seat] = bomb_rank
+
+        return {
+            "has_played_bomb": has_played,
+            "max_bomb_rank_by_seat": max_rank,
+            "max_bomb_size_by_seat": max_size,
+        }
+
     # ── 炸弹统计分析 ──────────────────────────────────
 
     def get_bomb_stats(self) -> Dict[str, Any]:
@@ -133,6 +318,9 @@ class RuleCardCounter:
               - total_bombs_played: int 总炸弹数
               - bombs_remaining_self: int 自己手牌中预计剩余炸弹数
               - bombs_remaining_opp: {seat: int} 对手预计剩余炸弹数
+              - has_played_bomb: {seat: bool} MEM-M02 是否出过炸
+              - max_bomb_rank_by_seat: {seat: rank} MEM-M02 最大炸弹点数
+              - max_bomb_size_by_seat: {seat: int} MEM-M02 最大炸弹张数
         """
         tracker = self._t
         bombs_played = dict(tracker.bombs_played)
@@ -177,12 +365,16 @@ class RuleCardCounter:
                 likely_bomb = 1
             opp_bombs[opp] = likely_bomb
 
+        bomb_profile = self._scan_seat_bomb_profile()
         return {
             "bombs_played": bombs_played,
             "sf_bombs_played": dict(sf),
             "total_bombs_played": total,
             "bombs_remaining_self": self_bombs,
             "bombs_remaining_opp": opp_bombs,
+            "has_played_bomb": bomb_profile["has_played_bomb"],
+            "max_bomb_rank_by_seat": bomb_profile["max_bomb_rank_by_seat"],
+            "max_bomb_size_by_seat": bomb_profile["max_bomb_size_by_seat"],
         }
 
     # ── rank 安全判断 ─────────────────────────────────
@@ -278,8 +470,216 @@ class RuleCardCounter:
             total += sum(1 for c in copies if self._may_opp_hold(c))
         return total
 
-    def _can_any_enemy_form_same_type(self, action_type: str, target_rank: str) -> bool:
-        """基于记牌估算：任一对手是否仍可能形成更大的同型压制。"""
+    def _seat_type_weakness_count(self, seat: int, action_type: str) -> int:
+        """该席对该牌型 PASS + 被迫开炸次数（牌路弱项，含 type_bombed）。"""
+        return int(self._t.get_type_weakness(seat).get(action_type, 0) or 0)
+
+    def _is_head_rank_depleted(self, rank: str) -> bool:
+        """MEM-M04：同点 ≥4 已出 → 难再组该点三带二/头炸余牌。"""
+        if rank in ("SB", "HR"):
+            return False
+        return int(self._rank_copy_stats(rank)["played"]) >= 4
+
+    def get_key_card_signal(self) -> Dict[str, Any]:
+        """MEM-M03 / §五：5 与 10 关键张外出计数 + 安全顺窗。"""
+        sk = self.get_straight_skeleton_signal()
+        five = self._rank_copy_stats("5")
+        ten = self._rank_copy_stats("T")
+        return {
+            "five_played": max(0, 8 - int(five["remain"])),
+            "five_remain": int(five["remain"]),
+            "five_outside": int(five["outside_my_hand"]),
+            "five_outside_depleted": int(five["outside_my_hand"]) <= 0,
+            "ten_played": max(0, 8 - int(ten["remain"])),
+            "ten_remain": int(ten["remain"]),
+            "ten_outside": int(ten["outside_my_hand"]),
+            "ten_outside_depleted": int(ten["outside_my_hand"]) <= 0,
+            "safe_straight_windows": list(sk.get("safe_straight_windows") or []),
+        }
+
+    def get_head_bomb_signal(self) -> Dict[str, Any]:
+        """MEM-M04：成头炸 rank（同点 ≥4 已出）→ 三带二主三张概率↓。"""
+        head_ranks: List[str] = []
+        twt_trip_depleted: List[str] = []
+        for rank in RANKS:
+            played = int(self._rank_copy_stats(rank)["played"])
+            if played >= 4:
+                head_ranks.append(rank)
+            if played >= 3:
+                twt_trip_depleted.append(rank)
+        return {
+            "head_bomb_ranks": head_ranks,
+            "twt_trip_ranks_depleted": twt_trip_depleted,
+        }
+
+    def get_tribute_signal(self) -> Dict[str, Any]:
+        """MEM-M05：进贡/还贡/抗贡牌记入信念。"""
+        tracker = self._t
+        tribute_cards: List[Dict[str, Any]] = []
+        back_cards: List[Dict[str, Any]] = []
+        for entry in tracker.tribute_history:
+            ev = str(entry.get("event") or "")
+            item = {
+                "from": entry.get("from"),
+                "to": entry.get("to"),
+                "card": entry.get("card"),
+            }
+            if ev == "tribute":
+                tribute_cards.append(item)
+            elif ev == "back":
+                back_cards.append(item)
+        latest_tribute_rank = ""
+        if tribute_cards:
+            latest_tribute_rank = _parse_card_rank_fast(
+                str(tribute_cards[-1].get("card") or "")
+            )
+        return {
+            "anti_tribute_seats": list(getattr(tracker, "_anti_tribute_pos", []) or []),
+            "tribute_cards": tribute_cards,
+            "back_cards": back_cards,
+            "tribute_count": len(tribute_cards),
+            "back_count": len(back_cards),
+            "latest_tribute_rank": latest_tribute_rank,
+        }
+
+    def get_type_route_signal(self) -> Dict[str, Any]:
+        """M3 / §四：逐席牌路弱项 + 首发/未出型推断。"""
+        tracker = self._t
+        seats: Dict[int, Dict[str, Any]] = {}
+        first_lead: Dict[int, str] = {}
+
+        for seat in range(4):
+            types_played: Set[str] = set()
+            singles = pairs = small_singles = 0
+            for entry in tracker.play_history:
+                if int(entry.get("seat", -1)) != seat:
+                    continue
+                at = _normalize_platform_action_type(str(entry.get("action_type") or ""))
+                if not at:
+                    continue
+                types_played.add(at)
+                if seat not in first_lead:
+                    first_lead[seat] = at
+                if at == "Single":
+                    singles += 1
+                    cards = entry.get("cards") or []
+                    if cards:
+                        rk = _parse_card_rank_fast(str(cards[0]))
+                        if RANK_VALUE.get(rk, 99) <= RANK_VALUE.get("9", 7):
+                            small_singles += 1
+                elif at == "Pair":
+                    pairs += 1
+
+            weakness = dict(tracker.get_type_weakness(seat))
+            never_played = [
+                t for t in ROUTE_ACTION_TYPES if t not in types_played
+            ]
+            unlikely_form = [
+                t
+                for t in ROUTE_ACTION_TYPES
+                if int(weakness.get(t, 0) or 0) >= 2
+            ]
+            likely_has: List[str] = []
+            if singles >= 3 and pairs == 0:
+                unlikely_form.append("Pair")
+            if "Single" in never_played and int(weakness.get("Single", 0) or 0) == 0:
+                likely_has.append("Single")
+            if "Pair" in never_played and int(weakness.get("Pair", 0) or 0) == 0:
+                likely_has.append("Pair")
+
+            seats[seat] = {
+                "first_lead_type": first_lead.get(seat, ""),
+                "types_played": sorted(types_played),
+                "types_never_played": never_played,
+                "type_weakness": weakness,
+                "unlikely_form_types": sorted(set(unlikely_form)),
+                "likely_has_types": likely_has,
+                "single_plays": singles,
+                "pair_plays": pairs,
+                "small_single_plays": small_singles,
+                "likely_short_pair": singles >= 3 and pairs == 0,
+            }
+
+        down = (tracker.my_pos + 1) % 4
+        tm = tracker.partner_pos
+        tm_info = seats.get(tm, {})
+        return {
+            "seats": seats,
+            "downseat": seats.get(down, {}),
+            "teammate": {
+                **tm_info,
+                "likely_wants_big_single": int(tm_info.get("small_single_plays", 0) or 0) >= 2,
+            },
+            "downseat_short_pair": bool(seats.get(down, {}).get("likely_short_pair")),
+        }
+
+    def seat_unlikely_form_type(self, seat: int, action_type: str) -> bool:
+        """该席是否 unlikely 再组 action_type（牌路弱项 ≥2 或连单缺对）。"""
+        route = self.get_type_route_signal()
+        info = route.get("seats", {}).get(seat, {})
+        at = _normalize_platform_action_type(action_type)
+        return at in (info.get("unlikely_form_types") or [])
+
+
+    @staticmethod
+    def _min_cards_for_action_type(action_type: str) -> int:
+        return {
+            "Single": 1,
+            "Pair": 2,
+            "Trips": 3,
+            "ThreeWithTwo": 5,
+            "Straight": 5,
+            "ThreePair": 6,
+            "TwoTrips": 6,
+            "Bomb": 4,
+            "StraightFlush": 5,
+        }.get(action_type, 1)
+
+    def _seat_remaining(self, seat: int, game_state=None) -> int:
+        """该席剩余张数：优先 numofplayers（平台实时），其次 belief，最后 tracker。"""
+        if game_state is not None:
+            nop = game_state.get("numofplayers") or []
+            if isinstance(nop, (list, tuple)) and len(nop) > seat:
+                try:
+                    return int(nop[seat])
+                except (TypeError, ValueError):
+                    pass
+            belief = game_state.get("_belief") or {}
+            hand_counts = belief.get("hand_counts") or {}
+            if seat in hand_counts:
+                try:
+                    return int(hand_counts[seat])
+                except (TypeError, ValueError):
+                    pass
+        return int(self._t.hand_counts.get(seat, 27) or 0)
+
+    def can_opponent_form_type(
+        self,
+        opp_seat: int,
+        action_type: str,
+        target_rank: str,
+        game_state=None,
+    ) -> bool:
+        """MEM-M02：对手 opp_seat 是否仍可能用同型更大牌压制。
+
+        比 can_opponent_suppress 多考虑：对子需 2 张、三带二需 3+2、
+        牌路 PASS 弱项、剩张不足以组成该型。
+        """
+        if opp_seat not in self._t.opponents:
+            return False
+
+        action_type = str(action_type or "")
+        if action_type in ("Bomb", "StraightFlush", "PASS"):
+            return self._t.get_opponent_bomb_risk(opp_seat) >= 0.55
+
+        remaining = self._seat_remaining(opp_seat, game_state)
+        if remaining < self._min_cards_for_action_type(action_type):
+            return False
+        if self._seat_type_weakness_count(opp_seat, action_type) >= 2:
+            return False
+        if self.seat_unlikely_form_type(opp_seat, action_type):
+            return False
+
         if action_type == "Single":
             return any(
                 self._count_possible_enemy_copies(rank) >= 1
@@ -297,6 +697,8 @@ class RuleCardCounter:
             )
         if action_type == "ThreeWithTwo":
             for trip_rank in self._iter_higher_ranks(target_rank):
+                if self._is_head_rank_depleted(trip_rank):
+                    continue
                 if self._count_possible_enemy_copies(trip_rank) < 3:
                     continue
                 for pair_rank in RANKS + ["SB", "HR"]:
@@ -306,11 +708,16 @@ class RuleCardCounter:
                         return True
             return False
         if action_type in ("Straight", "ThreePair", "TwoTrips"):
-            return True
-        if action_type in ("Bomb", "StraightFlush"):
-            return max(
-                self._t.get_opponent_bomb_risk(opp) for opp in self._t.opponents
-            ) >= 0.6
+            if self._seat_type_weakness_count(opp_seat, action_type) >= 1:
+                return remaining >= 10
+            return remaining >= 5
+        return False
+
+    def _can_any_enemy_form_same_type(self, action_type: str, target_rank: str) -> bool:
+        """基于记牌估算：任一对手是否仍可能形成更大的同型压制。"""
+        for opp in self._t.opponents:
+            if self.can_opponent_form_type(opp, action_type, target_rank):
+                return True
         return False
 
     @staticmethod
@@ -830,6 +1237,9 @@ class RuleCardCounter:
           - depleted_ranks: list[str] 已完全耗尽的 rank（8 张全出或全已知归属）
           - safe_ranks: set[str] 安全的 rank（对手不可持有）
           - can_opp_suppress_current: 对手是否可能压制当前控牌
+          - can_opp_form_type_current: MEM-M02 对手能否同型反压当前控牌
+          - high_card_signal: MEM-M01 get_high_card_signal() 返回值
+          - key_card_signal / type_route / head_bomb_signal / tribute_signal: M3–M5
           - bomb_stats: get_bomb_stats() 返回值
           - level_signal: get_level_signal() 返回值
           - unknown_rank_stats: get_unknown_rank_stats() 返回值
@@ -876,6 +1286,7 @@ class RuleCardCounter:
 
         # 对手能否压制当前控牌
         can_opp_suppress = True  # 默认保守
+        can_opp_form_type = True
         if game_state:
             greater_pos = game_state.get("greaterPos", -1)
             greater_action = game_state.get("greaterAction")
@@ -884,7 +1295,11 @@ class RuleCardCounter:
                     and isinstance(greater_action, list)
                     and len(greater_action) >= 2):
                 g_rank = str(greater_action[1])
+                g_type = str(greater_action[0])
                 can_opp_suppress = self.can_opponent_suppress(greater_pos, g_rank)
+                can_opp_form_type = self.can_opponent_form_type(
+                    greater_pos, g_type, g_rank, game_state
+                )
 
         hand_counts = dict(tracker.hand_counts)
 
@@ -900,6 +1315,12 @@ class RuleCardCounter:
             "depleted_ranks": depleted,
             "safe_ranks": safe,
             "can_opp_suppress_current": can_opp_suppress,
+            "can_opp_form_type_current": can_opp_form_type,
+            "high_card_signal": self.get_high_card_signal(),
+            "key_card_signal": self.get_key_card_signal(),
+            "type_route": self.get_type_route_signal(),
+            "head_bomb_signal": self.get_head_bomb_signal(),
+            "tribute_signal": self.get_tribute_signal(),
             "bomb_stats": self.get_bomb_stats(),
             "level_signal": self.get_level_signal(),
             "unknown_rank_stats": self.get_unknown_rank_stats(),

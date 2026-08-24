@@ -1,1 +1,1 @@
-# V7 training module (BC, PPO, etc.)
+# V7 training module (BC, DMC self-play, etc.)

@@ -11,7 +11,7 @@ GUA-189：队友 1-5 张时按 assist_prefer 表优先喂牌（覆盖 P1-P4 管�
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
 
 from src.v.nn.assist_prefer_table import assist_prefer_for
 
@@ -321,11 +321,18 @@ def _pick_smallest_straight(
     engine: "UltimateWinRateEngineV7",
     groups: Dict[int, dict],
     cur_rank: str,
+    game_state: Optional[Dict[str, Any]] = None,
 ) -> Optional[tuple]:
     from src.v.nn.guards.v7_guards import get_card_rank
 
     def _prank(internal_rank: str) -> str:
         return engine.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
+
+    safe: Set[str] = set()
+    if game_state:
+        belief = game_state.get("_belief") or {}
+        key_sig = belief.get("key_card_signal") or belief.get("straight_skeleton") or {}
+        safe = set(key_sig.get("safe_straight_windows") or [])
 
     # is_core 只禁「拆」不禁「整组出」：顺子在 to_card_mask 中均为 is_core=1.0，
     # 不得因 is_core 跳过；整组 cards 打出由 filter 判定 used==total 放行。
@@ -338,7 +345,8 @@ def _pick_smallest_straight(
         if len(cards) < 5:
             continue
         pr = _prank(get_card_rank(sequence_cards[0]))
-        key = (_pip_order(cards[0], cur_rank), cards)
+        safe_prio = 0 if pr in safe else 1
+        key = (safe_prio, _pip_order(cards[0], cur_rank), cards)
         if best is None or key < best[0]:
             best = (key, gid, "Straight", pr, cards[:5])
     if not best:
@@ -479,6 +487,7 @@ def _try_feed_from_groups(
     feed_prefer: List[str],
     group_type_map: Dict[int, str],
     group_members: Optional[Dict[int, List[str]]],
+    game_state: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     from src.v.nn.guards.v7_guards import CARD_RANK_ORDER, get_card_rank
 
@@ -487,7 +496,7 @@ def _try_feed_from_groups(
 
     for atype in feed_prefer:
         if atype == "Straight":
-            result = _pick_smallest_straight(engine, groups, cur_rank)
+            result = _pick_smallest_straight(engine, groups, cur_rank, game_state)
             if result:
                 gid, typ, pr, cards = result
                 if _has_structure_recapture(groups, lead_gid=gid, kind="straight", engine=engine, cur_rank=cur_rank):
@@ -578,10 +587,22 @@ def recommend_main_attack_lead(
             feed_prefer = assist_prefer_for(int(teammate_rem))
             feed_action = _try_feed_from_groups(
                 engine, groups, card_mask, hand_cards, cur_rank,
-                feed_prefer, group_type_map, group_members,
+                feed_prefer, group_type_map, group_members, game_state,
             )
             if feed_action:
                 return feed_action
+        # GUA-234 D：中期队友 ≥6 张 → 消费 _mid_feed_P（plan 已有则优先喂）
+        if isinstance(teammate_rem, (int, float)) and int(teammate_rem) >= 6:
+            mid_feed_p = game_state.get("_mid_feed_P")
+            if mid_feed_p:
+                feed_action = _try_feed_from_groups(
+                    engine, groups, card_mask, hand_cards, cur_rank,
+                    list(mid_feed_p), group_type_map, group_members, game_state,
+                )
+                if feed_action:
+                    feed_action = dict(feed_action)
+                    feed_action["intent"] = "main_feed_mid_p"
+                    return feed_action
 
     # ── P1（O10）──
     p1_singles = _eligible_p1_singles(
@@ -620,7 +641,7 @@ def recommend_main_attack_lead(
 
     # ── GUA-179：对手牌型弱点感知 → 优先出对手 PASS/被迫开炸过的牌型 ──
     # 预计算 st_pick（原在 P3 中，为弱点检测提前）
-    st_pick = _pick_smallest_straight(engine, groups, cur_rank)
+    st_pick = _pick_smallest_straight(engine, groups, cur_rank, game_state)
     _weakness_promoted = None
     tracker = game_state.get("_memory_tracker")
     if tracker is not None and hasattr(tracker, "get_type_weakness"):
@@ -702,7 +723,7 @@ def recommend_main_attack_lead(
             }
 
     # ── P3：整组短小顺（含 is_core=1.0 的组牌顺）──
-    st_pick = _pick_smallest_straight(engine, groups, cur_rank)
+    st_pick = _pick_smallest_straight(engine, groups, cur_rank, game_state)
     if st_pick:
         gid, typ, pr, cards = st_pick
         scatter_n = len(engine._scatter_singles(card_mask))
