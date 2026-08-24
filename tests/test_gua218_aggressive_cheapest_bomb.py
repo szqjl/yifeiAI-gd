@@ -26,6 +26,7 @@ def _make_engine(*, role="超强主攻"):
     eng._match_fail_type_mismatch = 0
     eng._match_fail_rank_mismatch = 0
     eng._match_fail_cards_mismatch = 0
+    eng._dynamic_regroup_enabled = False
     return eng
 
 

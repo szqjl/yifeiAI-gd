@@ -603,6 +603,22 @@ def _get_declared_action_type(action: List) -> str:
     return ""
 
 
+def _is_joker_pair_action(action: List) -> bool:
+    """GUA-269：是否为对小王 / 对大王（平台 Pair/B 或 Pair/R）。"""
+    if not action or not isinstance(action, list):
+        return False
+    if _get_declared_action_type(action) != ACTION_TYPE_PAIR:
+        return False
+    cards = _get_cards(action)
+    if len(cards) != 2:
+        return False
+    ranks = {get_card_rank(str(c)) for c in cards} if GUARD_TOOLS_OK else set()
+    if not ranks:
+        rank = action[1] if len(action) > 1 else ""
+        return rank in ("B", "R")
+    return ranks <= {"SB", "HR"} and len(ranks) == 1
+
+
 def _effective_structure_type(action: List) -> str:
     """结构类型：平台 StraightFlush / Bomb 声明优先于实牌推断。"""
     declared = _get_declared_action_type(action)
@@ -1462,6 +1478,17 @@ class EndgameDecider:
                             return i, a
                     return None, None
 
+        # GUA-269：未冲刺不得用对王压队友对子。
+        # match=6a8c3e2c t35 3号级牌对 22 压过 2 号对 T 后，1 号 9 张（QQQ+33+KK+对 SB）
+        # 尚未两手冲刺，却打 Pair/B 抢权 → 4 号 Bomb/6 接管清头游。
+        # 队友 close 时 GUA-212 已让道；此处覆盖队友剩牌多、主攻「帮挡」误用对王的洞。
+        # 例外：自己 should_sprint（冲刺拿权）或敌人 ≤2 张 imminent（接管拦截）。
+        gua269 = self._gua269_joker_pair_vs_teammate_pass(
+            game_state, action_list, ec, greater_pos, greater_action, teammate_pos,
+        )
+        if gua269 is not None:
+            return gua269
+
         # ── Q0.5: 一手清（finish_now）────  [GUA-097 fix: 提升至 Q0 之前]
         # GUA-112: 无论敌人/队友状态，只要 actionList 含一手清候选 → 立即出完
         # 原嵌套在 Q1 内，敌人不进残局区时 finish_now 被跳过
@@ -1487,6 +1514,11 @@ class EndgameDecider:
             result = self._q1_block_enemy(game_state, action_list, ec)
             if result is not None:
                 idx, action = result
+                rewritten = self._gua269_rewrite_joker_pair_vs_teammate(
+                    game_state, action_list, ec, idx, action,
+                )
+                if rewritten is not None:
+                    return rewritten
                 if _get_declared_action_type(action) not in ("PASS",):
                     # GUA-239：多手自由领出先单试探有意拆 SF/顺子核心 → 豁免拆核心转 PASS
                     if not should_allow_gua239_single_probe(game_state):
@@ -2926,6 +2958,82 @@ class EndgameDecider:
         """GUA-112：若平台给出一手清牌候选，Q1 不得拆完整手牌。"""
         return find_finish_now_candidate(game_state, action_list)
 
+    def _gua269_joker_pair_vs_teammate_pass(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Dict[str, Any],
+        greater_pos: Any,
+        greater_action: List,
+        teammate_pos: int,
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-269：未冲刺且压队友对子的同型只有对王 → PASS。"""
+        if greater_pos not in (teammate_pos,) or not greater_action:
+            return None
+        if _get_declared_action_type(greater_action) != ACTION_TYPE_PAIR:
+            return None
+        self_ctx = ec.get("self") or {}
+        if self_ctx.get("should_sprint"):
+            return None
+        enemies = ec.get("enemies") or {}
+        if any(e.get("remaining", 99) <= 2 for e in enemies.values()):
+            return None
+        pair_follows = [
+            a for a in action_list
+            if _get_declared_action_type(a) == ACTION_TYPE_PAIR
+        ]
+        if not pair_follows:
+            return None
+        if not all(_is_joker_pair_action(a) for a in pair_follows):
+            return None
+        pidx = next(
+            (i for i, a in enumerate(action_list)
+             if _get_declared_action_type(a) in ("PASS", "pass")),
+            None,
+        )
+        if pidx is None:
+            return None
+        logger.info(
+            "GUA-269: greaterPos=teammate(%d) Pair 唯一同型是对王且未冲刺 → PASS",
+            teammate_pos,
+        )
+        return pidx, action_list[pidx]
+
+    def _gua269_rewrite_joker_pair_vs_teammate(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Dict[str, Any],
+        idx: int,
+        action: List,
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-269：Q1 已选对王压队友且未冲刺 → 改 PASS。"""
+        if not _is_joker_pair_action(action):
+            return None
+        self_ctx = ec.get("self") or {}
+        if self_ctx.get("should_sprint"):
+            return None
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        teammate_pos = (my_pos + 2) % 4
+        greater_pos = game_state.get("greaterPos", -1)
+        if greater_pos != teammate_pos:
+            return None
+        enemies = ec.get("enemies") or {}
+        if any(e.get("remaining", 99) <= 2 for e in enemies.values()):
+            return None
+        pidx = next(
+            (i for i, a in enumerate(action_list)
+             if _get_declared_action_type(a) in ("PASS", "pass")),
+            None,
+        )
+        if pidx is None:
+            return None
+        logger.info(
+            "GUA-269: Q1 对王压队友(idx=%d) 未冲刺 → PASS",
+            idx,
+        )
+        return pidx, action_list[pidx]
+
     def _q1_hold_teammate_max_control(
         self, game_state: Dict[str, Any], action_list: List, ec: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
@@ -3015,7 +3123,11 @@ class EndgameDecider:
         if ga_type == ACTION_TYPE_SINGLE:
             cur_val = _max_card_value(greater_action, cur_rank)
         elif ga_type in (ACTION_TYPE_PAIR, ACTION_TYPE_TRIPS, ACTION_TYPE_THREE_WITH_TWO):
-            cur_val = CARD_RANK_ORDER.get(get_action_rank(greater_action), 99)
+            ga_rank = get_action_rank(greater_action)
+            if ga_rank in ("B", "R"):
+                cur_val = 16 if ga_rank == "B" else 17
+            else:
+                cur_val = get_card_value(f"H{ga_rank}", cur_rank)
         elif ga_type == ACTION_TYPE_STRAIGHT:
             top_rank = self._get_straight_top_rank(greater_action, cur_rank)
             cur_val = CARD_RANK_ORDER.get(top_rank, 99)

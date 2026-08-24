@@ -776,6 +776,8 @@ class UltimateWinRateEngineV7:
         # ══════════════ ⑤-⑦ GUA-075 主路径：推荐 + 匹配 + 校验 ══════════════
         try:
             recommendation = self._recommend_play(game_state, action_list)
+            recommendation = self._apply_gua268_joker_control_single(
+                recommendation, game_state, action_list)
             self._replay_record(
                 "recommendation",
                 {"gua_id": "GUA-075", "recommendation": recommendation},
@@ -1319,6 +1321,121 @@ class UltimateWinRateEngineV7:
 
         return get_card_rank(str(cards[0])) in ("HR", "SB")
 
+    def _joker_control_single_from_candidates(
+        self,
+        candidates: List[Tuple[Any, str, str]],
+        *,
+        to_platform_rank,
+    ) -> Optional[Dict[str, Any]]:
+        """GUA-268：从跟单候选取能压的王（小王优先）。不走 P0a。"""
+        jokers = [item for item in candidates if item[2] in ("SB", "HR")]
+        if not jokers:
+            return None
+        jokers.sort(key=lambda item: (0 if item[2] == "SB" else 1, item[0]))
+        _val, card, rank = jokers[0]
+        return {
+            "type": "Single",
+            "rank": to_platform_rank(rank),
+            "cards": [str(card)],
+            "intent": "joker_control_single",
+        }
+
+    def _find_joker_control_single(
+        self,
+        game_state: Dict[str, Any],
+        greater_action: List[Any],
+        action_list: Optional[List] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """GUA-268：敌方普通单张且 actionList 有能压的 SB/HR → 用王控单。
+
+        队友控牌 / 领出 / greater 已是炸或大王（SB 压不住）时返回 None。
+        """
+        from src.v.nn.guards.v7_guards import (
+            get_action_type,
+            get_card_rank,
+            get_card_value,
+            _extract_action_cards,
+            ACTION_TYPE_SINGLE,
+        )
+
+        if not greater_action or greater_action[0] == "PASS":
+            return None
+        if get_action_type(greater_action) != ACTION_TYPE_SINGLE:
+            return None
+
+        my_pos = int(game_state.get("myPos", self.player_id) or self.player_id)
+        teammate_pos = (my_pos + 2) % 4
+        try:
+            greater_pos = int(game_state.get("greaterPos", -1) or -1)
+        except (TypeError, ValueError):
+            return None
+        if greater_pos in (-1, my_pos, teammate_pos):
+            return None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+        greater_cards = _extract_action_cards(greater_action)
+        if greater_cards:
+            greater_val = get_card_value(str(greater_cards[0]), cur_rank)
+        else:
+            greater_val = get_card_value(
+                f"H{greater_action[1]}" if len(greater_action) > 1 else "H5",
+                cur_rank,
+            )
+
+        actions = action_list if action_list is not None else (
+            game_state.get("actionList") or []
+        )
+        jokers: List[Tuple[int, List]] = []
+        for act in actions:
+            if not act or get_action_type(act) != ACTION_TYPE_SINGLE:
+                continue
+            cards = _extract_action_cards(act)
+            if not cards:
+                continue
+            rank = get_card_rank(str(cards[0]))
+            if rank not in ("SB", "HR"):
+                continue
+            if get_card_value(str(cards[0]), cur_rank) > greater_val:
+                jokers.append((0 if rank == "SB" else 1, act))
+        if not jokers:
+            return None
+        jokers.sort(key=lambda item: item[0])
+        act = jokers[0][1]
+        cards = _extract_action_cards(act)
+        return {
+            "type": "Single",
+            "rank": act[1] if len(act) > 1 else self.INTERNAL_TO_PLATFORM_RANK.get(
+                get_card_rank(str(cards[0])), get_card_rank(str(cards[0]))
+            ),
+            "cards": list(cards),
+            "intent": "joker_control_single",
+        }
+
+    def _apply_gua268_joker_control_single(
+        self,
+        rec: Optional[Dict[str, Any]],
+        game_state: Dict[str, Any],
+        action_list: Optional[List] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """GUA-268：已推荐 Bomb/SF 压敌方单张、但有王能压 → 改出王。"""
+        if not rec or rec.get("type") not in ("Bomb", "StraightFlush"):
+            return rec
+        joker = self._find_joker_control_single(
+            game_state,
+            game_state.get("greaterAction") or [],
+            action_list,
+        )
+        if not joker:
+            return rec
+        self.logger.info(
+            "GUA-268 王控单: 拦截开炸 %s/%s → Single/%s %s",
+            rec.get("type"),
+            rec.get("rank"),
+            joker.get("rank"),
+            joker.get("cards"),
+        )
+        return joker
+
     def _filter_joker_lead_singles(
         self, singles: List[str], game_state: Dict[str, Any]
     ) -> List[str]:
@@ -1454,6 +1571,13 @@ class UltimateWinRateEngineV7:
         if not greater_action or greater_action[0] == "PASS":
             return None
         if get_action_type(greater_action) != "Single":
+            return None
+
+        # GUA-268：有王能压这张单 → 控单，不点火开炸。
+        if self._find_joker_control_single(
+            game_state, greater_action, game_state.get("actionList") or [],
+        ):
+            self.logger.info("GUA-268 王控单: 有王压单 → 不点火开炸")
             return None
 
         teammate_cover_confidence = float(
@@ -4771,6 +4895,9 @@ class UltimateWinRateEngineV7:
                     hand_cards,
                     cur_rank,
                 )
+            if not rec_impl:
+                rec_impl = self._find_joker_control_single(
+                    game_state, greater_action, action_list)
             if rec_impl:
                 rec = _ensure_valid(rec_impl, f"跟上家(greater={greater_type}/{greater_rank})")
                 if rec:
@@ -4842,6 +4969,16 @@ class UltimateWinRateEngineV7:
                 self.logger.warning(
                     "GUA-075 卡下家: 推荐存在但 actionList 无匹配 → return None 回退")
                 return None
+            rec_impl = self._find_joker_control_single(
+                game_state, greater_action, action_list)
+            if rec_impl:
+                rec = _ensure_valid(
+                    rec_impl, f"卡下家王控单(greater={greater_type}/{greater_rank})")
+                if rec:
+                    self.logger.info(
+                        "GUA-268 王控单: 卡下家 → type=%s rank=%s cards=%s",
+                        rec.get("type"), rec.get("rank"), rec.get("cards"))
+                    return rec
             # 无同型可压 → R11 预检
             can_bomb, reason = self._r11_bomb_throttle_check(
                 game_state, greater_action, greater_rank, cur_rank)
@@ -5336,6 +5473,9 @@ class UltimateWinRateEngineV7:
                     hand_cards,
                     cur_rank,
                 )
+            if not rec:
+                rec = self._find_joker_control_single(
+                    game_state, greater_action, game_state.get("actionList") or [])
             if rec:
                 if (
                     hr_with_opponents >= 2
@@ -5540,6 +5680,12 @@ class UltimateWinRateEngineV7:
             )
             gt = get_action_type(greater_action)
             if gt in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+                return None
+            # GUA-268：敌方普通单张且有王能压 → 控单，不抢攻开炸。
+            if gt == "Single" and self._find_joker_control_single(
+                game_state, greater_action, game_state.get("actionList") or [],
+            ):
+                self.logger.info("GUA-268 王控单: 有王压单 → GUA-205 不开炸")
                 return None
             critical_enemy_seat = int(phase_relation.get("critical_enemy_seat", -1))
             critical_enemy_remaining = 27
@@ -5869,11 +6015,24 @@ class UltimateWinRateEngineV7:
                     wild_card_sort = f"H{cur_rank}"
                     candidates.sort(key=lambda x: (1 if x[1] == wild_card_sort else 0, x[0]))
                     _, best, best_rank = candidates[0]
-                    return _gate({
+                    rec = _gate({
                         "type": "Single",
                         "rank": _to_platform_rank(best_rank),
                         "cards": [str(best)],
                     })
+                    if rec:
+                        return rec
+                    # GUA-268：P0a 拦了最廉单后，改用能压的王控单，不开炸。
+                    joker_rec = self._joker_control_single_from_candidates(
+                        candidates, to_platform_rank=_to_platform_rank,
+                    )
+                    if joker_rec:
+                        self.logger.info(
+                            "GUA-268 王控单: P0a 拦最廉单后改出 Single/%s %s",
+                            joker_rec.get("rank"), joker_rec.get("cards"),
+                        )
+                        return joker_rec
+                    return None
                 return None
 
         # ── 三带二（ThreeWithTwo）：从手牌直接建，不用组引擎子结构 ──
