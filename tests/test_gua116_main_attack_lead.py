@@ -184,6 +184,51 @@ def test_p3_leads_core_straight_with_bomb_recapture():
     assert set(rec["cards"]) == set(s_low)
 
 
+def test_p3_two_straights_cur_rank2_leads_low_window_first():
+    """match 6a8d35ed：级牌小顺 23456 + 大顺 9-K，curRank=2 须先出小顺（非 9-K）。"""
+    s_small = ["C2", "D3", "H4", "H5", "S6"]
+    s_big = ["C9", "HT", "DJ", "SQ", "SK"]
+    sf = ["S7", "S8", "S9", "ST", "SJ"]
+    card_mask = {}
+    group_members = {0: sf, 1: s_big, 2: s_small}
+    group_type_map = {0: "StraightFlush", 1: "straight", 2: "straight"}
+    for gid, cards in group_members.items():
+        for c in cards:
+            card_mask[c] = (gid, 1.0, len(cards))
+    engine = _make_engine(
+        card_mask=card_mask,
+        group_type_map=group_type_map,
+        group_members=group_members,
+    )
+    rec = recommend_main_attack_lead(
+        engine, {}, card_mask, list(card_mask), "2", "stage_2",
+    )
+    assert rec is not None
+    assert rec["type"] == "Straight"
+    assert rec["rank"] == "2"
+    assert rec["intent"] == "main_p3_short_straight"
+    assert set(rec["cards"]) == set(s_small)
+
+
+def test_pick_smallest_straight_cur_rank2_not_pip_order():
+    """单元：_pick_smallest_straight 按窗口低牌比，级牌 2 顺仍小于 9 顺。"""
+    from src.v.nn.stage_main_attack_lead import _pick_smallest_straight
+
+    s_small = ["C2", "D3", "H4", "H5", "S6"]
+    s_big = ["C9", "HT", "DJ", "SQ", "SK"]
+    groups = {
+        1: {"type": "straight", "cards": s_big, "is_core": 1.0, "size": 5},
+        2: {"type": "straight", "cards": s_small, "is_core": 1.0, "size": 5},
+    }
+    engine = _make_engine()
+    pick = _pick_smallest_straight(engine, groups, "2", {})
+    assert pick is not None
+    _gid, typ, pr, cards = pick
+    assert typ == "Straight"
+    assert pr == "2"
+    assert set(cards) == set(s_small)
+
+
 def test_p2_leads_core_twt_with_bomb_recapture():
     """单手 core TWT + 炸作回手，stage_2：整组领三带二。"""
     trip = ["S6", "H6", "C6"]

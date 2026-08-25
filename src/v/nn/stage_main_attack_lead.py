@@ -36,6 +36,16 @@ def _pip_order(card: str, cur_rank: str) -> int:
     return CARD_RANK_ORDER.get(rank, 99)
 
 
+def _straight_window_low_order(cards: List[str]) -> int:
+    """顺子窗口低牌位序（领出选「最小顺」用）。
+
+    不用 _pip_order：级牌顺的低牌是 curRank，_pip_order 会打成 99 误判为大顺。
+    """
+    from src.v.nn.guards.v7_guards import CARD_RANK_ORDER, get_card_rank
+
+    return min(CARD_RANK_ORDER.get(get_card_rank(c), 99) for c in cards[:5])
+
+
 def _has_joker(hand_cards: List[str]) -> bool:
     for c in hand_cards:
         r = str(c)
@@ -323,7 +333,7 @@ def _pick_smallest_straight(
     cur_rank: str,
     game_state: Optional[Dict[str, Any]] = None,
 ) -> Optional[tuple]:
-    from src.v.nn.guards.v7_guards import get_card_rank
+    from src.v.nn.guards.v7_guards import CARD_RANK_ORDER, get_card_rank
 
     def _prank(internal_rank: str) -> str:
         return engine.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
@@ -344,9 +354,13 @@ def _pick_smallest_straight(
         cards = sorted(sequence_cards)
         if len(cards) < 5:
             continue
-        pr = _prank(get_card_rank(sequence_cards[0]))
+        low_card = min(
+            cards,
+            key=lambda c: CARD_RANK_ORDER.get(get_card_rank(c), 99),
+        )
+        pr = _prank(get_card_rank(low_card))
         safe_prio = 0 if pr in safe else 1
-        key = (safe_prio, _pip_order(cards[0], cur_rank), cards)
+        key = (safe_prio, _straight_window_low_order(cards), cards)
         if best is None or key < best[0]:
             best = (key, gid, "Straight", pr, cards[:5])
     if not best:
@@ -603,6 +617,13 @@ def recommend_main_attack_lead(
                     feed_action = dict(feed_action)
                     feed_action["intent"] = "main_feed_mid_p"
                     return feed_action
+
+    # ── GUA-077 P3：中局 num_rounds≤3 软引导 play_sequence 首步 ──
+    from src.v.nn.endgame.sprint_step_picker import try_soft_lead_from_play_sequence
+
+    soft = try_soft_lead_from_play_sequence(engine, game_state, cur_rank)
+    if soft:
+        return soft
 
     # ── P1（O10）──
     p1_singles = _eligible_p1_singles(

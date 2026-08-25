@@ -36,7 +36,7 @@ GUA-062 v2 升级（2026-06-18）：
 
 from __future__ import annotations
 
-from typing import Dict, List, Set, Tuple, Optional, NamedTuple
+from typing import Dict, List, Set, Tuple, Optional, NamedTuple, Any
 from collections import Counter
 from dataclasses import dataclass, field
 import copy
@@ -72,6 +72,26 @@ BOMB_CORE_MIN = 4
 # ── 数据结构 ──────────────────────────────────────────────
 
 @dataclass
+class PlayStep:
+    """GUA-077：平台对齐的一步出牌意图（非 actionList 下标）。"""
+
+    action_type: str  # Single / ThreeWithTwo / Bomb / …
+    target_rank: str  # greaterAction 主 rank
+    group_id: Optional[int] = None
+    cards_hint: Optional[List[str]] = None
+    step_role: str = "lead"  # lead | probe
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "action_type": self.action_type,
+            "target_rank": self.target_rank,
+            "group_id": self.group_id,
+            "cards_hint": list(self.cards_hint) if self.cards_hint else None,
+            "step_role": self.step_role,
+        }
+
+
+@dataclass
 class GroupingPlan:
     """一个组牌方案。"""
     singles: List[str] = field(default_factory=list)        # 单张列表
@@ -98,6 +118,10 @@ class GroupingPlan:
     de_singleton_score: float = 0.0  # 去单化 0.1（单张越少越高）
     power_score: int = 0             # 牌力计分
     role: str = ""                   # 角色定位（超强主攻/主攻/助攻/超弱）
+
+    # GUA-077：理想出完序（结构层，不含敌情门控）
+    play_sequence: List[PlayStep] = field(default_factory=list)
+    plan_b_sequences: List[List[PlayStep]] = field(default_factory=list)
 
     def num_rounds(self) -> int:
         """出完所有牌所需轮数。"""
@@ -2438,6 +2462,137 @@ def _extract_features(
 
 # ── 主入口 ────────────────────────────────────────────────
 
+def _dominant_rank(cards: List[str], cur_rank: str) -> str:
+    """牌组主 rank（逢人配不计入主 rank）。"""
+    ranks = [_parse_rank(c) for c in cards if not _is_wild(c, cur_rank)]
+    if not ranks:
+        for c in cards:
+            r = _parse_rank(c)
+            if r in ("SB", "HR"):
+                return r
+        return cur_rank
+    return max(ranks, key=lambda r: _card_rank_value(
+        r if r in ("SB", "HR") else f"S{r}", cur_rank
+    ))
+
+
+def _plan_play_order(
+    plan: GroupingPlan,
+    cur_rank: str,
+    max_steps: int = 4,
+) -> List[PlayStep]:
+    """GUA-077：从静态 GroupingPlan 导出理想出完序（仅结构，不看敌情）。
+
+    优先级：钢板/三连对 → 连环三带二（trip 升序）→ 同花顺/顺 → 炸 → 三张/对 → 散单(probe)。
+    特例：炸+单两手 → [Single(probe), Bomb]（GUA-168 结构序）。
+    """
+    cr = plan.cur_rank or cur_rank
+    steps: List[PlayStep] = []
+
+    nr = plan.num_rounds()
+    if nr == 0:
+        return steps
+
+    if len(plan.bombs) == 1 and len(plan.singles) == 1 and nr == 2:
+        s_card = plan.singles[0]
+        s_rank = _parse_rank(s_card)
+        b_rank = _dominant_rank(plan.bombs[0], cr)
+        return [
+            PlayStep(
+                "Single", s_rank, cards_hint=[s_card], step_role="probe",
+            ),
+            PlayStep(
+                "Bomb", b_rank, cards_hint=list(plan.bombs[0]),
+            ),
+        ][:max_steps]
+
+    for sp in plan.steel_plates:
+        flat = [c for trip in sp for c in trip]
+        steps.append(PlayStep(
+            "TwoTrips", _dominant_rank(flat, cr), cards_hint=flat,
+        ))
+
+    for tp in plan.three_pairs:
+        flat = [c for pr in tp for c in pr]
+        steps.append(PlayStep(
+            "ThreePair", _dominant_rank(flat, cr), cards_hint=flat,
+        ))
+
+    twts = sorted(
+        plan.three_with_twos,
+        key=lambda twt: _card_rank_value(twt[0][0], cr),
+    )
+    for trip, pair in twts:
+        hint = list(trip) + list(pair)
+        steps.append(PlayStep(
+            "ThreeWithTwo",
+            _dominant_rank(trip, cr),
+            cards_hint=hint,
+        ))
+
+    for sf in plan.straight_flushes:
+        steps.append(PlayStep(
+            "StraightFlush",
+            _dominant_rank(sf, cr),
+            cards_hint=list(sf),
+        ))
+
+    for st in plan.straights:
+        steps.append(PlayStep(
+            "Straight",
+            _dominant_rank(st, cr),
+            cards_hint=list(st),
+        ))
+
+    for bomb in plan.bombs:
+        steps.append(PlayStep(
+            "Bomb", _dominant_rank(bomb, cr), cards_hint=list(bomb),
+        ))
+
+    for trip in plan.trips:
+        steps.append(PlayStep(
+            "Trips", _dominant_rank(trip, cr), cards_hint=list(trip),
+        ))
+
+    for pair in plan.pairs:
+        steps.append(PlayStep(
+            "Pair", _dominant_rank(pair, cr), cards_hint=list(pair),
+        ))
+
+    for card in sorted(plan.singles, key=lambda c: _card_rank_value(c, cr)):
+        steps.append(PlayStep(
+            "Single",
+            _parse_rank(card),
+            cards_hint=[card],
+            step_role="probe",
+        ))
+
+    return steps[:max_steps]
+
+
+def _build_plan_b_sequences(seq: List[PlayStep]) -> List[List[PlayStep]]:
+    """GUA-077 P4：首步被炸后的备选出完序（去探路步或直炸）。"""
+    alts: List[List[PlayStep]] = []
+    if len(seq) >= 2 and seq[0].step_role == "probe":
+        alts.append(list(seq[1:]))
+    if (
+        len(seq) == 2
+        and seq[0].action_type == "Single"
+        and seq[1].action_type == "Bomb"
+    ):
+        bomb_only = [seq[1]]
+        if bomb_only not in alts:
+            alts.append(bomb_only)
+    return alts
+
+
+def attach_play_sequences(plans: List[GroupingPlan], cur_rank: str) -> None:
+    """为每个完整方案填充 play_sequence（就地修改）。"""
+    for plan in plans:
+        plan.play_sequence = _plan_play_order(plan, cur_rank)
+        plan.plan_b_sequences = _build_plan_b_sequences(plan.play_sequence)
+
+
 def _count_all_cards_in_plan(plan: GroupingPlan) -> int:
     """GUA-076：统计方案中所有牌张数（用于完整性校验）。"""
     count = (
@@ -2472,6 +2627,7 @@ def enumerate_groupings(
     """
     if not hand_cards:
         empty = GroupingPlan(cur_rank=cur_rank, strategy="empty")
+        empty.play_sequence = []
         return empty, [empty]
 
     plans = copy.deepcopy(_enumerate_plans_cached(tuple(hand_cards), cur_rank))
@@ -2538,6 +2694,7 @@ def enumerate_groupings(
         complete_plans = plans
 
     complete_plans.sort(key=lambda p: p.score, reverse=True)
+    attach_play_sequences(complete_plans, cur_rank)
     return complete_plans[0], complete_plans[:3]  # GUA-074: 只保留 Top 3 方案，节约算力
 
 

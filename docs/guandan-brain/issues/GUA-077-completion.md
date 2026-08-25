@@ -1,6 +1,6 @@
 # GUA-077 完成定义：全局出牌序列 + 记忆门控的末段 TWT vs 单
 
-> **状态**：open（实施口径 **2026-08-25** 定稿，未改代码）  
+> **状态**：open（P0–P4 **2026-08-25** 已编码；**仍缺**：GUA-238/273 领出 if 收敛、V8 批跑 KPI 护栏）  
 > **优先级**：P1  
 > **关联**：GUA-062、GUA-075、GUA-078、GUA-072（MEM-M01–M06）、GUA-125、GUA-110、GUA-168、GUA-238、GUA-273、GUA-260  
 > **真源题库**：guandan.nullkit.com 残局 advanced_01（10 张两手 TWT 走完）、advanced_05（11 张三手连环 TWT）
@@ -261,6 +261,8 @@ _recommend_play() 领出
 | **P2** | `SprintStepPicker` 接入 Q0 + 收敛 GUA-238/273/168 领出分支 | 残局构造 pytest ≥10 |
 | **P3** | `_recommend_play` 领出软消费 `play_sequence[0]` | stage_2 冒烟 |
 | **P4** | `plan_b_sequences`（被炸后重规划） | 可选，不挡 P2 关单 |
+
+**P3/P4 落地（2026-08-25）**：`try_soft_lead_from_play_sequence`（`num_rounds≤3` 且 `len(hand)>10`）接 `stage_main_attack_lead`；`_build_plan_b_sequences` + `_maybe_switch_play_sequence_plan_b` 敌 Bomb/SF 截胡后切 plan_b。pytest `test_gua077_p3_p4.py` **5/5**；GUA-077 合计 **26/26** ✅。
 
 **依赖**：GUA-075 主路径稳定（已具备）；**不依赖** NN 重训。
 

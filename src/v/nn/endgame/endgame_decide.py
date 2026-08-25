@@ -1912,6 +1912,28 @@ class EndgameDecider:
             if tws_lead is not None:
                 return tws_lead
 
+            play_seq = game_state.get("_active_play_sequence") or []
+            if play_seq:
+                try:
+                    from .sprint_step_picker import SprintStepPicker
+
+                    picker_hit = SprintStepPicker().pick_lead_step(
+                        game_state,
+                        play_seq,
+                        game_state.get("_sprint_belief"),
+                        action_list,
+                        is_my_turn=True,
+                    )
+                    if picker_hit is not None:
+                        logger.info(
+                            "GUA-077 SprintStepPicker lead idx=%s type=%s",
+                            picker_hit[0],
+                            picker_hit[1][0] if picker_hit[1] else "?",
+                        )
+                        return picker_hit
+                except Exception as exc:
+                    logger.debug("GUA-077 SprintStepPicker skip: %s", exc)
+
         if not bombs:
             if not is_my_turn:
                 return None

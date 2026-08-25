@@ -606,6 +606,12 @@ class UltimateWinRateEngineV7:
         # ── ②c GUA-072 规则记牌信念（供 heuristic / 推荐器）──
         self._inject_belief_vector(game_state)
 
+        # ── ②c2 GUA-077 冲刺门控信念（MEM-M07，消费 play_sequence）──
+        self._inject_sprint_belief(game_state)
+
+        # ── ②c3 GUA-077 P4：敌炸截胡后切 plan_b ──
+        self._maybe_switch_play_sequence_plan_b(game_state)
+
         # ── ②d GUA-094 规则版推断层（供 stage_2 / trace 后续消费）──
         self._inject_phase_relation(game_state)
         if self._active_replay_trace is not None:
@@ -1174,6 +1180,88 @@ class UltimateWinRateEngineV7:
             self.logger.debug("belief inject skip: %s", e)
             game_state.pop("_belief", None)
             game_state.pop("_rule_memory_vec", None)
+
+    def _inject_sprint_belief(self, game_state: Dict[str, Any]) -> None:
+        """GUA-077：按 play_sequence 头几步计算冲刺门控信念。"""
+        seq = game_state.get("_active_play_sequence") or []
+        if not seq:
+            game_state.pop("_sprint_belief", None)
+            return
+        counter = self._rule_card_counter_from_state(game_state)
+        if counter is None:
+            game_state.pop("_sprint_belief", None)
+            return
+        probe: List[str] = []
+        twt_ranks: List[str] = []
+        for step in seq[:4]:
+            if isinstance(step, dict):
+                at = str(step.get("action_type") or "")
+                rk = str(step.get("target_rank") or "")
+            else:
+                at = str(getattr(step, "action_type", "") or "")
+                rk = str(getattr(step, "target_rank", "") or "")
+            if at == "Single" and rk:
+                probe.append(rk)
+            if at == "ThreeWithTwo" and rk:
+                twt_ranks.append(rk)
+        try:
+            belief = counter.get_sprint_belief(
+                game_state,
+                probe_single_candidates=probe,
+                twt_trip_ranks=twt_ranks,
+            )
+            game_state["_sprint_belief"] = belief.to_dict()
+        except Exception as e:
+            self.logger.debug("sprint belief inject skip: %s", e)
+            game_state.pop("_sprint_belief", None)
+
+    def _maybe_switch_play_sequence_plan_b(self, game_state: Dict[str, Any]) -> None:
+        """GUA-077 P4：敌炸截胡我方领出后，切换 plan_b 出完序。"""
+        if game_state.get("_gua077_play_sequence_mode") == "plan_b":
+            return
+        plan = self._active_plan
+        plan_b = (
+            (getattr(plan, "plan_b_sequences", None) if plan else None)
+            or game_state.get("_play_sequence_plan_b")
+            or []
+        )
+        if not plan_b:
+            return
+        if not self._detect_enemy_bombed_after_our_lead(game_state):
+            return
+        alt = plan_b[0]
+        if not alt:
+            return
+        if alt and hasattr(alt[0], "to_dict"):
+            game_state["_active_play_sequence"] = [
+                s.to_dict() for s in alt
+            ]
+        else:
+            game_state["_active_play_sequence"] = list(alt)
+        game_state["_gua077_play_sequence_mode"] = "plan_b"
+        self.logger.info(
+            "GUA-077 plan_b activated: %d steps after bomb interrupt",
+            len(game_state["_active_play_sequence"]),
+        )
+        self._inject_sprint_belief(game_state)
+
+    def _detect_enemy_bombed_after_our_lead(self, game_state: Dict[str, Any]) -> bool:
+        """上一手我方非炸出牌，紧接敌 Bomb/StraightFlush 压制。"""
+        tracker = self._tracker
+        if tracker is None or len(tracker.play_history) < 2:
+            return False
+        my_pos = int(game_state.get("myPos", self.player_id))
+        last = tracker.play_history[-1]
+        prev = tracker.play_history[-2]
+        if int(last.get("seat", -1)) not in tracker.opponents:
+            return False
+        last_type = str(last.get("action_type") or "").upper()
+        if last_type not in ("BOMB", "STRAIGHTFLUSH"):
+            return False
+        if int(prev.get("seat", -1)) != my_pos:
+            return False
+        prev_type = str(prev.get("action_type") or "").upper()
+        return prev_type not in ("PASS", "BOMB", "STRAIGHTFLUSH")
 
     def _rule_card_counter_from_state(self, game_state: Dict[str, Any]):
         """GUA-072 / P0a：从 tracker 或 game_state 取 RuleCardCounter。"""
@@ -1753,6 +1841,19 @@ class UltimateWinRateEngineV7:
             self._all_plans = list(all_plans)
             self._active_plan = best_plan
 
+            game_state["_active_play_sequence"] = [
+                s.to_dict() if hasattr(s, "to_dict") else s
+                for s in (getattr(best_plan, "play_sequence", None) or [])
+            ]
+            game_state["_play_sequence_plan_b"] = [
+                [
+                    s.to_dict() if hasattr(s, "to_dict") else s
+                    for s in alt
+                ]
+                for alt in (getattr(best_plan, "plan_b_sequences", None) or [])
+            ]
+            game_state.pop("_gua077_play_sequence_mode", None)
+
             # 产出 1: card mask（进前置过滤）+ group_type_map + group_members
             self._card_mask, self._group_type_map, self._group_members = best_plan.to_card_mask()
 
@@ -1957,6 +2058,18 @@ class UltimateWinRateEngineV7:
         self._card_mask, self._group_type_map, self._group_members = plan.to_card_mask()
         if game_state is not None:
             game_state["_active_plan_strategy"] = getattr(plan, "strategy", "")
+            game_state["_active_play_sequence"] = [
+                s.to_dict() if hasattr(s, "to_dict") else s
+                for s in (getattr(plan, "play_sequence", None) or [])
+            ]
+            game_state["_play_sequence_plan_b"] = [
+                [
+                    s.to_dict() if hasattr(s, "to_dict") else s
+                    for s in alt
+                ]
+                for alt in (getattr(plan, "plan_b_sequences", None) or [])
+            ]
+            game_state.pop("_gua077_play_sequence_mode", None)
 
     def _evaluate_replan_candidates(self, game_state: Dict[str, Any]) -> None:
         """GUA-234 阶段 C：局面触发时对 Top3 重评分并可选切换 plan。
@@ -4683,6 +4796,9 @@ class UltimateWinRateEngineV7:
         card_mask = self._card_mask or {}
         if not card_mask or not hand_cards:
             return None
+
+        if action_list:
+            game_state["actionList"] = action_list
 
         # ── 场景判断（跟牌看 greaterPos=本圈最大者，不是 curPos=轮谁出牌）──
         # curPos 在 act 消息里是「当前行动席」；greaterPos 才是上家/下家/对家谁出的牌。
