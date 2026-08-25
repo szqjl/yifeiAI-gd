@@ -20,6 +20,7 @@ def _make_engine(*, role="主攻"):
     eng._group_type_map = {"Bomb": 2, "StraightFlush": 1}
     eng._group_members = {}
     eng._current_role = role
+    eng._dynamic_regroup_enabled = False
     eng._match_fail_type_mismatch = 0
     eng._match_fail_rank_mismatch = 0
     eng._match_fail_cards_mismatch = 0

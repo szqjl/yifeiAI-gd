@@ -78,6 +78,63 @@ def _parse_card_rank(card: str) -> str:
     return card[1:] if len(card) > 1 else card[-1]
 
 
+def infer_current_trick_lead(
+    history: List[Any],
+    partner_pos: int,
+) -> Tuple[Optional[int], Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """从引擎 history 还原本圈领出者与窗口内最近一次队友领出。
+
+    返回 (lead_seat, lead_type, lead_rank, teammate_lead_type, teammate_lead_rank)。
+
+    圈边界：连续 3 次 PASS。窗口以 PASS 开头时，第一手非 PASS 视为本圈领出
+    （Botzone 近窗常是「上圈收尾 PASS + 本圈领出 + 覆盖」）。
+    """
+    plays: List[Tuple[int, str, str]] = []
+    for item in history or []:
+        if not isinstance(item, dict):
+            continue
+        raw_seat = item.get("pos", item.get("seat", item.get("player", -1)))
+        try:
+            seat = int(raw_seat)
+        except (TypeError, ValueError):
+            continue
+        action = item.get("action") or item.get("curAction") or []
+        if not action or str(action[0]).upper() == "PASS":
+            plays.append((seat, "PASS", ""))
+            continue
+        rank = str(action[1]) if len(action) > 1 else ""
+        plays.append((seat, str(action[0]), rank))
+
+    last_tm_type: Optional[str] = None
+    last_tm_rank: Optional[str] = None
+    pass_run = 3
+    for seat, typ, rank in plays:
+        if typ == "PASS":
+            pass_run += 1
+            continue
+        if pass_run >= 3 and seat == partner_pos:
+            last_tm_type, last_tm_rank = typ, rank
+        pass_run = 0
+
+    gap = -1
+    i = 0
+    while i <= len(plays) - 3:
+        if (plays[i][1] == "PASS"
+                and plays[i + 1][1] == "PASS"
+                and plays[i + 2][1] == "PASS"):
+            gap = i + 2
+        i += 1
+    trick = plays[gap + 1:]
+    lead_seat: Optional[int] = None
+    lead_type: Optional[str] = None
+    lead_rank: Optional[str] = None
+    for seat, typ, rank in trick:
+        if typ != "PASS":
+            lead_seat, lead_type, lead_rank = seat, typ, rank
+            break
+    return lead_seat, lead_type, lead_rank, last_tm_type, last_tm_rank
+
+
 # ── 牌追踪器 ────────────────────────────────────────────
 
 
@@ -145,6 +202,13 @@ class MemoryTracker:
         # 当前级牌 rank（GUA-262 PASS 负证据用）
         self.level_rank: str = "2"
 
+        # GUA-282：本圈领出者 + 最近一次队友领出牌型
+        self.current_trick_lead_seat: Optional[int] = None
+        self.current_trick_lead_type: Optional[str] = None
+        self.current_trick_lead_rank: Optional[str] = None
+        self.teammate_last_lead_type: Optional[str] = None
+        self.teammate_last_lead_rank: Optional[str] = None
+
     # ── 初始化 ──────────────────────────────────────────
 
     def init_from_hand(self, my_hand: List[str]) -> None:
@@ -185,6 +249,11 @@ class MemoryTracker:
             return
 
         ctx = context or {}
+        # GUA-282：append 前判断是否新领出（空历史或尾部连续 ≥3 次 PASS）
+        is_lead = self._history_indicates_new_lead()
+        declared_type = str(action[0])
+        declared_rank = str(action[1]) if len(action) > 1 else ""
+
         if action_type == "tribute":
             tribute_pos = ctx.get("tribute_pos", seat)
             receive_pos = ctx.get("receive_tribute_pos")
@@ -236,6 +305,8 @@ class MemoryTracker:
             "cards": cards,
             "hand_count_after": self.hand_counts[seat],
         })
+        if is_lead:
+            self._set_current_trick_lead(seat, declared_type, declared_rank)
 
         # GUA-179：若用炸/同花顺压制非炸牌型 → 记为该牌型弱点
         ga = ctx.get("greaterAction")
@@ -281,6 +352,13 @@ class MemoryTracker:
             self.type_weakness[seat][target_type] = (
                 self.type_weakness[seat].get(target_type, 0) + 1
             )
+        # GUA-282：PASS 写入 play_history，才能用尾部 PASS 判新领出
+        self.play_history.append({
+            "seat": seat,
+            "action_type": "PASS",
+            "cards": [],
+            "hand_count_after": self.hand_counts.get(seat, 0),
+        })
         if greater_action is not None and greater_pos is not None:
             self._infer_joker_from_partner_pass_on_enemy(
                 seat, greater_action, greater_pos,
@@ -1022,6 +1100,49 @@ class MemoryTracker:
         """估算牌数（通常 len(cards)）。"""
         return len(cards)
 
+    def _history_indicates_new_lead(self) -> bool:
+        """空历史或尾部连续 ≥3 次 PASS → 下一手是新领出。"""
+        if not self.play_history:
+            return True
+        trailing = 0
+        for entry in reversed(self.play_history):
+            if str(entry.get("action_type", "")).upper() == "PASS":
+                trailing += 1
+            else:
+                break
+        return trailing >= 3
+
+    def _set_current_trick_lead(self, seat: int, action_type: str, rank: str) -> None:
+        self.current_trick_lead_seat = seat
+        self.current_trick_lead_type = action_type
+        self.current_trick_lead_rank = rank
+        if seat == self.partner_pos and action_type.upper() not in ("PASS", ""):
+            self.teammate_last_lead_type = action_type
+            self.teammate_last_lead_rank = rank
+
+    def teammate_led_current_trick(self) -> bool:
+        """本圈是否由队友领出（含被敌方同型覆盖后仍未换圈）。"""
+        return self.current_trick_lead_seat == self.partner_pos
+
+    def get_teammate_last_lead_type(self) -> Optional[str]:
+        return self.teammate_last_lead_type
+
+    def sync_trick_lead_from_history(self, history: Optional[List[Any]]) -> None:
+        """从引擎 history（含 Botzone 近窗）还原本圈领出。
+
+        Botzone 常只下发最近 4 条，不能只靠增量 play_history。
+        队友领出牌型仅在窗口内看见时更新，以免短窗冲掉上一圈记忆。
+        """
+        lead_seat, lead_type, lead_rank, tm_type, tm_rank = infer_current_trick_lead(
+            history or [], self.partner_pos,
+        )
+        self.current_trick_lead_seat = lead_seat
+        self.current_trick_lead_type = lead_type
+        self.current_trick_lead_rank = lead_rank
+        if tm_type:
+            self.teammate_last_lead_type = tm_type
+            self.teammate_last_lead_rank = tm_rank
+
     def reset(self) -> None:
         """重置所有状态。"""
         for ct in ALL_CARD_TYPES:
@@ -1035,3 +1156,8 @@ class MemoryTracker:
         self._processed_tribute_keys.clear()
         self._processed_anti_keys.clear()
         self._anti_tribute_pos.clear()
+        self.current_trick_lead_seat = None
+        self.current_trick_lead_type = None
+        self.current_trick_lead_rank = None
+        self.teammate_last_lead_type = None
+        self.teammate_last_lead_rank = None

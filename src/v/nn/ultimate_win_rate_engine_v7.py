@@ -1761,6 +1761,9 @@ class UltimateWinRateEngineV7:
                     self._tracker.record_play(seat, action, context=ctx)
         self._tracker_history_replayed = len(history)
 
+        if self._tracker is not None:
+            self._tracker.sync_trick_lead_from_history(history)
+
         cur_rank = str(game_state.get("curRank", "2"))
         self._tracker.sync_tribute_phase_from_state(
             tribute_result=game_state.get("tributeResult"),
@@ -4970,6 +4973,13 @@ class UltimateWinRateEngineV7:
                     "cards": [],
                     "intent": "assist_yield_teammate",
                 }
+            weak_skip = self._gua282_weak_follow_on_teammate_lead(
+                game_state, greater_type=greater_type, is_lead=is_lead,
+            )
+            if weak_skip:
+                self.logger.info(
+                    "GUA-282 弱牌不跟队友领出圈 type=%s → PASS", greater_type)
+                return weak_skip
             if is_lead:
                 from src.v.nn.stage_assist_feed import recommend_assist_lead
                 assist_rec = recommend_assist_lead(
@@ -5119,6 +5129,12 @@ class UltimateWinRateEngineV7:
                         "GUA-275: actionList 有同型可压 → 禁止改炸 type=%s rank=%s",
                         rec.get("type"), rec.get("rank"))
                     return rec
+            if (self._gua282_teammate_led_current_trick()
+                    and not self._gua282_takeover_ok(game_state, greater_type)):
+                self.logger.info(
+                    "GUA-282 队友领出圈跟上家 → R11 不开炸 PASS")
+                return {"type": "PASS", "rank": "", "cards": [],
+                        "intent": "gua282_hold_teammate_lead"}
             can_bomb, reason = self._r11_bomb_throttle_check(
                 game_state, greater_action, greater_rank, cur_rank)
             if can_bomb:
@@ -5199,6 +5215,12 @@ class UltimateWinRateEngineV7:
                         "GUA-275: 卡下家 actionList 有同型可压 → 禁止改炸 type=%s rank=%s",
                         rec.get("type"), rec.get("rank"))
                     return rec
+            if (self._gua282_teammate_led_current_trick()
+                    and not self._gua282_takeover_ok(game_state, greater_type)):
+                self.logger.info(
+                    "GUA-282 队友领出圈卡下家 → R11 不开炸 PASS")
+                return {"type": "PASS", "rank": "", "cards": [],
+                        "intent": "gua282_hold_teammate_lead"}
             can_bomb, reason = self._r11_bomb_throttle_check(
                 game_state, greater_action, greater_rank, cur_rank)
             if can_bomb:
@@ -5835,6 +5857,56 @@ class UltimateWinRateEngineV7:
 
         return None
 
+    def _gua282_teammate_led_current_trick(self) -> bool:
+        tracker = getattr(self, "_tracker", None)
+        if tracker is None:
+            return False
+        return bool(getattr(tracker, "teammate_led_current_trick", lambda: False)())
+
+    def _gua282_takeover_ok(
+        self, game_state: Dict[str, Any], greater_type: str,
+    ) -> bool:
+        """GUA-282 例外：敌已开炸/SF、敌 remaining≤2 可接管。"""
+        if greater_type in ("Bomb", "StraightFlush"):
+            return True
+        my_pos = int(game_state.get("myPos", getattr(self, "player_id", 0)) or 0)
+        counts = game_state.get("numofplayers") or []
+        belief = game_state.get("_belief") or {}
+        hand_counts = belief.get("hand_counts") or counts
+        enemies = ((my_pos + 1) % 4, (my_pos + 3) % 4)
+
+        def _rem(seat: int) -> int:
+            if isinstance(hand_counts, dict):
+                return int(hand_counts.get(seat, 27) or 27)
+            if isinstance(hand_counts, list) and seat < len(hand_counts):
+                return int(hand_counts[seat] or 27)
+            return 27
+
+        return any(_rem(seat) <= 2 for seat in enemies)
+
+    def _gua282_weak_follow_on_teammate_lead(
+        self,
+        game_state: Dict[str, Any],
+        *,
+        greater_type: str,
+        is_lead: bool,
+    ) -> Optional[Dict[str, Any]]:
+        """弱牌跟队友领出圈：仅 Single/Pair 可跟，其余 PASS。"""
+        if is_lead:
+            return None
+        if not self._gua282_teammate_led_current_trick():
+            return None
+        if self._gua282_takeover_ok(game_state, greater_type):
+            return None
+        if greater_type in ("Single", "Pair", ""):
+            return None
+        return {
+            "type": "PASS",
+            "rank": "",
+            "cards": [],
+            "intent": "gua282_weak_skip_non_pair",
+        }
+
     def _mid_aggressive_bomb_special(
         self,
         game_state: Dict[str, Any],
@@ -5899,6 +5971,12 @@ class UltimateWinRateEngineV7:
             )
             gt = get_action_type(greater_action)
             if gt in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
+                return None
+            # GUA-282：本圈是队友领出的普通牌型，敌方覆盖后不要开炸抢队友回手。
+            if (self._gua282_teammate_led_current_trick()
+                    and not self._gua282_takeover_ok(game_state, gt)):
+                self.logger.info(
+                    "GUA-282 队友领出圈(type=%s) → GUA-205 不开炸", gt)
                 return None
             # GUA-268：敌方普通单张且有王能压 → 控单，不抢攻开炸。
             if gt == "Single" and self._find_joker_control_single(

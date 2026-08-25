@@ -391,6 +391,23 @@ def recommend_assist_lead(
     stage = _effective_stage(current_stage)
     teammate_rest = _teammate_remaining(game_state, teammate_pos)
 
+    # GUA-282：弱牌领出回放队友上一圈领出牌型
+    tracker = getattr(engine, "_tracker", None)
+    echo_type = None
+    if tracker is not None:
+        echo_type = getattr(tracker, "get_teammate_last_lead_type", lambda: None)()
+    if echo_type and action_list:
+        echo_rec = _feed_from_prefer(
+            game_state,
+            action_list,
+            teammate_rest,
+            "gua282_echo_teammate_lead",
+            rank_map=rank_map,
+            prefer_override=[echo_type],
+        )
+        if echo_rec:
+            return echo_rec
+
     if stage == "stage_3":
         if teammate_rest >= 6 or not assist_is_close(teammate_rest):
             return _feed_mid_match_fallback(

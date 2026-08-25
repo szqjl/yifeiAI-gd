@@ -550,7 +550,14 @@ class EndgamePreprocessor:
         if not hand_cards:
             return False
         try:
-            from src.v.nn.endgame.endgame_decide import EndgameDecider
+            from src.v.nn.endgame.endgame_decide import (
+                EndgameDecider,
+                _is_two_trips_plus_wild_hand,
+            )
+            cur_rank = str(game_state.get("curRank", "2"))
+            # GUA-281：两趟三张+配子 = 配子升炸 + 剩一手三张
+            if _is_two_trips_plus_wild_hand(hand_cards, cur_rank):
+                return True
             return EndgameDecider._hand_has_sprint_capability(hand_cards)
         except Exception:
             return False

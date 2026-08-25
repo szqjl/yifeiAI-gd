@@ -1709,14 +1709,17 @@ def _upgrade_bombs_with_wilds(
     """用逢人配将三张升级为四头炸（三张+1 wild=4头炸）。
     返回 (new_bombs, remaining_trips, remaining_wilds)。
 
-    GUA-XXX: 钢板兼容 — 红桃配优先给非钢板 Trips。
+    GUA-181: 钢板兼容 — 红桃配优先给非钢板 Trips。
     Part A: 有其他 Trips 时红桃配不给钢板 Trips
     Part B: 全部 Trips 仅能组成钢板时，不组钢板，红桃配+一个 Trip=炸弹
+
+    GUA-281: 同一桶内按点数从大到小消耗配子（冲刺 666+QQQ+配子 → 升 Q 炸）。
+    remaining_trips 按未升炸的下标保留，禁止按「消耗数量」切片（升大点后切片会切错）。
     """
     if not wilds or not trips:
         return [], trips[:], list(wilds)
 
-    # GUA-XXX: 检测钢板潜力（连续 rank 的 trip 对）
+    # GUA-181: 检测钢板潜力（连续 rank 的 trip 对）
     sp_indices: Set[int] = set()
     if len(trips) >= 2 and cur_rank:
         indexed = sorted(
@@ -1734,7 +1737,22 @@ def _upgrade_bombs_with_wilds(
                     sp_indices.add(idx2)
 
     new_bombs: List[List[str]] = []
-    wilds_consumed = 0
+    upgraded: Set[int] = set()
+
+    def _consume(indexed_trips: List[Tuple[int, List[str]]]) -> None:
+        # GUA-281: 点数大的三张优先吃配子
+        ordered = sorted(
+            indexed_trips,
+            key=lambda item: _card_rank_value(item[1][0], cur_rank) if cur_rank else 0,
+            reverse=True,
+        )
+        for idx, trip in ordered:
+            if len(upgraded) >= len(wilds):
+                return
+            if idx in upgraded:
+                continue
+            new_bombs.append(trip + [wilds[len(upgraded)]])
+            upgraded.add(idx)
 
     if sp_indices:
         non_sp = [(i, t) for i, t in enumerate(trips) if i not in sp_indices]
@@ -1742,32 +1760,16 @@ def _upgrade_bombs_with_wilds(
 
         if non_sp:
             # Part A: 有其他 Trips → wild 先给非钢板 trips
-            for _i, trip in non_sp:
-                if wilds_consumed < len(wilds):
-                    new_bombs.append(trip + [wilds[wilds_consumed]])
-                    wilds_consumed += 1
-            # 仍有剩余 wild → 给钢板 trips
-            for _i, trip in sp_items:
-                if wilds_consumed < len(wilds):
-                    new_bombs.append(trip + [wilds[wilds_consumed]])
-                    wilds_consumed += 1
+            _consume(non_sp)
+            _consume(sp_items)
         else:
             # Part B: 全部 trips 仅能组成钢板 → 不组钢板，wild 升炸
-            for _i, trip in sp_items:
-                if wilds_consumed < len(wilds):
-                    new_bombs.append(trip + [wilds[wilds_consumed]])
-                    wilds_consumed += 1
+            _consume(sp_items)
     else:
-        # 无钢板潜力：正常升炸
-        for trip in trips:
-            if wilds_consumed < len(wilds):
-                new_bombs.append(trip + [wilds[wilds_consumed]])
-                wilds_consumed += 1
-            else:
-                break
+        _consume(list(enumerate(trips)))
 
-    remaining_trips = trips[wilds_consumed:]
-    remaining_wilds = wilds[wilds_consumed:]
+    remaining_trips = [t for i, t in enumerate(trips) if i not in upgraded]
+    remaining_wilds = wilds[len(upgraded):]
     return new_bombs, remaining_trips, remaining_wilds
 
 

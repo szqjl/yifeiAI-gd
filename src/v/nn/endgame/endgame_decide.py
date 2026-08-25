@@ -81,6 +81,46 @@ def _max_card_value(action: List, cur_rank: str = "2") -> int:
     return max(vals)
 
 
+def _declared_bomb_rank_value(action: List, cur_rank: str = "2") -> int:
+    """炸弹比点用声明 rank / 自然三张，排除逢人配（级牌配子会把小炸虚高）。"""
+    declared = ""
+    if isinstance(action, list) and len(action) >= 2:
+        declared = str(action[1] or "")
+    if declared and declared not in ("PASS", "Bomb", "StraightFlush"):
+        fake = declared if declared in ("SB", "HR", "B", "R") else f"S{declared}"
+        if GUARD_TOOLS_OK:
+            try:
+                return get_card_value(fake, cur_rank)
+            except Exception:
+                pass
+        return CARD_RANK_ORDER.get(declared, 0)
+    cards = _get_cards(action)
+    naturals = [
+        c for c in cards
+        if isinstance(c, str) and c != f"H{cur_rank}"
+    ]
+    use = naturals or cards
+    if not use:
+        return 0
+    if GUARD_TOOLS_OK:
+        return max(get_card_value(c, cur_rank) for c in use)
+    return max(CARD_RANK_ORDER.get(c[1:] if len(c) > 1 else c, 0) for c in use)
+
+
+def _is_two_trips_plus_wild_hand(hand_cards: List[str], cur_rank: str) -> bool:
+    """GUA-281：恰好两趟三张 + 1 张逢人配（可升任一趟成四星炸）。"""
+    wild = f"H{cur_rank}"
+    cards = [str(c) for c in (hand_cards or [])]
+    if len(cards) != 7 or cards.count(wild) != 1:
+        return False
+    others = [c for c in cards if c != wild]
+    if GUARD_TOOLS_OK:
+        ranks = [get_card_rank(c) for c in others]
+    else:
+        ranks = [c[1:] if len(c) > 1 else c for c in others]
+    return sorted(Counter(ranks).values()) == [3, 3]
+
+
 def _min_card_value(action: List, cur_rank: str = "2") -> int:
     """一手牌的最小单张值（领出小点优先用）。"""
     cards = _get_cards(action)
@@ -1022,12 +1062,16 @@ def _sort_q1_block_candidates(
         split_orphan = _bomb_splits_pure_rank_leaving_orphan(item, bomb_items, hand_cards)
         act_type = _get_declared_action_type(act)
         is_sf = act_type in ("StraightFlush", "STRAIGHT_FLUSH")
+        # GUA-281：两趟三张+配子冲刺 → 配子搭大点（非 GUA-103 最小足够炸）
+        rank_key = _declared_bomb_rank_value(act, cur_rank)
+        if _is_two_trips_plus_wild_hand(hand_cards, cur_rank):
+            rank_key = -rank_key
         return (
             1 if (is_sf and has_non_sf_bomb) else 0,
             1 if split_orphan else 0,
             len(cards),
             wild_count,
-            _max_card_value(act, cur_rank),
+            rank_key,
         )
 
     bomb_items = sorted(bomb_items, key=_bomb_min_sufficient_key)
@@ -2342,6 +2386,10 @@ class EndgameDecider:
         if greater_type not in (ACTION_TYPE_SINGLE, ACTION_TYPE_PAIR):
             return None
 
+        # GUA-281：两趟三张+配子是两手冲刺（配子升炸），不是「炸+散牌」
+        if _is_two_trips_plus_wild_hand(game_state.get("handCards") or [], cur_rank):
+            return None
+
         # 敌报单时不适用：单张可被敌直接接走，且无回手意义 → 落回出炸逻辑
         enemies = ec.get("enemies", {})
         if enemies and any(e.get("remaining", 27) == 1 for e in enemies.values()):
@@ -2418,6 +2466,31 @@ class EndgameDecider:
         finish_now = self._q1_finish_now_candidate(game_state, action_list)
         if finish_now is not None:
             return finish_now
+
+        # GUA-282：队友领出圈禁止对敌方普通覆盖开炸/SF；有同型则跟，仅炸可压则 PASS。
+        if self._q1_teammate_led_hold_bombs(game_state, ec):
+            stripped = [
+                a for a in action_list
+                if isinstance(a, list) and not _is_bomb_like_action(a)
+            ]
+            has_follow = any(
+                _get_declared_action_type(a) not in (ACTION_TYPE_PASS, "PASS")
+                for a in stripped
+            )
+            if not has_follow:
+                gua282_pass = self._q1_hold_teammate_led_trick_bomb(
+                    game_state, action_list, ec,
+                )
+                if gua282_pass is not None:
+                    return gua282_pass
+            else:
+                # 炸位改 PASS 占位，保留原下标，避免 actIndex 错位
+                action_list = [
+                    (["PASS", "PASS", "PASS"]
+                     if isinstance(a, list) and _is_bomb_like_action(a)
+                     else a)
+                    for a in action_list
+                ]
 
         # GUA-142：自由领出整组 ThreePair/TwoTrips，出完后剩 SF/炸冲刺路径
         structure_sprint = self._q1_free_lead_structure_sprint(
@@ -3222,6 +3295,42 @@ class EndgameDecider:
             idx,
         )
         return pidx, action_list[pidx]
+
+    def _q1_teammate_led_hold_bombs(
+        self,
+        game_state: Dict[str, Any],
+        ec: Dict[str, Any],
+    ) -> bool:
+        """GUA-282：本圈队友领出且非接管例外 → Q1 不得开炸。"""
+        tracker = game_state.get("_memory_tracker")
+        led = getattr(tracker, "teammate_led_current_trick", None)
+        if tracker is None or not callable(led) or not led():
+            return False
+        greater_action = game_state.get("greaterAction") or []
+        gt = _get_declared_action_type(greater_action)
+        if gt in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH, "Bomb", "StraightFlush"):
+            return False
+        enemies = ec.get("enemies") or {}
+        if any(int(e.get("remaining", 99) or 99) <= 2 for e in enemies.values()):
+            return False
+        if (ec.get("self") or {}).get("should_sprint"):
+            return False
+        return True
+
+    def _q1_hold_teammate_led_trick_bomb(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """队友领出圈仅剩炸/SF 可压 → PASS。"""
+        if not self._q1_teammate_led_hold_bombs(game_state, ec):
+            return None
+        for i, act in enumerate(action_list):
+            if _get_declared_action_type(act) in (ACTION_TYPE_PASS, "PASS"):
+                logger.info("GUA-282: 队友领出圈仅炸可压 → PASS 不抢回手")
+                return (i, act)
+        return None
 
     def _q1_yield_upper_endgame_to_teammate(
         self,
@@ -5397,7 +5506,11 @@ class EndgameDecider:
                     bomb_sprint_rank,
                     _q1_structure_priority(act_type),
                     -len(cards),
-                    _max_card_value(act, cur_rank),
+                    (
+                        -_declared_bomb_rank_value(act, cur_rank)
+                        if declared == "Bomb"
+                        else _max_card_value(act, cur_rank)
+                    ),
                 ),
                 item,
             ))
@@ -6301,16 +6414,17 @@ class EndgameDecider:
 
     def _select_best_bomb(
         self, bombs: List[Tuple[int, List]], action_list: List,
+        cur_rank: str = "2",
     ) -> Optional[Tuple[int, List]]:
-        """选最大炸弹（张数多 > 牌力大）。"""
+        """选最大炸弹（张数多 > 声明点数大）。逢人配不参与比点（GUA-281）。"""
         if not bombs:
             return None
 
         def bomb_score(item: Tuple[int, List]) -> int:
             _, act = item
             cards = _get_cards(act)
-            # 张数多优先，同张数牌力大优先
-            return len(cards) * 100 + _max_card_value(act)
+            # 张数多优先，同张数按声明点数（排除配子虚高）
+            return len(cards) * 100 + _declared_bomb_rank_value(act, cur_rank)
 
         best = max(bombs, key=bomb_score)
         return best
