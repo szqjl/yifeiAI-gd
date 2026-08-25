@@ -36,6 +36,7 @@ def _step82_state():
             {"rest": 9}, {"rest": 14}, {"rest": 0}, {"rest": 9},
         ],
         "numofplayers": [9, 14, 0, 9],
+        "done": [2],
         "selfRank": "9",
         "oppoRank": "2",
         "curRank": "9",

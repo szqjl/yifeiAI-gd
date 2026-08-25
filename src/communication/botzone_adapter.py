@@ -280,6 +280,18 @@ class ActionListGenerator:
                             actions.append(
                                 self._three_with_two_action(trips, list(pair))
                             )
+            # GUA-273：三自然张 + 配子 + 单张 → TWT（trip 三枚同点，pair=配子+单）。
+            # match 6a8d2762：444+H2+DT 仅枚举了配子炸，缺 TWT 一手清。
+            for t_rank, t_cards in natural_groups.items():
+                if len(t_cards) < 3:
+                    continue
+                for trips in self._combos(t_cards, 3):
+                    left = [c for c in hand_cards if c not in trips]
+                    if len(left) == 2 and wild in left:
+                        single = next(c for c in left if c != wild)
+                        actions.append(
+                            self._three_with_two_action(list(trips), [wild, single])
+                        )
 
         # Straights
         actions.extend(self._generate_straights(rank_groups, suits, hand_cards))

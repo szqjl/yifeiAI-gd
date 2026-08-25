@@ -18,9 +18,10 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from math import comb
-from typing import Any, Dict, List, Set, Set
+from typing import Any, Dict, List, Optional, Set
 
 from src.v.nn.features.memory_tracker import MemoryTracker
+from src.v.nn.features.sprint_belief import SprintBelief
 
 SUITS = ["S", "H", "D", "C"]
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
@@ -1221,6 +1222,137 @@ class RuleCardCounter:
             "downseat_short_pair": bool(down_info.get("likely_short_pair")),
             "teammate_short_pair": bool(tm_info.get("likely_short_pair")),
         }
+
+    # ── GUA-077 / MEM-M07：冲刺门控信念 ─────────────────
+
+    @staticmethod
+    def _normalize_sprint_rank_key(rank_or_card: str) -> str:
+        """牌点或单张牌串 → rank 键（2–A / SB / HR）。"""
+        raw = str(rank_or_card or "").strip()
+        if not raw:
+            return ""
+        if raw in ("SB", "HR") or raw in RANKS:
+            return raw
+        return _parse_card_rank_fast(raw)
+
+    def _enemy_bomb_risk_on_lead(self, game_state=None) -> float:
+        """领出被炸的综合风险（与 ``get_belief`` 中 opp_risks 同口径）。"""
+        gap_boost = float(
+            (self.get_gap_bomb_risk_signal() or {}).get("gap_bomb_risk_max") or 0.0
+        )
+        risks = []
+        for opp in self._t.opponents:
+            base = self._t.get_opponent_bomb_risk(opp)
+            risks.append(min(1.0, max(base, gap_boost * 0.85)))
+        return max(risks) if risks else 1.0
+
+    def _estimate_my_bomb_beats_field(self, enemy_bomb_risk_on_lead: float) -> bool:
+        """粗判：场上是否难再有更大炸压住我的领出炸（骨架：低炸险即 True）。"""
+        # TODO(GUA-077 P2)：结合手牌最大炸阶与对手 bomb_stats 精化
+        return enemy_bomb_risk_on_lead < 0.40
+
+    def _enemy_twt_unlikely_for_seat(self, seat: int) -> bool:
+        """敌席是否「接不住三带二」：牌路 PASS/弱项证据。"""
+        if seat not in self._t.opponents:
+            return False
+        if self._seat_type_weakness_count(seat, "ThreeWithTwo") > 0:
+            return True
+        return self.seat_unlikely_form_type(seat, "ThreeWithTwo")
+
+    def get_sprint_belief(
+        self,
+        game_state=None,
+        *,
+        probe_single_candidates: Optional[List[str]] = None,
+        twt_trip_ranks: Optional[List[str]] = None,
+    ) -> SprintBelief:
+        """MEM-M07：残局冲刺门控信念（GUA-077 SprintStepPicker 输入）。
+
+        聚合 ``can_opponent_form_type``、牌路弱项、敌剩张，回答：
+          - 我的探单是否场上最大；
+          - 敌席是否还能 ``ThreeWithTwo`` 压我的 trip；
+          - 敌是否已对 TWT 显露弱点。
+
+        Args:
+            game_state: 可选；优先 ``numofplayers`` / ``publicInfo.rest`` 读敌剩张。
+            probe_single_candidates: 待评估的探路单张 rank 或牌串列表。
+            twt_trip_ranks: 待评估的三带二主三张 rank 列表。
+        """
+        opponents = list(self._t.opponents)
+        probe_ranks: List[str] = []
+        for item in probe_single_candidates or []:
+            rk = self._normalize_sprint_rank_key(item)
+            if rk and rk not in probe_ranks:
+                probe_ranks.append(rk)
+
+        twt_ranks: List[str] = []
+        for item in twt_trip_ranks or []:
+            rk = self._normalize_sprint_rank_key(item)
+            if rk and rk not in twt_ranks:
+                twt_ranks.append(rk)
+
+        probe_single_rank: Optional[str] = None
+        if probe_ranks:
+            probe_single_rank = min(
+                probe_ranks,
+                key=lambda r: RANK_VALUE_WITH_JOKERS.get(r, 99),
+            )
+
+        enemy_can_beat_single: Dict[int, Dict[str, bool]] = {
+            seat: {} for seat in opponents
+        }
+        my_single_is_field_max: Dict[str, bool] = {}
+        for rank in probe_ranks:
+            any_beat = False
+            for seat in opponents:
+                can_beat = self.can_opponent_form_type(
+                    seat, "Single", rank, game_state
+                )
+                enemy_can_beat_single[seat][rank] = can_beat
+                if can_beat:
+                    any_beat = True
+            my_single_is_field_max[rank] = not any_beat
+
+        enemy_can_beat_twt: Dict[int, Dict[str, bool]] = {}
+        any_enemy_can_beat_twt: Dict[str, bool] = {}
+        for trip_rank in twt_ranks:
+            any_beat = False
+            for seat in opponents:
+                can_beat = self.can_opponent_form_type(
+                    seat, "ThreeWithTwo", trip_rank, game_state
+                )
+                enemy_can_beat_twt.setdefault(seat, {})[trip_rank] = can_beat
+                if can_beat:
+                    any_beat = True
+            any_enemy_can_beat_twt[trip_rank] = any_beat
+
+        enemy_twt_unlikely = {
+            seat: self._enemy_twt_unlikely_for_seat(seat) for seat in opponents
+        }
+
+        enemy_remainings = [
+            self._seat_remaining(seat, game_state) for seat in opponents
+        ]
+        enemy_min_remaining = min(enemy_remainings) if enemy_remainings else 27
+        enemy_any_remaining_eq_1 = any(r == 1 for r in enemy_remainings)
+
+        enemy_bomb_risk_on_lead = self._enemy_bomb_risk_on_lead(game_state)
+        my_bomb_beats_field = self._estimate_my_bomb_beats_field(
+            enemy_bomb_risk_on_lead
+        )
+
+        return SprintBelief(
+            my_single_is_field_max=my_single_is_field_max,
+            enemy_can_beat_single=enemy_can_beat_single,
+            probe_single_rank=probe_single_rank,
+            enemy_can_beat_twt=enemy_can_beat_twt,
+            any_enemy_can_beat_twt=any_enemy_can_beat_twt,
+            enemy_twt_unlikely=enemy_twt_unlikely,
+            enemy_bomb_risk_on_lead=enemy_bomb_risk_on_lead,
+            my_bomb_beats_field=my_bomb_beats_field,
+            enemy_min_remaining=enemy_min_remaining,
+            enemy_any_remaining_eq_1=enemy_any_remaining_eq_1,
+        )
 
     # ── 信念字典（完整 ────────────────────────────────
 

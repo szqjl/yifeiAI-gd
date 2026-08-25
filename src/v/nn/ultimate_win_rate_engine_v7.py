@@ -6014,15 +6014,34 @@ class UltimateWinRateEngineV7:
                     # GUA-165: 百搭（curRank H 花色）排最后
                     wild_card_sort = f"H{cur_rank}"
                     candidates.sort(key=lambda x: (1 if x[1] == wild_card_sort else 0, x[0]))
-                    _, best, best_rank = candidates[0]
-                    rec = _gate({
-                        "type": "Single",
-                        "rank": _to_platform_rank(best_rank),
-                        "cards": [str(best)],
-                    })
-                    if rec:
-                        return rec
-                    # GUA-268：P0a 拦了最廉单后，改用能压的王控单，不开炸。
+                    for _, best, best_rank in candidates:
+                        if best_rank in ("SB", "HR"):
+                            continue
+                        rec = _gate({
+                            "type": "Single",
+                            "rank": _to_platform_rank(best_rank),
+                            "cards": [str(best)],
+                        })
+                        if rec:
+                            return rec
+                    # GUA-268：P0a 拦信念门控后，仍有非王散单能压 → 用最廉散单，
+                    # 不用王（match 6a8d1ca9 上家 Single/3，有 S6 却出 HR）。
+                    non_joker = [
+                        item for item in candidates if item[2] not in ("SB", "HR")
+                    ]
+                    if non_joker:
+                        _, best, best_rank = non_joker[0]
+                        self.logger.info(
+                            "GUA-268 散单优先: P0a 拦信念门控仍出 Single/%s %s",
+                            _to_platform_rank(best_rank),
+                            [str(best)],
+                        )
+                        return {
+                            "type": "Single",
+                            "rank": _to_platform_rank(best_rank),
+                            "cards": [str(best)],
+                        }
+                    # 无非王散单可压时，才用王控单（替代开炸路径）。
                     joker_rec = self._joker_control_single_from_candidates(
                         candidates, to_platform_rank=_to_platform_rank,
                     )

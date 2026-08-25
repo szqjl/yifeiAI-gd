@@ -76,8 +76,7 @@ def test_decide_uses_sb_not_straightflush_vs_single_five():
     chosen = acts[idx]
     assert chosen[0] != "StraightFlush", f"不得用同花顺开炸压单 5，实际 {chosen}"
     assert chosen[0] != "Bomb", f"不得用炸弹压单 5，实际 {chosen}"
-    assert chosen[0] == "Single", f"应用王控单，实际 {chosen}"
-    assert chosen[2] == ["SB"], f"应出小王，实际 {chosen}"
+    assert chosen[0] == "Single", f"应用单张跟压（散单或王），实际 {chosen}"
 
 
 def test_mid_aggressive_skips_bomb_when_sb_beats_single():
@@ -226,3 +225,41 @@ def test_cheap_natural_single_still_preferred_over_joker():
     assert rec is not None
     assert rec["type"] == "Single"
     assert rec["cards"] == ["S7"], f"有散 7 应最省压，实际 {rec}"
+
+
+def test_p0a_blocked_still_uses_natural_single_not_hr():
+    """P0a 拦 Single/6 压 Single/3 时，仍出散单不用 HR（match 6a8d1ca9）。"""
+    from src.v.nn.guards.v7_guards import get_card_value
+
+    hand = ["S6", "HR", "HR", "CA", "HA", "DA", "DK", "CK"]
+    card_mask = {c: (-1, 0.0, 1) for c in hand}
+    engine = UltimateWinRateEngineV7(player_id=2)
+    engine._card_mask = card_mask
+    engine._group_type_map = {}
+    engine._group_members = {-1: list(hand)}
+    engine._current_role = "超强主攻"
+    gs = {
+        "myPos": 2,
+        "greaterPos": 1,
+        "greaterAction": ["Single", "3", ["H3"]],
+        "handCards": hand,
+        "curRank": "2",
+        "actionList": [
+            ["PASS", "PASS", "PASS"],
+            ["Single", "6", ["S6"]],
+            ["Single", "R", ["HR"]],
+            ["Bomb", "Q", ["HQ", "HQ", "DQ", "H2"]],
+        ],
+        "_belief": {
+            "hand_counts": {0: 27, 1: 26, 2: 26, 3: 27},
+            "opp_bomb_risks": {1: 0.8},
+        },
+    }
+    rec = engine._recommend_min_press_impl(
+        gs, card_mask, gs["greaterAction"], "Single", hand, "2",
+        apply_belief_gate=True,
+    )
+    assert rec is not None
+    assert rec["type"] == "Single"
+    assert rec["cards"] == ["S6"], f"有 S6 压 3 应出 6 不用大王，实际 {rec}"
+    assert get_card_value(rec["cards"][0], "2") > get_card_value("H3", "2")

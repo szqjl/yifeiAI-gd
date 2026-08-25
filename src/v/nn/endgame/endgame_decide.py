@@ -260,6 +260,36 @@ def _bomb_splits_pure_rank_leaving_orphan(
     return False
 
 
+def _has_non_single_lead_candidates(candidates: List[Tuple[int, List]]) -> bool:
+    """领出候选中是否存在非单张（不含 PASS/炸弹）。"""
+    if not GUARD_TOOLS_OK:
+        return False
+    for _, act in candidates:
+        if _get_declared_action_type(act) in (ACTION_TYPE_PASS, "PASS"):
+            continue
+        if _is_bomb_like_action(act):
+            continue
+        try:
+            if get_action_type(act) != ACTION_TYPE_SINGLE:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _pick_second_smallest_single(
+    singles: List[Tuple[int, List]], cur_rank: str,
+) -> Optional[Tuple[int, List]]:
+    """散单中出倒数第二小（至少 2 张时）；仅 1 张则出该张。"""
+    if not singles:
+        return None
+    ordered = sorted(
+        singles,
+        key=lambda item: get_card_value(_get_cards(item[1])[0], cur_rank),
+    )
+    return ordered[1] if len(ordered) >= 2 else ordered[0]
+
+
 def _is_wild_level_card(card: str, cur_rank: str) -> bool:
     """红桃级牌 H{curRank} 为逢人配。"""
     if not card or not cur_rank:
@@ -501,11 +531,17 @@ def pick_assist_feed_by_prefer(
                         down_seat_rem = int(rem)
                         break
             if down_seat_rem == 1:
-                # 下家也报单: 出大单防截胡(忽略 recapture, 因为目的是赢这一轮)
-                assist_actions.sort(key=lambda item: -_max_card_value(item[1], cur_rank))
-            else:
-                # 下家不报单: 出小单让队友接(忽略 recapture, 因为目的是让队友接过去)
+                # GUA-271 定音：下家也报单时，手牌仅有散单→倒数第二小；
+                # 另有对子/三带等整牌型→本路径不送单，交由其他领出逻辑。
+                all_candidates = [
+                    (i, a) for i, a in enumerate(game_state.get("actionList") or [])
+                ]
+                if _has_non_single_lead_candidates(all_candidates):
+                    return None
                 assist_actions.sort(key=lambda item: _max_card_value(item[1], cur_rank))
+                return _pick_second_smallest_single(assist_actions, cur_rank)
+            # 下家不报单: 出小单让队友接
+            assist_actions.sort(key=lambda item: _max_card_value(item[1], cur_rank))
             return assist_actions[0]
 
     assist_actions = _sort_by_recapture_first(assist_actions, hand_cards, cur_rank)
@@ -1336,10 +1372,26 @@ class EndgameDecider:
         )
         return index, action
 
+    @staticmethod
+    def _teammate_is_head_finisher(
+        game_state: Dict[str, Any], teammate_pos: int,
+    ) -> bool:
+        """GUA-272：平台 done 按完牌顺序；仅 done[0]==队友 才是真头游（非二游/三游）。"""
+        done = game_state.get("done")
+        if not isinstance(done, (list, tuple)) or not done:
+            return False
+        try:
+            return int(done[0]) == int(teammate_pos)
+        except (TypeError, ValueError):
+            return False
+
     def pick_double_second_small_single(
         self, game_state: Dict[str, Any], action_list: List,
     ) -> Tuple[Optional[int], Optional[List]]:
-        """GUA-161：队友已头游时，主攻自由领最小自然小散单争双上。"""
+        """GUA-161：队友已头游时，主攻自由领最小自然小散单争双上。
+
+        GUA-272：须 done[0]==队友（真头游）；队友二游/三游（如 done=[3,0]）不触发。
+        """
         if not GUARD_TOOLS_OK:
             return None, None
         if game_state.get("_role") not in ("主攻", "超强主攻"):
@@ -1361,6 +1413,13 @@ class EndgameDecider:
             teammate_pos, ec, game_state,
         )
         if teammate_remaining != 0:
+            return None, None
+
+        if not self._teammate_is_head_finisher(game_state, teammate_pos):
+            logger.info(
+                "GUA-272: teammate=%d remaining=0 但非头游 done=%s → 跳过 GUA-161",
+                teammate_pos, game_state.get("done"),
+            )
             return None, None
 
         # GUA-229 下家报单禁止送单：队友已头游但下家（my_pos+1）剩 1 张时，
@@ -1739,6 +1798,87 @@ class EndgameDecider:
         )
         return self._select_best_index(pair_acts, action_list, game_state)
 
+    @staticmethod
+    def _hand_is_trips_wild_single_five(
+        hand_cards: List[str], cur_rank: str,
+    ) -> bool:
+        """GUA-273：5 张 = 三自然张同点 + 逢人配 + 单张（非三带二对子半幅）。"""
+        wild = f"H{cur_rank}"
+        if len(hand_cards) != 5 or hand_cards.count(wild) != 1:
+            return False
+        others = [c for c in hand_cards if c != wild]
+        if len(others) != 4:
+            return False
+        rank_counts = Counter(get_card_rank(str(c)) for c in others)
+        return sorted(rank_counts.values()) == [1, 3]
+
+    def _q0_trips_wild_single_sprint_lead(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Dict[str, Any],
+        non_bombs: List[Tuple[int, List]],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-273：三带二+配子+单 两手结构冲刺。
+
+        - 任一敌 remaining==1 → 直接 ThreeWithTwo 一手清头游；
+        - 敌均 >1 → 先出最小天然单，配子+三头留炸/TWT 下轮冲头游。
+        match 6a8d2762：误走 Q0 配子炸只剩 DT 单张末游。
+        """
+        if not self._is_my_q1_lead_turn(game_state, ec.get("my_pos", 0)):
+            return None
+        hand_cards = list(game_state.get("handCards") or [])
+        cur_rank = str(game_state.get("curRank", "2"))
+        if not self._hand_is_trips_wild_single_five(hand_cards, cur_rank):
+            return None
+
+        enemies = ec.get("enemies", {}) or {}
+        enemy_one = any(
+            int(e.get("remaining", 99) or 99) == 1 for e in enemies.values()
+        )
+        hand_set = set(hand_cards)
+
+        if enemy_one:
+            twt_acts = [
+                (i, a) for i, a in non_bombs
+                if _get_declared_action_type(a) == ACTION_TYPE_THREE_WITH_TWO
+                and set(_get_cards(a)) == hand_set
+            ]
+            if twt_acts:
+                logger.info(
+                    "GUA-273: 敌报单 + 三带二配子单 → TWT 一手清 idx=%d",
+                    twt_acts[0][0],
+                )
+                return twt_acts[0]
+
+        # 敌均 >1 张：先出最小天然散单（非三头点数、不用配子），炸/TWT 留回手
+        wild = f"H{cur_rank}"
+        rank_counts = Counter(get_card_rank(str(c)) for c in hand_cards if c != wild)
+        trip_rank = next(
+            (r for r, cnt in rank_counts.items() if cnt == 3),
+            None,
+        )
+        singles = [
+            (i, a) for i, a in non_bombs
+            if (
+                _get_declared_action_type(a) == ACTION_TYPE_SINGLE
+                and len(_get_cards(a)) == 1
+                and str(_get_cards(a)[0]) != wild
+                and (
+                    trip_rank is None
+                    or get_card_rank(str(_get_cards(a)[0])) != trip_rank
+                )
+            )
+        ]
+        if singles:
+            singles.sort(key=lambda item: _min_card_value(item[1], cur_rank))
+            logger.info(
+                "GUA-273: 敌>1 张 → 先探单 idx=%d card=%s",
+                singles[0][0], _get_cards(singles[0][1]),
+            )
+            return singles[0]
+        return None
+
     def _q0_self_sprint(
         self, game_state: Dict[str, Any], action_list: List, ec: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
@@ -1764,6 +1904,13 @@ class EndgameDecider:
                 bombs.append((i, a))
             else:
                 non_bombs.append((i, a))
+
+        if is_my_turn:
+            tws_lead = self._q0_trips_wild_single_sprint_lead(
+                game_state, action_list, ec, non_bombs,
+            )
+            if tws_lead is not None:
+                return tws_lead
 
         if not bombs:
             if not is_my_turn:
@@ -2233,6 +2380,12 @@ class EndgameDecider:
         if teammate_hold is not None:
             return teammate_hold
 
+        upper_yield = self._q1_yield_upper_endgame_to_teammate(
+            game_state, action_list, ec,
+        )
+        if upper_yield is not None:
+            return upper_yield
+
         finish_now = self._q1_finish_now_candidate(game_state, action_list)
         if finish_now is not None:
             return finish_now
@@ -2347,7 +2500,14 @@ class EndgameDecider:
         if twt_feed is not None:
             return twt_feed
 
-        # ④.5d GUA-202：我方领出 + 队友 close → 优先送牌（防整牌锁敌抢跑）
+        # ④.5d GUA-271：领出 + 队友剩 1 → 天然单送队友（级牌留回收；下家 2 张防守）
+        teammate_one_natural = self._q1_teammate_one_natural_single_lead(
+            game_state, non_banned_candidates, ec,
+        )
+        if teammate_one_natural is not None:
+            return teammate_one_natural
+
+        # ④.5e GUA-202：我方领出 + 队友 close → 优先送牌（防整牌锁敌抢跑）
         lead_feed = self._q1_lead_feed_teammate_special(
             game_state, non_banned_candidates, ec,
         )
@@ -3034,6 +3194,70 @@ class EndgameDecider:
         )
         return pidx, action_list[pidx]
 
+    def _q1_yield_upper_endgame_to_teammate(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-270：上家敌进残局 + 队友剩牌>5 → 仅「只有炸能压」时 PASS，交由队友。
+
+        match=6a8d09c3 约第 30 回合：队友 3 号出对 → 上家 4 号 JJ 压过 →
+        1 号（9 张）残局 Q1 直接 88888 开炸抢权，队友仍持多牌应继续配合线。
+
+        定音：须 greaterPos=上家敌且上家 remaining∈残局区；队友>5 张时不抢炸。
+        **例外**：actionList 仍有非炸同型可压（如 Single/Pair）→ 不 PASS，正常跟压
+        （match 6a8d1ca9 上家 Single/5 有散单可压不得 PASS）。
+        """
+        if not self._is_q1_following_enemy_control(game_state, ec):
+            return None
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        up_pos = (my_pos - 1) % 4
+        greater_pos = game_state.get("greaterPos", -1)
+        if greater_pos != up_pos:
+            return None
+
+        numofplayers = ec.get("numofplayers") or game_state.get("numofplayers", [27] * 4)
+        upper_remaining = int(numofplayers[up_pos] if up_pos < len(numofplayers) else 27)
+        try:
+            from .endgame_preprocessor import max_end_card
+        except ImportError:
+            from src.v.nn.endgame.endgame_preprocessor import max_end_card
+        if not (1 <= upper_remaining <= max_end_card):
+            return None
+
+        teammate_pos = (my_pos + 2) % 4
+        teammate_remaining = int(
+            ec.get("teammate", {}).get("remaining")
+            or (numofplayers[teammate_pos] if teammate_pos < len(numofplayers) else 27)
+            or 27
+        )
+        if teammate_remaining <= 5:
+            return None
+
+        enemies = ec.get("enemies", {})
+        if any(int(e.get("remaining", 99) or 99) <= 2 for e in enemies.values()):
+            return None
+
+        has_non_bomb_beater = any(
+            _get_declared_action_type(act) not in (ACTION_TYPE_PASS, "PASS")
+            and not _is_bomb_like_action(act)
+            for act in action_list
+            if isinstance(act, list)
+        )
+        if has_non_bomb_beater:
+            return None
+
+        for i, act in enumerate(action_list):
+            if _get_declared_action_type(act) in (ACTION_TYPE_PASS, "PASS"):
+                logger.info(
+                    "GUA-270: 上家敌残局(remaining=%d) 队友剩%d>5 → PASS 交由队友",
+                    upper_remaining, teammate_remaining,
+                )
+                return (i, act)
+        return None
+
     def _q1_hold_teammate_max_control(
         self, game_state: Dict[str, Any], action_list: List, ec: Dict[str, Any],
     ) -> Optional[Tuple[int, List]]:
@@ -3268,6 +3492,121 @@ class EndgameDecider:
                 best_value = value
         return best
 
+    def _filter_natural_single_feed_candidates(
+        self,
+        singles: List[Tuple[int, List]],
+        hand_cards: List[str],
+        cur_rank: str,
+    ) -> List[Tuple[int, List]]:
+        """天然单：手牌中该 rank 仅 1 张；排除大小王与逢人配级牌。"""
+        if not singles or not hand_cards:
+            return []
+        cnt = Counter(get_card_rank(str(c)) for c in hand_cards)
+        naturals: List[Tuple[int, List]] = []
+        for idx, act in singles:
+            cards = _get_cards(act)
+            if len(cards) != 1:
+                continue
+            card = str(cards[0])
+            rk = get_card_rank(card)
+            if rk in ("SB", "HR"):
+                continue
+            if _is_wild_level_card(card, cur_rank):
+                continue
+            if cnt.get(rk, 0) != 1:
+                continue
+            naturals.append((idx, act))
+        return naturals
+
+    def _select_min_natural_single_feed(
+        self,
+        candidates: List[Tuple[int, List]],
+        hand_cards: List[str],
+        game_state: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """从候选中挑最小天然单（送队友；级牌留作回收）。"""
+        if not GUARD_TOOLS_OK:
+            return None
+        singles = [
+            (i, a) for i, a in candidates
+            if get_action_type(a) == ACTION_TYPE_SINGLE
+        ]
+        cur_rank = str(game_state.get("curRank", "2"))
+        naturals = self._filter_natural_single_feed_candidates(
+            singles, hand_cards, cur_rank,
+        )
+        if not naturals:
+            return None
+        return min(
+            naturals,
+            key=lambda item: get_card_value(_get_cards(item[1])[0], cur_rank),
+        )
+
+    def _q1_teammate_one_natural_single_lead(
+        self,
+        game_state: Dict[str, Any],
+        candidates: List[Tuple[int, List]],
+        ec: Dict[str, Any],
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-271：领出 + 队友剩 1 → 天然单送队友（级牌留回收）。
+
+        match=6a8d0d7f：上家 Q 被级牌 2 压后接风领出，原 GUA-202 出 D2（级牌）
+        → GUA-244 出 KK → TWT 烂尾。定音：下家剩 2 张时最小天然单最优防守
+        （下家每圈只能出 1 张）；级牌 2 留回收。下家也报单：仅散单时出倒数第二小；
+        另有对子/三带等→不送单，交由其他领出逻辑。
+        """
+        if not GUARD_TOOLS_OK:
+            return None
+
+        my_pos = ec.get("my_pos", game_state.get("myPos", 0))
+        if not self._is_my_q1_lead_turn(game_state, my_pos):
+            return None
+
+        teammate = ec.get("teammate", {})
+        if int(teammate.get("remaining", 0) or 0) != 1:
+            return None
+
+        hand_cards = list(game_state.get("handCards", []) or [])
+        cur_rank = str(game_state.get("curRank", "2"))
+        singles = []
+        for idx, act in candidates:
+            try:
+                if get_action_type(act) != ACTION_TYPE_SINGLE:
+                    continue
+            except Exception:
+                continue
+            if self._is_bomb_destroying_action(act, hand_cards, game_state):
+                continue
+            singles.append((idx, act))
+
+        naturals = self._filter_natural_single_feed_candidates(
+            singles, hand_cards, cur_rank,
+        )
+        if not naturals:
+            return None
+
+        numofplayers = ec.get("numofplayers") or game_state.get("numofplayers", [27] * 4)
+        down_pos = (my_pos + 1) % 4
+        down_rem = int(numofplayers[down_pos] if down_pos < len(numofplayers) else 99)
+
+        if down_rem == 1:
+            if _has_non_single_lead_candidates(candidates):
+                return None
+            picked = _pick_second_smallest_single(naturals, cur_rank)
+            if picked is None:
+                return None
+        else:
+            picked = min(
+                naturals,
+                key=lambda item: get_card_value(_get_cards(item[1])[0], cur_rank),
+            )
+
+        logger.info(
+            "GUA-271: 队友剩1领出天然单 idx=%d card=%s down_rem=%d",
+            picked[0], _get_cards(picked[1]), down_rem,
+        )
+        return picked
+
     def _q1_lead_feed_teammate_special(
         self,
         game_state: Dict[str, Any],
@@ -3303,19 +3642,20 @@ class EndgameDecider:
         if not assist_prefer:
             return None
 
-        # GUA-202 护栏①：V8 自己有 2 手冲刺线（如 TWT+单 = 2 手收尾）→ 自己冲刺优先，不送牌。
-        # 对应 GUA-110：仅剩两手冲刺时自由领出先出整牌；GUA-111 场景同样经此让位给
-        # `_q1_enemy_critical_lead_special` / 风险通道剪枝后的推荐路径。
-        structured_all = [
-            (i, a) for i, a in candidates
-            if _get_declared_action_type(a) not in (ACTION_TYPE_PASS, "PASS")
-            and not _is_bomb_like_action(a)
-        ]
-        if self._select_two_turn_sprint_structure(
-            structured_all, candidates, game_state, ec,
-            prefer_structure_first=True,
-        ) is not None:
-            return None
+        # GUA-202 护栏①：V8 自己有 2 手冲刺线 → 自己冲刺优先，不送牌。
+        # 队友剩 1 张时送天然单拿头游优先于两手冲刺规划（GUA-271）。
+        teammate_rem_guard = int(teammate.get("remaining", 0) or 0)
+        if teammate_rem_guard != 1:
+            structured_all = [
+                (i, a) for i, a in candidates
+                if _get_declared_action_type(a) not in (ACTION_TYPE_PASS, "PASS")
+                and not _is_bomb_like_action(a)
+            ]
+            if self._select_two_turn_sprint_structure(
+                structured_all, candidates, game_state, ec,
+                prefer_structure_first=True,
+            ) is not None:
+                return None
 
         hand_cards = list(game_state.get("handCards", []) or [])
         feed_candidates: List[Tuple[int, List]] = []
@@ -3356,9 +3696,23 @@ class EndgameDecider:
         if not feed_candidates:
             return None
 
-        # 队友报单(1张)：仅送当前无外部压制的安全单，防敌方截胡
+        # 队友报单(1张)：优先天然单（级牌留回收）；无天然单再走安全单
         remaining = int(teammate.get("remaining", 0) or 0)
         if remaining == 1:
+            numofplayers = ec.get("numofplayers") or game_state.get("numofplayers", [27] * 4)
+            down_pos = (my_pos + 1) % 4
+            down_rem = int(numofplayers[down_pos] if down_pos < len(numofplayers) else 99)
+            if down_rem == 1 and _has_non_single_lead_candidates(candidates):
+                return None
+            natural_feed = self._select_min_natural_single_feed(
+                feed_candidates, hand_cards, game_state,
+            )
+            if natural_feed is not None:
+                logger.info(
+                    "Q1 领出送队友(GUA-202/271): idx=%d type=%s",
+                    natural_feed[0], get_action_type(natural_feed[1]),
+                )
+                return natural_feed
             safe = self._select_enemy_one_safe_single(feed_candidates, game_state, ec)
             if safe is None:
                 return None
@@ -5337,6 +5691,8 @@ class EndgameDecider:
         （原 C6 被级牌 D2 接走 → p1 S8 走完头游，V8 末游）。
         """
         if not GUARD_TOOLS_OK:
+            return None
+        if int(ec.get("teammate", {}).get("remaining", 0) or 0) == 1:
             return None
         my_pos = ec.get("my_pos", game_state.get("myPos", 0))
         if not self._is_my_q1_lead_turn(game_state, my_pos):
