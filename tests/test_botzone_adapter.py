@@ -4,6 +4,7 @@ BotzoneAdapter 单元测试 — 牌编码双射 + ActionList 生成。
 """
 
 import sys
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -1580,6 +1581,69 @@ def test_claim_straight_wild_replaces_covering():
     # 配子作自然级牌（H2 当 2）→ 无需替换，claim==action
     chosen_natural = ["Straight", "A", ["HA", "H2", "D3", "D4", "S5"]]
     assert adapter._build_bz_claim(chosen_natural, "2", [0, 1, 2, 3, 4]) == [0, 1, 2, 3, 4]
+
+
+def test_claim_twt_wild_replaces_covering_kk_jj():
+    """GUA-280：配子补三带二 KK+H2+JJ，claim 须把 H2 换成第三张 K。
+
+    线上 KEEP_RUNNING 非法牌型（philbot your_id=2）：
+    action=claim=[49,102,4,96,97]=[DK,HK,H2,SJ,CJ]，
+    裁判 checkPokerType 见 K/K/2/J/J → INVALID_TYPE。
+    """
+    from src.communication.botzone_adapter import BotzoneAdapter
+    adapter = BotzoneAdapter.__new__(BotzoneAdapter)
+    chosen = ["ThreeWithTwo", "K", ["DK", "HK", "H2", "SJ", "CJ"]]
+    bz = v8_to_bz_cards(chosen[2])
+    claim = adapter._build_bz_claim(chosen, "2", bz)
+    claim_v8 = bz_to_v8_cards(claim)
+    assert "H2" not in claim_v8, f"配子应被替换: {claim_v8}"
+    ranks = Counter(_card_rank(c) for c in claim_v8)
+    assert ranks.get("K") == 3 and ranks.get("J") == 2, claim_v8
+    classified = adapter._classify_action(claim_v8, "2")
+    assert classified[0] == "ThreeWithTwo" and classified[1] == "K", classified
+    physical = adapter._classify_action(chosen[2], "2")
+    assert physical[0] == "Free", physical
+
+
+def test_claim_twt_wild_as_pair_gua273():
+    """GUA-280 / GUA-273：三自然张+配子+单，配子补对子侧。"""
+    from src.communication.botzone_adapter import BotzoneAdapter
+    adapter = BotzoneAdapter.__new__(BotzoneAdapter)
+    chosen = ["ThreeWithTwo", "4", ["H4", "C4", "D4", "H2", "DT"]]
+    claim_v8 = bz_to_v8_cards(adapter._build_bz_claim(
+        chosen, "2", v8_to_bz_cards(chosen[2]),
+    ))
+    assert "H2" not in claim_v8, claim_v8
+    ranks = Counter(_card_rank(c) for c in claim_v8)
+    assert ranks.get("4") == 3 and ranks.get("T") == 2, claim_v8
+
+
+def test_claim_twt_wild_as_natural_level_unchanged():
+    """配子作自然级牌组成 222+QQ 时 claim==action。"""
+    from src.communication.botzone_adapter import BotzoneAdapter
+    adapter = BotzoneAdapter.__new__(BotzoneAdapter)
+    chosen = ["ThreeWithTwo", "2", ["S2", "D2", "H2", "SQ", "CQ"]]
+    bz = v8_to_bz_cards(chosen[2])
+    assert adapter._build_bz_claim(chosen, "2", bz) == bz
+
+
+def test_claim_pair_trips_wild_replaces_covering():
+    """GUA-195 配子补对/三：claim 同样须替换配子。"""
+    from src.communication.botzone_adapter import BotzoneAdapter
+    adapter = BotzoneAdapter.__new__(BotzoneAdapter)
+    pair = ["Pair", "K", ["SK", "H2"]]
+    pair_claim = bz_to_v8_cards(adapter._build_bz_claim(
+        pair, "2", v8_to_bz_cards(pair[2]),
+    ))
+    assert "H2" not in pair_claim and Counter(
+        _card_rank(c) for c in pair_claim
+    ) == {"K": 2}, pair_claim
+    trips = ["Trips", "K", ["SK", "DK", "H2"]]
+    trips_claim = bz_to_v8_cards(adapter._build_bz_claim(
+        trips, "2", v8_to_bz_cards(trips[2]),
+    ))
+    assert "H2" not in trips_claim
+    assert Counter(_card_rank(c) for c in trips_claim).get("K") == 3
 
 
 # ── GUA-072 / GUA-234：Botzone 贡牌记忆 + 动态组牌引擎接线 ──────────────

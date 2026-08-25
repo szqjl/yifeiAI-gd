@@ -1710,6 +1710,19 @@ class BotzoneAdapter:
             if claim_cards is not None:
                 return v8_to_bz_cards(claim_cards)
             return bz_ints
+        if chosen[0] in ("Pair", "Trips"):
+            # GUA-195 配子补对/三：与炸弹同规则，claim 须替换配子。
+            claim_cards = self._replace_bomb_covering(v8_cards, cur_rank)
+            if claim_cards is not None:
+                return v8_to_bz_cards(claim_cards)
+            return bz_ints
+        if chosen[0] == "ThreeWithTwo":
+            # GUA-280：配子补三带二（KK+H2+JJ）claim==action → INVALID_TYPE。
+            trip_rank = chosen[1] if len(chosen) >= 2 else ""
+            claim_cards = self._replace_twt_covering(v8_cards, cur_rank, trip_rank)
+            if claim_cards is not None:
+                return v8_to_bz_cards(claim_cards)
+            return bz_ints
         if chosen[0] == "Straight":
             # GUA-217: 配子补普通顺子缺位（如 HA+D2+H2+D4+S5 → A2345），claim
             # 须把配子替换为所代表 rank 的牌，否则含 H2 的 claim 被判 INVALID_TYPE。
@@ -1768,6 +1781,44 @@ class BotzoneAdapter:
                 else:
                     result.append(f"{suit}{r}")
             return result
+        return None
+
+    def _replace_twt_covering(
+        self, v8_cards: List[str], cur_rank: str, trip_rank: str = "",
+    ) -> Optional[List[str]]:
+        """H+cur_rank 逢人配补 ThreeWithTwo：把配子替换为所代表 rank。
+
+        GUA-280：自然 KK+QQ+H2 作 TWT 时，claim 若仍含 H2，裁判 checkPokerType
+        看到 K/K/2/Q/Q → INVALID_TYPE。两种配子用法：
+        - 自然 2+2：配子补 trip（chosen rank）
+        - 自然 3+1：配子补 pair（那张单的点数，GUA-273）
+        配子作自然级牌（目标点数==cur_rank）→ 返回 None，claim==action。
+        替换花色按目标点数未占用花色选取（TWT 四张自然牌可能占满四花，
+        不能像炸弹那样按「全部自然牌花色」排除）。
+        """
+        covering = f"H{cur_rank}"
+        covering_cnt = v8_cards.count(covering)
+        natural = [c for c in v8_cards if c != covering]
+        if covering_cnt != 1 or len(natural) != 4:
+            return None
+        counts = Counter(_card_rank(c) for c in natural)
+        ranks_2 = [r for r, n in counts.items() if n == 2]
+        ranks_3 = [r for r, n in counts.items() if n == 3]
+        ranks_1 = [r for r, n in counts.items() if n == 1]
+        target = ""
+        if len(ranks_2) == 2 and not ranks_3:
+            target = trip_rank if trip_rank in ranks_2 else ranks_2[0]
+        elif len(ranks_3) == 1 and len(ranks_1) == 1:
+            target = ranks_1[0]
+        else:
+            return None
+        if not target or target == cur_rank:
+            return None
+        existing = set(natural)
+        for suit in ("H", "D", "S", "C"):
+            cand = f"{suit}{target}"
+            if cand not in existing:
+                return natural + [cand]
         return None
 
     def _replace_bomb_covering(self, v8_cards: List[str],
