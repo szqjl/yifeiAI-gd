@@ -1588,6 +1588,13 @@ class EndgameDecider:
                             game_state, ec, action,
                         ):
                             if self._action_breaks_core_structure(action, game_state):
+                                # GUA-278：下家敌≤2 且有炸 → 最廉炸截断，勿拆核转 PASS
+                                # （match=6a8d4603：GUA-135 min TWT → 拆核 PASS，放走下家头游）
+                                bomb_alt = self._gua278_critical_lower_enemy_bomb(
+                                    game_state, action_list, ec,
+                                )
+                                if bomb_alt is not None:
+                                    return bomb_alt
                                 pidx = next(
                                     (i for i, a in enumerate(action_list)
                                      if _get_declared_action_type(a) in ("PASS",)),
@@ -6308,6 +6315,85 @@ class EndgameDecider:
         best = max(bombs, key=bomb_score)
         return best
 
+    def _select_cheapest_bomb_or_sf(
+        self, action_list: List, cur_rank: str = "2",
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-278：actionList 中最廉 Bomb/StraightFlush（Bomb≻SF，张少≻点小）。"""
+        cands: List[Tuple[int, int, int, int, List]] = []
+        for i, a in enumerate(action_list or []):
+            at = _get_declared_action_type(a)
+            if at not in ("Bomb", "StraightFlush"):
+                continue
+            cards = _get_cards(a)
+            family = 0 if at == "Bomb" else 1
+            cands.append(
+                (family, len(cards), _max_card_value(a, cur_rank), i, a)
+            )
+        if not cands:
+            return None
+        best = min(cands)
+        return (best[3], best[4])
+
+    def _gua278_critical_lower_enemy_bomb(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+        ec: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-278：下家敌 remaining≤2 且有炸 → 最廉 Bomb/SF 截断。
+
+        锚点 match=6a8d4603：下家 TWT/K 后剩≈2，GUA-135 选 min TWT →
+        Q1 拆核转 PASS，放走下家头游。定音：有炸则禁该 PASS / 禁优先拆核 TWT。
+        """
+        try:
+            my_pos = int(game_state.get("myPos", 0) or 0)
+            greater_pos = int(game_state.get("greaterPos", -1))
+        except (TypeError, ValueError):
+            return None
+        if greater_pos < 0:
+            return None
+        lower_pos = (my_pos + 1) % 4
+        if greater_pos != lower_pos:
+            return None
+
+        rem = 99
+        if ec:
+            enemies = ec.get("enemies") or {}
+            einfo = enemies.get(lower_pos)
+            if einfo is None:
+                einfo = enemies.get(str(lower_pos))
+            if isinstance(einfo, dict):
+                try:
+                    rem = int(einfo.get("remaining", 99) or 99)
+                except (TypeError, ValueError):
+                    rem = 99
+        if rem > 2:
+            nums = game_state.get("numofplayers") or []
+            if isinstance(nums, (list, tuple)) and len(nums) > lower_pos:
+                try:
+                    rem = int(nums[lower_pos] or 99)
+                except (TypeError, ValueError):
+                    rem = 99
+            if rem > 2:
+                pub = game_state.get("publicInfo") or []
+                if isinstance(pub, list) and len(pub) > lower_pos:
+                    try:
+                        rem = int((pub[lower_pos] or {}).get("rest", 99) or 99)
+                    except (TypeError, ValueError):
+                        rem = 99
+        if rem < 1 or rem > 2:
+            return None
+
+        picked = self._select_cheapest_bomb_or_sf(
+            action_list, str(game_state.get("curRank", "2")),
+        )
+        if picked is not None:
+            logger.info(
+                "GUA-278: 下家敌 remaining=%d ≤2 → 最廉炸/同花顺截断",
+                rem,
+            )
+        return picked
+
     # ── L3 降级 ──
 
     def _l3_fallback(
@@ -7283,6 +7369,12 @@ class EndgameDecider:
                         "GUA-150 self_sprint_priority: self_hands=%d ≤ teammate_hands=%d → self 出牌夺权",
                         self_hands, teammate_hands,
                     )
+                    # GUA-278：下家敌危急时优先最廉炸，勿先拆核 TWT
+                    bomb_alt = self._gua278_critical_lower_enemy_bomb(
+                        game_state, action_list, ec,
+                    )
+                    if bomb_alt is not None:
+                        return bomb_alt
                     # 优先 TWT（与原 else 分支一致），其次最小非炸非 PASS 动作
                     twt = self._find_twt_min_point(action_list, cur_rank, hand_cards=hand_cards)
                     if twt is not None:
@@ -7315,6 +7407,12 @@ class EndgameDecider:
                         teammate_hands, self._min_reliable_inferred(teammate_pos, game_state),
                     )
 
+            # GUA-278：下家敌≤2 + 有炸 → 最廉炸截断（禁先 min TWT 再拆核 PASS）
+            bomb_alt = self._gua278_critical_lower_enemy_bomb(
+                game_state, action_list, ec,
+            )
+            if bomb_alt is not None:
+                return bomb_alt
             # 当 teammate_sprint=False 或 GUA-150 估计不可靠时：跟 min TWT 夺权
             twt = self._find_twt_min_point(action_list, cur_rank, hand_cards=hand_cards)
             if twt is not None:
