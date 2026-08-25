@@ -2635,21 +2635,27 @@ class UltimateWinRateEngineV7:
             self.group_filter_bypass_count += 1
             return action_list, list(range(len(action_list)))
 
-        # ── R16: 队友剩 1 张 + 下家非 1 张 → 放行全部（送单不卡 role filter）──
+        # ── R16: 队友剩 1 张 + 下家非 1 张 → 送单放行（不卡普通拆核对喂）──
         # 设计文档 (2026-06-20)：队友剩 1 张，下家也剩 1 张 → 不放行
         #   → 我出单 → 下家跟 → 下家头游 ❌
         # 下家剩 ≥2 张 + 队友剩 1 张 → 放行
         #   → 我出单 → 下家跟或不跟 → 队友轮到 → 队友头游 ✅
+        # GUA-279：R16 **不**豁免「Bomb allocation 拆另一核 StraightFlush」
+        # （match=6a8d4980：四星 J + SF 梅花10-A，五星炸抽 CJ 打散 SF）。
         xia_jia_pos = (my_pos + 1) % 4
-        if (numofplayers and len(numofplayers) >= 4
-                and numofplayers[teammate_pos] == 1
-                and numofplayers[xia_jia_pos] != 1):
+        r16_feed_bypass = bool(
+            numofplayers and len(numofplayers) >= 4
+            and numofplayers[teammate_pos] == 1
+            and numofplayers[xia_jia_pos] != 1
+        )
+        if r16_feed_bypass:
             self.group_filter_bypass_count += 1
             self.logger.debug(
-                "R16 放行: teammate=%d剩1张, 下家=%d剩%d张(非1) → 全部放行",
+                "R16 放行: teammate=%d剩1张, 下家=%d剩%d张(非1) → 送单放行"
+                "（GUA-279 仍禁拆他核补星 Bomb）",
                 teammate_pos, xia_jia_pos, numofplayers[xia_jia_pos],
             )
-            return action_list, list(range(len(action_list)))
+            return self._r16_bypass_except_bomb_pad_sf(action_list)
 
         # ── 过滤逻辑（角色分流） ──
         from src.v.nn.endgame.endgame_decide import (
@@ -2698,6 +2704,11 @@ class UltimateWinRateEngineV7:
                 # 不拆任何 core → 保留
                 keep_indices.append(idx)
             elif broken_type in ("Bomb", "StraightFlush"):
+                # GUA-279：Bomb 经 allocation 拆另一核 SF（补星）→ 一律禁选
+                # （优先于 GUA-123/239 豁免；完整打出 SF 本身 broken=None）
+                if self._is_bomb_padding_break_other_sf(action):
+                    removed_count += 1
+                    continue
                 # GUA-123：敌 sprint 反炸允许拆 core
                 if should_allow_counter_bomb_core_exempt(
                     action, game_state, cur_rank,
@@ -2769,6 +2780,54 @@ class UltimateWinRateEngineV7:
         for new_i, old_i in enumerate(keep_indices):
             filter_map[old_i] = new_i
 
+        return filtered, filter_map
+
+    def _is_bomb_padding_break_other_sf(self, action) -> bool:
+        """GUA-279：Bomb 经 allocation 拆了另一核 StraightFlush（补星抽张）。
+
+        完整打出 StraightFlush / 仅用炸组四星 Bomb → False。
+        四星炸组 + 从 SF 抽 1 张拼五星 → True。
+        """
+        if not action or not isinstance(action, list) or len(action) < 3:
+            return False
+        if str(action[0] or "") != "Bomb":
+            return False
+        if not self._group_members or not self._group_type_map:
+            return False
+        broken = self._get_broken_core_type(
+            action,
+            self._card_mask or {},
+            self._group_type_map,
+            self._group_members,
+        )
+        return broken == "StraightFlush"
+
+    def _r16_bypass_except_bomb_pad_sf(
+        self, action_list: List,
+    ) -> Tuple[List, List[int]]:
+        """R16 送单旁路：放行几乎全部，但禁 GUA-279 拆他核补星 Bomb。"""
+        keep_indices: List[int] = []
+        removed = 0
+        for idx, action in enumerate(action_list):
+            if self._is_bomb_padding_break_other_sf(action):
+                removed += 1
+                continue
+            keep_indices.append(idx)
+        if not keep_indices:
+            self.logger.warning(
+                "GUA-279/R16 安全阀：仅剩拆他核补星 Bomb，全部放行",
+            )
+            return action_list, list(range(len(action_list)))
+        if removed > 0:
+            self.group_filtered_count += 1
+            self.logger.info(
+                "GUA-279/R16: 移除 %d 个拆他核补星 Bomb，保留 %d",
+                removed, len(keep_indices),
+            )
+        filtered = [action_list[i] for i in keep_indices]
+        filter_map = [-1] * len(action_list)
+        for new_i, old_i in enumerate(keep_indices):
+            filter_map[old_i] = new_i
         return filtered, filter_map
 
     @staticmethod
