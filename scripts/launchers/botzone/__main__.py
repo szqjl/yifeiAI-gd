@@ -15,8 +15,9 @@ Botzone 掼蛋在线 Bot 入口（__main__.py）。
 决策链复用 src/communication/botzone_adapter.BotzoneAdapter：
   - ActionListGenerator / CardTracker / _classify_action / _beats / claim 构造
     与 Local AI 完全一致（同一套协议转换）。
-  - 引擎 UltimateWinRateEngineV7(model=None)：规则栈 + 组牌，不依赖 torch
-    运行时（torch 惰性导入，缺失时 model 恒 None）。
+  - 引擎 UltimateWinRateEngineV7(use_grouping_engine=True, model=None)：
+    组牌 + MemoryTracker + GUA-072 信念 + GUA-234 动态重组 + 残局/Guards；
+    torch 惰性导入，沙箱无 torch 时走规则栈。
 
 打包（scripts/launchers/botzone/package_v8_online.py）会复制 src/ 与
 game_logic/ 等依赖，并将本文件放 zip 根。
@@ -62,10 +63,28 @@ logging.basicConfig(
 logger = logging.getLogger("v8_online")
 
 
+# 在线 Bot 启用的 V8 能力栈（规则路径；BC 权重见 data/bc_model_v3.pth，当前默认不挂）
+_ONLINE_FEATURES = (
+    "grouping_engine",
+    "memory_tracker",
+    "rule_memory_belief",  # GUA-072 + adapter tributeResult/backResult/antiPos
+    "dynamic_regroup",     # GUA-234 P0–E
+    "endgame_pipeline",
+    "guards_v7",
+)
+
+
 def _load_engine():
-    """加载 V8 决策引擎（model=None 规则栈 + 组牌；torch 可选）。"""
+    """加载 V8 决策引擎（model=None 规则栈 + 组牌 + 记忆 + 动态重组）。"""
     from src.v.nn import UltimateWinRateEngineV7
     engine = UltimateWinRateEngineV7(player_id=0, use_grouping_engine=True)
+    engine._dynamic_regroup_enabled = True
+    logger.warning(
+        "V8 online 全功能栈: %s | grouping=%s regroup=%s",
+        ",".join(_ONLINE_FEATURES),
+        engine.use_grouping_engine,
+        engine._dynamic_regroup_enabled,
+    )
     return engine
 
 

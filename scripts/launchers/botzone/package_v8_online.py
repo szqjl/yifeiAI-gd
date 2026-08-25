@@ -104,7 +104,12 @@ def _latest_rev() -> int:
 
 def _should_skip(rel: str) -> bool:
     parts = rel.replace("\\", "/").split("/")
-    if any(s in parts for s in ("__pycache__", "training", "train", "batch_executor",
+    # 仅排除仓库根 src/train/（M3 训练脚本），保留 src/v/nn/training/bc_dataset 等推理切片
+    if rel.startswith("src/train/"):
+        return True
+    if rel.startswith("src/v/nn/training/") and rel != "src/v/nn/training/bc_dataset.py":
+        return True
+    if any(s in parts for s in ("__pycache__", "batch_executor",
                                 "learn", "scripts", "tests", ".git")):
         return True
     if any(fnmatch.fnmatch(rel, s) or rel.endswith(s) for s in _EXCLUDE_SNIPPETS):
