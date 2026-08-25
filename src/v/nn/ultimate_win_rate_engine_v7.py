@@ -1265,11 +1265,12 @@ class UltimateWinRateEngineV7:
 
     def _rule_card_counter_from_state(self, game_state: Dict[str, Any]):
         """GUA-072 / P0a：从 tracker 或 game_state 取 RuleCardCounter。"""
-        if self._tracker is not None:
+        tracker = getattr(self, "_tracker", None)
+        if tracker is not None:
             try:
                 from src.v.nn.features.rule_card_counter import create_counter_from_tracker
 
-                return create_counter_from_tracker(self._tracker)
+                return create_counter_from_tracker(tracker)
             except Exception as e:
                 self.logger.debug("rule counter skip: %s", e)
         tracker = game_state.get("_memory_tracker")
@@ -1290,6 +1291,8 @@ class UltimateWinRateEngineV7:
         """P0a：信念门控跟压。True → 拦截推荐（上游倾向 PASS）。
 
         设计真源：V8-中期压顺灵活性-组牌-动态重组方案.md §3.4 P0a。
+        GUA-274：`can_opponent_form_type`  alone 只记软风险，不硬拦；
+        硬拦仅「拆非炸核心换不稳牌权」或「高炸风险且拆核」。
         """
         my_pos = int(game_state.get("myPos", self.player_id))
         teammate_pos = (my_pos + 2) % 4
@@ -1324,6 +1327,10 @@ class UltimateWinRateEngineV7:
             if opp_rest is not None and int(opp_rest) <= 5:
                 return False
 
+        # 设计 §3.4：can_opponent_form_type 只是「牌权不稳」软风险（减半
+        # current_control_gain），不是硬 PASS。硬拦仅用于「拆非炸核心换
+        # 不稳牌权」——否则 loose 对/散单也会被空记牌误拦，进而触发 R11
+        # 改炸（match 6a8d3d40：有 JJ/QQ/对2 却 Bomb/3）。
         cards = rec.get("cards") or []
         broken = self._get_broken_core_type(
             [action_type, press_rank, list(cards)],
@@ -1332,17 +1339,31 @@ class UltimateWinRateEngineV7:
             self._group_members,
         )
         if broken is not None and broken not in ("Bomb", "StraightFlush"):
-            self.logger.debug(
-                "P0a belief gate: breaks_core=%s type=%s rank=%s",
+            self.logger.info(
+                "P0a belief gate: block breaks_core=%s type=%s rank=%s",
                 broken,
                 action_type,
                 press_rank,
             )
+            return True
         opp_risks = belief.get("opp_bomb_risks") or {}
         risk = float(opp_risks.get(greater_pos, 0) or 0)
         if risk >= 0.6 and broken is not None:
-            self.logger.debug("P0a belief gate: high bomb risk %.2f", risk)
-        return True
+            self.logger.info(
+                "P0a belief gate: block high bomb risk %.2f broken=%s",
+                risk,
+                broken,
+            )
+            return True
+        self.logger.debug(
+            "P0a belief gate: soft risk only type=%s rank=%s "
+            "(can_form=True broken=%s risk=%.2f) → allow",
+            action_type,
+            press_rank,
+            broken,
+            risk,
+        )
+        return False
 
     def _apply_belief_gate_min_press(
         self,
@@ -1352,7 +1373,7 @@ class UltimateWinRateEngineV7:
         """P0a：对 _recommend_min_press_impl 产出做信念门控。"""
         if not rec:
             return None
-        if game_state.get("_belief") is None and self._tracker is not None:
+        if game_state.get("_belief") is None and getattr(self, "_tracker", None) is not None:
             self._inject_belief_vector(game_state)
         if self._belief_gate_counter_press(game_state, rec):
             self.logger.info(
@@ -5027,6 +5048,18 @@ class UltimateWinRateEngineV7:
                     "GUA-075 跟上家: 推荐存在但 actionList 无匹配 → return None 回退")
                 return None
             # 无同型可压 → R11 预检：是否允许改炸
+            # GUA-275：actionList 仍有同型非炸可压 → 禁止改炸，出最廉同型
+            same_from_al = self._pick_cheapest_same_type_from_action_list(
+                action_list, greater_action, cur_rank,
+            )
+            if same_from_al:
+                rec = _ensure_valid(
+                    same_from_al, f"GUA-275跟上家同型优先(greater={greater_type})")
+                if rec:
+                    self.logger.info(
+                        "GUA-275: actionList 有同型可压 → 禁止改炸 type=%s rank=%s",
+                        rec.get("type"), rec.get("rank"))
+                    return rec
             can_bomb, reason = self._r11_bomb_throttle_check(
                 game_state, greater_action, greater_rank, cur_rank)
             if can_bomb:
@@ -5096,6 +5129,17 @@ class UltimateWinRateEngineV7:
                         rec.get("type"), rec.get("rank"), rec.get("cards"))
                     return rec
             # 无同型可压 → R11 预检
+            same_from_al = self._pick_cheapest_same_type_from_action_list(
+                action_list, greater_action, cur_rank,
+            )
+            if same_from_al:
+                rec = _ensure_valid(
+                    same_from_al, f"GUA-275卡下家同型优先(greater={greater_type})")
+                if rec:
+                    self.logger.info(
+                        "GUA-275: 卡下家 actionList 有同型可压 → 禁止改炸 type=%s rank=%s",
+                        rec.get("type"), rec.get("rank"))
+                    return rec
             can_bomb, reason = self._r11_bomb_throttle_check(
                 game_state, greater_action, greater_rank, cur_rank)
             if can_bomb:
@@ -5905,7 +5949,76 @@ class UltimateWinRateEngineV7:
             )
             return broken in _PROTECTED_LEAD_CORE
 
+        def _is_high_cost_single(card: str) -> bool:
+            """GUA-277：K/A/级牌/王视为高耗损领单。"""
+            rk = get_card_rank(str(card))
+            return rk in ("K", "A", "SB", "HR", "B", "R", cur_rank)
+
         # ── 策略：优先出最小的非 core 单张或对子 ──
+        # GUA-277：手牌>10 且散单全是高耗损 → 先 loose 小对/顺，勿甩 K
+        pair_groups = [
+            (gid, ginfo) for gid, ginfo in groups.items()
+            if ginfo["type"] in ("pair",) and ginfo["is_core"] <= 0
+            and len(ginfo["cards"]) >= 2
+        ]
+        straight_groups = [
+            (gid, ginfo) for gid, ginfo in groups.items()
+            if ginfo["type"] == "straight" and len(ginfo["cards"]) >= 5
+        ]
+
+        def _lead_min_loose_pair():
+            if not pair_groups:
+                return None
+            def _pair_sort_key(item):
+                _gid, ginfo = item
+                card = ginfo["cards"][0]
+                return self.RANK_ORDER.get(get_card_rank(str(card)), 99)
+            _gid, ginfo = min(pair_groups, key=_pair_sort_key)
+            cards = sorted(ginfo["cards"])[:2]
+            rank = get_card_rank(str(cards[0]))
+            return {"type": "Pair", "rank": _prank(rank), "cards": cards}
+
+        def _lead_min_straight():
+            if not straight_groups:
+                return None
+            def _st_key(item):
+                _gid, ginfo = item
+                vals = [
+                    self.RANK_ORDER.get(get_card_rank(str(c)), 99)
+                    for c in ginfo["cards"]
+                ]
+                return min(vals) if vals else 99
+            _gid, ginfo = min(straight_groups, key=_st_key)
+            cards = list(ginfo["cards"])
+            # 平台 Straight rank = 最高牌点（惯例）；此处用组内最大点
+            top = max(cards, key=lambda c: self.RANK_ORDER.get(get_card_rank(str(c)), 0))
+            return {
+                "type": "Straight",
+                "rank": _prank(get_card_rank(str(top))),
+                "cards": sorted(str(c) for c in cards),
+            }
+
+        if (
+            hand_size > 10
+            and singles
+            and not is_tribute_round
+            and all(_is_high_cost_single(c) for c in singles)
+        ):
+            pair_rec = _lead_min_loose_pair()
+            if pair_rec:
+                self.logger.info(
+                    "GUA-277 领出: 高耗损散单+手牌>10 → 优先 Pair/%s",
+                    pair_rec.get("rank"),
+                )
+                return pair_rec
+            st_rec = _lead_min_straight()
+            if st_rec:
+                self.logger.info(
+                    "GUA-277 领出: 高耗损散单+手牌>10 → 优先 Straight/%s",
+                    st_rec.get("rank"),
+                )
+                return st_rec
+
         if singles and not is_tribute_round:
             singles = self._filter_joker_lead_singles(singles, game_state)
             singles.sort(key=lambda c: self.RANK_ORDER.get(get_card_rank(c), 99))
@@ -5927,19 +6040,9 @@ class UltimateWinRateEngineV7:
                 }
 
         # 如果没有安全单张，尝试非 core 对子
-        pair_groups = [(gid, ginfo) for gid, ginfo in groups.items()
-                       if ginfo["type"] in ("pair",) and ginfo["is_core"] <= 0
-                       and len(ginfo["cards"]) >= 2]
-        if pair_groups:
-            # 找 rank 最小的对子
-            def _pair_sort_key(item):
-                gid, ginfo = item
-                card = ginfo["cards"][0]
-                return self.RANK_ORDER.get(get_card_rank(str(card)), 99)
-            gid, ginfo = min(pair_groups, key=_pair_sort_key)
-            cards = sorted(ginfo["cards"])[:2]
-            rank = get_card_rank(str(cards[0]))
-            return {"type": "Pair", "rank": _prank(rank), "cards": cards}
+        pair_rec = _lead_min_loose_pair()
+        if pair_rec:
+            return pair_rec
 
         # 没能从非 core 组找到 → 出最小散牌（即使进贡）
         if singles:
@@ -6128,10 +6231,34 @@ class UltimateWinRateEngineV7:
                         candidates, game_state
                     )
                     # GUA-165: 百搭（curRank H 花色）排最后
+                    # GUA-276: TWT/级牌 trips 拆单排在王之后（有王可压时勿拆核）
                     wild_card_sort = f"H{cur_rank}"
-                    candidates.sort(key=lambda x: (1 if x[1] == wild_card_sort else 0, x[0]))
+                    joker_can_press = any(
+                        r in ("SB", "HR") for _, _, r in candidates
+                    )
+
+                    def _is_level_struct_split(card: str) -> bool:
+                        info = (card_mask or {}).get(str(card))
+                        if not info:
+                            return False
+                        gid = info[0]
+                        gtype = (self._group_type_map or {}).get(gid, "")
+                        if gtype not in ("trips", "trip_in_three_with_two"):
+                            return False
+                        return get_card_rank(str(card)) == cur_rank
+
+                    candidates.sort(
+                        key=lambda x: (
+                            1 if _is_level_struct_split(x[1]) else 0,
+                            1 if x[1] == wild_card_sort else 0,
+                            x[0],
+                        )
+                    )
                     for _, best, best_rank in candidates:
                         if best_rank in ("SB", "HR"):
+                            continue
+                        # GUA-276：有王能压时跳过拆级牌 trips/TWT 核
+                        if joker_can_press and _is_level_struct_split(best):
                             continue
                         rec = _gate({
                             "type": "Single",
@@ -6142,11 +6269,19 @@ class UltimateWinRateEngineV7:
                             return rec
                     # GUA-268：P0a 拦信念门控后，仍有非王散单能压 → 用最廉散单，
                     # 不用王（match 6a8d1ca9 上家 Single/3，有 S6 却出 HR）。
+                    # GUA-276：非王优先排除级牌结构拆，有王则出王。
                     non_joker = [
                         item for item in candidates if item[2] not in ("SB", "HR")
                     ]
-                    if non_joker:
-                        _, best, best_rank = non_joker[0]
+                    natural_non_struct = [
+                        item for item in non_joker
+                        if not _is_level_struct_split(item[1])
+                    ]
+                    pick_pool = natural_non_struct if natural_non_struct else (
+                        [] if joker_can_press else non_joker
+                    )
+                    if pick_pool:
+                        _, best, best_rank = pick_pool[0]
                         self.logger.info(
                             "GUA-268 散单优先: P0a 拦信念门控仍出 Single/%s %s",
                             _to_platform_rank(best_rank),
@@ -6158,15 +6293,23 @@ class UltimateWinRateEngineV7:
                             "cards": [str(best)],
                         }
                     # 无非王散单可压时，才用王控单（替代开炸路径）。
+                    # GUA-276：仅剩拆级牌核时，有王则先王。
                     joker_rec = self._joker_control_single_from_candidates(
                         candidates, to_platform_rank=_to_platform_rank,
                     )
                     if joker_rec:
                         self.logger.info(
-                            "GUA-268 王控单: P0a 拦最廉单后改出 Single/%s %s",
+                            "GUA-268/276 王控单: 优先于拆级牌核 → Single/%s %s",
                             joker_rec.get("rank"), joker_rec.get("cards"),
                         )
                         return joker_rec
+                    if non_joker:
+                        _, best, best_rank = non_joker[0]
+                        return {
+                            "type": "Single",
+                            "rank": _to_platform_rank(best_rank),
+                            "cards": [str(best)],
+                        }
                     return None
                 return None
 
@@ -7026,6 +7169,61 @@ class UltimateWinRateEngineV7:
             "type": best[0],
             "rank": str(best[1]),
             "cards": sorted(str(c) for c in best[2]),
+        }
+
+    def _pick_cheapest_same_type_from_action_list(
+        self,
+        action_list,
+        greater_action,
+        cur_rank: str,
+    ) -> Optional[Dict[str, Any]]:
+        """GUA-275：actionList 中能压 greater 的最廉同型非炸/非 SF。"""
+        from src.v.nn.endgame.endgame_decide import _action_beats_greater
+        from src.v.nn.guards.v7_guards import (
+            get_action_type, get_action_rank, get_card_value,
+            ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH,
+        )
+
+        if not greater_action or not isinstance(greater_action, list):
+            return None
+        gt = get_action_type(greater_action)
+        if not gt or gt in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH, "PASS"):
+            return None
+
+        candidates = []
+        for action in action_list or []:
+            if not isinstance(action, list) or len(action) < 3:
+                continue
+            if action[0] != gt:
+                continue
+            if action[0] in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH, "PASS"):
+                continue
+            cards = action[2] if isinstance(action[2], list) else []
+            if not cards:
+                continue
+            try:
+                if not _action_beats_greater(action, greater_action, cur_rank):
+                    continue
+            except Exception:
+                continue
+            # 拆炸核的同型不作为「自然同型」豁免改炸
+            broken = self._get_broken_core_type(
+                action, self._card_mask or {}, self._group_type_map or {},
+                self._group_members,
+            )
+            if broken in ("Bomb", "StraightFlush"):
+                continue
+            rank = str(get_action_rank(action) or action[1] or "")
+            rank_val = get_card_value(f"H{rank}", cur_rank) if rank not in ("B", "R") else 99
+            candidates.append((rank_val, action, rank, cards))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda x: (x[0], tuple(sorted(str(c) for c in x[3]))))
+        _, best, rank, cards = candidates[0]
+        return {
+            "type": gt,
+            "rank": rank,
+            "cards": sorted(str(c) for c in cards),
         }
 
     def _recommend_vs_teammate(

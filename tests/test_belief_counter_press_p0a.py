@@ -64,8 +64,8 @@ def _min_press(engine, hand, **kw):
 class TestBeliefGateCounterPress:
     """P0a：信念门控跟压 vs PASS。"""
 
-    def test_gate_blocks_when_opponent_can_suppress(self):
-        """空记牌 → 对手很可能还能压 T → 拦截跟压。"""
+    def test_gate_allows_natural_press_when_opponent_can_suppress(self):
+        """空记牌 + 自然散单：can_form 仅软风险，不硬拦（GUA-274）。"""
         hand = [
             "ST", "D3", "D4", "D5", "D6", "D7", "D8",
             "C3", "C4", "C5", "C6", "C7", "C8",
@@ -74,7 +74,99 @@ class TestBeliefGateCounterPress:
         tracker = _make_tracker()
         engine = _engine_with_single_press(hand, tracker=tracker)
         rec = _min_press(engine, hand)
-        assert rec is None, "P0a：对手可反压 rank=T 时应拦截跟压"
+        assert rec is not None, "P0a：自然散单不得仅因 can_form 硬拦"
+        assert rec["cards"][0] == "ST"
+
+    def test_gate_blocks_when_breaks_core_and_can_form(self):
+        """拆对核出单 + 对手可反压 → 硬拦（直接测门控；走 card_mask 拆核路径）。"""
+        hand = ["ST", "HT", "D3", "D4", "D5"]
+        tracker = _make_tracker()
+        engine = UltimateWinRateEngineV7(player_id=0)
+        engine._card_mask = {
+            "ST": (0, 1.0, 2),
+            "HT": (0, 1.0, 2),
+            "D3": (-1, 0.0, 1),
+            "D4": (-1, 0.0, 1),
+            "D5": (-1, 0.0, 1),
+        }
+        engine._group_type_map = {0: "pair"}
+        engine._group_members = None  # 走 card_mask is_core 拆核判定
+        engine._tracker = tracker
+        state = {
+            "myPos": 0,
+            "greaterPos": 3,
+            "curRank": "A",
+            "handCards": hand,
+            "_belief": {"hand_counts": {0: 18, 3: 15}, "opp_bomb_risks": {}},
+        }
+        engine._inject_belief_vector(state)
+        assert engine._get_broken_core_type(
+            ["Single", "T", ["ST"]],
+            engine._card_mask,
+            engine._group_type_map,
+            None,
+        ) == "pair"
+        assert engine._belief_gate_counter_press(
+            state, {"type": "Single", "rank": "T", "cards": ["ST"]}
+        ) is True
+
+    def test_gate_allows_loose_pair_j_vs_pair_t(self):
+        """match 6a8d3d40：loose JJ 压 Pair/T，不得因 can_form 硬拦。"""
+        hand = [
+            "SJ", "HJ", "HQ", "SQ", "C2", "S2",
+            "D3", "D3", "C3", "S3",
+            "C4", "C4", "S4", "H4",
+            "H6", "D7", "D8", "H9", "DT",
+            "SK", "DA", "SB",
+        ]
+        tracker = _make_tracker(my_pos=2)
+        engine = UltimateWinRateEngineV7(player_id=2)
+        engine._card_mask = {
+            "SJ": (3, 0.0, 2), "HJ": (3, 0.0, 2),
+            "HQ": (4, 0.0, 2), "SQ": (4, 0.0, 2),
+            "C2": (5, 0.0, 2), "S2": (5, 0.0, 2),
+            "D3": (0, 1.0, 4), "C3": (0, 1.0, 4), "S3": (0, 1.0, 4),
+            "C4": (1, 1.0, 4), "S4": (1, 1.0, 4), "H4": (1, 1.0, 4),
+            "H6": (2, 1.0, 5), "D7": (2, 1.0, 5), "D8": (2, 1.0, 5),
+            "H9": (2, 1.0, 5), "DT": (2, 1.0, 5),
+            "SK": (-1, 0.0, 1), "DA": (-1, 0.0, 1), "SB": (-1, 0.0, 1),
+        }
+        # 第二枚 D3 / C4 需同 gid
+        engine._card_mask["D3"] = (0, 1.0, 4)
+        engine._group_type_map = {
+            0: "Bomb", 1: "Bomb", 2: "straight",
+            3: "pair", 4: "pair", 5: "pair",
+        }
+        engine._group_members = {
+            0: ["D3", "D3", "C3", "S3"],
+            1: ["C4", "C4", "S4", "H4"],
+            2: ["H6", "D7", "D8", "H9", "DT"],
+            3: ["SJ", "HJ"],
+            4: ["HQ", "SQ"],
+            5: ["C2", "S2"],
+            -1: ["SK", "DA", "SB"],
+        }
+        engine._tracker = tracker
+        state = {
+            "myPos": 2,
+            "greaterPos": 1,
+            "greaterAction": ["Pair", "T", ["ST", "HT"]],
+            "handCards": hand,
+            "curRank": "2",
+            "numofplayers": [20, 20, len(hand), 20],
+        }
+        engine._inject_belief_vector(state)
+        rec = engine._recommend_min_press_impl(
+            state,
+            engine._card_mask,
+            state["greaterAction"],
+            "Pair",
+            hand,
+            "2",
+        )
+        assert rec is not None, "GUA-274：loose Pair/J 不得被 P0a 硬拦"
+        assert rec["type"] == "Pair"
+        assert rec["rank"] == "J"
 
     def test_gate_allows_when_cannot_suppress(self):
         """高牌耗尽 → 对手无法压 7 → 放行跟压。"""
