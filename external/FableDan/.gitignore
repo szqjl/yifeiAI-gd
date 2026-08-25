@@ -1,0 +1,42 @@
+# ---- FableDan: exclude weights, data, build artifacts, and private files ----
+
+# Trained models / checkpoints / exported weights (train your own)
+ckpts/
+data/
+*.pt
+*.npz
+*.onnx
+
+# Packaged Botzone submissions
+dist/
+
+# Reference papers / private notes (not redistributed)
+papers/
+
+# Python caches & build
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist-info/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Editor / OS / tooling
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
