@@ -120,3 +120,14 @@ offline_platform/openguandan_latest/log.txt
 
 # Wiki 子工作树缓存产物
 wiki/wiki/queries/
+
+# external 第三方权重与二进制（>1MB，治理 Layer 2 等价；源码入 Git，权重见 external/README.md）
+external/**/ckpts/
+external/**/*.pt
+external/**/*.ckpt
+external/**/*.onnx
+external/**/danserver
+external/Danzero_plus/actor_n/guandan
+
+# Botzone 本地启动脚本（含凭据，勿提交；用 *.example 复制）
+scripts/start_botzone.ps1

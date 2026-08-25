@@ -1,0 +1,37 @@
+# V8 Botzone 在线监听启动模板
+#
+# 用法：
+#   1. 复制为 scripts/start_botzone.ps1（已在 .gitignore，勿提交含密钥版本）
+#   2. 设置环境变量或修改下方 param 默认值：
+#        $env:BOTZONE_USER_ID = "your_user_id"
+#        $env:BOTZONE_API_KEY = "your_api_key"
+#        $env:BOTZONE_TEAMMATE_BOT_ID = "optional_teammate_bot_id"
+#   3. .\scripts\start_botzone.ps1
+#
+# 同一 user-id/api-key 仅允许一个活跃连接；异常退出后需重启监听。
+
+param(
+    [string]$UserId = $env:BOTZONE_USER_ID,
+    [string]$ApiKey = $env:BOTZONE_API_KEY,
+    [string]$BaseUrl = $(if ($env:BOTZONE_BASE_URL) { $env:BOTZONE_BASE_URL } else { "https://www.botzone.org.cn/api" }),
+    [string]$TeammateBotId = $env:BOTZONE_TEAMMATE_BOT_ID,
+    [string]$RepoRoot = $(Split-Path -Parent $PSScriptRoot)
+)
+
+if (-not $UserId -or -not $ApiKey) {
+    Write-Error "请设置 BOTZONE_USER_ID / BOTZONE_API_KEY 环境变量，或传入 -UserId -ApiKey"
+    exit 1
+}
+
+$argsList = @(
+    "scripts/launchers/v8/run_v8_vs_botzone.py",
+    "--user-id", $UserId,
+    "--api-key", $ApiKey,
+    "--base-url", $BaseUrl
+)
+if ($TeammateBotId) {
+    $argsList += @("--teammate-bot-id", $TeammateBotId)
+}
+
+Start-Process -FilePath "python" -ArgumentList $argsList `
+    -WorkingDirectory $RepoRoot -PassThru -WindowStyle Hidden | Select-Object Id

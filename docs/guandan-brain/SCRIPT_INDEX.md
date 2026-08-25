@@ -329,7 +329,8 @@
 | `run_v8_test.bat` | V8 端到端测试 bat 入口 |
 | `run_v8_vs_v8_games.py` | **V8 vs V8 自对弈批跑** — 用 V8 引擎替代 lalala 担任对手，最强对手压力测试 |
 | `run_v8_vs_botzone.py` | **V8 vs Botzone（Local AI 模式）** — 通过 HTTP API 与 Botzone 平台对战 DanLM 等 bot；需 Botzone 账号 + API key；默认 base_url `https://www.botzone.org.cn/api` |
-| `START_BOTZONE.bat` | **V8 vs Botzone 在线监听启动（bat 入口）** — 调用 `run_v8_vs_botzone.py` 挂 Botzone 在线对战；**须用 PowerShell `Start-Process` 后台启动**（bash 会话会 kill 子进程）；同一 user-id/api-key 仅允许一个活跃连接（多实例互相 Kicked）；进程非正常退出（forrtl window-CLOSE）后重启用同一入口 |
+| `START_BOTZONE.bat` | **V8 vs Botzone 在线监听（bat）** — 从环境变量 `BOTZONE_USER_ID` / `BOTZONE_API_KEY` 读取凭据（勿写密钥进文件） |
+| `scripts/start_botzone.ps1.example` | **PowerShell 后台启动模板** — 复制为 `start_botzone.ps1`（已 gitignore）后 `Start-Process` 挂监听 |
 | `test_v8_engine_load.py` | V8 引擎模型加载验证 |
 | `run_12games_test.py` | V8 端到端测试（12 局） |
 | `run_e2e_simple.py` | V8 端到端测试简化版 |
