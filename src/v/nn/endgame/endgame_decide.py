@@ -6149,22 +6149,39 @@ class EndgameDecider:
             return None
 
         # 0. GUA-170-A: 优先非炸压牌（有同型合法压则不用炸）
-        cheaper = self._find_cheapest_press(game_state, action_list, cur_rank)
-        if cheaper is not None:
-            cheaper_idx, cheaper_act = cheaper
-            # GUA-XXX: 若最省压牌拆核心整牌（顺/三带二等）且有 PASS 可选 → PASS
-            if _get_declared_action_type(cheaper_act) not in ("PASS",):
+        # GUA-284: 最省候选若拆核 → 继续试次省散牌，勿直接 PASS
+        # （match=6a8e9548：最省 Q 拆 TWT 核对 J，散牌 HK 可用却被误 PASS）
+        press_candidates = self._find_all_cheapest_press_candidates(
+            game_state, action_list, cur_rank,
+        )
+        if press_candidates:
+            all_break_core = True
+            for cheaper_idx, cheaper_act in press_candidates:
+                if _get_declared_action_type(cheaper_act) in ("PASS",):
+                    continue
                 if self._action_breaks_core_structure(cheaper_act, game_state):
-                    pass_idx = next(
-                        (i for i, a in enumerate(action_list)
-                         if _get_declared_action_type(a) in ("PASS",)),
-                        None,
+                    if self._should_exempt_break_core_for_enemy_five_single(
+                        game_state, ec, cheaper_act,
+                    ):
+                        logger.info("Q3 非炸压牌(省,GUA-252): idx=%d", cheaper_idx)
+                        return (cheaper_idx, cheaper_act)
+                    logger.info(
+                        "Q3 最省压牌拆整牌(%s) 跳过",
+                        _get_declared_action_type(cheaper_act),
                     )
-                    if pass_idx is not None:
-                        logger.info("Q3 最省压牌拆整牌(%s) → PASS", _get_declared_action_type(cheaper_act))
-                        return (pass_idx, action_list[pass_idx])
-            logger.info("Q3 非炸压牌(省): idx=%d", cheaper_idx)
-            return cheaper
+                    continue
+                all_break_core = False
+                logger.info("Q3 非炸压牌(省): idx=%d", cheaper_idx)
+                return (cheaper_idx, cheaper_act)
+            if all_break_core:
+                pass_idx = next(
+                    (i for i, a in enumerate(action_list)
+                     if _get_declared_action_type(a) in ("PASS",)),
+                    None,
+                )
+                if pass_idx is not None:
+                    logger.info("Q3 全部压牌均拆整牌 → PASS")
+                    return (pass_idx, action_list[pass_idx])
 
         # 分离炸弹
         bombs = []
@@ -6198,16 +6215,13 @@ class EndgameDecider:
     # ── GUA-170-A: 最省同型压牌 ──
 
     @staticmethod
-    def _find_cheapest_press(
+    def _find_all_cheapest_press_candidates(
         game_state: Dict[str, Any], action_list: List, cur_rank: str,
-    ) -> Optional[Tuple[int, List]]:
-        """找最省的非炸同型压牌（压 greaterAction），若有则优先于炸弹。
-
-        Returns (index, action) or None。
-        """
+    ) -> List[Tuple[int, List]]:
+        """找所有非炸同型压牌候选，按 rank 值升序（最省在前）。"""
         greater_action = game_state.get("greaterAction") or game_state.get("greater_action")
         if not greater_action or greater_action[0] in ("PASS", None, ""):
-            return None
+            return []
 
         candidates = []
         for i, a in enumerate(action_list):
@@ -6223,11 +6237,23 @@ class EndgameDecider:
                 pass
 
         if not candidates:
-            return None
+            return []
 
-        # 同型内按 rank 值最小（最省）
         candidates.sort(key=lambda x: _min_card_value(x[1], cur_rank))
-        return candidates[0]
+        return candidates
+
+    @staticmethod
+    def _find_cheapest_press(
+        game_state: Dict[str, Any], action_list: List, cur_rank: str,
+    ) -> Optional[Tuple[int, List]]:
+        """找最省的非炸同型压牌（压 greaterAction），若有则优先于炸弹。
+
+        Returns (index, action) or None。
+        """
+        candidates = EndgameDecider._find_all_cheapest_press_candidates(
+            game_state, action_list, cur_rank,
+        )
+        return candidates[0] if candidates else None
 
     @staticmethod
     def _should_exempt_break_core_for_enemy_five_single(

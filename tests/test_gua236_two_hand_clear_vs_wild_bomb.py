@@ -100,8 +100,8 @@ class TestGua236PowerSelectRepro:
         two = _two_clear_plan()
         bomb = _bomb_scatter_plan()
         assert _score_power(two, CUR) > _score_power(bomb, CUR)
-        assert _score_power(two, CUR) == 2
-        assert _score_power(bomb, CUR) == -2
+        assert _score_power(two, CUR) == 0.4
+        assert _score_power(bomb, CUR) == -2.0
 
 
 class TestGua236LeadStraightBeforeTwt:

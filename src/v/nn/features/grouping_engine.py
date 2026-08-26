@@ -66,6 +66,10 @@ NORM_MAX_ROUNDS = 20.0
 NORM_MAX_THREE_PAIRS = 2.0
 NORM_MAX_POWER = 10.0
 
+# 顺子/三带二结构奖（弱权重，避免多顺虚抬 role；2026-08-26 由 +1 降为 +0.2）
+STRUCT_BONUS_PER_STRAIGHT = 0.2
+STRUCT_BONUS_PER_THREE_WITH_TWO = 0.2
+
 # GUA-084：5+ 同点炸弹至少保留 4 张为炸
 BOMB_CORE_MIN = 4
 
@@ -116,7 +120,7 @@ class GroupingPlan:
     recovery_score: float = 0.0      # 静态回收评估 0.3
     flexibility_score: float = 0.0   # 灵活性 0.1
     de_singleton_score: float = 0.0  # 去单化 0.1（单张越少越高）
-    power_score: int = 0             # 牌力计分
+    power_score: float = 0.0             # 牌力计分（含 0.2 级结构奖）
     role: str = ""                   # 角色定位（超强主攻/主攻/助攻/超弱）
 
     # GUA-077：理想出完序（结构层，不含敌情门控）
@@ -1433,7 +1437,7 @@ def _score_flexibility(plan: "GroupingPlan", all_plans: List["GroupingPlan"]) ->
     return (type_div + plan_diff) / 2.0
 
 
-def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
+def _score_power(plan: "GroupingPlan", cur_rank: str) -> float:
     """
     GUA-062 P1：牌力计分（基于 04_card_grouping_skills.md §一 + V7 增强）。
 
@@ -1536,11 +1540,10 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     # 例如 888-999 钢板 = +1（防止因不记分导致 role 被低估）
     score += len(plan.steel_plates)
 
-    # 整牌型结构加分：每个顺子 +1，每个三带二 +1
-    # 抵消小牌罚分对结构强度手牌的误杀（如 SF+炸+2顺+TWT 不应因散5被打到助攻）
-    # 钢板已在上面（GUA-069 稀有牌型）计过一次 +1，此处不重复
-    score += len(plan.straights)
-    score += len(plan.three_with_twos)
+    # 整牌型结构加分：每个顺子 / 三带二 +0.2（弱信号，SF/炸仍是主牌力）
+    # 2026-08-20 曾为 +1/组防误杀；2026-08-26 降为 0.2，避免「三顺蓝图」虚抬超强主攻
+    score += len(plan.straights) * STRUCT_BONUS_PER_STRAIGHT
+    score += len(plan.three_with_twos) * STRUCT_BONUS_PER_THREE_WITH_TWO
 
     # 多炸加分：双炸及更多时额外 +2，反映多炸防守深度优势
     # GUA-184（2026-07-29）：双炸 vs 单炸+结构方案评分倒挂（Plan1 2炸+顺 5+2 > Plan0 1炸+顺+TWT 4）
@@ -1603,7 +1606,7 @@ def _score_power(plan: "GroupingPlan", cur_rank: str) -> int:
     return score
 
 
-def determine_role(power_score: int) -> str:
+def determine_role(power_score: float) -> str:
     """
     GUA-062 P1：根据牌力分确定角色。
 

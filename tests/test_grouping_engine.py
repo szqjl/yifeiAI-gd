@@ -563,7 +563,7 @@ class TestGUA062PowerScore:
                 ["RJ"])  # 大王
         _, plans = enumerate_groupings(hand, "2")
         for p in plans:
-            assert isinstance(p.power_score, int)
+            assert isinstance(p.power_score, (int, float))
             # 至少有炸弹的分
             if p.bombs:
                 assert p.power_score >= 2, \
@@ -574,7 +574,7 @@ class TestGUA062PowerScore:
         hand = make_hand("3", "4", "5", "6", "7", "8", "9", "T")
         _, plans = enumerate_groupings(hand, "2")
         for p in plans:
-            assert isinstance(p.power_score, int)
+            assert isinstance(p.power_score, (int, float))
             # 无炸弹的小牌
             assert p.power_score < 5, \
                 f"弱牌牌力分应<5，got {p.power_score}"

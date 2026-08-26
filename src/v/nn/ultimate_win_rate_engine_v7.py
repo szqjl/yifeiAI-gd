@@ -891,13 +891,44 @@ class UltimateWinRateEngineV7:
                                                 },
                                             )
                         if not blocked_by_mask:
+                            from src.v.nn.play_candidate_competition import (
+                                run_candidate_competition,
+                            )
+                            comp = run_candidate_competition(
+                                self,
+                                game_state,
+                                action_list,
+                                recommendation,
+                                act_index,
+                            )
+                            if comp.rec is not None and comp.act_index >= 0:
+                                recommendation = comp.rec
+                                act_index = comp.act_index
+                                comp_trace = game_state.get("_gua283_competition") or {}
+                                if comp_trace:
+                                    self.logger.info(
+                                        "GUA-283 候选竞争: pick=%s type=%s/%s "
+                                        "weight=%s pool=%d trace=%s",
+                                        comp.picked_source,
+                                        recommendation.get("type"),
+                                        recommendation.get("rank"),
+                                        comp_trace.get("exec_weight"),
+                                        comp_trace.get("pool_size", 0),
+                                        comp_trace,
+                                    )
                             self.recommend_valid_count += 1
                             self.logger.info(
                                 "GUA-075 主路径: recommend=%s/%s → actIndex=%d ✅",
                                 recommendation.get("type"), recommendation.get("rank"), act_index)
                             self._last_decision_layer = "GUA-075推荐"
-                            self._last_decision_score = None
-                            self._last_decision_candidates = len(action_list)
+                            self._last_decision_score = (
+                                (game_state.get("_gua283_competition") or {})
+                                .get("exec_weight")
+                            )
+                            self._last_decision_candidates = len(
+                                (game_state.get("_gua283_competition") or {})
+                                .get("trace", [])
+                            ) or len(action_list)
                             return self._trace_finalize(act_index, action_list, game_state)
                         # 被拦截时继续往下走到回退路径
                     else:
@@ -6240,12 +6271,43 @@ class UltimateWinRateEngineV7:
                 continue
         return False
 
+    def recommend_min_press_all_candidates(
+        self, game_state: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """GUA-285：跟压同型全部 GUA-075 候选（不单 early-return 第一个）。"""
+        from src.v.nn.guards.v7_guards import get_action_type
+
+        greater_action = game_state.get("greaterAction") or []
+        if not greater_action or greater_action[0] == "PASS":
+            return []
+        card_mask = self._card_mask or {}
+        if not card_mask:
+            return []
+        hand_cards = list(game_state.get("handCards") or [])
+        cur_rank = str(game_state.get("curRank", "2"))
+        greater_type = get_action_type(greater_action)
+        result = self._recommend_min_press_impl(
+            game_state,
+            card_mask,
+            greater_action,
+            greater_type,
+            hand_cards,
+            cur_rank,
+            collect_all=True,
+        )
+        if isinstance(result, list):
+            return result
+        if result:
+            return [result]
+        return []
+
     def _recommend_min_press_impl(
         self, game_state, card_mask, greater_action, greater_type,
         hand_cards, cur_rank,
         *,
         apply_belief_gate: bool = True,
-    ) -> Optional[Dict[str, Any]]:
+        collect_all: bool = False,
+    ):
         """
         跟上家牌：找同型可压中最小的（节牌力）。
         如果无同型可压 → 返回 None（不走炸弹推荐，让回退路径决定是否炸）。
@@ -6391,6 +6453,7 @@ class UltimateWinRateEngineV7:
                             x[0],
                         )
                     )
+                    all_single_recs: List[Dict[str, Any]] = []
                     for _, best, best_rank in candidates:
                         if best_rank in ("SB", "HR"):
                             continue
@@ -6403,7 +6466,9 @@ class UltimateWinRateEngineV7:
                             "cards": [str(best)],
                         })
                         if rec:
-                            return rec
+                            all_single_recs.append(rec)
+                            if not collect_all:
+                                return rec
                     # GUA-268：P0a 拦信念门控后，仍有非王散单能压 → 用最廉散单，
                     # 不用王（match 6a8d1ca9 上家 Single/3，有 S6 却出 HR）。
                     # GUA-276：非王优先排除级牌结构拆，有王则出王。
@@ -6419,34 +6484,59 @@ class UltimateWinRateEngineV7:
                     )
                     if pick_pool:
                         _, best, best_rank = pick_pool[0]
-                        self.logger.info(
-                            "GUA-268 散单优先: P0a 拦信念门控仍出 Single/%s %s",
-                            _to_platform_rank(best_rank),
-                            [str(best)],
-                        )
-                        return {
+                        fallback_rec = {
                             "type": "Single",
                             "rank": _to_platform_rank(best_rank),
                             "cards": [str(best)],
                         }
+                        if not any(
+                            r.get("rank") == fallback_rec["rank"]
+                            and r.get("cards") == fallback_rec["cards"]
+                            for r in all_single_recs
+                        ):
+                            all_single_recs.append(fallback_rec)
+                        if not collect_all:
+                            self.logger.info(
+                                "GUA-268 散单优先: P0a 拦信念门控仍出 Single/%s %s",
+                                _to_platform_rank(best_rank),
+                                [str(best)],
+                            )
+                            return fallback_rec
                     # 无非王散单可压时，才用王控单（替代开炸路径）。
                     # GUA-276：仅剩拆级牌核时，有王则先王。
                     joker_rec = self._joker_control_single_from_candidates(
                         candidates, to_platform_rank=_to_platform_rank,
                     )
                     if joker_rec:
-                        self.logger.info(
-                            "GUA-268/276 王控单: 优先于拆级牌核 → Single/%s %s",
-                            joker_rec.get("rank"), joker_rec.get("cards"),
-                        )
-                        return joker_rec
+                        if not any(
+                            r.get("rank") == joker_rec.get("rank")
+                            and r.get("cards") == joker_rec.get("cards")
+                            for r in all_single_recs
+                        ):
+                            all_single_recs.append(joker_rec)
+                        if not collect_all:
+                            self.logger.info(
+                                "GUA-268/276 王控单: 优先于拆级牌核 → Single/%s %s",
+                                joker_rec.get("rank"), joker_rec.get("cards"),
+                            )
+                            return joker_rec
                     if non_joker:
                         _, best, best_rank = non_joker[0]
-                        return {
+                        last_rec = {
                             "type": "Single",
                             "rank": _to_platform_rank(best_rank),
                             "cards": [str(best)],
                         }
+                        if not any(
+                            r.get("rank") == last_rec["rank"]
+                            and r.get("cards") == last_rec["cards"]
+                            for r in all_single_recs
+                        ):
+                            all_single_recs.append(last_rec)
+                    if collect_all:
+                        return all_single_recs
+                    if all_single_recs:
+                        return all_single_recs[0]
                     return None
                 return None
 
