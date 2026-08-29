@@ -1945,6 +1945,13 @@ class EndgameDecider:
         is_my_turn = self._is_my_q1_lead_turn(game_state, my_pos)
         enemies = ec.get("enemies", {})
 
+        if is_my_turn and self._q0_lead_bomb_guard_active(game_state):
+            logger.info(
+                "GUA-287 领出手多非两手清(%d 张) → 禁 Q0 冲刺甩炸，落回 Q1",
+                len(game_state.get("handCards") or []),
+            )
+            return None
+
         # 分离 bomb-like（含平台 StraightFlush）与非 bomb-like
         bombs = []
         non_bombs = []
@@ -2265,6 +2272,29 @@ class EndgameDecider:
             else:
                 # 不急于炸，让对手出 → 残局管线不越权，fall through 到 GUA-075
                 return None
+
+    def _q0_lead_bomb_guard_active(self, game_state: Dict[str, Any]) -> bool:
+        """
+        GUA-287：手牌>5 且语义手数>2（非两手整牌清）→ Q0 自由领出禁冲刺甩炸。
+
+        用户口径（2026-08-29）：有炸 + 手多（非两手清）→ 炸不出领出轮；
+        先整牌锁窗（GUA-107）/ 单诱拆（GUA-220 Tier2），炸弹留作回手/截断。
+        两手整牌（语义≤2，含两手冲刺 GUA-236/257/221 等）不受影响。
+        无 `_group_type_map`（单元测试等构造）保持旧行为（真实对局恒有组牌注入）。
+        """
+        hand_cards = game_state.get("handCards") or []
+        if len(hand_cards) <= 5:
+            return False
+        grouptype_map = game_state.get("_group_type_map")
+        if not grouptype_map:
+            return False
+        try:
+            from .endgame_preprocessor import EndgamePreprocessor as EP
+        except ImportError:  # pragma: no cover
+            from src.v.nn.endgame.endgame_preprocessor import (  # type: ignore
+                EndgamePreprocessor as EP,
+            )
+        return EP.count_semantic_hands(grouptype_map) > 2
 
     def _select_q0_whole_structure_lead(
         self,
@@ -3194,6 +3224,16 @@ class EndgameDecider:
             return None
         if not self._is_q1_following_enemy_control(game_state, ec):
             return None
+
+        # GUA-286：变手炸弹资源 ≥3 把时豁免 GUA-115，开最廉炸截断。
+        # 主敌剩 4 张 + 我方三炸在手，开一把还有两把续控；即便敌藏四炸，
+        # 开一把被反压后仍有炸续控（match=6a927cbd：三炸被 PASS 放走下家 TWT 连牌）。
+        gua286 = self._q1_gua286_three_bombs_vs_four(
+            game_state, action_list,
+        )
+        if gua286 is not None:
+            return gua286
+
         if self._q1_allow_bomb_vs_four_card_enemy_exception(game_state, ec):
             return None
 
@@ -3213,6 +3253,71 @@ class EndgameDecider:
         if has_non_bomb_candidate:
             return None
         return pass_candidate
+
+    def _q1_gua286_three_bombs_vs_four(
+        self,
+        game_state: Dict[str, Any],
+        action_list: List,
+    ) -> Optional[Tuple[int, List]]:
+        """GUA-286：主敌剩 4 张（调用方已判）时，变手炸弹资源 ≥3 开最廉炸截断。
+
+        统计范围：变手 bomb-like 资源（普通炸 ≥4 同点 / 同花顺）≥3，
+        且在 actionList 中存在能压 greaterAction 的炸弹（`_action_beats_greater` 真）。
+        炸弹资源数按 actionList 中 bomb-like 候选的**种类**计：同一手牌的四张点
+        与同花顺分解出的多条路径可能对应多个候选，去重避免重复计数。
+
+        返回最廉 Bomb/SF（`_select_cheapest_bomb_or_sf`：Bomb≻SF，张少≻点小），
+        保留大炸回手续控。
+        """
+        greater_action = game_state.get("greaterAction")
+        if not greater_action:
+            return None
+        if not action_list:
+            return None
+
+        cur_rank = str(game_state.get("curRank", "2"))
+        usable_bombs: List[Tuple[int, List]] = []
+        seen_groups: List[set] = []
+        for i, act in enumerate(action_list):
+            if not isinstance(act, list):
+                continue
+            if not _is_bomb_like_action(act):
+                continue
+            try:
+                atype = get_action_type(act)
+            except Exception:
+                atype = _get_declared_action_type(act)
+            cards = _get_cards(act)
+            if atype == ACTION_TYPE_STRAIGHT_FLUSH:
+                group_key = frozenset(str(c) for c in cards)
+            else:
+                ranks = sorted({get_card_rank(str(c)) for c in cards})
+                group_key = frozenset(ranks)
+            if group_key in seen_groups:
+                continue
+            seen_groups.append(group_key)
+            if _action_beats_greater(act, greater_action, cur_rank):
+                usable_bombs.append((i, act))
+
+        if len(usable_bombs) < 3:
+            return None
+
+        # 最廉 Bomb/SF（Bomb≻SF，张少≻点小），与 GUA-278 _select_cheapest_bomb_or_sf 同语义
+        picked = min(
+            usable_bombs,
+            key=lambda item: (
+                0 if _get_declared_action_type(item[1]) == "Bomb" else 1,
+                len(_get_cards(item[1])),
+                _max_card_value(item[1], cur_rank),
+            ),
+        )
+        if picked is not None:
+            logger.info(
+                "GUA-286: 变手炸弹资源=%d ≥3 vs 主敌报四 → 最廉炸截断 idx=%d type=%s",
+                len(usable_bombs), picked[0],
+                _get_declared_action_type(picked[1]),
+            )
+        return picked
 
     def _q1_finish_now_candidate(
         self, game_state: Dict[str, Any], action_list: List,
@@ -7145,8 +7250,18 @@ class EndgameDecider:
         from collections import Counter
         ranks = Counter(get_card_rank(c) for c in cards)
         counts = sorted(ranks.values())
-        # 钢板 3+3 / 三连对 2+2+2 / 6 星炸
-        return counts in ([3, 3], [2, 2, 2], [6])
+        # 6 星炸：6 张同 rank
+        if counts == [6]:
+            return True
+        # GUA-287: 钢板(3+3)/三连对(2+2+2) 必须 rank 连续才是整手牌型。
+        # 原实现仅比 counts，把「对6+对T+王对」等非连续 rank 组合误判为三连对一手，
+        # 导致 botzone 6a927cbd 14:31:41 V8 手牌剥双炸后剩 6 张散对被判冲刺 → 领出甩炸。
+        if GUARD_TOOLS_OK:
+            if counts == [3, 3]:
+                return EndgameDecider._find_two_trips_cards(cards) is not None
+            if counts == [2, 2, 2]:
+                return EndgameDecider._find_three_pair_cards(cards) is not None
+        return False
 
     @staticmethod
     def _is_single_high_recovery_hand(cards: List[str]) -> bool:
