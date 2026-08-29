@@ -121,6 +121,48 @@ def _is_two_trips_plus_wild_hand(hand_cards: List[str], cur_rank: str) -> bool:
     return sorted(Counter(ranks).values()) == [3, 3]
 
 
+# GUA-288：与 _action_breaks_core_structure 共用的核心整牌类型集合。集中定义防漂移
+# （组牌引擎产出小写 straight/trips 与子组；炸弹/同花顺为大写，见 grouping_engine.py:167）。
+_BOMB_BREAK_CORE_TYPES = frozenset({
+    "StraightFlush", "Bomb", "straight", "trips",
+    "trip_in_three_with_two", "pair_in_three_with_two",
+    "pair_in_three_pair", "trip_in_steel_plate",
+})
+
+
+def _bomb_disrupts_core_group(game_state: Dict[str, Any], action: List) -> bool:
+    """GUA-288：炸弹动作是否借用了其他核心组（SF/straight/trips/Bomb）的牌而未整组消耗
+    → 视为「拆核凑炸」。锚点 match=6a92e4aa 21:55:16：Bomb/T=[CT,ST,ST,H2] 把 H2（红桃
+    配子）从唯一核心 StraightFlush[H5,H6,H7,H2,H9] 抽出凑 4 头炸，H2 出手后同花顺只剩
+    5/6/7/9 四张散单 → V8 队负（scores=[0,3,0,3]）。
+
+    与 _action_breaks_core_structure 不同：后者对 bomb-like 一律豁免（GUA-206：完整炸弹
+    =用核心整牌压制，绝不拆核心打弱牌）；本函数专供 Q1 炸弹排序惩罚——有「整核炸弹」可选
+    时，应优先于「借核凑炸」。不绝对禁用：GUA-278 危急截断等只剩借配炸时可继续使用。
+    整组消耗某核心组视为核心整牌压制（GUA-206 语义），不计拆核。
+    """
+    if not _is_bomb_like_action(action):
+        return False
+    group_members = game_state.get("_group_members")
+    gid_type_map = game_state.get("_group_gid_type_map", {})
+    if not group_members:
+        return False
+    action_counts = Counter(str(c) for c in _get_cards(action))
+    if not action_counts:
+        return False
+    for gid, members in group_members.items():
+        gtype = gid_type_map.get(gid) or gid_type_map.get(str(gid), "")
+        if gtype not in _BOMB_BREAK_CORE_TYPES:
+            continue
+        members_counts = Counter(str(c) for c in members)
+        overlap = action_counts & members_counts
+        if not overlap:
+            continue
+        if overlap != members_counts:
+            return True
+    return False
+
+
 def _min_card_value(action: List, cur_rank: str = "2") -> int:
     """一手牌的最小单张值（领出小点优先用）。"""
     cards = _get_cards(action)
@@ -1066,9 +1108,16 @@ def _sort_q1_block_candidates(
         rank_key = _declared_bomb_rank_value(act, cur_rank)
         if _is_two_trips_plus_wild_hand(hand_cards, cur_rank):
             rank_key = -rank_key
+        # GUA-288：借核心组牌凑炸（wildcard 从唯一 SF/straight/trips/Bomb 抽借）→ 整核炸优先。
+        # 惩罚键位于张数之前：宁可多用 2 张出整核炸，也不拆唯一核心同花顺打成 4 张散单
+        # （match=6a92e4aa 21:55:16）。GUA-281 两手冲刺时配子本就用于拼炸，不惩罚。
+        borrow = 0
+        if not _is_two_trips_plus_wild_hand(hand_cards, cur_rank):
+            borrow = 1 if _bomb_disrupts_core_group(game_state, act) else 0
         return (
             1 if (is_sf and has_non_sf_bomb) else 0,
             1 if split_orphan else 0,
+            borrow,
             len(cards),
             wild_count,
             rank_key,
@@ -3468,6 +3517,27 @@ class EndgameDecider:
         except ImportError:
             from src.v.nn.endgame.endgame_preprocessor import max_end_card
         if not (1 <= upper_remaining <= max_end_card):
+            return None
+
+        # GUA-289：上家本手之前已用过炸弹（historical）→ GUA-270 让道失效，开炸截断。
+        # match=6a92e4aa 21:55:13（第 52 回合）：上家连出 Bomb/4→Bomb/3 剩 3 张，V8 手
+        # 6 星 J 炸仍 GUA-270 PASS → 放走上家冲刺（scores=[0,3,0,3] V8 队负）。
+        # 用户定音（2026-08-29）：上家已用炸说明炸已落底、冲刺在即，不应再按「普通残局
+        # 交队友」让道。口径=historical：不算本手刚出的那把炸（21:55:09 上家第一把
+        # Bomb/4 刚落地仍保持让道）。
+        tracker = game_state.get("_memory_tracker")
+        tracked_bombs = (
+            int(tracker.bombs_played.get(up_pos, 0))
+            if tracker is not None and hasattr(tracker, "bombs_played")
+            else 0
+        )
+        greater_action = game_state.get("greaterAction")
+        greater_is_upper_bomb = (
+            tracked_bombs >= 1
+            and isinstance(greater_action, list)
+            and _is_bomb_like_action(greater_action)
+        )
+        if tracked_bombs - (1 if greater_is_upper_bomb else 0) >= 1:
             return None
 
         teammate_pos = (my_pos + 2) % 4
@@ -6460,11 +6530,8 @@ class EndgameDecider:
         # 炸弹/同花顺为组牌引擎大写 "Bomb"/"StraightFlush"（grouping_engine.py:167）。
         # GUA-199: Bomb 纳入核心 → 拆炸弹 core 打弱牌（如 444+H2 拆 H2 打 22 对子）
         # 被拦截 PASS，防止把炸弹核心当弱牌打出（match=6a71ace3 回合11）。
-        CORE_TYPES = frozenset({
-            "StraightFlush", "Bomb", "straight", "trips",
-            "trip_in_three_with_two", "pair_in_three_with_two",
-            "pair_in_three_pair", "trip_in_steel_plate",
-        })
+        # GUA-288: 集合与模块级 _BOMB_BREAK_CORE_TYPES 保持一致（供 _bomb_disrupts_core_group 复用）。
+        CORE_TYPES = _BOMB_BREAK_CORE_TYPES
 
         for gid, members in group_members.items():
             gtype = gid_type_map.get(gid) or gid_type_map.get(str(gid), "")
