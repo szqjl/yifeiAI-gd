@@ -4891,6 +4891,16 @@ class EndgameDecider:
         # 只剩贵单：打出后若还有不拆核心的贵单/炸可回手，则交给后续最大单路径
         if self._has_clean_followup_stopper(game_state, candidates, beaters[0][1]):
             return None
+        # GUA-290: 打出贵单后剩余为「一手封顶冲刺」（对级牌/对A/王等一墩且
+        # 全高牌，可直推跑完）→ 该出贵单抢回领出权冲刺，不应 PASS。
+        # 锚点 match=6a942e2d1b27100f38da1595 21:21:03：手 SB+对2，上家敌出 Single/Q，
+        # 原 GUA-266 判 dump-precious-no-stopper → PASS 放走敌冲刺（scores=[0,3,0,3]）。
+        if self._precious_single_leaves_sprint_hand(game_state, beaters[0][1]):
+            logger.info(
+                "GUA-290 follow sprint-hand precious: idx=%d card=%s",
+                beaters[0][0], _get_cards(beaters[0][1])[0],
+            )
+            return (beaters[0][0], beaters[0][1])
         if pass_item is None:
             return None
         logger.info("GUA-266 follow dump-precious-no-stopper → PASS")
@@ -4941,6 +4951,39 @@ class EndgameDecider:
                 continue
             if not self._is_precious_single_card(cards[0], cur_rank):
                 continue
+            return True
+        return False
+
+    def _precious_single_leaves_sprint_hand(
+        self,
+        game_state: Dict[str, Any],
+        played: List,
+    ) -> bool:
+        """GUA-290：打出贵单后，剩余是否为一手封顶冲刺（同 rank 墩且高牌）。
+
+        口子：GUA-266 原判「贵单无干净回手 → PASS」只从防线视角看「能否再拦」，
+        没看进攻视角——打出小王后剩余对级牌/对A 是一手直推、拿回领出权即冲刺，
+        根本不需要回手。此处判定剩余均为同一高 rank（级牌/王/A），即为一手封顶。
+        """
+        played_list = _get_cards(played)
+        left = list(game_state.get("handCards") or [])
+        for c in played_list:
+            try:
+                left.remove(c)
+            except ValueError:
+                pass
+        if not left:
+            return False
+        cur_rank = str(game_state.get("curRank", "2"))
+        ranks = {get_card_rank(c) for c in left}
+        if len(ranks) != 1:
+            return False
+        rk = next(iter(ranks))
+        if rk in ("SB", "HR"):
+            return True
+        if rk == str(cur_rank):
+            return True
+        if rk == "A":
             return True
         return False
 
