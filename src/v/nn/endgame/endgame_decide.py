@@ -231,6 +231,26 @@ def _bomb_family_strength(action: List, cur_rank: str = "2") -> Optional[Tuple[i
     return None
 
 
+def _bomb_weakest_first_key(action: List, cur_rank: str = "2") -> int:
+    """bomb family 排序键（弱→强优先）：键越小越弱越优先 →「炸够用就好」。
+
+    与牌力序一致（guandan-knowledge L205）：同花顺(55) > 5星炸(50) > 4星炸(40)。
+    对一组「均能压过对手」的候选，优先用**最弱一档**即可（够用就好，不浪费更
+    强火力、不乱动同花顺）；仅当更弱档都不够压时才落到同花顺。
+    按**平台声明类型** + 张数算 level（比 `_bomb_family_strength` 更稳，后者经
+    `get_action_type` 对含配子的 5 星炸/同花顺可能重导为其它类型返回 None）：
+    同花顺=55，N 星炸=N*10（4星=40<5星=50<同花顺=55）。被 `min` 取最小时选中最弱可用档。
+    """
+    cards = _get_cards(action)
+    n = len(cards)
+    atype = _get_declared_action_type(action)
+    if atype in (ACTION_TYPE_STRAIGHT_FLUSH, "StraightFlush", "STRAIGHT_FLUSH"):
+        return 55
+    if atype in (ACTION_TYPE_BOMB, "Bomb", "BOMB"):
+        return n * 10
+    return 0
+
+
 def _hand_has_natural_joker_bomb(hand_cards: List[str]) -> bool:
     """手牌能否构成王炸（2 大王 + 2 小王）。"""
     sb = hr = 0
@@ -1089,11 +1109,21 @@ def _sort_q1_block_candidates(
     if len(bomb_items) <= 1:
         return ordered
 
-    # GUA-188: 检测是否存在非 SF 的普通炸弹（用于 SF 延后键）
-    has_non_sf_bomb = any(
-        _get_declared_action_type(
-            item[1] if isinstance(item, tuple) and len(item) == 2 else item
-        ) not in ("StraightFlush", "STRAIGHT_FLUSH")
+    # GUA-188: 检测是否存在非 SF 的普通炸弹（用于 SF 延后键）。
+    # GUA-296：若所有非 SF 候选都是「拆核心组凑的炸」（借用同花顺/顺子/三条的牌，
+    # 见 GUA-288 _bomb_disrupts_core_group），则它们并不比同花顺更「够用/保结构」，
+    # 此时不应把同花顺延后——否则会拆掉原组牌引擎已组好的 StraightFlush 去凑 5 星炸
+    # （锚点 match=6a95841d turn12：对手 4头炸 QQQQ，4星 3、4 压不过；5个3含黑桃3、
+    #  5个4含黑桃4+黑桃5/6/7，应用 3-7 同花顺压，保留 3炸+4炸）。
+    has_preserving_non_sf_bomb = any(
+        (
+            _get_declared_action_type(
+                item[1] if isinstance(item, tuple) and len(item) == 2 else item
+            ) not in ("StraightFlush", "STRAIGHT_FLUSH")
+        ) and not _bomb_disrupts_core_group(
+            game_state,
+            item[1] if isinstance(item, tuple) and len(item) == 2 else item,
+        )
         for item in bomb_items
     )
 
@@ -1115,7 +1145,8 @@ def _sort_q1_block_candidates(
         if not _is_two_trips_plus_wild_hand(hand_cards, cur_rank):
             borrow = 1 if _bomb_disrupts_core_group(game_state, act) else 0
         return (
-            1 if (is_sf and has_non_sf_bomb) else 0,
+            # 仅当存在「保结构的非同花顺炸弹」时才把同花顺延后（GUA-296：拆核凑炸不算）
+            1 if (is_sf and has_preserving_non_sf_bomb) else 0,
             1 if split_orphan else 0,
             borrow,
             len(cards),
@@ -3351,11 +3382,18 @@ class EndgameDecider:
         if len(usable_bombs) < 3:
             return None
 
-        # 最廉 Bomb/SF（Bomb≻SF，张少≻点小），与 GUA-278 _select_cheapest_bomb_or_sf 同语义
+        # 最廉 Bomb/SF（先保结构、再按牌力弱→强，够用就好），与 GUA-278 同语义。
+        # GUA-296：① 首键「拆核心组」惩罚——不拆原组牌引擎已组好的 StraightFlush 去凑
+        # 5 星炸（5个3含黑桃3、5个4含黑桃4+黑桃5/6/7 → 应保留 3炸+4炸+同花顺 而非
+        # 用 5个3 拆 SF）。锚点 match=6a95841d turn12：4 头炸 3、4 压不过对手 4头炸 QQQQ，
+        # 原逻辑 Bomb≻SF 直接选 33333 拆 SF（GUA-154 self broken=['StraightFlush']）。
+        # ② 次键用牌力序 _bomb_weakest_first_key（SF≻Bomb，4星<5星<同花顺）：候选均够压时
+        # 优先最弱一档（4星炸够用就用，不动同花顺）；仅当更弱档不够压才落到同花顺。
         picked = min(
             usable_bombs,
             key=lambda item: (
-                0 if _get_declared_action_type(item[1]) == "Bomb" else 1,
+                _bomb_disrupts_core_group(game_state, item[1]),
+                _bomb_weakest_first_key(item[1], cur_rank),
                 len(_get_cards(item[1])),
                 _max_card_value(item[1], cur_rank),
             ),
@@ -6679,14 +6717,16 @@ class EndgameDecider:
     def _select_cheapest_bomb_or_sf(
         self, action_list: List, cur_rank: str = "2",
     ) -> Optional[Tuple[int, List]]:
-        """GUA-278：actionList 中最廉 Bomb/StraightFlush（Bomb≻SF，张少≻点小）。"""
+        """GUA-278：actionList 中最廉 Bomb/StraightFlush（牌力弱→强优先，够用就好）。"""
         cands: List[Tuple[int, int, int, int, List]] = []
         for i, a in enumerate(action_list or []):
             at = _get_declared_action_type(a)
             if at not in ("Bomb", "StraightFlush"):
                 continue
             cards = _get_cards(a)
-            family = 0 if at == "Bomb" else 1
+            # 牌力序（guandan-knowledge）：SF(55)≻5星(50)≻4星(40)。
+            # 弱→强优先 = 够用就好；4星够压就用 4星，不浪费更强火力/不动同花顺。
+            family = _bomb_weakest_first_key(a, cur_rank)
             cands.append(
                 (family, len(cards), _max_card_value(a, cur_rank), i, a)
             )
