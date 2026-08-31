@@ -2161,6 +2161,12 @@ class BotzoneAdapter:
         # GUA-293：注入跨对局累计的「各席已出炸弹数」（在线 MemoryTracker 拿不到），
         # GUA-289 据此判「上家敌 historical 已用炸」→ GUA-270 让道失效。
         game_state["_bombs_played_by_seat"] = self._count_bombs_played(game)
+        # GUA-294：注入「队友本圈是否已 PASS」，供候选竞争在对手控牌时判
+        # 「若我方也 PASS 则对手白跑」→ 弱牌也须压制。
+        mate_pos = (game.player_id + 2) % 4
+        game_state["_teammate_passed_current_trick"] = any(
+            p == mate_pos and not ac for (p, ac, _cc) in parsed_history
+        )
 
         # 4. Call V8's decision engine
         from collections import Counter as _C

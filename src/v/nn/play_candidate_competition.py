@@ -405,6 +405,9 @@ E1_TEAMMATE_WIN_GAIN_BOOST = 0.38
 E1_RESIDUAL_PENALTY_SCALE = 0.25
 E4_SELF_RESCUE_CONTROL_BOOST = 0.18
 E4_MAX_RESIDUAL_ROUNDS = 2
+# GUA-294：队友已 PASS + 对手控牌 → 弱牌也须压制（防对手白跑牌）。
+E5_TEAMMATE_PASSED_BLOCK_BOOST = 0.5
+E5_TEAMMATE_PASSED_BLOCK_BOOST_STRONG = 0.3
 
 
 def _my_pos(game_state: Dict[str, Any]) -> int:
@@ -519,6 +522,35 @@ def _enemy_block_control_boost(
     ):
         return 0.0
     return E2_CONTROL_GAIN_BOOST
+
+
+def _teammate_passed_block_gain(
+    engine: Any,
+    game_state: Dict[str, Any],
+    rec: Dict[str, Any],
+) -> float:
+    """GUA-294：队友已 PASS + 对手控牌 → 抬高「压制」收益，弱牌也须收回牌权。
+
+    场景：当前 greater 是**对手**（非自己、非队友）打出，且**队友在本圈已 PASS**
+    ——若我方也 PASS，则对手白跑一手继续控牌，队友此前 PASS 等于浪费。
+    此时即便牌力超弱也应出一手合法压制（最省的那手），避免对手跑牌。
+    仅对「压制」候选（非 PASS）加成；PASS 候选不享受。
+
+    牌力越弱加成越大：超弱/助攻 用 E5_TEAMMATE_PASSED_BLOCK_BOOST，
+    其余角色用 E5_TEAMMATE_PASSED_BLOCK_BOOST_STRONG。
+    """
+    if str(rec.get("type") or "") == "PASS":
+        return 0.0
+    if not game_state.get("_teammate_passed_current_trick"):
+        return 0.0
+    my_pos = int(game_state.get("myPos", 0) or 0)
+    great = int(game_state.get("greaterPos", -1) or -1)
+    if great in (-1, my_pos, _teammate_pos(game_state)):
+        return 0.0
+    role = getattr(engine, "_current_role", None) or "主攻"
+    if role in ("助攻", "超弱"):
+        return E5_TEAMMATE_PASSED_BLOCK_BOOST
+    return E5_TEAMMATE_PASSED_BLOCK_BOOST_STRONG
 
 
 def _apply_exemption_to_penalties(
@@ -721,6 +753,8 @@ def score_play_candidate(
     control_gain += _self_rescue_control_boost(
         game_state, rec, residual.metrics.residual_rounds,
     )
+    # GUA-294：队友已 PASS + 对手控牌 → 弱牌也须收回牌权（防对手白跑）。
+    control_gain += _teammate_passed_block_gain(engine, game_state, rec)
 
     plan_loss, waste_penalty, structure_penalty = _apply_exemption_to_penalties(
         exemption,
