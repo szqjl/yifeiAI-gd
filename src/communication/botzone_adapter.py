@@ -1424,6 +1424,34 @@ class BotzoneAdapter:
                 continue
             game.played_cards.setdefault(player, set()).update(action_cards)
 
+    def _count_bombs_played(self, game: BotzoneGameState) -> dict:
+        """GUA-293：跨整个对局累计各席炸弹数（含同花顺），供 GUA-289 读上家 historical 炸。
+
+        背景：Botzone 在线每次只把「当前 request 的 history」喂给引擎 MemoryTracker，
+        且 `_replay_history_to_tracker` 的 `_tracker_history_replayed` 停在首副首圈长度后
+        永不增长 → 在线模式 MemoryTracker.bombs_played 恒空，GUA-289 读它永远拿不到
+        上家 historical 炸而失效（match 6a9517d9 第49回合放走上家）。
+        此处改用 adapter 端累计的 game.play_history（整个对局，_handle_play_request 逐
+        request extend），按 (player, 牌面集合) 去重统计炸弹数，跨 request 重叠安全。
+        """
+        cur_rank = game.cur_rank
+        bombs: dict = {}
+        seen = set()
+        for player, action_cards, claim_cards in self._parse_bz_play_history(game.play_history):
+            if player < 0 or not action_cards:
+                continue
+            v8_action = self._bz_response_to_v8_action(
+                action_cards, bz_claim_cards=claim_cards, cur_rank=cur_rank)
+            if not v8_action or str(v8_action[0]).upper() == "PASS":
+                continue
+            if str(v8_action[0]).upper() in ("BOMB", "STRAIGHTFLUSH"):
+                key = (player, tuple(sorted(str(c) for c in v8_action[2])))
+                if key in seen:
+                    continue
+                seen.add(key)
+                bombs[player] = bombs.get(player, 0) + 1
+        return bombs
+
     def _compute_numofplayers(self, game: BotzoneGameState,
                               hand_cards: List[str],
                               known_done: List[int]) -> List[int]:
@@ -2130,6 +2158,9 @@ class BotzoneAdapter:
             "backResult": tribute_phase.get("backResult"),
             "antiPos": tribute_phase.get("antiPos"),
         }
+        # GUA-293：注入跨对局累计的「各席已出炸弹数」（在线 MemoryTracker 拿不到），
+        # GUA-289 据此判「上家敌 historical 已用炸」→ GUA-270 让道失效。
+        game_state["_bombs_played_by_seat"] = self._count_bombs_played(game)
 
         # 4. Call V8's decision engine
         from collections import Counter as _C

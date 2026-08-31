@@ -308,6 +308,13 @@ class MemoryTracker:
         if is_lead:
             self._set_current_trick_lead(seat, declared_type, declared_rank)
 
+        # GUA-293：本手出的是炸弹/同花顺 → 记入 bombs_played[seat]。
+        # GUA-289 依 bombs_played 判「上家敌 historical 已用炸」→ GUA-270 让道失效；
+        # 此前 bombs_played 从不被填充（恒 0），GUA-289 成死代码。
+        # 口径=historical：本手刚出的炸也算炸弹资源里（GUA-289 侧会对「上家本手炸」扣 1）。
+        if str(action[0]).upper() in ("BOMB", "STRAIGHTFLUSH"):
+            self.record_bomb(seat)
+
         # GUA-179：若用炸/同花顺压制非炸牌型 → 记为该牌型弱点
         ga = ctx.get("greaterAction")
         if (isinstance(ga, list) and len(ga) >= 3 and str(action[0]).upper()

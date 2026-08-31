@@ -3525,12 +3525,18 @@ class EndgameDecider:
         # 用户定音（2026-08-29）：上家已用炸说明炸已落底、冲刺在即，不应再按「普通残局
         # 交队友」让道。口径=historical：不算本手刚出的那把炸（21:55:09 上家第一把
         # Bomb/4 刚落地仍保持让道）。
-        tracker = game_state.get("_memory_tracker")
-        tracked_bombs = (
-            int(tracker.bombs_played.get(up_pos, 0))
-            if tracker is not None and hasattr(tracker, "bombs_played")
-            else 0
-        )
+        # GUA-293：优先用 adapter 跨对局累计的 bombs_played（在线 MemoryTracker 恒空，
+        # 见 botzone_adapter._count_bombs_played 注释）；无则回退 _memory_tracker。
+        cumulative_bombs = game_state.get("_bombs_played_by_seat")
+        if isinstance(cumulative_bombs, dict):
+            tracked_bombs = int(cumulative_bombs.get(up_pos, 0))
+        else:
+            tracker = game_state.get("_memory_tracker")
+            tracked_bombs = (
+                int(tracker.bombs_played.get(up_pos, 0))
+                if tracker is not None and hasattr(tracker, "bombs_played")
+                else 0
+            )
         greater_action = game_state.get("greaterAction")
         greater_is_upper_bomb = (
             tracked_bombs >= 1
