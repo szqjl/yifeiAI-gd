@@ -428,6 +428,44 @@ def _pick_smallest_three_pair(
     return gid, typ, pr, cards
 
 
+def _pick_guang_trips(
+    engine: "UltimateWinRateEngineV7",
+    groups: Dict[int, dict],
+    cur_rank: str,
+) -> Optional[tuple]:
+    """GUA-295 光三：挑最小小 trio 作裸三张领出。
+
+    光三场景下小 trio（如 333）被组进 trip_in_three_with_two，但
+    _pick_smallest_natural_trips 只认 type=="trips" 会漏。这里把小 trio
+    拆出当裸三张（弱牌先出），仅挑弱 trio（点 ≤ T），避免拆大 trio 组核。
+    """
+    from src.v.nn.guards.v7_guards import CARD_RANK_ORDER, get_card_rank
+
+    def _prank(internal_rank: str) -> str:
+        return engine.INTERNAL_TO_PLATFORM_RANK.get(internal_rank, internal_rank)
+
+    best = None
+    for gid, ginfo in groups.items():
+        if ginfo["type"] not in ("trips", "trip_in_three_with_two"):
+            continue
+        cards = sorted(str(c) for c in ginfo["cards"])[:3]
+        if len(cards) < 3:
+            continue
+        rank = get_card_rank(cards[0])
+        if rank == cur_rank:
+            continue
+        val = CARD_RANK_ORDER.get(rank, 99)
+        if val > CARD_RANK_ORDER["T"]:
+            continue
+        key = (_pip_order(cards[0], cur_rank), cards)
+        if best is None or key < best[0]:
+            best = (key, gid, "Trips", _prank(rank), cards)
+    if not best:
+        return None
+    _, gid, typ, pr, cards = best
+    return gid, typ, pr, cards
+
+
 def _pick_smallest_natural_trips(
     engine: "UltimateWinRateEngineV7",
     groups: Dict[int, dict],
@@ -722,6 +760,18 @@ def recommend_main_attack_lead(
     elif twt_pick and not _sprint_two_hands:
         gid, typ, pr, cards = twt_pick
         defer = twt_count == 1 and stage == "stage_1"
+        # GUA-295: 弱三带二（三张点 ≤ T）属「弱牌先出」，即使独 TWT 也应领出，
+        # 否则回退到 lead_impl 会先烧 级牌对/大对K 等控制牌。非弱 TWT 仍 defer。
+        _trip_card = str(cards[0]) if cards else None
+        _trip_rank = get_card_rank(_trip_card) if _trip_card else None
+        _trip_val = (
+            CARD_RANK_ORDER.get(_trip_rank, 99)
+            if _trip_rank and _trip_rank != cur_rank
+            else 99
+        )
+        _weak_twt_lead = _trip_val <= CARD_RANK_ORDER["T"]
+        if _weak_twt_lead:
+            defer = False
         # GUA-198: 独 TWT 仅炸弹回手（无同型回手）时，若存在「同型回手」顺子
         # → 让 P3 顺子先领（6-10 回手 9-K 不耗炸），TWT 留作后续
         _twt_same_recap = _has_twt_recapture(groups, gid)
@@ -806,6 +856,22 @@ def recommend_main_attack_lead(
             }
 
     # ── P3d：天然三张 Trips（不含钢板/TWT 子结构）──
+    # GUA-295：光三（_skip_p2_for_trips）时，小 trio（如 333）虽被组进
+    # trip_in_three_with_two，也应作为裸三张领出（弱牌先出），避免回退烧控制牌。
+    if _skip_p2_for_trips:
+        gtrips_pick = _pick_guang_trips(engine, groups, cur_rank)
+        if gtrips_pick:
+            gid, typ, pr, cards = gtrips_pick
+            if _has_structure_recapture(
+                groups, lead_gid=gid, kind="trips", engine=engine, cur_rank=cur_rank,
+            ):
+                return {
+                    "type": typ,
+                    "rank": pr,
+                    "cards": cards,
+                    "intent": "main_p3d_guang_trips",
+                }
+
     trips_pick = _pick_smallest_natural_trips(engine, groups, cur_rank)
     if trips_pick:
         gid, typ, pr, cards = trips_pick

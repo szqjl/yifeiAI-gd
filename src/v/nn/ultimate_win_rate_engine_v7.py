@@ -4967,6 +4967,23 @@ class UltimateWinRateEngineV7:
                 if a_type == r_type and a_rank == r_rank and a_cards == r_cards:
                     return rec
 
+            # GUA-295：连续结构（ThreePair/TwoTrips/Straight/StraightFlush）的
+            # rank 字段约定不同：组牌引擎推荐用「低点」，platform actionList 用
+            # 「高点」（如 5-6-7 连对 rec=5 vs actionList=7）→ 精确/type+rank 均失配，
+            # GUA-090/091 推荐每手领出都被拒 → 回退候选竞争打出大对K/空刃SF/级牌对2。
+            # 补一道「type + 牌张集合」重排匹配（牌张集合唯一决定该结构，与 rank 约定无关）。
+            for a in action_list:
+                if not a or len(a) < 2:
+                    continue
+                a_type = a[0]
+                a_cards = sorted(str(c) for c in (a[2] if len(a) >= 3 and isinstance(a[2], list) else a))
+                if a_type == r_type and a_cards == r_cards:
+                    a_rank = a[1] if len(a) >= 2 else r_rank
+                    self.logger.info(
+                        "GUA-295 %s: 推荐 type+cards 匹配(actionList rank=%s) rec_cards=%s",
+                        scenario_label, a_rank, r_cards)
+                    return {"type": a_type, "rank": a_rank, "cards": a_cards}
+
             # 精确匹配失败 → 宽松匹配：找 actionList 中同 type+rank 的第一个条目
             for a in action_list:
                 if not a or len(a) < 2:
@@ -7544,6 +7561,19 @@ class UltimateWinRateEngineV7:
 
             if c_type == r_type and c_rank == r_rank and c_cards == r_cards:
                 return i
+
+        # GUA-295：连续结构 rank 约定差异（组牌引擎 rec=低点 vs platform actionList=高点，
+        # 如 5-6-7 连对 rec=5 / actionList=7）→ 精确匹配失配时，按「type + 牌张集合」
+        # 重排匹配。牌张集合唯一决定该结构，与 rank 字段约定无关，且能取回 platform 正确 rank。
+        if r_type in ("ThreePair", "TwoTrips", "Straight", "StraightFlush"):
+            for i, candidate in enumerate(action_list):
+                if not candidate:
+                    continue
+                c_type = candidate[0] if len(candidate) >= 1 else ""
+                c_cards_raw = candidate[2] if len(candidate) >= 3 and isinstance(candidate[2], list) else candidate
+                c_cards = sorted([str(c) for c in c_cards_raw])
+                if c_type == r_type and c_cards == r_cards:
+                    return i
 
         return -1
 
