@@ -1139,12 +1139,14 @@ class BotzoneAdapter:
         之所以需要：重放时 _on_request 只重建「他人动作带来的 state」，
         自己出过的牌必须从 hand_cards 扣除，否则当前回合手牌数错误。
         """
-        if not resp_raw or not isinstance(resp_raw, str):
+        if resp_raw is None:
             return
-        try:
-            resp = json.loads(resp_raw)
-        except json.JSONDecodeError:
-            return
+        resp = resp_raw
+        if isinstance(resp_raw, str):
+            try:
+                resp = json.loads(resp_raw)
+            except json.JSONDecodeError:
+                return
         if not isinstance(resp, list) or not resp:
             return
         action_cards = resp[0]

@@ -1518,6 +1518,51 @@ def test_online_single_turn_applies_own_history_to_hand():
     assert len(game.hand_cards) == 26, len(game.hand_cards)
 
 
+def test_online_full_input_applies_own_list_responses_to_hand():
+    """GUA-291：全量重放模式（带 requests.responses）必须扣除自己已出的牌。
+
+    线上 bot（scripts/launchers/botzone/__main__.py）对 stdin 做 json.loads，
+    full_input["responses"] 是【已解析的 list】而非 JSON 字符串。此前
+    _apply_online_self_response 以 isinstance(str) 校验，list 直接空返回，
+    导致自己出过的牌（如 SB=52）从不从 hand_cards 扣除 → 手牌漂移，
+    后续回合可能打出已在手牌中消失的牌（实测平台响应 [[52],[52]]=SB 非法）。
+
+    修复后：list 型 responses 也被正常解析，自己出的 S5(72)/SB(52) 从手牌扣除。
+    """
+    from src.communication.botzone_adapter import BotzoneAdapter
+    import json
+    engine = _FakeEngine()
+    adapter = BotzoneAdapter("test", "test_key", decision_engine=engine, player_id=0)
+    # deliver 含 72(S5)、52(SB)：27 张手牌，其中 SB/S5 各一张
+    deal = {"stage": "deal",
+            "deliver": [38, 51, 80, 5, 52, 13, 72, 50, 7, 58, 69, 27,
+                        88, 67, 34, 66, 23, 41, 43, 11, 81, 96, 61, 14,
+                        92, 90, 44],
+            "your_id": 0, "global": {"level": "2"}}
+    lead = {"stage": "play",
+            "history": [[], [], [], []], "done": [], "pass_on": -1,
+            "global": {"level": "2", "tribute": 0, "first": None, "last": None}}
+    second = {"stage": "play",
+              "history": [{"player": 0, "response": [[72], [72]]},
+                          {"player": 1, "response": [[94], [94]]},
+                          {"player": 2, "response": [[105], [105]]},
+                          {"player": 3, "response": [[54], [54]]}],
+              "done": [], "pass_on": -1,
+              "global": {"level": "2", "tribute": 0, "first": None, "last": None}}
+    # responses 为 JSON 已解析的 list（平台真实形态）
+    responses = [[], [[72], [72]]]
+    adapter.handle_online_turn_sync(
+        {"requests": [deal, lead, second], "responses": responses})
+    game = adapter.games["online"]
+    # 自己(P0)在 lead 回合出了 S5(72)；SB(52) 是当前回合待决策，未出、仍在手
+    assert "S5" not in game.hand_cards, "自己已出的 S5 应从手牌扣除: %s" % (
+        sorted(game.hand_cards),)
+    assert "SB" in game.hand_cards, "SB 尚未出、应仍留在手牌: %s" % (
+        sorted(game.hand_cards),)
+    # 27 - 1(S5) = 26
+    assert len(game.hand_cards) == 26, len(game.hand_cards)
+
+
 def test_lead_wild_straight_fills_gap():
     """GUA-217：配子 H{cur_rank} 补普通顺子缺位。
 
