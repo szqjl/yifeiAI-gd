@@ -59,6 +59,10 @@ class CandidateScore:
     vetoed: bool = False
     veto_reason: str = ""
     exemption: str = ""
+    joker_penalty: float = 0.0
+
+
+PRESERVE_JOKER_CONTROL_PENALTY = 0.6
 
 
 @dataclass
@@ -613,6 +617,80 @@ def _control_gain(
     return gain
 
 
+def _is_joker_single(
+    rec: Dict[str, Any],
+    cur_rank: str,
+) -> bool:
+    """GUA-298：候选是否为「大王/小王」单张跟压（HR=大王, SB=小王）。"""
+    if str(rec.get("type") or "") != "Single":
+        return False
+    rank = str(rec.get("rank") or "")
+    if rank in ("R", "B"):
+        return True
+    for c in (rec.get("cards") or []):
+        if str(c) in ("HR", "SB"):
+            return True
+    return False
+
+
+def _has_non_joker_single_press(
+    game_state: Dict[str, Any],
+    cur_rank: str,
+) -> bool:
+    """GUA-298：actionList 是否存在「非王」单张能压过 greaterAction。"""
+    from src.v.nn.endgame.endgame_decide import (
+        _action_beats_greater,
+        _get_declared_action_type,
+        _is_bomb_like_action,
+    )
+    from src.v.nn.guards.v7_guards import get_action_type
+
+    greater_action = game_state.get("greaterAction") or []
+    action_list = game_state.get("actionList") or []
+    if not greater_action or greater_action[0] in ("PASS", ""):
+        return False
+    if get_action_type(greater_action) != "Single":
+        return False
+    for action in action_list:
+        try:
+            if _get_declared_action_type(action) in ("PASS",):
+                continue
+            if _is_bomb_like_action(action):
+                continue
+            if get_action_type(action) != "Single":
+                continue
+            if not _action_beats_greater(action, greater_action, cur_rank):
+                continue
+            cards = action[2] if len(action) > 2 and isinstance(action[2], list) else []
+            if any(str(cac) in ("HR", "SB") for cac in cards):
+                continue
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _preserve_joker_control_penalty(
+    engine: Any,
+    game_state: Dict[str, Any],
+    rec: Dict[str, Any],
+    cur_rank: str,
+) -> float:
+    """GUA-298：跟在廉可压单后烧王作普通单 → 罚分，防凭 E3 豁免超车。
+
+    主攻应顺势跟小单、保留王作控制。当候选为单张王且存在非王普通单也能
+    压过 greaterAction 时，出王属浪费最高控制牌 → 罚 PRESERVE_JOKER_CONTROL_PENALTY。
+    仅当没有廉可压单（只有靠王才能拿圈）时为 0，不误伤合法用王。
+    """
+    if not _is_joker_single(rec, cur_rank):
+        return 0.0
+    if not _is_follow_press_scenario(game_state):
+        return 0.0
+    if not _has_non_joker_single_press(game_state, cur_rank):
+        return 0.0
+    return PRESERVE_JOKER_CONTROL_PENALTY
+
+
 def score_play_candidate(
     engine: Any,
     game_state: Dict[str, Any],
@@ -750,6 +828,13 @@ def score_play_candidate(
         ):
             exemption = "E3"
 
+    # GUA-298：跟在廉可压单后烧王作普通单 → 罚分 + 不给 E3 豁免兜底（保留王作控制）
+    joker_penalty = _preserve_joker_control_penalty(
+        engine, game_state, rec, cur_rank,
+    )
+    if joker_penalty and exemption == "E3":
+        exemption = None
+
     control_gain += _self_rescue_control_boost(
         game_state, rec, residual.metrics.residual_rounds,
     )
@@ -771,6 +856,7 @@ def score_play_candidate(
         - waste_penalty
         - structure_penalty
         - belief_penalty
+        - joker_penalty
     )
 
     # §3.4：can_opponent_form_type 软风险 → 折半夺权；E2/E3 豁免不减 E2 加成
@@ -794,6 +880,7 @@ def score_play_candidate(
         power_drop=power_drop,
         has_anchor=residual.metrics.has_anchor,
         exemption=exemption or "",
+        joker_penalty=joker_penalty,
     )
 
 

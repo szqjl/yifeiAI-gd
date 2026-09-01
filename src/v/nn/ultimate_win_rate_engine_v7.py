@@ -7208,6 +7208,49 @@ class UltimateWinRateEngineV7:
 
     # ── R11 改炸预检 + 炸弹推荐（GUA-075 扩展）────────────
 
+    def _can_reverse_bomb_higher(
+        self,
+        game_state: Dict[str, Any],
+        greater_action: List[str],
+        cur_rank: str,
+    ) -> bool:
+        """GUA-297 + GUA-299：对手出炸时，本方是否有「结构保留」的更高炸可反炸。
+
+        GUA-297：中局不例外——手中有能压过对手炸的更高炸即可反炸，避免无条件让道
+        （原 `_r11_bomb_throttle_check` 对 Bomb/SF 硬编码「不跟炸弹」）。
+
+        GUA-299（match 6a963f8f1b27100f38dc7248）：**要求该反炸不拆本方已组好的
+        核心结构（SF/顺子/炸/三带二…）**。若唯一能压对手炸的是「重新打散已组
+        SF+顺子凑出」的炸（如本局把 3-7SF+7-J顺 拆成 4-8SF，留下 3/7/9 弱单），
+        则回退 PASS 保留结构——与 GUA-296/288 的「不拆己组 SF 凑炸」原则一致。
+
+        actionList 由平台保证只含合法可压动作；整组消耗某核心组的炸（standalone
+        bomb）视为结构保留，允许反炸；无更高炸或无保留炸（仅 PASS/普通牌/拆核炸）
+        时返回 False → 让道。
+        """
+        from src.v.nn.endgame.endgame_decide import (
+            _action_beats_greater,
+            _is_bomb_like_action,
+            _bomb_disrupts_core_group,
+        )
+
+        action_list = game_state.get("actionList") or []
+        if not action_list or not greater_action:
+            return False
+        for action in action_list:
+            try:
+                if not _is_bomb_like_action(action):
+                    continue
+                if not _action_beats_greater(action, greater_action, cur_rank):
+                    continue
+                if _bomb_disrupts_core_group(game_state, action):
+                    # GUA-299：拆核凑出的反炸 → 不采用（保留 3-7SF+7-J顺 结构）
+                    continue
+                return True
+            except Exception:
+                continue
+        return False
+
     def _r11_bomb_throttle_check(
         self, game_state: Dict[str, Any], greater_action: List[str],
         greater_rank: str, cur_rank: str,
@@ -7231,10 +7274,12 @@ class UltimateWinRateEngineV7:
         my_pos = game_state.get("myPos", self.player_id)
         greater_pos = game_state.get("greaterPos", -1)
 
-        # ── 前置：对手出炸/同花顺 → 不跟（改压更高炸弹是另一回事）──
+        # ── 前置：对手出炸/同花顺 → 我炸更高可反炸（GUA-297 中局也不例外），否则让道 ──
         gt = get_action_type(greater_action)
         if gt in (ACTION_TYPE_BOMB, ACTION_TYPE_STRAIGHT_FLUSH):
-            return (False, f"对手出{gt} → 不跟炸弹")
+            if self._can_reverse_bomb_higher(game_state, greater_action, cur_rank):
+                return (True, f"对手出{gt} 我炸更高 → 可反炸")
+            return (False, f"对手出{gt} 无更高炸 → 让道")
 
         opponent_positions = [(my_pos + 1) % 4, (my_pos + 3) % 4]
         if greater_pos not in opponent_positions:
