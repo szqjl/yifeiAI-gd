@@ -4317,7 +4317,8 @@ class EndgameDecider:
             safe_structured = [
                 (i, a) for i, a in structured
                 if not self._is_bomb_destroying_action(a, hand_cards, game_state)
-                and get_action_type(a) not in ("Bomb", "StraightFlush", "JokerBomb")
+                and not _is_bomb_like_action(a)
+                and get_action_type(a) not in ("JokerBomb",)
             ]
             if safe_structured:
                 best_lock = self._select_enemy_one_locking_structure(safe_structured, game_state)
